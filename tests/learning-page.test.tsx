@@ -1,0 +1,1424 @@
+import { fireEvent, render, screen } from "@testing-library/react";
+import type { ReactNode } from "react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import LearningRoutePage from "@/app/learning/page";
+import { LearningPage } from "@/components/pages/learning-page";
+
+const mockPreferences = vi.hoisted(() => ({
+  locale: "zh-CN" as "zh-CN" | "en-US",
+}));
+
+vi.mock("next/link", () => ({
+  default: ({
+    href,
+    children,
+    ...props
+  }: {
+    href: string;
+    children: ReactNode;
+  }) => (
+    <a href={href} {...props}>
+      {children}
+    </a>
+  ),
+}));
+
+vi.mock("next/image", () => ({
+  default: (imageProps: {
+    src: string;
+    alt: string;
+    priority?: boolean;
+    unoptimized?: boolean;
+  }) => {
+    const { src, alt, priority, unoptimized, ...props } = imageProps;
+    void priority;
+    // eslint-disable-next-line @next/next/no-img-element
+    return <img src={src} alt={alt} data-unoptimized={unoptimized ? "true" : undefined} {...props} />;
+  },
+}));
+
+vi.mock("@/components/providers/app-preferences", () => ({
+  useAppPreferences: () => ({
+    locale: mockPreferences.locale,
+    theme: "light",
+    toggleLocale: vi.fn(),
+    toggleTheme: vi.fn(),
+  }),
+}));
+
+afterEach(() => {
+  mockPreferences.locale = "zh-CN";
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+  delete (HTMLElement.prototype as Partial<HTMLElement>).requestFullscreen;
+  delete (document as Partial<Document>).fullscreenElement;
+  delete (document as Partial<Document>).exitFullscreen;
+});
+
+describe("LearningPage", () => {
+  it("receives the selected course id from the learning route query", async () => {
+    const page = await LearningRoutePage({
+      searchParams: Promise.resolve({
+        courseId: "math-pedagogy-learning",
+        classId: "math-pedagogy-learning-class-1",
+      }),
+    });
+
+    expect(page.props.initialCourseId).toBe("math-pedagogy-learning");
+    expect(page.props.initialClassId).toBe("math-pedagogy-learning-class-1");
+  });
+
+  it("shows the selected course workspace when opened from the course plaza", () => {
+    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => {})));
+
+    render(<LearningPage initialCourseId="math-pedagogy-learning" />);
+
+    expect(screen.getByText("当前课程：数学教学法")).toBeTruthy();
+    expect(screen.getByText("把例题变成课堂提问链")).toBeTruthy();
+    expect(screen.queryByText("当前课程：大学研究方法")).toBeNull();
+  });
+
+  it("hydrates an approved invite-code course context when opened from the student dashboard", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === "/api/teaching/courses") {
+        expect(init?.method).toBe("GET");
+        expect(init?.headers).toEqual({ accept: "application/json" });
+        return Response.json({
+          courses: [
+            {
+              courseId: "teacher-course-ai-supported-mathematics-research-20260622-112000",
+              courseName: "AI Supported Mathematics Research",
+              semester: "2026 Spring",
+            },
+          ],
+          classes: [
+            {
+              classId: "teacher-course-ai-supported-mathematics-research-20260622-112000-class-1",
+              courseId: "teacher-course-ai-supported-mathematics-research-20260622-112000",
+              className: "Research Methods Class 1",
+              semester: "2026 Spring",
+            },
+          ],
+          memberships: [
+            {
+              membershipId:
+                "membership-teacher-course-ai-supported-mathematics-research-20260622-112000-class-1-Peter",
+              courseId: "teacher-course-ai-supported-mathematics-research-20260622-112000",
+              classId: "teacher-course-ai-supported-mathematics-research-20260622-112000-class-1",
+              studentId: "Peter",
+              studentDisplayName: "Peter",
+              membershipStatus: "approved",
+            },
+          ],
+        });
+      }
+
+      return new Promise<Response>(() => {});
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <LearningPage
+        initialCourseId="teacher-course-ai-supported-mathematics-research-20260622-112000"
+        initialClassId="teacher-course-ai-supported-mathematics-research-20260622-112000-class-1"
+      />,
+    );
+
+    expect(await screen.findByText("AI Supported Mathematics Research")).toBeTruthy();
+    expect(screen.getByText("Research Methods Class 1")).toBeTruthy();
+    expect(screen.getByText("已通过邀请码加入")).toBeTruthy();
+  });
+
+  it("does not hydrate a pending invite-code membership as an active learning context", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input) === "/api/teaching/courses") {
+        return Response.json({
+          courses: [
+            {
+              courseId: "teacher-course-statistics-writing-20260622-112000",
+              courseName: "Statistics Writing Studio",
+              semester: "2026 Spring",
+            },
+          ],
+          classes: [
+            {
+              classId: "teacher-course-statistics-writing-20260622-112000-class-1",
+              courseId: "teacher-course-statistics-writing-20260622-112000",
+              className: "Statistics Writing Cohort",
+              semester: "2026 Spring",
+            },
+          ],
+          memberships: [
+            {
+              membershipId:
+                "membership-teacher-course-statistics-writing-20260622-112000-class-1-Peter",
+              courseId: "teacher-course-statistics-writing-20260622-112000",
+              classId: "teacher-course-statistics-writing-20260622-112000-class-1",
+              studentId: "Peter",
+              studentDisplayName: "Peter",
+              membershipStatus: "pending-teacher-review",
+            },
+          ],
+        });
+      }
+
+      return new Promise<Response>(() => {});
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <LearningPage
+        initialCourseId="teacher-course-statistics-writing-20260622-112000"
+        initialClassId="teacher-course-statistics-writing-20260622-112000-class-1"
+      />,
+    );
+
+    expect(await screen.findByText("当前课程：大学研究方法")).toBeTruthy();
+    expect(screen.queryByText("Statistics Writing Studio")).toBeNull();
+    expect(screen.queryByText("Statistics Writing Cohort")).toBeNull();
+  });
+
+  it("keeps the full chatroom off the learning home page", () => {
+    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => {})));
+    const { container } = render(<LearningPage />);
+
+    expect(screen.getByRole("link", { name: "进入聊天室" }).getAttribute("href")).toBe(
+      "/learning/chatroom",
+    );
+    expect(
+      screen.queryByRole("heading", { name: "人机协作聊天室" }),
+    ).toBeNull();
+    expect(
+      container
+        .querySelector('[data-uais-learning-layout="page-right-companion"]')
+        ?.className,
+    ).toContain("w-full");
+    expect(
+      container
+        .querySelector('[data-uais-learning-layout="page-right-companion"]')
+        ?.className,
+    ).not.toContain("max-w-[1340px]");
+    expect(screen.queryByText("播放设置")).toBeNull();
+  });
+
+  it("keeps study tools behind the narration dock learning-tools entry", () => {
+    const { container } = render(<LearningPage />);
+
+    const switcher = screen.getByRole("group", { name: "我的学习右侧栏目切换" });
+    expect(switcher.querySelectorAll("button").length).toBe(3);
+    expect(switcher.parentElement?.querySelector('button[aria-label="学习工具"]')).toBeNull();
+    const narrationControls = container.querySelector(
+      '[data-uais-learning-segment-controls="compact"]',
+    );
+    const dockStudyToolsTrigger = narrationControls?.querySelector(
+      'button[aria-label="学习工具"]',
+    );
+    expect(dockStudyToolsTrigger).toBeTruthy();
+    expect(dockStudyToolsTrigger?.className).toContain("w-full");
+    expect(dockStudyToolsTrigger?.className).not.toContain("size-9");
+    expect(dockStudyToolsTrigger?.textContent).toContain("学习工具");
+    expect(screen.getByRole("button", { name: "智能导学" }).getAttribute("aria-pressed")).toBe(
+      "true",
+    );
+    expect(screen.queryByRole("button", { name: "本页笔记" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "检查点" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "概念卡" })).toBeNull();
+    expect(screen.queryByText(/梯度下降的核心思想/)).toBeNull();
+    expect(screen.queryByText(/第三章/)).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "全部字幕" }));
+    expect(screen.getByText(/梯度下降的核心思想/)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "课程目录" }));
+    expect(screen.getByText(/第三章/)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "学习工具" }));
+    const toolsPanel = screen.getByRole("dialog", { name: "学习工具" });
+    const toolsSwitcher = screen.getByRole("group", { name: "学习工具栏目切换" });
+    expect(toolsPanel.className).toContain("fixed");
+    expect(toolsPanel.className).toContain("bottom-0");
+    expect(toolsPanel.className).toContain("xl:static");
+    expect(toolsSwitcher.querySelectorAll("button").length).toBe(3);
+    expect(screen.getByRole("button", { name: "本页笔记" }).getAttribute("aria-pressed")).toBe(
+      "true",
+    );
+    expect(screen.getByRole("heading", { name: "本页笔记" })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "检查点" }));
+    expect(screen.getByRole("heading", { name: "学习检查点" })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "概念卡" }));
+    expect(screen.getByRole("heading", { name: "关键概念" })).toBeTruthy();
+  });
+
+  it("shows the DOCX course directory with placeholder durations", () => {
+    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => {})));
+    const { container } = render(<LearningPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: "课程目录" }));
+
+    expect(screen.getByText("初等数学研究（2024 春）")).toBeTruthy();
+    expect(screen.getByText("康霞博士")).toBeTruthy();
+    expect(screen.queryByText("机器学习导论（2024 春）")).toBeNull();
+    expect(container.textContent).not.toContain("线性模型与优化方法");
+
+    [
+      "第一章 数系",
+      "第二章 解析式",
+      "第三章 初等函数",
+      "第四章 方程",
+      "第五章 不等式",
+      "第六章 几何",
+      "1.1 数的概念的扩展",
+      "1.6 复数域",
+      "2.3 分式",
+      "3.2 用初等方法讨论函数",
+      "5.3 几个著名的不等式",
+      "6.2 直线与平面",
+      "45:20",
+      "52:10",
+      "48:30",
+      "41:25",
+      "68:40",
+      "36:15",
+      "08:15",
+      "15:30",
+      "09:40",
+      "11:55",
+      "05:00",
+    ].forEach((text) => {
+      expect(screen.getAllByText(text).length).toBeGreaterThan(0);
+    });
+  });
+
+  it("sends a question from the AI guide panel", () => {
+    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => {})));
+    render(<LearningPage />);
+
+    const input = screen.getByRole("textbox", { name: "向智能助教提问" }) as HTMLInputElement;
+    fireEvent.change(input, {
+      target: { value: "什么是导数？" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "发送" }));
+
+    expect(screen.getByText("什么是导数？")).toBeTruthy();
+    expect(screen.getByText(/智能导学已收到/)).toBeTruthy();
+    expect(screen.getAllByText(/大学研究方法/).length).toBeGreaterThan(0);
+    expect(input.value).toBe("");
+  });
+
+  it("calls the learning AI guide API when an assistant card is selected", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === "/api/learning/ai-guide") {
+        const requestBody = JSON.parse(String(init?.body));
+        expect(requestBody.agentId).toBe("concept-explainer");
+        expect(requestBody.question).toContain("解释");
+        return Response.json({
+          status: "ok",
+          message: {
+            id: "guide-assistant-test",
+            kind: "assistant",
+            text: "概念解读已经接入 Qwen 多模态能力。",
+          },
+          provider: {
+            provider: "qwen",
+            role: "multimodal",
+            model: "qwen3.5-omni-plus",
+          },
+          redaction: {
+            secrets: "omitted",
+            localFiles: "omitted",
+            assets: "ids-only",
+          },
+        });
+      }
+
+      return new Promise<Response>(() => {});
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<LearningPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: /概念解读/ }));
+
+    expect(await screen.findByText("概念解读已经接入 Qwen 多模态能力。")).toBeTruthy();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/learning/ai-guide",
+      expect.objectContaining({
+        method: "POST",
+      }),
+    );
+  });
+
+  it("sends the bottom AI guide input through LangGraph multi-agent mode", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === "/api/learning/ai-guide") {
+        const requestBody = JSON.parse(String(init?.body));
+        expect(requestBody.agentId).toBe("concept-explainer");
+        expect(requestBody.mode).toBe("multi-agent");
+        expect(requestBody.question).toBe("把这页整理成 3 个学习要点");
+        return Response.json({
+          status: "ok",
+          message: {
+            id: "learning-ai-langgraph-multi-agent",
+            kind: "assistant",
+            agentId: "multi-agent",
+            text: "LangGraph 多智能体导学已完成：学习顾问、概念解读和代码助手已经协同响应。",
+          },
+          orchestration: {
+            graph: {
+              runtime: "langgraph",
+              graphId: "learning-ai-guide",
+            },
+          },
+          redaction: {
+            secrets: "omitted",
+            localFiles: "omitted",
+            assets: "ids-only",
+          },
+        });
+      }
+
+      return new Promise<Response>(() => {});
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<LearningPage />);
+
+    const input = screen.getByRole("textbox", { name: "向智能助教提问" }) as HTMLInputElement;
+    fireEvent.change(input, {
+      target: { value: "把这页整理成 3 个学习要点" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "发送" }));
+
+    expect(await screen.findByText(/LangGraph 多智能体导学已完成/)).toBeTruthy();
+    expect(input.value).toBe("");
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/learning/ai-guide",
+      expect.objectContaining({
+        method: "POST",
+      }),
+    );
+  });
+
+  it("shows the LangGraph agent trace, supervisor handoff, runtime status, and memory checkpoint after a multi-agent guide response", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === "/api/learning/ai-guide") {
+        const requestBody = JSON.parse(String(init?.body));
+        expect(requestBody.mode).toBe("multi-agent");
+        return Response.json({
+          status: "ok",
+          message: {
+            id: "learning-ai-langgraph-multi-agent",
+            kind: "assistant",
+            agentId: "multi-agent",
+            text: "LangGraph 多智能体导学已完成：学习顾问、概念解读和代码助手已经协同响应。",
+          },
+          orchestration: {
+            graph: {
+              runtime: "langgraph",
+              graphId: "learning-ai-guide",
+              supervisorNodeId: "learning-guide-supervisor",
+              topologicalOrder: ["learning-advisor", "concept-explainer", "code-assistant"],
+            },
+            turns: [
+              {
+                agentId: "learning-advisor",
+                label: "学习顾问",
+                providerRole: "text-reasoning",
+                content: "先拆解学习路径。",
+              },
+              {
+                agentId: "concept-explainer",
+                label: "概念解读",
+                providerRole: "multimodal",
+                content: "再解释当前课件图文。",
+              },
+              {
+                agentId: "code-assistant",
+                label: "代码助手",
+                providerRole: "text-reasoning",
+                content: "最后形成练习步骤。",
+              },
+            ],
+            trace: {
+              handoffs: [
+                {
+                  fromNodeId: "learning-guide-supervisor",
+                  toNodeId: "learning-advisor",
+                  reason: "start-sequence",
+                },
+                {
+                  fromNodeId: "concept-explainer",
+                  toNodeId: "code-assistant",
+                  reason: "concept-grounded",
+                },
+              ],
+              memory: {
+                mode: "thread-checkpoint",
+                threadId: "learning-guide-thread-001",
+                store: "InMemoryStore",
+              },
+              humanInTheLoop: {
+                status: "ready",
+                resumeMode: "teacher-or-learner-review",
+              },
+            },
+            runtime: {
+              engine: "uais-langgraph-production-runtime",
+              status: "completed",
+              threadId: "learning-guide-thread-001",
+              eventCount: 3,
+            },
+            runtimeEvents: [
+              { type: "node-update", nodeId: "learning-advisor" },
+              { type: "node-update", nodeId: "concept-explainer" },
+              { type: "node-update", nodeId: "code-assistant" },
+            ],
+          },
+          redaction: {
+            secrets: "omitted",
+            localFiles: "omitted",
+            assets: "ids-only",
+          },
+        });
+      }
+
+      return new Promise<Response>(() => {});
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const { container } = render(<LearningPage />);
+
+    const input = screen.getByRole("textbox", { name: "向智能助教提问" }) as HTMLInputElement;
+    fireEvent.change(input, {
+      target: { value: "把这页整理成 3 个学习要点" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "发送" }));
+
+    expect(await screen.findByText("LangGraph 执行追踪")).toBeTruthy();
+    expect(screen.getByText("learning-ai-guide")).toBeTruthy();
+    expect(screen.getByText("learning-guide-supervisor")).toBeTruthy();
+    expect(screen.getByText(/learning-guide-thread-001/)).toBeTruthy();
+    expect(screen.getByText(/Human-in-the-loop/)).toBeTruthy();
+    expect(screen.getByText(/学习顾问 · text-reasoning/)).toBeTruthy();
+    expect(screen.getByText(/概念解读 · multimodal/)).toBeTruthy();
+    expect(screen.getByText(/代码助手 · text-reasoning/)).toBeTruthy();
+    expect(container.querySelector('[data-uais-langgraph-trace="learning-ai-guide"]')).toBeTruthy();
+  });
+
+  it("starts and resumes a LangGraph human review from the AI guide trace panel", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === "/api/learning/ai-guide") {
+        return Response.json({
+          status: "ok",
+          message: {
+            id: "learning-ai-langgraph-multi-agent",
+            kind: "assistant",
+            agentId: "multi-agent",
+            text: "LangGraph 多智能体导学已完成：学习顾问、概念解读和代码助手已经协同响应。",
+          },
+          orchestration: {
+            graph: {
+              runtime: "langgraph",
+              graphId: "learning-ai-guide",
+              supervisorNodeId: "learning-guide-supervisor",
+              topologicalOrder: ["learning-advisor", "concept-explainer", "code-assistant"],
+            },
+            turns: [
+              {
+                agentId: "learning-advisor",
+                label: "学习顾问",
+                providerRole: "text-reasoning",
+                content: "先拆解学习路径。",
+              },
+            ],
+            trace: {
+              handoffs: [
+                {
+                  fromNodeId: "learning-guide-supervisor",
+                  toNodeId: "learning-advisor",
+                  reason: "start-sequence",
+                },
+              ],
+              memory: {
+                mode: "thread-checkpoint",
+                threadId: "learning-guide-thread-002",
+                store: "InMemoryStore",
+              },
+              humanInTheLoop: {
+                status: "ready",
+                resumeMode: "teacher-or-learner-review",
+              },
+            },
+            runtime: {
+              engine: "uais-langgraph-production-runtime",
+              status: "completed",
+              threadId: "learning-guide-thread-002",
+              eventCount: 3,
+            },
+            runtimeEvents: [{ type: "node-update", nodeId: "learning-advisor" }],
+          },
+          redaction: {
+            secrets: "omitted",
+            localFiles: "omitted",
+            assets: "ids-only",
+          },
+        });
+      }
+
+      if (String(input) === "/api/learning/ai-guide/hitl") {
+        const requestBody = JSON.parse(String(init?.body));
+        if (requestBody.action === "start-review") {
+          expect(requestBody.threadId).toBe("learning-guide-thread-002");
+          return Response.json({
+            status: "interrupted",
+            humanInTheLoop: {
+              status: "waiting-human",
+              threadId: "learning-guide-thread-002",
+              interrupt: {
+                value: {
+                  kind: "learning-guide-human-review",
+                  prompt: "请教师或学习者复核 LangGraph 导学结果。",
+                },
+              },
+            },
+            runtime: {
+              engine: "uais-langgraph-production-runtime",
+              graphId: "learning-ai-guide-hitl",
+              status: "interrupted",
+              threadId: "learning-guide-thread-002",
+              eventCount: 1,
+            },
+            runtimeEvents: [{ type: "interrupt" }],
+          });
+        }
+
+        expect(requestBody.action).toBe("resume-review");
+        expect(requestBody.threadId).toBe("learning-guide-thread-002");
+        return Response.json({
+          status: "completed",
+          message: {
+            text: "人工复核已完成，LangGraph 导学线程已恢复。",
+          },
+          humanInTheLoop: {
+            status: "resumed",
+            threadId: "learning-guide-thread-002",
+            decision: "approved",
+          },
+          runtime: {
+            engine: "uais-langgraph-production-runtime",
+            graphId: "learning-ai-guide-hitl",
+            status: "completed",
+            threadId: "learning-guide-thread-002",
+            eventCount: 2,
+          },
+          runtimeEvents: [
+            { type: "node-update", nodeId: "human-review" },
+            { type: "node-update", nodeId: "resume-learning-guide" },
+          ],
+        });
+      }
+
+      return new Promise<Response>(() => {});
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<LearningPage />);
+
+    const input = screen.getByRole("textbox", { name: "向智能助教提问" }) as HTMLInputElement;
+    fireEvent.change(input, {
+      target: { value: "把这页整理成 3 个学习要点" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "发送" }));
+
+    expect(await screen.findByText("LangGraph 执行追踪")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "发起人工复核" }));
+
+    expect(await screen.findByText(/等待人工复核/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "确认复核并恢复" }));
+
+    expect(await screen.findByText(/人工复核已完成/)).toBeTruthy();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/learning/ai-guide/hitl",
+      expect.objectContaining({
+        method: "POST",
+      }),
+    );
+  });
+
+  it("aligns the AI guide copy with the active published PPT course", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        expect(String(input)).toBe(
+          "/api/learning/ppt-playback/elementary-math-research?locale=zh-CN",
+        );
+        return Response.json({
+          playback: {
+            status: "ready",
+            courseId: "elementary-math-research",
+            courseTitle: "初等数学研究",
+            sourceDeckTitle: "初等数学研究+PPT1+自然数的序数理论.pptx",
+            audioManifestId:
+              "audio-manifest-elementary-math-research-natural-number-ordinal-theory-ppt1",
+            teacherName: "康霞博士",
+            voiceLabel: "康霞博士克隆声音",
+            slideCount: 2,
+            slides: [
+              {
+                slideId: "slide-01",
+                slideNumber: 1,
+                slideTitle: "自然数的序数理论",
+                narrationText:
+                  "同学们好，今天我们进入初等数学研究的一个基础主题：自然数的序数理论。",
+                imageUrl:
+                  "/learning/ppt-playback/slides/natural-number-ordinal-theory-ppt1/page-01.jpg",
+                audioId: "tts_natural-number-ordinal-theory-ppt1_slide-01",
+                audioUrl:
+                  "/api/learning/ppt-playback/audio/audio-manifest-elementary-math-research-natural-number-ordinal-theory-ppt1/tts_natural-number-ordinal-theory-ppt1_slide-01",
+                durationSeconds: 15.52,
+              },
+              {
+                slideId: "slide-02",
+                slideNumber: 2,
+                slideTitle: "学习线索",
+                narrationText: "这节课有三个核心线索：是什么、为什么学、以及如何教。",
+                imageUrl:
+                  "/learning/ppt-playback/slides/natural-number-ordinal-theory-ppt1/page-02.jpg",
+                audioId: "tts_natural-number-ordinal-theory-ppt1_slide-02",
+                audioUrl:
+                  "/api/learning/ppt-playback/audio/audio-manifest-elementary-math-research-natural-number-ordinal-theory-ppt1/tts_natural-number-ordinal-theory-ppt1_slide-02",
+                durationSeconds: 14.56,
+              },
+            ],
+            redaction: {
+              secrets: "omitted",
+              localFiles: "omitted",
+              assets: "published-learning-ids-only",
+            },
+          },
+        });
+      }),
+    );
+
+    render(<LearningPage />);
+
+    expect(await screen.findByText(/《初等数学研究》智能导学/)).toBeTruthy();
+    expect(screen.getByText("当前课程：初等数学研究")).toBeTruthy();
+    expect(screen.queryByText("当前课程：大学研究方法")).toBeNull();
+    expect(screen.getByText(/当前第 1 页「自然数的序数理论」/)).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "解释「自然数的序数理论」的核心概念" }),
+    ).toBeTruthy();
+    expect(screen.getByRole("button", { name: "把这页整理成 3 个学习要点" })).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "根据「自然数的序数理论」生成一个课堂提问" }),
+    ).toBeTruthy();
+    expect(screen.queryByText(/梯度下降|学习率|小智|教学助教/)).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "下一段" }));
+
+    expect(screen.getByText(/当前第 2 页「学习线索」/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "解释「学习线索」的核心概念" })).toBeTruthy();
+  });
+
+  it("renders the published PPT workspace in English without Chinese visible text", async () => {
+    mockPreferences.locale = "en-US";
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      expect(String(input)).toBe(
+        "/api/learning/ppt-playback/elementary-math-research?locale=en-US",
+      );
+      return Response.json({
+        playback: {
+          status: "ready",
+          courseId: "elementary-math-research",
+          courseTitle: "Elementary Mathematics Research",
+          sourceDeckTitle:
+            "Elementary Mathematics Research PPT 1 Ordinal Theory of Natural Numbers.pptx",
+          audioManifestId:
+            "audio-manifest-elementary-math-research-natural-number-ordinal-theory-ppt1",
+          teacherName: "Dr. Kang Xia",
+          voiceLabel: "Dr. Kang Xia cloned voice",
+          slideCount: 2,
+          slides: [
+            {
+              slideId: "slide-01",
+              slideNumber: 1,
+              slideTitle: "Ordinal theory of natural numbers",
+              narrationText:
+                "Hello everyone. Today we begin a foundational topic in elementary mathematics research: the ordinal theory of natural numbers.",
+              imageUrl:
+                "/learning/ppt-playback/slides/natural-number-ordinal-theory-ppt1/page-01.jpg",
+              audioId: "tts_natural-number-ordinal-theory-ppt1_slide-01",
+              audioUrl:
+                "/api/learning/ppt-playback/audio/audio-manifest-elementary-math-research-natural-number-ordinal-theory-ppt1/tts_natural-number-ordinal-theory-ppt1_slide-01",
+              durationSeconds: 15.52,
+            },
+            {
+              slideId: "slide-02",
+              slideNumber: 2,
+              slideTitle: "Learning path",
+              narrationText:
+                "This lesson has three core threads: what it is, why we study it, and how to teach it.",
+              imageUrl:
+                "/learning/ppt-playback/slides/natural-number-ordinal-theory-ppt1/page-02.jpg",
+              audioId: "tts_natural-number-ordinal-theory-ppt1_slide-02",
+              audioUrl:
+                "/api/learning/ppt-playback/audio/audio-manifest-elementary-math-research-natural-number-ordinal-theory-ppt1/tts_natural-number-ordinal-theory-ppt1_slide-02",
+              durationSeconds: 14.56,
+            },
+          ],
+          redaction: {
+            secrets: "omitted",
+            localFiles: "omitted",
+            assets: "published-learning-ids-only",
+          },
+        },
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { container } = render(<LearningPage />);
+
+    expect(
+      await screen.findByText("Elementary Mathematics Research / Lecture 1 / Section 1"),
+    ).toBeTruthy();
+    expect(screen.getAllByText("Dr. Kang Xia").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Ordinal theory of natural numbers").length).toBeGreaterThan(0);
+    expect(
+      screen.getByRole("button", {
+        name: 'Explain the core idea of "Ordinal theory of natural numbers"',
+      }),
+    ).toBeTruthy();
+    const activeSlideFrame = screen.getByRole("img", {
+      name: "PPT slide 1: Ordinal theory of natural numbers",
+    });
+    expect(activeSlideFrame.getAttribute("data-uais-english-slide")).toBe("active");
+    const workspace = container.querySelector(
+      '[data-uais-learning-playback-workspace="single-viewport"]',
+    );
+    expect(workspace?.textContent).not.toMatch(/\p{Script=Han}/u);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/learning/ppt-playback/elementary-math-research?locale=en-US",
+    );
+  });
+
+  it("keeps the published PPT and narration controls in one desktop playback workspace", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        expect(String(input)).toBe(
+          "/api/learning/ppt-playback/elementary-math-research?locale=zh-CN",
+        );
+        return Response.json({
+          playback: {
+            status: "ready",
+            courseId: "elementary-math-research",
+            courseTitle: "初等数学研究",
+            sourceDeckTitle: "初等数学研究+PPT1+自然数的序数理论.pptx",
+            audioManifestId:
+              "audio-manifest-elementary-math-research-natural-number-ordinal-theory-ppt1",
+            teacherName: "康霞博士",
+            voiceLabel: "康霞博士克隆声音",
+            slideCount: 2,
+            slides: [
+              {
+                slideId: "slide-01",
+                slideNumber: 1,
+                slideTitle: "自然数的序数理论",
+                narrationText:
+                  "同学们好，今天我们进入初等数学研究的一个基础主题：自然数的序数理论。",
+                imageUrl:
+                  "/learning/ppt-playback/slides/natural-number-ordinal-theory-ppt1/page-01.jpg",
+                audioId: "tts_natural-number-ordinal-theory-ppt1_slide-01",
+                audioUrl:
+                  "/api/learning/ppt-playback/audio/audio-manifest-elementary-math-research-natural-number-ordinal-theory-ppt1/tts_natural-number-ordinal-theory-ppt1_slide-01",
+                durationSeconds: 15.52,
+              },
+              {
+                slideId: "slide-02",
+                slideNumber: 2,
+                slideTitle: "学习线索",
+                narrationText: "这节课有三个核心线索：是什么、为什么学、以及如何教。",
+                imageUrl:
+                  "/learning/ppt-playback/slides/natural-number-ordinal-theory-ppt1/page-02.jpg",
+                audioId: "tts_natural-number-ordinal-theory-ppt1_slide-02",
+                audioUrl:
+                  "/api/learning/ppt-playback/audio/audio-manifest-elementary-math-research-natural-number-ordinal-theory-ppt1/tts_natural-number-ordinal-theory-ppt1_slide-02",
+                durationSeconds: 14.56,
+              },
+            ],
+            redaction: {
+              secrets: "omitted",
+              localFiles: "omitted",
+              assets: "published-learning-ids-only",
+            },
+          },
+        });
+      }),
+    );
+
+    const { container } = render(<LearningPage />);
+
+    expect(await screen.findByText("初等数学研究 / 第一讲 / 第一节")).toBeTruthy();
+    expect(screen.queryByText("初等数学研究+PPT1+自然数的序数理论.pptx")).toBeNull();
+    expect(screen.queryByText("康霞博士克隆声音")).toBeNull();
+    const staticVoiceSwitch = Array.from(container.querySelectorAll("span")).find(
+      (element) =>
+        element.className.includes("h-6 w-11") &&
+        element.className.includes("rounded-full") &&
+        element.className.includes("bg-[#1f6feb]") &&
+        element.textContent === "",
+    );
+    expect(staticVoiceSwitch).toBeUndefined();
+
+    const workspace = container.querySelector(
+      '[data-uais-learning-playback-workspace="single-viewport"]',
+    );
+    const pptStage = container.querySelector('[data-uais-learning-ppt-stage="compact"]');
+    const pptStageBody = container.querySelector(
+      '[data-uais-learning-ppt-stage-body="expanded-slide"]',
+    );
+    const pptFrame = container.querySelector('[data-uais-learning-ppt-frame="active-slide"]');
+    const slideCount = container.querySelector(
+      '[data-uais-learning-slide-count="stage-overlay"]',
+    );
+    const actionBar = container.querySelector('[data-uais-learning-study-actions="compact"]');
+    const narrationDock = container.querySelector(
+      '[data-uais-learning-narration-dock="compact"]',
+    );
+
+    expect(workspace).toBeTruthy();
+    expect(workspace?.contains(pptStage)).toBe(true);
+    expect(workspace?.contains(narrationDock)).toBe(true);
+    expect(workspace?.className).toContain("xl:max-h-[calc(100dvh-7.4rem)]");
+    expect(pptStage?.className).toContain("min-w-0");
+    expect(pptStage?.className).toContain("w-full");
+    expect(pptStage?.className).toContain("xl:min-h-[calc(100dvh-13.5rem)]");
+    expect(pptStageBody?.className).toContain(
+      "xl:grid-rows-[auto_minmax(0,1fr)]",
+    );
+    expect(narrationDock?.className).toContain("mt-10");
+    expect(narrationDock?.className).toContain("min-w-0");
+    expect(narrationDock?.className).toContain("w-full");
+    expect(narrationDock?.className).toContain("xl:mt-20");
+    expect(pptFrame?.className).toContain("aspect-[1467/825]");
+    expect(pptFrame?.className).toContain("xl:max-w-[min(100%,103dvh)]");
+    expect(pptFrame?.className).not.toContain("xl:h-full");
+    expect(pptFrame?.className).not.toContain("xl:w-auto");
+    expect(pptFrame?.className).not.toContain("max-w-[min(100%,78dvh,765px)]");
+    expect(pptFrame?.className).not.toContain("xl:h-[min(44dvh,430px)]");
+    expect(pptFrame?.className).not.toContain("xl:aspect-auto");
+    expect(slideCount?.className).toContain("xl:absolute");
+    expect(
+      screen
+        .getByRole("img", { name: "课件第 1 页：自然数的序数理论" })
+        .getAttribute("data-unoptimized"),
+    ).toBe("true");
+    expect(actionBar?.className).toContain("xl:grid-cols-5");
+    expect(narrationDock?.className).toContain("xl:min-h-0");
+  });
+
+  it("binds My Learning to the published Kang Xia cloned-voice PPT narration audio", async () => {
+    const playMock = vi
+      .spyOn(window.HTMLMediaElement.prototype, "play")
+      .mockImplementation(function play(this: HTMLMediaElement) {
+        fireEvent.play(this);
+        return Promise.resolve();
+      });
+    const pauseMock = vi
+      .spyOn(window.HTMLMediaElement.prototype, "pause")
+      .mockImplementation(function pause(this: HTMLMediaElement) {
+        fireEvent.pause(this);
+      });
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      expect(String(input)).toBe(
+        "/api/learning/ppt-playback/elementary-math-research?locale=zh-CN",
+      );
+      return Response.json({
+        playback: {
+          status: "ready",
+          courseId: "elementary-math-research",
+          courseTitle: "初等数学研究",
+          sourceDeckTitle: "初等数学研究+PPT1+自然数的序数理论.pptx",
+          audioManifestId:
+            "audio-manifest-elementary-math-research-natural-number-ordinal-theory-ppt1",
+          teacherName: "康霞博士",
+          voiceLabel: "康霞博士克隆声音",
+          slideCount: 2,
+          slides: [
+            {
+              slideId: "slide-01",
+              slideNumber: 1,
+              slideTitle: "自然数的序数理论",
+              narrationText:
+                "同学们好，今天我们进入初等数学研究的一个基础主题：自然数的序数理论。",
+              imageUrl:
+                "/learning/ppt-playback/slides/natural-number-ordinal-theory-ppt1/page-01.jpg",
+              audioId: "tts_natural-number-ordinal-theory-ppt1_slide-01",
+              audioUrl:
+                "/api/learning/ppt-playback/audio/audio-manifest-elementary-math-research-natural-number-ordinal-theory-ppt1/tts_natural-number-ordinal-theory-ppt1_slide-01",
+              durationSeconds: 15.52,
+            },
+            {
+              slideId: "slide-02",
+              slideNumber: 2,
+              slideTitle: "学习线索",
+              narrationText: "这节课有三个核心线索：是什么、为什么学、以及如何教。",
+              imageUrl:
+                "/learning/ppt-playback/slides/natural-number-ordinal-theory-ppt1/page-02.jpg",
+              audioId: "tts_natural-number-ordinal-theory-ppt1_slide-02",
+              audioUrl:
+                "/api/learning/ppt-playback/audio/audio-manifest-elementary-math-research-natural-number-ordinal-theory-ppt1/tts_natural-number-ordinal-theory-ppt1_slide-02",
+              durationSeconds: 14.56,
+            },
+          ],
+          redaction: {
+            secrets: "omitted",
+            localFiles: "omitted",
+            assets: "published-learning-ids-only",
+          },
+        },
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { container } = render(<LearningPage />);
+
+    expect(await screen.findByText("初等数学研究 / 第一讲 / 第一节")).toBeTruthy();
+    expect(screen.queryByText("初等数学研究+PPT1+自然数的序数理论.pptx")).toBeNull();
+    expect(screen.queryByText("康霞博士克隆声音")).toBeNull();
+    expect(screen.getAllByText("自然数的序数理论").length).toBeGreaterThan(0);
+    expect(
+      screen
+        .getByRole("img", { name: "课件第 1 页：自然数的序数理论" })
+        .getAttribute("src"),
+    ).toBe("/learning/ppt-playback/slides/natural-number-ordinal-theory-ppt1/page-01.jpg");
+    expect(screen.queryByText("当前课件讲解")).toBeNull();
+
+    const audio = container.querySelector(
+      '[data-uais-learning-ppt-audio="active-slide"]',
+    ) as HTMLAudioElement | null;
+    const teacherAvatarFrame = container.querySelector(
+      '[data-uais-teacher-avatar="published-narration"]',
+    ) as HTMLElement | null;
+    const teacherAvatarProgressRing = container.querySelector(
+      '[data-uais-teacher-avatar-progress="slide-playback"]',
+    ) as HTMLElement | null;
+    const teacherProfile = container.querySelector(
+      '[data-uais-learning-narration-profile="published-teacher"]',
+    ) as HTMLElement | null;
+    const teacherAvatar = screen.getByRole("img", { name: "康霞博士教师头像" });
+
+    expect(teacherAvatar.getAttribute("src")).toBe(
+      "/learning/teacher-avatar-kang-xia-comic.png",
+    );
+    expect(teacherAvatar.getAttribute("data-unoptimized")).toBe("true");
+    expect(teacherProfile?.className).toContain("min-w-0");
+    expect(teacherAvatarFrame?.className).toContain("size-18");
+    expect(teacherAvatarFrame?.dataset.speaking).toBe("false");
+    expect(teacherAvatarFrame?.className).not.toContain(
+      "motion-safe:animate-[spin_8s_linear_infinite]",
+    );
+    expect(teacherAvatarProgressRing?.getAttribute("role")).toBe("progressbar");
+    expect(teacherAvatarProgressRing?.getAttribute("aria-label")).toBe("当前课件播放进度");
+    expect(teacherAvatarProgressRing?.getAttribute("aria-valuenow")).toBe("0");
+    expect(teacherAvatarProgressRing?.dataset.progressPercent).toBe("0");
+    expect(teacherAvatarProgressRing?.getAttribute("style")).toContain(
+      "conic-gradient(from 0deg",
+    );
+    expect(audio?.getAttribute("src")).toBe(
+      "/api/learning/ppt-playback/audio/audio-manifest-elementary-math-research-natural-number-ordinal-theory-ppt1/tts_natural-number-ordinal-theory-ppt1_slide-01",
+    );
+    expect(audio?.getAttribute("controls")).toBeNull();
+    expect(audio?.playbackRate).toBe(1.25);
+    fireEvent.click(screen.getByRole("button", { name: /1\.25 倍/ }));
+    expect(audio?.playbackRate).toBe(1);
+    expect(screen.getByRole("button", { name: /1 倍/ }).textContent).toBe("1 倍");
+    fireEvent.click(screen.getByRole("button", { name: /1 倍/ }));
+    expect(audio?.playbackRate).toBeCloseTo(0.85, 2);
+    expect(screen.getByRole("button", { name: /0\.85 倍/ }).textContent).toBe(
+      "0.85 倍",
+    );
+    fireEvent.click(screen.getByRole("button", { name: /0\.85 倍/ }));
+    expect(audio?.playbackRate).toBe(1.25);
+    expect(screen.getByRole("button", { name: /1\.25 倍/ }).textContent).toBe(
+      "1.25 倍",
+    );
+    expect(screen.queryByText(/约 15\.52 秒/)).toBeNull();
+    expect(screen.getByText("0:00 / 0:16")).toBeTruthy();
+    const customControls = container.querySelector(
+      '[data-uais-learning-audio-controls="custom"]',
+    ) as HTMLElement | null;
+    expect(customControls?.parentElement?.textContent).not.toContain("第 1 页");
+    const progressRail = container.querySelector(
+      '[data-uais-learning-audio-progress="rail"]',
+    ) as HTMLElement | null;
+    const timeReadout = container.querySelector(
+      '[data-uais-learning-audio-time="elapsed"]',
+    ) as HTMLElement | null;
+    const dockLayout = container.querySelector(
+      '[data-uais-learning-narration-dock-layout="desktop"]',
+    ) as HTMLElement | null;
+    const segmentControls = container.querySelector(
+      '[data-uais-learning-segment-controls="compact"]',
+    ) as HTMLElement | null;
+    expect(dockLayout?.className).toContain(
+      "xl:grid-cols-[220px_minmax(340px,440px)_minmax(300px,1fr)]",
+    );
+    expect(dockLayout?.className).toContain("xl:gap-4");
+    expect(customControls?.className).toContain(
+      "sm:grid-cols-[44px_104px_minmax(160px,520px)_40px]",
+    );
+    expect(customControls?.className).not.toContain("rounded-full");
+    expect(progressRail?.className).toContain("max-w-[520px]");
+    expect(timeReadout?.className).toContain("min-w-[92px]");
+    expect(segmentControls?.className).toContain(
+      "grid-cols-[36px_36px_1px_72px_minmax(140px,1fr)]",
+    );
+    expect(segmentControls?.className).not.toContain("grid-rows-[38px_30px]");
+    expect(segmentControls?.className).toContain("sm:pl-4");
+    expect(screen.queryByText("…")).toBeNull();
+    const progressSlider = screen.getByRole("slider", { name: "讲解进度" }) as HTMLInputElement;
+    expect(progressSlider.getAttribute("max")).toBe("15.52");
+    expect(progressSlider.value).toBe("0");
+    fireEvent.change(progressSlider, { target: { value: "7.5" } });
+    expect(audio?.currentTime).toBe(7.5);
+    expect(screen.getByText("0:08 / 0:16")).toBeTruthy();
+    expect(teacherAvatarProgressRing?.getAttribute("aria-valuenow")).toBe("48");
+    expect(teacherAvatarProgressRing?.dataset.progressPercent).toBe("48");
+    expect(teacherAvatarProgressRing?.getAttribute("style")).toContain(
+      "conic-gradient(from 0deg",
+    );
+    expect(screen.getByRole("button", { name: "静音讲解" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "静音讲解" }));
+    expect(audio?.muted).toBe(true);
+    expect(screen.getByRole("button", { name: "恢复音量" })).toBeTruthy();
+
+    const primaryNarrationButton = screen.getByRole("button", { name: "播放讲解" });
+    expect(customControls?.contains(primaryNarrationButton)).toBe(true);
+    fireEvent.click(primaryNarrationButton);
+    expect(playMock).toHaveBeenCalledTimes(1);
+    expect(teacherAvatarFrame?.dataset.speaking).toBe("true");
+    expect(teacherAvatarFrame?.className).not.toContain(
+      "motion-safe:animate-[spin_8s_linear_infinite]",
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "暂停讲解" }));
+    expect(pauseMock).toHaveBeenCalledTimes(1);
+    expect(teacherAvatarFrame?.dataset.speaking).toBe("false");
+
+    fireEvent.play(audio as HTMLAudioElement);
+    expect(teacherAvatarFrame?.dataset.speaking).toBe("true");
+    expect(teacherAvatarFrame?.className).not.toContain(
+      "motion-safe:animate-[spin_8s_linear_infinite]",
+    );
+
+    fireEvent.pause(audio as HTMLAudioElement);
+    expect(teacherAvatarFrame?.dataset.speaking).toBe("false");
+
+    fireEvent.play(audio as HTMLAudioElement);
+    fireEvent.ended(audio as HTMLAudioElement);
+    expect(teacherAvatarFrame?.dataset.speaking).toBe("false");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("requests fullscreen on only the active published PPT image frame", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      expect(String(input)).toBe(
+        "/api/learning/ppt-playback/elementary-math-research?locale=zh-CN",
+      );
+      return Response.json({
+        playback: {
+          status: "ready",
+          courseId: "elementary-math-research",
+          courseTitle: "初等数学研究",
+          sourceDeckTitle: "初等数学研究+PPT1+自然数的序数理论.pptx",
+          audioManifestId:
+            "audio-manifest-elementary-math-research-natural-number-ordinal-theory-ppt1",
+          teacherName: "康霞博士",
+          voiceLabel: "康霞博士克隆声音",
+          slideCount: 1,
+          slides: [
+            {
+              slideId: "slide-01",
+              slideNumber: 1,
+              slideTitle: "自然数的序数理论",
+              narrationText:
+                "同学们好，今天我们进入初等数学研究的一个基础主题：自然数的序数理论。",
+              imageUrl:
+                "/learning/ppt-playback/slides/natural-number-ordinal-theory-ppt1/page-01.jpg",
+              audioId: "tts_natural-number-ordinal-theory-ppt1_slide-01",
+              audioUrl:
+                "/api/learning/ppt-playback/audio/audio-manifest-elementary-math-research-natural-number-ordinal-theory-ppt1/tts_natural-number-ordinal-theory-ppt1_slide-01",
+              durationSeconds: 15.52,
+            },
+          ],
+          redaction: {
+            secrets: "omitted",
+            localFiles: "omitted",
+            assets: "published-learning-ids-only",
+          },
+        },
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    let fullscreenElement: Element | null = null;
+    Object.defineProperty(document, "fullscreenElement", {
+      configurable: true,
+      get: () => fullscreenElement,
+    });
+    const requestFullscreen = vi.fn(() => Promise.resolve());
+    Object.defineProperty(HTMLElement.prototype, "requestFullscreen", {
+      configurable: true,
+      value: requestFullscreen,
+    });
+    const exitFullscreen = vi.fn(() => {
+      fullscreenElement = null;
+      document.dispatchEvent(new Event("fullscreenchange"));
+      return Promise.resolve();
+    });
+    Object.defineProperty(document, "exitFullscreen", {
+      configurable: true,
+      value: exitFullscreen,
+    });
+
+    render(<LearningPage />);
+
+    const fullscreenButton = await screen.findByRole("button", {
+      name: "全屏显示课件",
+    });
+    expect(fullscreenButton.getAttribute("title")).toBe("全屏显示课件");
+
+    fireEvent.click(fullscreenButton);
+
+    expect(requestFullscreen).toHaveBeenCalledTimes(1);
+    const requestedElement = requestFullscreen.mock.contexts[0] as HTMLElement | undefined;
+    fullscreenElement = requestedElement ?? null;
+    document.dispatchEvent(new Event("fullscreenchange"));
+    expect(requestedElement?.getAttribute("data-uais-learning-ppt-frame")).toBe(
+      "active-slide",
+    );
+    expect(
+      requestedElement?.contains(
+        screen.getByRole("img", { name: "课件第 1 页：自然数的序数理论" }),
+      ),
+    ).toBe(true);
+    expect(requestedElement?.querySelector("audio")).toBeNull();
+    expect(await screen.findByRole("button", { name: "退出课件全屏" })).toBeTruthy();
+
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+
+    expect(exitFullscreen).toHaveBeenCalledTimes(1);
+    expect(await screen.findByRole("button", { name: "全屏显示课件" })).toBeTruthy();
+  });
+
+  it("uses the bottom narration arrows to move between published PPT slides", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      expect(String(input)).toBe(
+        "/api/learning/ppt-playback/elementary-math-research?locale=zh-CN",
+      );
+      return Response.json({
+        playback: {
+          status: "ready",
+          courseId: "elementary-math-research",
+          courseTitle: "初等数学研究",
+          sourceDeckTitle: "初等数学研究+PPT1+自然数的序数理论.pptx",
+          audioManifestId:
+            "audio-manifest-elementary-math-research-natural-number-ordinal-theory-ppt1",
+          teacherName: "康霞博士",
+          voiceLabel: "康霞博士克隆声音",
+          slideCount: 2,
+          slides: [
+            {
+              slideId: "slide-01",
+              slideNumber: 1,
+              slideTitle: "自然数的序数理论",
+              narrationText:
+                "同学们好，今天我们进入初等数学研究的一个基础主题：自然数的序数理论。",
+              imageUrl:
+                "/learning/ppt-playback/slides/natural-number-ordinal-theory-ppt1/page-01.jpg",
+              audioId: "tts_natural-number-ordinal-theory-ppt1_slide-01",
+              audioUrl:
+                "/api/learning/ppt-playback/audio/audio-manifest-elementary-math-research-natural-number-ordinal-theory-ppt1/tts_natural-number-ordinal-theory-ppt1_slide-01",
+              durationSeconds: 15.52,
+            },
+            {
+              slideId: "slide-02",
+              slideNumber: 2,
+              slideTitle: "学习线索",
+              narrationText: "这节课有三个核心线索：是什么、为什么学、以及如何教。",
+              imageUrl:
+                "/learning/ppt-playback/slides/natural-number-ordinal-theory-ppt1/page-02.jpg",
+              audioId: "tts_natural-number-ordinal-theory-ppt1_slide-02",
+              audioUrl:
+                "/api/learning/ppt-playback/audio/audio-manifest-elementary-math-research-natural-number-ordinal-theory-ppt1/tts_natural-number-ordinal-theory-ppt1_slide-02",
+              durationSeconds: 14.56,
+            },
+          ],
+          redaction: {
+            secrets: "omitted",
+            localFiles: "omitted",
+            assets: "published-learning-ids-only",
+          },
+        },
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { container } = render(<LearningPage />);
+
+    expect(await screen.findByText("初等数学研究 / 第一讲 / 第一节")).toBeTruthy();
+    expect(screen.queryByText("初等数学研究+PPT1+自然数的序数理论.pptx")).toBeNull();
+    expect(screen.queryByText("康霞博士克隆声音")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "下一段" }));
+
+    const audio = container.querySelector(
+      '[data-uais-learning-ppt-audio="active-slide"]',
+    ) as HTMLAudioElement | null;
+    expect(audio?.getAttribute("src")).toBe(
+      "/api/learning/ppt-playback/audio/audio-manifest-elementary-math-research-natural-number-ordinal-theory-ppt1/tts_natural-number-ordinal-theory-ppt1_slide-02",
+    );
+    expect(screen.getByText("2 / 2")).toBeTruthy();
+    expect(
+      container.querySelector('[data-uais-learning-audio-controls="custom"]')?.parentElement
+        ?.textContent,
+    ).not.toContain("第 2 页");
+    expect(screen.queryByText(/约 14\.56 秒/)).toBeNull();
+    expect(screen.getAllByText("学习线索").length).toBeGreaterThan(0);
+    expect(
+      screen
+        .getByRole("img", { name: "课件第 2 页：学习线索" })
+        .getAttribute("src"),
+    ).toBe("/learning/ppt-playback/slides/natural-number-ordinal-theory-ppt1/page-02.jpg");
+
+    fireEvent.click(screen.getByRole("button", { name: "上一段" }));
+
+    expect(audio?.getAttribute("src")).toBe(
+      "/api/learning/ppt-playback/audio/audio-manifest-elementary-math-research-natural-number-ordinal-theory-ppt1/tts_natural-number-ordinal-theory-ppt1_slide-01",
+    );
+    expect(screen.getByText("1 / 2")).toBeTruthy();
+    expect(
+      container.querySelector('[data-uais-learning-audio-controls="custom"]')?.parentElement
+        ?.textContent,
+    ).not.toContain("第 1 页");
+    expect(screen.queryByText(/约 15\.52 秒/)).toBeNull();
+  });
+
+  it("jumps the published PPT to the clicked subtitle page", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      expect(String(input)).toBe(
+        "/api/learning/ppt-playback/elementary-math-research?locale=zh-CN",
+      );
+      return Response.json({
+        playback: {
+          status: "ready",
+          courseId: "elementary-math-research",
+          courseTitle: "初等数学研究",
+          sourceDeckTitle: "初等数学研究+PPT1+自然数的序数理论.pptx",
+          audioManifestId:
+            "audio-manifest-elementary-math-research-natural-number-ordinal-theory-ppt1",
+          teacherName: "康霞博士",
+          voiceLabel: "康霞博士克隆声音",
+          slideCount: 19,
+          slides: Array.from({ length: 19 }, (_, index) => {
+            const slideNumber = index + 1;
+            const slideId = `slide-${String(slideNumber).padStart(2, "0")}`;
+            const slideTitle = slideNumber === 15 ? "教学情境" : `第 ${slideNumber} 页标题`;
+
+            return {
+              slideId,
+              slideNumber,
+              slideTitle,
+              narrationText:
+                slideNumber === 15
+                  ? "现在把视角转向教学情境。手机支付和网银转账为什么能安全传输？"
+                  : `这是第 ${slideNumber} 页的讲解字幕。`,
+              imageUrl: `/learning/ppt-playback/slides/natural-number-ordinal-theory-ppt1/page-${String(slideNumber).padStart(2, "0")}.jpg`,
+              audioId: `tts_natural-number-ordinal-theory-ppt1_${slideId}`,
+              audioUrl: `/api/learning/ppt-playback/audio/audio-manifest-elementary-math-research-natural-number-ordinal-theory-ppt1/tts_natural-number-ordinal-theory-ppt1_${slideId}`,
+              durationSeconds: 10 + slideNumber,
+            };
+          }),
+          redaction: {
+            secrets: "omitted",
+            localFiles: "omitted",
+            assets: "published-learning-ids-only",
+          },
+        },
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { container } = render(<LearningPage />);
+
+    expect(await screen.findByRole("img", { name: "课件第 1 页：第 1 页标题" })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "全部字幕" }));
+    const page15Subtitle = screen.getByRole("button", {
+      name: "跳转到第 15 页：教学情境",
+    });
+    fireEvent.click(page15Subtitle);
+
+    expect(page15Subtitle.getAttribute("aria-current")).toBe("page");
+    expect(screen.getAllByText("第 15 页").length).toBeGreaterThan(0);
+    expect(
+      screen
+        .getByRole("img", { name: "课件第 15 页：教学情境" })
+        .getAttribute("src"),
+    ).toBe("/learning/ppt-playback/slides/natural-number-ordinal-theory-ppt1/page-15.jpg");
+    expect(
+      (
+        container.querySelector(
+          '[data-uais-learning-ppt-audio="active-slide"]',
+        ) as HTMLAudioElement | null
+      )?.getAttribute("src"),
+    ).toBe(
+      "/api/learning/ppt-playback/audio/audio-manifest-elementary-math-research-natural-number-ordinal-theory-ppt1/tts_natural-number-ordinal-theory-ppt1_slide-15",
+    );
+  });
+
+  it("runs the five slide study actions from the PPT toolbar", async () => {
+    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => {})));
+    const createObjectUrl = vi.fn(() => "blob:uais-study-notes");
+    const revokeObjectUrl = vi.fn();
+    const anchorClick = vi
+      .spyOn(HTMLAnchorElement.prototype, "click")
+      .mockImplementation(() => undefined);
+    Object.defineProperty(URL, "createObjectURL", {
+      configurable: true,
+      value: createObjectUrl,
+    });
+    Object.defineProperty(URL, "revokeObjectURL", {
+      configurable: true,
+      value: revokeObjectUrl,
+    });
+
+    render(<LearningPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: "问这页" }));
+    const aiInput = screen.getByRole("textbox", { name: "向智能助教提问" }) as HTMLInputElement;
+    expect(aiInput.value).toContain("请解释当前页");
+    expect(document.activeElement).toBe(aiInput);
+
+    fireEvent.click(screen.getByRole("button", { name: "生成笔记" }));
+    expect(screen.getByRole("button", { name: "本页笔记" }).getAttribute("aria-pressed")).toBe(
+      "true",
+    );
+    expect(screen.getByRole("heading", { name: "本页笔记" })).toBeTruthy();
+    expect(screen.getAllByText(/把研究问题转化为可观察证据/).length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByRole("button", { name: "学习检查点" }));
+    expect(screen.getByRole("heading", { name: "学习检查点" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /检查点 1/ }));
+    expect(screen.getByText(/参考答案/)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "关键概念" }));
+    expect(screen.getByRole("heading", { name: "关键概念" })).toBeTruthy();
+    expect(screen.getByText("变量关系")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "导出笔记" }));
+    expect(createObjectUrl).toHaveBeenCalledWith(expect.any(Blob));
+    expect(anchorClick).toHaveBeenCalledTimes(1);
+    expect(revokeObjectUrl).toHaveBeenCalledWith("blob:uais-study-notes");
+  });
+});
