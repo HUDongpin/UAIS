@@ -12,6 +12,9 @@
 
 # testing
 /coverage
+/.playwright-cli/
+/.tmp/
+/output/
 
 # next.js
 /.next/
@@ -23,6 +26,10 @@
 # misc
 .DS_Store
 *.pem
+.local/
+.worktrees/
+worktrees/
+OpenMAIC-main.zip
 
 # debug
 npm-debug.log*
@@ -32,6 +39,8 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.local.example
+All API Keys.docx
 
 # vercel
 .vercel

@@ -1,0 +1,80 @@
+{
+  "generatedFor": "UAIS dirty-worktree cleanup",
+  "generatedAt": "2026-06-30T23:45:20+08:00",
+  "owners": {
+    "S10-docs-tooling": [
+      ".gitignore",
+      "AGENTS.md",
+      "README.md",
+      "package.json",
+      "package-lock.json",
+      "vitest.config.mts",
+      "coordination/",
+      "docs/",
+      "scripts/release-dirty-map.mjs",
+      "scripts/release-clean-check.mjs"
+    ],
+    "S22-release-config": [
+      ".dockerignore",
+      ".vercelignore",
+      "Dockerfile.external-storage",
+      "next.config.ts",
+      "vercel.json"
+    ],
+    "S19-env-example": [
+      ".env.local.example"
+    ],
+    "S01-shell": [
+      "src/app/layout.tsx",
+      "src/app/page.tsx",
+      "src/app/favicon.ico",
+      "src/components/layout/",
+      "src/components/providers/"
+    ],
+    "S06-design": [
+      "src/app/globals.css"
+    ],
+    "S02-S03-S04-S05-routes": [
+      "src/app/courses/",
+      "src/app/learning/",
+      "src/app/login/",
+      "src/app/privacy/",
+      "src/app/student-dashboard/",
+      "src/app/teaching/",
+      "src/app/terms/",
+      "src/app/legal-document.tsx",
+      "src/components/pages/",
+      "src/components/teaching/",
+      "src/components/ui/"
+    ],
+    "S08-S09-data-copy": [
+      "src/data/",
+      "src/i18n/"
+    ],
+    "S12-backend-api": [
+      "src/app/api/",
+      "src/lib/server/",
+      "src/proxy.ts"
+    ],
+    "S07-ai-lrs": [
+      "src/lib/ai/",
+      "src/lib/auth/",
+      "src/lib/learning-records/",
+      "src/lib/learning/",
+      "src/lib/chat-actions.ts",
+      "src/lib/teaching-course-id.ts",
+      "src/lib/teaching-operation-idempotency.ts"
+    ],
+    "S11-tests": [
+      "tests/"
+    ],
+    "S24-public-assets": [
+      "public/learning/",
+      "public/login/"
+    ],
+    "local-archive-only": [
+      "output/",
+      "OpenMAIC-main.zip"
+    ]
+  }
+}
