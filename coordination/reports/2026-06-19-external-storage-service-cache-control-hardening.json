@@ -1,0 +1,73 @@
+{
+  "target": "external-storage-service-cache-control-hardening",
+  "status": "completed",
+  "date": "2026-06-19",
+  "responsibleSession": "S22",
+  "objective": "Require external-storage service readiness and aggregate release evidence to prove /healthz Cache-Control no-store before production storage can be accepted.",
+  "changes": [
+    {
+      "file": "scripts/external-storage-service-readiness.mjs",
+      "summary": "Added cacheControlNoStore to the health check contract, captured the /healthz Cache-Control response header, and blocked readiness unless it proves no-store."
+    },
+    {
+      "file": "scripts/production-e2e-release-gate.mjs",
+      "summary": "Added external-storage-service-cache-control-not-proven as a production release gate blocker and included cacheControl in readiness health details."
+    },
+    {
+      "file": "scripts/production-owner-decision-checklist.mjs",
+      "summary": "Routed cache-control readiness blockers to the external-storage owner decision and added a visible proofNeeded item."
+    }
+  ],
+  "evidence": {
+    "dockerLocalProductionReadiness": "coordination/reports/2026-06-19-external-storage-service-readiness-docker-local-production.json",
+    "releaseGate": "coordination/reports/2026-06-19-production-e2e-release-gate-current-linked-vercel-preflight-docker-storage.json",
+    "ownerChecklist": "coordination/reports/2026-06-19-production-owner-decision-checklist-current-linked-vercel-preflight-docker-storage.json",
+    "healthProof": {
+      "cacheControl": "no-store",
+      "apiContractVersion": "matched",
+      "durableBackingStore": "ready",
+      "productionServiceIdentity": "proved",
+      "redaction": "present"
+    }
+  },
+  "verification": {
+    "redTest": "npm run test -- tests/external-storage-service-readiness.test.ts -t cache-control failed before implementation with missing cacheControl proof.",
+    "commandsPassed": [
+      "node --check scripts/external-storage-service-readiness.mjs",
+      "node --check scripts/production-e2e-release-gate.mjs",
+      "node --check scripts/production-owner-decision-checklist.mjs",
+      "npm run test",
+      "npm run lint",
+      "npm run build"
+    ],
+    "fullVitest": {
+      "testFilesPassed": 39,
+      "testsPassed": 535
+    },
+    "redactionScan": {
+      "status": "passed",
+      "scannedFiles": [
+        "coordination/reports/2026-06-19-external-storage-service-readiness-docker-local-production.json",
+        "coordination/reports/2026-06-19-production-e2e-release-gate-current-linked-vercel-preflight-docker-storage.json",
+        "coordination/reports/2026-06-19-production-owner-decision-checklist-current-linked-vercel-preflight-docker-storage.json"
+      ],
+      "matchedLeakPatterns": 0
+    },
+    "dockerCleanup": "temporary local-production container removed after evidence capture"
+  },
+  "remainingBlockers": [
+    "remote HTTPS external-storage production service not provisioned",
+    "Vercel production/preview env not applied",
+    "teacher auth provider live production readiness not proven",
+    "Vercel production deployment and deployed smokes not proven",
+    "manual PowerPoint/WPS playback acceptance not recorded"
+  ],
+  "safety": {
+    "valuesRedacted": true,
+    "serviceUrlOmitted": true,
+    "tokensOmitted": true,
+    "imageTagsOmitted": true,
+    "localPrivatePathsOmitted": true,
+    "productionMutationPerformed": false
+  }
+}

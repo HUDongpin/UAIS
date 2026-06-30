@@ -1,0 +1,81 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-06-27T16:52:29+08:00",
+  "status": "passed",
+  "scope": "teaching-operation-detail-page-receipt-identity-error-closure",
+  "enterpriseGapAddressed": "/teaching/[operation] detail pages no longer treat a persisted backend receipt as success when the receipt identifies a different operation or action slot than the clicked button.",
+  "changedFiles": [
+    "src/components/teaching/teaching-operation-page.tsx",
+    "tests/teaching-operation-page.test.tsx"
+  ],
+  "proofSummary": {
+    "regression": "The teacher opens the knowledge-base operation page and clicks its primary action, but the backend returns a persisted course-settings:primary receipt and course-settings domain summary.",
+    "expectedBehavior": "The page shows the receipt mismatch failure message and suppresses the mismatched course-settings saved-success message.",
+    "guardedFields": [
+      "operationId",
+      "actionSlot"
+    ],
+    "userVisibleFailureMessage": {
+      "zh-CN": "服务端回执未匹配当前操作，请稍后重试。",
+      "en-US": "The server receipt did not match the current operation. Please retry later."
+    }
+  },
+  "redGreenEvidence": [
+    {
+      "phase": "red",
+      "command": "npx vitest run tests/teaching-operation-page.test.tsx --reporter=dot -t \"different operation\"",
+      "observedBeforeImplementation": "failed as expected because the operation page did not render the receipt mismatch message for a persisted receipt that belonged to course-settings instead of knowledge-base"
+    },
+    {
+      "phase": "green",
+      "command": "npx vitest run tests/teaching-operation-page.test.tsx --reporter=dot -t \"different operation\"",
+      "result": "passed",
+      "testFilesPassed": 1,
+      "testsPassed": 1,
+      "testsSkipped": 18
+    }
+  ],
+  "verification": [
+    {
+      "command": "npx vitest run tests/teaching-operation-page.test.tsx --reporter=dot",
+      "result": "passed",
+      "testFilesPassed": 1,
+      "testsPassed": 19
+    },
+    {
+      "command": "npm run lint",
+      "result": "passed"
+    },
+    {
+      "command": "npm run test",
+      "result": "passed",
+      "testFilesPassed": 66,
+      "testsPassed": 1274
+    },
+    {
+      "command": "npm run build",
+      "result": "passed"
+    },
+    {
+      "command": "git diff --check",
+      "result": "passed"
+    }
+  ],
+  "boundaries": [
+    "This is local frontend detail-page error-closure hardening for the ordinary teaching operation pages.",
+    "It does not replace live production route smoke evidence for /teaching/[operation] or /api/teaching/operations.",
+    "The overall enterprise release gate remains blocked until owner-approved production app-auth, external-storage readiness, ordinary teaching route/browser smoke, and provider mutation proof are regenerated in one release run."
+  ],
+  "secretHandling": {
+    "realSecretsInspected": false,
+    "realSecretsLogged": false,
+    "credentialsMutated": false
+  },
+  "gitMutation": {
+    "staged": false,
+    "committed": false,
+    "branched": false,
+    "pushed": false,
+    "resetOrReverted": false
+  }
+}

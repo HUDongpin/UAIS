@@ -1,0 +1,809 @@
+{
+  "target": "uais-production-e2e-release-gate",
+  "status": "blocked",
+  "responsibleSession": "S22",
+  "requirements": [
+    {
+      "id": "website-teacher-workflow-ui",
+      "status": "satisfied",
+      "evidenceStatus": "feature-evidence-passed",
+      "requiredFeatures": [
+        "voiceSampleUpload",
+        "uploadedSampleAudioPayload",
+        "voiceSampleDurationGate",
+        "voiceSampleSelect",
+        "selectedSampleIdentity",
+        "preflight",
+        "voiceRefDisplay",
+        "pptNarrationGenerate",
+        "perSlideWavDownloads",
+        "workflowStepGating",
+        "signedSessionBootstrap",
+        "authFailClosed",
+        "serverWorkflowStatus"
+      ]
+    },
+    {
+      "id": "deployed-teacher-workflow-page",
+      "status": "satisfied",
+      "evidenceStatus": "live-passed",
+      "requiredAnchors": [
+        "teacherWorkflowTitle",
+        "voiceSampleUpload",
+        "voiceSampleSelect",
+        "uploadedSampleAudioPayload",
+        "voiceSampleDurationGate",
+        "selectedSampleIdentity",
+        "preflight",
+        "pptNarrationGenerate",
+        "perSlideWavDownloads",
+        "signedSessionBootstrap",
+        "workflowSessionActions",
+        "serverWorkflowStatus",
+        "serverWorkflowProgress"
+      ],
+      "evidenceEnvironment": "production",
+      "deploymentFingerprint": {
+        "deployedTeacherWorkflowUi": "present"
+      },
+      "renderedPageFingerprint": {
+        "deployedTeacherWorkflowUi": "present"
+      },
+      "deploymentOrigin": {
+        "status": "present",
+        "originClass": "remote-https",
+        "valueRedacted": true
+      },
+      "vercelProductionDeploymentBinding": {
+        "target": "vercel-production-deployment",
+        "status": "matched",
+        "deploymentObservationStatus": "observed",
+        "releaseRunIdStatus": "matched",
+        "valueRedacted": true
+      }
+    },
+    {
+      "id": "teacher-workflow-browser-smoke",
+      "status": "blocked",
+      "evidenceStatus": "live-passed",
+      "blockedReason": "teacher-workflow-browser-smoke-not-production",
+      "evidenceEnvironment": "preview",
+      "missingInteractions": [],
+      "deploymentOrigin": {
+        "status": "present",
+        "originClass": "remote-https",
+        "valueRedacted": true
+      },
+      "apiInterceptionPolicy": {
+        "workflowApis": "fixture-only",
+        "remoteMutations": "blocked",
+        "responseBodiesOmitted": true
+      },
+      "vercelProductionDeploymentBinding": {
+        "target": "missing",
+        "status": "missing",
+        "deploymentObservationStatus": "missing",
+        "releaseRunIdStatus": "missing",
+        "valueRedacted": false
+      }
+    },
+    {
+      "id": "deployed-learning-ppt-playback",
+      "status": "blocked",
+      "evidenceStatus": "live-passed",
+      "blockedReason": "deployed-learning-ppt-playback-vercel-deployment-binding-not-proven",
+      "evidenceEnvironment": "production",
+      "missingResults": [],
+      "deploymentOrigin": {
+        "status": "present",
+        "originClass": "remote-https",
+        "valueRedacted": true
+      },
+      "vercelProductionDeploymentBinding": {
+        "target": "missing",
+        "status": "missing",
+        "deploymentObservationStatus": "missing",
+        "releaseRunIdStatus": "missing",
+        "valueRedacted": false
+      },
+      "httpStatus": {
+        "learningPage": 200,
+        "playbackManifest": 200,
+        "firstSlideAudio": 200
+      },
+      "playbackContract": "passed",
+      "audioContract": "passed",
+      "minimumFirstAudioContentLength": 1024
+    },
+    {
+      "id": "vercel-project-readiness",
+      "status": "satisfied",
+      "evidenceStatus": "local-ready",
+      "requiredChecks": [
+        "s22-vercel-cli",
+        "s22-vercel-auth",
+        "s22-vercel-team-scope",
+        "s22-vercel-project-candidate",
+        "s22-vercel-project-link",
+        "s22-vercelignore-upload-hygiene"
+      ],
+      "redactionSafety": {
+        "valuesRedacted": "proved",
+        "projectIdsOmitted": "proved",
+        "orgIdsOmitted": "proved",
+        "accountNamesOmitted": "proved",
+        "teamIdsOmitted": "proved",
+        "teamSlugsOmitted": "proved",
+        "projectNamesOmitted": "proved",
+        "deploymentUrlsOmitted": "proved",
+        "localPrivatePathsOmitted": "proved"
+      }
+    },
+    {
+      "id": "vercel-env-placement",
+      "status": "blocked",
+      "evidenceStatus": "dry-run-blocked",
+      "blockedReason": "vercel-env-not-applied",
+      "remoteEnvInventory": {
+        "target": "vercel-env-inventory",
+        "status": "blocked",
+        "mode": "live",
+        "remoteEnvCounts": {
+          "production": 0,
+          "preview": 0
+        },
+        "remoteEnvNames": {
+          "production": [],
+          "preview": []
+        },
+        "command": {
+          "name": "vercel-env-list",
+          "format": "json",
+          "statusByEnvironment": {
+            "production": "passed",
+            "preview": "passed"
+          },
+          "failureClassByEnvironment": {
+            "production": "unknown",
+            "preview": "unknown"
+          },
+          "attemptsByEnvironment": {
+            "production": "missing",
+            "preview": "missing"
+          },
+          "stdoutOmitted": "proved",
+          "stderrOmitted": "proved"
+        },
+        "missingRequiredEnvCount": 20,
+        "missingRequiredEnv": [
+          {
+            "name": "UAIS_AI_ACCESS_SIGNING_SECRET",
+            "environment": "production",
+            "valueRedacted": true
+          },
+          {
+            "name": "UAIS_AI_ACCESS_SIGNING_SECRET",
+            "environment": "preview",
+            "valueRedacted": true
+          },
+          {
+            "name": "UAIS_TEACHER_AUTH_PROVIDER",
+            "environment": "production",
+            "valueRedacted": true
+          },
+          {
+            "name": "UAIS_TEACHER_AUTH_PROVIDER",
+            "environment": "preview",
+            "valueRedacted": true
+          },
+          {
+            "name": "UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET",
+            "environment": "production",
+            "valueRedacted": true
+          },
+          {
+            "name": "UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET",
+            "environment": "preview",
+            "valueRedacted": true
+          },
+          {
+            "name": "UAIS_TEACHER_AUTH_ISSUER_SECRET",
+            "environment": "production",
+            "valueRedacted": true
+          },
+          {
+            "name": "UAIS_TEACHER_AUTH_ISSUER_SECRET",
+            "environment": "preview",
+            "valueRedacted": true
+          },
+          {
+            "name": "UAIS_TEACHER_AI_OWNERSHIP_BACKEND",
+            "environment": "production",
+            "valueRedacted": true
+          },
+          {
+            "name": "UAIS_TEACHER_AI_OWNERSHIP_BACKEND",
+            "environment": "preview",
+            "valueRedacted": true
+          },
+          {
+            "name": "UAIS_VOICE_LIFECYCLE_AUDIT_BACKEND",
+            "environment": "production",
+            "valueRedacted": true
+          },
+          {
+            "name": "UAIS_VOICE_LIFECYCLE_AUDIT_BACKEND",
+            "environment": "preview",
+            "valueRedacted": true
+          },
+          {
+            "name": "UAIS_EXTERNAL_STORAGE_BASE_URL",
+            "environment": "production",
+            "valueRedacted": true
+          },
+          {
+            "name": "UAIS_EXTERNAL_STORAGE_BASE_URL",
+            "environment": "preview",
+            "valueRedacted": true
+          },
+          {
+            "name": "UAIS_EXTERNAL_STORAGE_ACCESS_TOKEN",
+            "environment": "production",
+            "valueRedacted": true
+          },
+          {
+            "name": "UAIS_EXTERNAL_STORAGE_ACCESS_TOKEN",
+            "environment": "preview",
+            "valueRedacted": true
+          },
+          {
+            "name": "DEEPSEEK_API_KEY",
+            "environment": "production",
+            "valueRedacted": true
+          },
+          {
+            "name": "DEEPSEEK_API_KEY",
+            "environment": "preview",
+            "valueRedacted": true
+          },
+          {
+            "name": "DASHSCOPE_API_KEY",
+            "environment": "production",
+            "valueRedacted": true
+          },
+          {
+            "name": "DASHSCOPE_API_KEY",
+            "environment": "preview",
+            "valueRedacted": true
+          }
+        ],
+        "unobservedRequiredEnvCount": 0,
+        "unobservedRequiredEnv": [],
+        "safety": {
+          "valuesRedacted": "proved",
+          "rawCliOutputOmitted": "proved",
+          "localPrivatePathsOmitted": "proved",
+          "noMutation": "proved"
+        }
+      },
+      "localSourceSummary": {
+        "status": "blocked",
+        "valuesRedacted": true,
+        "deploymentEntries": {
+          "total": 21,
+          "present": 9,
+          "missing": 12,
+          "missingNames": [
+            "UAIS_AI_ACCESS_SIGNING_SECRET",
+            "UAIS_TEACHER_AUTH_PROVIDER",
+            "UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET",
+            "UAIS_TEACHER_AUTH_ISSUER_SECRET",
+            "UAIS_TEACHER_AUTH_OIDC_ISSUER",
+            "UAIS_TEACHER_AUTH_OIDC_AUDIENCE",
+            "UAIS_TEACHER_AUTH_OIDC_JWKS_URL",
+            "UAIS_TEACHER_AUTH_OIDC_TEACHER_ID_CLAIM",
+            "UAIS_TEACHER_AI_OWNERSHIP_BACKEND",
+            "UAIS_VOICE_LIFECYCLE_AUDIT_BACKEND",
+            "UAIS_EXTERNAL_STORAGE_BASE_URL",
+            "UAIS_EXTERNAL_STORAGE_ACCESS_TOKEN"
+          ]
+        },
+        "selectedAuthProvider": {
+          "mode": "missing",
+          "requiredPresent": 0,
+          "requiredMissing": 2,
+          "missingRequiredNames": [
+            "UAIS_TEACHER_AUTH_PROVIDER",
+            "UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET"
+          ]
+        },
+        "productionSecretStrength": {
+          "minimumLength": 32,
+          "sufficient": 1,
+          "weak": 0,
+          "missing": 3,
+          "weakNames": [],
+          "missingNames": [
+            "UAIS_AI_ACCESS_SIGNING_SECRET",
+            "UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET",
+            "UAIS_EXTERNAL_STORAGE_ACCESS_TOKEN"
+          ]
+        },
+        "externalStorage": {
+          "endpointClass": "missing",
+          "fingerprintStatus": "missing"
+        },
+        "localOnlyEntries": {
+          "total": 2,
+          "present": 0,
+          "ignored": 2
+        }
+      },
+      "authProviderMode": "missing",
+      "requiredEnv": [
+        "UAIS_LIVE_AI_APPROVAL_TOKEN",
+        "UAIS_AI_ACCESS_SIGNING_SECRET",
+        "UAIS_TEACHER_AUTH_PROVIDER",
+        "UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET",
+        "UAIS_TEACHER_AI_OWNERSHIP_BACKEND",
+        "UAIS_VOICE_LIFECYCLE_AUDIT_BACKEND",
+        "UAIS_EXTERNAL_STORAGE_BASE_URL",
+        "UAIS_EXTERNAL_STORAGE_ACCESS_TOKEN",
+        "DEEPSEEK_API_KEY",
+        "DASHSCOPE_API_KEY"
+      ],
+      "requiredAuthProviderEnv": [],
+      "missingEnv": [
+        "UAIS_AI_ACCESS_SIGNING_SECRET",
+        "UAIS_TEACHER_AUTH_PROVIDER",
+        "UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET",
+        "UAIS_TEACHER_AI_OWNERSHIP_BACKEND",
+        "UAIS_VOICE_LIFECYCLE_AUDIT_BACKEND",
+        "UAIS_EXTERNAL_STORAGE_BASE_URL",
+        "UAIS_EXTERNAL_STORAGE_ACCESS_TOKEN"
+      ],
+      "projectReadinessEvidenceStatus": "ready",
+      "envTargets": [
+        "production",
+        "preview"
+      ],
+      "missingTargets": [],
+      "localOnlySmokeEnvNotSynced": "proved",
+      "secretStrength": {
+        "minimumLength": 32,
+        "valuesRedacted": true,
+        "checks": [
+          {
+            "name": "UAIS_LIVE_AI_APPROVAL_TOKEN",
+            "status": "sufficient",
+            "valueRedacted": true
+          },
+          {
+            "name": "UAIS_AI_ACCESS_SIGNING_SECRET",
+            "status": "missing",
+            "valueRedacted": true
+          },
+          {
+            "name": "UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET",
+            "status": "missing",
+            "valueRedacted": true
+          },
+          {
+            "name": "UAIS_EXTERNAL_STORAGE_ACCESS_TOKEN",
+            "status": "missing",
+            "valueRedacted": true
+          }
+        ]
+      },
+      "externalStorageEndpoint": {
+        "status": "missing",
+        "endpointClass": "missing",
+        "valueRedacted": true
+      },
+      "externalStorageServiceFingerprint": "missing"
+    },
+    {
+      "id": "trusted-teacher-auth-route-chain",
+      "status": "satisfied",
+      "evidenceStatus": "proved-locally",
+      "authProvider": "trusted-cookie-issuer",
+      "routeChain": [
+        "/api/ai/teacher-auth/issue",
+        "/api/ai/session"
+      ],
+      "issuerProofValidation": "proved",
+      "issuerCookieHardening": "proved",
+      "sessionCookiePair": [
+        "uais_teacher_auth_claims",
+        "uais_teacher_auth_signature"
+      ],
+      "downstreamAiSession": "scoped-teacher-ai-session-issued",
+      "workflowAction": "ppt-narration-submit",
+      "localTrustedCookieRouteWiring": "proved",
+      "releaseGateEligible": false,
+      "safety": {
+        "secretsRedacted": "proved",
+        "cookieValuesOmitted": "proved",
+        "sessionIdsOmitted": "proved",
+        "commandOutputOmitted": "proved",
+        "localPrivatePathsOmitted": "proved",
+        "productionMutationPerformed": "proved-not-performed"
+      }
+    },
+    {
+      "id": "teacher-auth-provider-readiness",
+      "status": "blocked",
+      "evidenceStatus": "live-blocked",
+      "blockedReason": "teacher-auth-provider-readiness-not-live-ready",
+      "evidenceEnvironment": "production",
+      "authProviderMode": "trusted-cookie-issuer",
+      "sessionCookieContract": {
+        "signingSecretStrength": "sufficient",
+        "httpOnly": "required",
+        "sameSite": "lax",
+        "secureInProduction": true,
+        "maxAgeBounded": true,
+        "cookiePair": "proved",
+        "valueRedacted": true
+      },
+      "vercelEnvSyncEvidence": {
+        "target": "missing",
+        "status": "missing",
+        "valueRedacted": true,
+        "applyPreflight": "missing",
+        "releaseRunIdStatus": "missing"
+      },
+      "trustedIssuerContract": {
+        "issuerSecretStrength": "sufficient",
+        "sessionIssuerSecretSeparation": "proved",
+        "issuerProofRequired": true,
+        "issuerProofMaxAgeSeconds": 300,
+        "issuerProofBoundsCookieMaxAge": true,
+        "valueRedacted": true
+      },
+      "trustedCookieSessionRoundTrip": {
+        "status": "proved",
+        "cookiePair": "created-and-verified-in-memory",
+        "claimsCookie": "signed-session-claims",
+        "signatureCookie": "hmac-sha256-signature",
+        "signatureVerification": "passed",
+        "expiryCheck": "passed",
+        "tamperCheck": "passed",
+        "sessionIdRedacted": true,
+        "cookieValuesEmitted": false,
+        "valuesRedacted": true
+      },
+      "trustedTeacherAuthRouteChainEvidence": {
+        "target": "trusted-teacher-auth-route-chain-contract",
+        "status": "proved",
+        "valueRedacted": true,
+        "authProvider": "trusted-cookie-issuer",
+        "routeChain": "proved",
+        "issuerProofValidation": "proved",
+        "issuerCookieHardening": "proved",
+        "sessionCookiePair": "proved",
+        "downstreamAiSession": "proved",
+        "workflowAction": "proved",
+        "localTrustedCookieRouteWiring": "proved",
+        "redactionSafety": "proved"
+      },
+      "trustedTeacherAuthRouteSmokeEvidence": {
+        "target": "missing",
+        "status": "missing",
+        "valueRedacted": true,
+        "releaseRunIdStatus": "missing",
+        "deploymentBinding": "missing",
+        "teacherAuthIssuerRoute": "missing",
+        "responseHeaders": "missing",
+        "responseShape": "missing"
+      },
+      "redactionSafety": {
+        "valuesRedacted": "proved",
+        "secretsOmitted": "proved",
+        "providerUrlsOmitted": "proved",
+        "responseBodiesOmitted": "proved",
+        "localPrivatePathsOmitted": "proved",
+        "liveRequiresApproval": "proved",
+        "noCookieIssued": "proved"
+      }
+    },
+    {
+      "id": "external-storage-production-launch-contract",
+      "status": "satisfied",
+      "evidenceStatus": "dry-run-ready",
+      "serviceMode": "production",
+      "runtimeNode": "required",
+      "runtimeLongRunningProcess": true,
+      "healthEndpoint": "/healthz",
+      "serviceTarget": "uais-external-storage-production-service",
+      "portSource": "PORT",
+      "dataDirSource": "UAIS_EXTERNAL_STORAGE_DATA_DIR",
+      "persistentVolumeRequired": true,
+      "dataDirPersistence": "persistent-volume",
+      "containerArtifact": {
+        "dockerfile": "Dockerfile.external-storage",
+        "dockerignore": ".dockerignore",
+        "persistentVolumePath": "/data/uais-external-storage",
+        "imageSecretsPolicy": "env-only-at-runtime"
+      },
+      "requiredEnv": {
+        "accessToken": "present-sufficient",
+        "dataDir": "present-persistent-volume"
+      },
+      "blockedReasons": [],
+      "safety": {
+        "accessTokenOmitted": "proved",
+        "dataDirOmitted": "proved",
+        "localPrivatePathsOmitted": "proved",
+        "startupOutputRedacted": "proved",
+        "productionServiceModeForced": "proved"
+      }
+    },
+    {
+      "id": "external-storage-container-build-readiness",
+      "status": "satisfied",
+      "evidenceStatus": "build-ready",
+      "mode": "build",
+      "dockerfileContract": "passed",
+      "dockerignoreSecretExclusion": "passed",
+      "dockerignoreGeneratedOutputExclusion": "passed",
+      "dockerClient": "present",
+      "dockerDaemon": "available",
+      "buildStatus": "passed",
+      "buildInvoked": true,
+      "blockedReasons": [],
+      "safety": {
+        "imageTagOmitted": "proved",
+        "dockerOutputOmitted": "proved",
+        "localPrivatePathsOmitted": "proved",
+        "secretsExcludedFromContext": "proved",
+        "buildRunInApprovedMode": "proved"
+      }
+    },
+    {
+      "id": "external-storage-service-readiness",
+      "status": "blocked",
+      "evidenceStatus": "live-blocked",
+      "blockedReason": "external-storage-service-readiness-not-live-ready",
+      "evidenceEnvironment": "local-production",
+      "storageEndpoint": {
+        "status": "present",
+        "networkClass": "local-loopback",
+        "endpointClass": "local-loopback",
+        "valueRedacted": true
+      },
+      "storageServiceFingerprint": "present",
+      "health": {
+        "httpStatus": 200,
+        "status": "ok",
+        "target": "uais-external-storage-production-service",
+        "productionServiceIdentity": "proved",
+        "apiContractVersion": "matched",
+        "cacheControl": "no-store",
+        "durableBackingStore": "ready",
+        "redaction": "present"
+      },
+      "vercelEnvSyncEvidence": {
+        "target": "missing",
+        "status": "missing",
+        "valueRedacted": true,
+        "applyPreflight": "missing",
+        "releaseRunIdStatus": "missing"
+      },
+      "productionLaunchContractEvidence": {
+        "target": "external-storage-service-production-launcher",
+        "status": "ready",
+        "valueRedacted": true,
+        "serviceMode": "production",
+        "runtime": "proved",
+        "envContract": "proved",
+        "containerArtifact": "proved",
+        "redactionSafety": "proved"
+      },
+      "persistenceEvidence": {
+        "target": "missing",
+        "status": "missing",
+        "valueRedacted": true,
+        "releaseRunIdStatus": "missing"
+      },
+      "redactionSafety": {
+        "valuesRedacted": "proved",
+        "serviceUrlOmitted": "proved",
+        "responseBodiesOmitted": "proved",
+        "localPrivatePathsOmitted": "proved",
+        "liveRequiresApproval": "proved",
+        "noWriteOperations": "proved"
+      }
+    },
+    {
+      "id": "vercel-production-deployment",
+      "status": "blocked",
+      "evidenceStatus": "live-blocked",
+      "blockedReason": "vercel-production-deployment-env-sync-not-proven",
+      "evidenceEnvironment": "production",
+      "deploymentFingerprint": {
+        "vercelProductionDeployment": "present"
+      },
+      "deploymentOrigin": {
+        "status": "present",
+        "originClass": "remote-https",
+        "valueRedacted": true
+      },
+      "deploymentObservationStatus": "missing",
+      "projectReadinessGuard": "proved",
+      "envSyncGuard": "missing",
+      "envSyncApplyPreflightGuard": "missing",
+      "operationStatus": "blocked-before-invocation",
+      "redactionSafety": {
+        "valuesRedacted": "proved",
+        "deploymentUrlOmitted": "proved",
+        "deploymentUrlsOmitted": "proved",
+        "projectIdsOmitted": "proved",
+        "orgIdsOmitted": "proved",
+        "accountNamesOmitted": "proved",
+        "teamIdsOmitted": "proved",
+        "tokenOmitted": "proved",
+        "projectReadinessEvidencePathOmitted": "proved",
+        "envSyncEvidencePathOmitted": "proved",
+        "localPrivatePathsOmitted": "proved"
+      }
+    },
+    {
+      "id": "deployment-route-smoke",
+      "status": "blocked",
+      "evidenceStatus": "dry-run-blocked",
+      "blockedReason": "deployment-route-smoke-not-live-passed",
+      "evidenceEnvironment": "production",
+      "missingRouteChecks": [
+        "s22-retention-readiness-route",
+        "s22-voice-lifecycle-audit-route",
+        "s22-teacher-auth-issuer-route",
+        "s22-teacher-ai-session-route",
+        "s22-teacher-ownership-route",
+        "s22-teacher-ppt-workflow-route"
+      ],
+      "authProviderMode": "missing",
+      "issuerRouteAuth": "missing",
+      "issuerCookieHardening": "missing",
+      "ownershipRouteAuth": "missing",
+      "workflowRouteAuth": "missing",
+      "routeResponseShapes": {
+        "teacherAuthIssuer": "missing",
+        "teacherAiSession": "missing",
+        "teacherOwnership": "missing",
+        "teacherPptWorkflow": "missing"
+      },
+      "deploymentOrigin": {
+        "status": "missing",
+        "originClass": "missing",
+        "valueRedacted": true
+      },
+      "teacherAuthProviderReadinessBinding": {
+        "target": "teacher-auth-provider-readiness",
+        "status": "not-live-ready",
+        "authProviderMode": "trusted-cookie-issuer",
+        "releaseRunIdStatus": "mismatched",
+        "valueRedacted": true
+      },
+      "vercelProductionDeploymentBinding": {
+        "target": "vercel-production-deployment",
+        "status": "not-deployed",
+        "deploymentObservationStatus": "pending",
+        "releaseRunIdStatus": "mismatched",
+        "valueRedacted": true
+      }
+    },
+    {
+      "id": "teacher-auth-provider-consistency",
+      "status": "blocked",
+      "evidenceStatus": "waiting-for-live-ready-auth-provider-evidence",
+      "blockedReason": "teacher-auth-provider-readiness-not-live-ready",
+      "authProviderModes": {
+        "vercelEnvSync": "missing",
+        "teacherAuthProviderReadiness": "trusted-cookie-issuer",
+        "routeSmoke": "missing",
+        "match": "waiting"
+      }
+    },
+    {
+      "id": "external-durable-storage-smoke",
+      "status": "blocked",
+      "evidenceStatus": "live-passed",
+      "blockedReason": "external-storage-smoke-not-production",
+      "evidenceEnvironment": "local-reference",
+      "missingStorageChecks": [],
+      "storageResponseShapes": {
+        "health": "proved",
+        "teacherOwnershipMerge": "proved",
+        "teacherOwnershipRead": "proved",
+        "lifecycleAuditAppend": "proved",
+        "lifecycleAuditRead": "proved"
+      },
+      "storageEndpointNetworkClass": "local-loopback",
+      "storageEndpointClass": "local-loopback",
+      "externalStorageServiceReadinessEvidence": {
+        "target": "external-storage-service-readiness",
+        "status": "local-reference-matched",
+        "valueRedacted": true,
+        "releaseRunIdStatus": "not-required"
+      }
+    },
+    {
+      "id": "external-storage-service-consistency",
+      "status": "blocked",
+      "evidenceStatus": "waiting-for-live-ready-storage-evidence",
+      "blockedReason": "external-storage-service-readiness-not-live-ready",
+      "storageServiceFingerprints": {
+        "readiness": "blocked",
+        "smoke": "waiting",
+        "match": "waiting"
+      }
+    },
+    {
+      "id": "ppt-manual-playback-acceptance",
+      "status": "blocked",
+      "evidenceStatus": "plan-blocked",
+      "blockedReason": "manual-ppt-playback-not-accepted",
+      "acceptedApplications": [],
+      "manualRecordEvidenceStatus": "missing",
+      "manualRecordPackageIdentityStatus": "missing",
+      "machinePreflightStatus": "passed",
+      "expectedSlideCount": 19,
+      "checklistSlideChecks": 19,
+      "packageArtifactFingerprintStatus": "present",
+      "packageTargetVoiceLabelStatus": "present",
+      "manualRecordArtifactFingerprintStatus": "missing",
+      "manualRecordReleaseRunStatus": "missing",
+      "manualRecordAfterDeploymentStatus": "missing",
+      "manualRecordTimingStatus": "missing",
+      "manualRecordConfirmationStatus": "missing",
+      "manualRecordTemplate": {
+        "fileName": "2026-06-20-kangxia-ppt-manual-acceptance-record-template-current-refresh.json",
+        "status": "created",
+        "accepted": false,
+        "applications": [
+          "Microsoft PowerPoint",
+          "WPS Presentation"
+        ],
+        "slideChecksPerApplication": 19,
+        "valuesRedacted": true
+      }
+    },
+    {
+      "id": "production-release-run-consistency",
+      "status": "blocked",
+      "evidenceStatus": "waiting-for-production-evidence",
+      "blockedReason": "vercel-production-deployment-not-proven",
+      "releaseRunIds": {
+        "vercelEnvSync": "waiting",
+        "vercelProductionDeployment": "waiting",
+        "deployedTeacherWorkflowUi": "present",
+        "teacherWorkflowBrowserUi": "waiting",
+        "learningPptPlayback": "waiting",
+        "teacherAuthProviderReadiness": "waiting",
+        "externalStorageServiceReadiness": "waiting",
+        "routeSmoke": "waiting",
+        "externalStorageSmoke": "waiting",
+        "pptAcceptance": "waiting",
+        "match": "waiting"
+      }
+    }
+  ],
+  "blockedReasons": [
+    "teacher-workflow-browser-smoke-not-production",
+    "deployed-learning-ppt-playback-vercel-deployment-binding-not-proven",
+    "vercel-env-not-applied",
+    "teacher-auth-provider-readiness-not-live-ready",
+    "external-storage-service-readiness-not-live-ready",
+    "vercel-production-deployment-env-sync-not-proven",
+    "deployment-route-smoke-not-live-passed",
+    "external-storage-smoke-not-production",
+    "manual-ppt-playback-not-accepted"
+  ],
+  "safety": {
+    "secretsRedacted": true,
+    "evidenceValuesRedacted": true,
+    "responseBodiesOmitted": true,
+    "localPrivatePathsOmitted": true
+  }
+}

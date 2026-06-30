@@ -1,0 +1,69 @@
+{
+  "target": "teacher-workflow-deployment-smoke",
+  "mode": "live",
+  "environment": "preview",
+  "network": "enabled",
+  "status": "failed",
+  "responsibleSession": "S22",
+  "route": "/teaching",
+  "deploymentFingerprint": {
+    "status": "present",
+    "value": "sha256:71989ff1c55f47be"
+  },
+  "deploymentOrigin": {
+    "status": "present",
+    "originClass": "remote-https",
+    "valueRedacted": true
+  },
+  "anchors": [
+    "teacherWorkflowTitle",
+    "voiceSampleUpload",
+    "voiceSampleSelect",
+    "uploadedSampleAudioPayload",
+    "voiceSampleDurationGate",
+    "selectedSampleIdentity",
+    "preflight",
+    "pptNarrationGenerate",
+    "perSlideWavDownloads",
+    "signedSessionBootstrap",
+    "workflowSessionActions",
+    "serverWorkflowStatus",
+    "serverWorkflowProgress"
+  ],
+  "prerequisites": [
+    {
+      "id": "s22-deployment-base-url",
+      "responsibleSession": "S22",
+      "requiredEnv": "UAIS_DEPLOYMENT_BASE_URL",
+      "status": "present"
+    }
+  ],
+  "blockedReasons": [
+    "teacher-workflow-deployment-request-failed"
+  ],
+  "safety": {
+    "valuesRedacted": true,
+    "responseBodyOmitted": true,
+    "liveRequiresApproval": true,
+    "checksRenderedTeacherWorkflowAnchors": true
+  },
+  "results": {
+    "teacherWorkflowTitle": "missing",
+    "voiceSampleUpload": "missing",
+    "voiceSampleSelect": "missing",
+    "uploadedSampleAudioPayload": "missing",
+    "voiceSampleDurationGate": "missing",
+    "selectedSampleIdentity": "missing",
+    "preflight": "missing",
+    "pptNarrationGenerate": "missing",
+    "perSlideWavDownloads": "missing",
+    "signedSessionBootstrap": "missing",
+    "workflowSessionActions": "missing",
+    "serverWorkflowStatus": "missing",
+    "serverWorkflowProgress": "missing"
+  },
+  "networkError": {
+    "class": "TimeoutError",
+    "valueRedacted": true
+  }
+}

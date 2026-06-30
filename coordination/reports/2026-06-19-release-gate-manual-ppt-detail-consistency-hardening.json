@@ -1,0 +1,34 @@
+{
+  "target": "release-gate-manual-ppt-acceptance-detail-consistency-hardening",
+  "status": "hardened",
+  "productionStatus": "not-live-production-evidence",
+  "responsibleSession": "S22",
+  "objective": "Prevent production release-run consistency from treating manual PPT acceptance as ready unless the full manual PPT evaluator is satisfied.",
+  "evidence": {
+    "blockedReason": "manual-ppt-evidence-detail-not-proven",
+    "releaseRunConsistencyWhenPptDetailMissing": {
+      "id": "production-release-run-consistency",
+      "status": "blocked",
+      "evidenceStatus": "waiting-for-production-evidence",
+      "pptAcceptance": "waiting",
+      "match": "waiting"
+    },
+    "helperBehavior": "isPptManualAcceptanceAccepted now delegates to evaluatePptAcceptance with vercelProductionDeployment evidence"
+  },
+  "verification": {
+    "red": "npm run test -- tests/production-release-gate.test.ts -t manual PPT acceptance lacks slide detail proof failed before implementation because production-release-run-consistency was satisfied/matched",
+    "green": "same focused test passed after implementation",
+    "focused": "npm run test -- tests/production-release-gate.test.ts passed: 1 file / 134 tests"
+  },
+  "remainingProductionBlockers": [
+    "No human PowerPoint playback acceptance record has been created in this work.",
+    "No human WPS Presentation playback acceptance record has been created in this work.",
+    "Production deployment and deployed smokes remain unproven."
+  ],
+  "safety": {
+    "valuesRedacted": true,
+    "localPrivatePathsOmitted": true,
+    "secretsOmitted": true,
+    "notCredentialEvidence": true
+  }
+}

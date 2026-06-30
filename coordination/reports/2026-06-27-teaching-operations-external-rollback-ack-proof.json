@@ -1,0 +1,70 @@
+{
+  "generatedAt": "2026-06-27T18:10:00+08:00",
+  "responsibleSession": "S22",
+  "scope": "ordinary-teaching-external-rollback-acknowledgement",
+  "status": "passed",
+  "summary": "External teaching operation rollback acknowledgements now fail closed unless the external service confirms a persisted rollback with the expected append-only rollback storage policy and responsible session.",
+  "filesChanged": [
+    "src/lib/server/teaching-operations-store.ts",
+    "tests/teaching-operation-backend.test.ts"
+  ],
+  "redGreenEvidence": [
+    {
+      "phase": "red",
+      "command": "npx vitest run tests/teaching-operation-backend.test.ts --reporter=dot -t \"external teaching operation rollback acknowledgement is not persisted\"",
+      "expectedFailure": true,
+      "observed": "Failed because the rollback route returned HTTP 200 for an external rollback acknowledgement with status queued, local storage policy, local write policy, and the wrong responsible session."
+    },
+    {
+      "phase": "green",
+      "command": "npx vitest run tests/teaching-operation-backend.test.ts --reporter=dot -t \"external teaching operation rollback acknowledgement is not persisted\"",
+      "exitCode": 0,
+      "observed": "1 passed, 152 skipped."
+    }
+  ],
+  "behaviorHardened": [
+    "External rollback acknowledgements must return status persisted.",
+    "External rollback acknowledgements must return storagePolicy external-redacted-teaching-operation-rollback.",
+    "External rollback acknowledgements must return storageWritePolicy external-append-only-rollback-log.",
+    "External rollback acknowledgements must return responsibleSession S12.",
+    "Invalid rollback acknowledgements now return HTTP 502 and no rollback receipt is emitted."
+  ],
+  "verification": [
+    {
+      "command": "npx vitest run tests/teaching-operation-backend.test.ts --reporter=dot -t \"uses the external teaching operations backend for signed record rollback\"",
+      "exitCode": 0,
+      "observed": "1 passed, 152 skipped."
+    },
+    {
+      "command": "npx vitest run tests/teaching-operation-backend.test.ts --reporter=dot",
+      "exitCode": 0,
+      "observed": "153 passed."
+    },
+    {
+      "command": "npm run lint",
+      "exitCode": 0,
+      "observed": "ESLint passed."
+    },
+    {
+      "command": "npm run test",
+      "exitCode": 0,
+      "observed": "66 files passed, 1281 tests passed. Existing jsdom navigation warnings remained non-fatal."
+    },
+    {
+      "command": "npm run build",
+      "exitCode": 0,
+      "observed": "Next.js production build completed."
+    },
+    {
+      "command": "git diff --check",
+      "exitCode": 0,
+      "observed": "No whitespace errors."
+    }
+  ],
+  "boundary": "This is local backend/API rollback-contract hardening only. It does not replace fresh same-run live production ordinary teaching route/browser smoke artifacts, external-storage readiness, Vercel env/deployment evidence, or provider mutation evidence required for enterprise completion.",
+  "redaction": {
+    "secrets": "omitted",
+    "localFiles": "omitted",
+    "assets": "ids-only"
+  }
+}

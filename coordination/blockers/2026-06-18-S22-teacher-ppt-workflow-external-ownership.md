@@ -1,0 +1,33 @@
+# Blocker Report
+
+- Date: 2026-06-18
+- Session ID: S22
+- Task: Local-production E2E proof for signed teacher PPT workflow downloads
+- Blocker type: Scope conflict / Backend integration
+- Current status: Resolved by later S12 route adapter work and S22 no-browser local-production verification.
+- Resolution evidence:
+  - `coordination/reports/2026-06-18-local-production-e2e-smoke-no-browser.json`
+  - Verified at 2026-06-18 19:44 HKT with `node scripts/local-production-e2e-smoke.mjs --live --approved --skip-build --skip-browser --timeout-ms 180000`.
+  - The protected route chain passed with external ownership storage enabled, and `s22-teacher-ppt-workflow-route` proved `workflowReadyForDownloads`, `workflowDownloadContract`, `workflowAudioDownloadPattern`, and `workflowExportDownloadUrl`.
+  - Browser automation was explicitly skipped because Playwright is not locally installed; this resolution only closes the protected route/external ownership blocker, not the full website browser E2E goal.
+- Summary:
+  - The live local-production E2E smoke now requires the protected teacher PPT workflow route to prove the download-ready contract: `workflowReadyForDownloads`, `workflowDownloadContract`, `workflowAudioDownloadPattern`, and `workflowExportDownloadUrl`.
+  - The local-production run reached the protected routes with trusted teacher auth, and `/api/ai/teacher-ownership` passed its response-shape proof from the external ownership fixture.
+  - `/api/ai/teacher-ppt-workflow` returned HTTP 200 but failed the stricter response-shape proof because the workflow did not become `ready-for-downloads` and did not expose export/WAV download URLs.
+- Evidence:
+  - `coordination/reports/2026-06-18-local-production-e2e-smoke.json`
+  - Failed check: `s22-local-protected-route-smoke`
+  - Failed route: `s22-teacher-ppt-workflow-route`
+  - Missing required fields: `workflowReadyForDownloads`, `workflowDownloadContract`, `workflowAudioDownloadPattern`, `workflowExportDownloadUrl`
+- Likely cause:
+  - `src/app/api/ai/teacher-ownership/route.ts` uses `createUaisTeacherAiOwnershipAdapter`, which can read the external durable storage backend.
+  - `src/app/api/ai/teacher-ppt-workflow/route.ts` still reads ownership through `readUaisTeacherAiOwnershipRecord` and `UAIS_TEACHER_AI_OWNERSHIP_DIR`, so it does not consume the external ownership fixture used by the local-production harness.
+- Why S22 did not patch the route:
+  - `src/app/api/ai/teacher-ppt-workflow/route.ts` is backend/API route ownership, not S22 release-engineering scope.
+  - Seeding a local ownership directory in the S22 harness would make the route pass locally while masking the external durable storage integration gap the release gate is meant to catch.
+- Required owner/session action:
+  - S12 should update the teacher PPT workflow route to use the same teacher ownership adapter/backend contract as the teacher ownership summary route, including external durable storage.
+  - S22 should rerun `node scripts/local-production-e2e-smoke.mjs --live --approved --timeout-ms 180000` after the backend adapter fix.
+- Release impact:
+  - Production route smoke remains blocked for the teacher PPT workflow download contract.
+  - The enterprise UAIS end-to-end goal remains incomplete until this route can prove signed auth, external ownership, ready workflow status, and per-slide/export download URLs together.

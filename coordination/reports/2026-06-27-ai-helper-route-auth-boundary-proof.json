@@ -1,0 +1,93 @@
+{
+  "target": "ai-helper-route-auth-boundary-proof",
+  "generatedAt": "2026-06-27T17:42:00+08:00",
+  "responsibleSession": "S22",
+  "status": "passed",
+  "scope": "local release-gate and protected-route-smoke contract hardening",
+  "changedFiles": [
+    "scripts/ai-route-smoke.mjs",
+    "scripts/production-e2e-release-gate.mjs",
+    "tests/ai-env-and-smoke.test.ts",
+    "tests/production-release-gate.test.ts"
+  ],
+  "routeSmokeContract": {
+    "directCallBoundary": {
+      "coreContractRoutes": {
+        "expectedStatus": 403,
+        "reasonCode": "signed-session-required",
+        "legacyScopedHeadersDenied": true
+      },
+      "teacherCookieRoutePolicy": {
+        "routes": "signed-teacher-cookie-required",
+        "expectedResult": "authenticated-session-required",
+        "valuesRedacted": true
+      },
+      "teacherCookieRouteProbes": [
+        {
+          "route": "/api/ai/teacher-ownership",
+          "method": "GET",
+          "expectedStatus": 401,
+          "reasonCode": "authenticated-session-required"
+        },
+        {
+          "route": "/api/ai/teacher-ppt-workflow",
+          "method": "GET",
+          "expectedStatus": 401,
+          "reasonCode": "authenticated-session-required"
+        }
+      ],
+      "legacyScopedHeaderTeacherCookieRouteProbesRequired": true,
+      "valuesRedacted": true
+    }
+  },
+  "releaseGateContract": {
+    "requirement": "deployment-route-smoke",
+    "blockedReasonWhenMissing": "deployment-route-smoke-helper-auth-boundary-not-proven",
+    "detailField": "routeHelperAuthBoundary",
+    "acceptedStatus": "proved"
+  },
+  "redGreenProof": [
+    {
+      "command": "npx vitest run tests/production-release-gate.test.ts --reporter=dot -t \"signed teacher-cookie helper route direct-call\"",
+      "red": "failed before implementation because the release gate did not block missing helper-route auth-boundary evidence",
+      "green": "passed after implementation"
+    },
+    {
+      "command": "npx vitest run tests/ai-env-and-smoke.test.ts --reporter=dot -t \"signed admin headers\"",
+      "red": "failed before implementation because the route smoke output omitted teacher-cookie helper-route probes",
+      "green": "passed after implementation"
+    }
+  ],
+  "verification": [
+    {
+      "command": "npx vitest run tests/ai-env-and-smoke.test.ts --reporter=dot",
+      "result": "66 passed"
+    },
+    {
+      "command": "npx vitest run tests/production-release-gate.test.ts --reporter=dot",
+      "result": "288 passed"
+    },
+    {
+      "command": "node --check scripts/ai-route-smoke.mjs",
+      "result": "passed"
+    },
+    {
+      "command": "node --check scripts/production-e2e-release-gate.mjs",
+      "result": "passed"
+    },
+    {
+      "command": "npm run lint",
+      "result": "passed"
+    },
+    {
+      "command": "npm run test",
+      "result": "66 files passed, 1277 tests passed"
+    },
+    {
+      "command": "npm run build",
+      "result": "passed"
+    }
+  ],
+  "enterpriseStatus": "not-complete",
+  "remainingBlockerSummary": "This is local gate and smoke evidence hardening only. Enterprise completion still requires fresh owner-approved same-run production evidence and the outstanding external-storage/Vercel/live-smoke blockers."
+}

@@ -1,0 +1,95 @@
+{
+  "target": "teacher-workflow-deployment-smoke",
+  "mode": "live",
+  "environment": "production",
+  "network": "enabled",
+  "status": "passed",
+  "responsibleSession": "S22",
+  "releaseRunId": "uais-release-2026-06-21-production-deploy-blocked",
+  "route": "/teaching",
+  "deploymentFingerprint": {
+    "status": "present",
+    "value": "sha256:7c8e0f8c7195d5b9"
+  },
+  "deploymentOrigin": {
+    "status": "present",
+    "originClass": "remote-https",
+    "valueRedacted": true
+  },
+  "vercelProductionDeploymentEvidence": {
+    "target": "missing",
+    "status": "missing",
+    "deploymentObservationStatus": "missing",
+    "valueRedacted": true
+  },
+  "anchors": [
+    "teacherWorkflowTitle",
+    "voiceSampleUpload",
+    "voiceSampleSelect",
+    "uploadedSampleAudioPayload",
+    "voiceSampleDurationGate",
+    "selectedSampleIdentity",
+    "preflight",
+    "pptNarrationGenerate",
+    "perSlideWavDownloads",
+    "signedSessionBootstrap",
+    "signedSessionReadiness",
+    "workflowSessionActions",
+    "serverWorkflowStatus",
+    "serverWorkflowProgress"
+  ],
+  "prerequisites": [
+    {
+      "id": "s22-deployment-base-url",
+      "responsibleSession": "S22",
+      "requiredEnv": "UAIS_DEPLOYMENT_BASE_URL",
+      "status": "present"
+    },
+    {
+      "id": "s22-vercel-production-deployment-evidence",
+      "responsibleSession": "S22",
+      "requiredEvidence": "vercel-production-deployment",
+      "status": "missing",
+      "valueRedacted": true
+    }
+  ],
+  "blockedReasons": [],
+  "safety": {
+    "valuesRedacted": true,
+    "responseBodyOmitted": true,
+    "liveRequiresApproval": true,
+    "checksRenderedTeacherWorkflowAnchors": true
+  },
+  "httpStatus": 200,
+  "renderedPageFingerprint": {
+    "status": "present",
+    "value": "sha256:6e572ff4e4d73b63"
+  },
+  "networkAttempts": {
+    "attempted": 1,
+    "maxAttempts": 3,
+    "retried": false,
+    "valueRedacted": true
+  },
+  "results": {
+    "teacherWorkflowTitle": "present",
+    "voiceSampleUpload": "present",
+    "voiceSampleSelect": "present",
+    "uploadedSampleAudioPayload": "present",
+    "voiceSampleDurationGate": "present",
+    "selectedSampleIdentity": "present",
+    "preflight": "present",
+    "pptNarrationGenerate": "present",
+    "perSlideWavDownloads": "present",
+    "signedSessionBootstrap": "present",
+    "signedSessionReadiness": "present",
+    "workflowSessionActions": "present",
+    "serverWorkflowStatus": "present",
+    "serverWorkflowProgress": "present"
+  },
+  "deploymentEvidenceBindingStatus": "not-proven",
+  "productionReleaseEligible": false,
+  "diagnosticBlockedReasons": [
+    "vercel-production-deployment-evidence-missing"
+  ]
+}

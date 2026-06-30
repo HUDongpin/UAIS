@@ -1,0 +1,182 @@
+{
+  "target": "vercel-preview-deployment-refresh",
+  "date": "2026-06-20",
+  "responsibleSession": "S22",
+  "status": "preview-deployed-http-reachability-blocked",
+  "overallGoalStatus": "active-incomplete",
+  "summary": {
+    "deployment": "Created a fresh Vercel preview deployment for the linked UAIS project using direct CLI deploy because the repository has no git remote.",
+    "inspection": "Vercel inspect observed the preview deployment as Ready and the redacted deployment evidence recorded a remote HTTPS deployment fingerprint.",
+    "reachability": "Direct HTTP reachability from this environment failed at DNS resolution for both preview aliases, so teacher workflow and learning PPT smoke results are request-failed network evidence rather than application anchor or playback failures.",
+    "productionBoundary": "The aggregate production release gate correctly remains blocked and records the preview deployment as not production."
+  },
+  "deploymentEvidence": {
+    "deployCommand": "npx vercel deploy -y --no-wait",
+    "target": "preview",
+    "vercelInspectStatus": "Ready",
+    "deploymentUrl": "present-redacted-in-evidence",
+    "deploymentFingerprint": "sha256:34b27b884ceb1371",
+    "valueRedacted": true
+  },
+  "generatedEvidence": [
+    {
+      "path": "coordination/reports/2026-06-20-vercel-preview-deployment-inspect-ready.json",
+      "target": "vercel-production-deployment",
+      "status": "deployed",
+      "environment": "preview",
+      "action": "inspect",
+      "note": "Script target name is historical; evidence environment is preview."
+    },
+    {
+      "path": "coordination/reports/2026-06-20-deployment-reachability-diagnostics-vercel-preview-refresh-live.json",
+      "target": "deployment-reachability-diagnostics",
+      "status": "blocked",
+      "environment": "preview",
+      "blockedReasons": [
+        "dns-origin-failed",
+        "transport-origin-failed",
+        "head-root-failed",
+        "head-teaching-failed",
+        "head-learning-failed"
+      ]
+    },
+    {
+      "path": "coordination/reports/2026-06-20-deployment-reachability-diagnostics-vercel-preview-refresh-live-retry.json",
+      "target": "deployment-reachability-diagnostics",
+      "status": "blocked",
+      "environment": "preview",
+      "blockedReasons": [
+        "dns-origin-failed",
+        "transport-origin-failed",
+        "head-root-failed",
+        "head-teaching-failed",
+        "head-learning-failed"
+      ]
+    },
+    {
+      "path": "coordination/reports/2026-06-20-deployment-reachability-diagnostics-vercel-preview-alias-refresh-live.json",
+      "target": "deployment-reachability-diagnostics",
+      "status": "blocked",
+      "environment": "preview",
+      "blockedReasons": [
+        "dns-origin-failed",
+        "transport-origin-failed",
+        "head-root-failed",
+        "head-teaching-failed",
+        "head-learning-failed"
+      ]
+    },
+    {
+      "path": "coordination/reports/2026-06-20-teacher-workflow-deployment-smoke-vercel-preview-refresh-live.json",
+      "target": "teacher-workflow-deployment-smoke",
+      "status": "failed",
+      "environment": "preview",
+      "blockedReasons": [
+        "teacher-workflow-deployment-request-failed"
+      ]
+    },
+    {
+      "path": "coordination/reports/2026-06-20-learning-ppt-playback-deployment-smoke-vercel-preview-refresh-live.json",
+      "target": "learning-ppt-playback-deployment-smoke",
+      "status": "failed",
+      "environment": "preview",
+      "blockedReasons": [
+        "learning-ppt-playback-smoke-request-failed"
+      ]
+    },
+    {
+      "path": "coordination/reports/2026-06-20-production-e2e-release-gate-current-preview-deploy-refresh.json",
+      "target": "uais-production-e2e-release-gate",
+      "status": "blocked"
+    },
+    {
+      "path": "coordination/reports/2026-06-20-production-owner-decision-checklist-current-preview-deploy-refresh.json",
+      "target": "production-owner-decision-checklist",
+      "status": "owner-decisions-required"
+    }
+  ],
+  "releaseGateBlockedReasons": [
+    "deployed-teacher-workflow-page-not-live-passed",
+    "deployed-learning-ppt-playback-not-live-passed",
+    "vercel-env-not-applied",
+    "teacher-auth-provider-readiness-not-live-ready",
+    "external-storage-service-readiness-not-live-ready",
+    "vercel-production-deployment-not-production",
+    "deployment-route-smoke-not-live-passed",
+    "external-storage-smoke-not-production",
+    "manual-ppt-playback-not-accepted"
+  ],
+  "checksRun": [
+    {
+      "command": "git remote get-url origin",
+      "result": "no-origin-remote"
+    },
+    {
+      "command": "sed -n '1,120p' .vercel/project.json",
+      "result": "linked-project-present"
+    },
+    {
+      "command": "vercel whoami",
+      "result": "exit-0"
+    },
+    {
+      "command": "vercel teams list --format json",
+      "result": "exit-0-empty-personal-scope"
+    },
+    {
+      "command": "node scripts/vercel-project-readiness.mjs --project-name uais",
+      "result": "ready"
+    },
+    {
+      "command": "npx vercel deploy -y --no-wait",
+      "result": "preview-deployment-created"
+    },
+    {
+      "command": "npx vercel inspect <preview-url>",
+      "result": "ready"
+    },
+    {
+      "command": "node scripts/vercel-production-deployment-evidence.mjs --live --approved --environment preview --deployment-url <preview-url>",
+      "result": "deployed-preview-observed"
+    },
+    {
+      "command": "node scripts/deployment-reachability-diagnostics.mjs --live --approved --environment preview --base-url <preview-url>",
+      "result": "blocked-dns-enotfound"
+    },
+    {
+      "command": "node scripts/teacher-workflow-deployment-smoke.mjs --live --approved --environment preview --base-url <preview-url>",
+      "result": "failed-request-failed"
+    },
+    {
+      "command": "node scripts/learning-ppt-playback-deployment-smoke.mjs --live --approved --environment preview --base-url <preview-url>",
+      "result": "failed-request-failed"
+    },
+    {
+      "command": "node scripts/production-e2e-release-gate.mjs ...",
+      "result": "passed-blocked-gate-generated"
+    },
+    {
+      "command": "node scripts/production-owner-decision-checklist.mjs ...",
+      "result": "passed-owner-decisions-required"
+    }
+  ],
+  "notRun": [
+    "Production Vercel deploy",
+    "Vercel env apply",
+    "Live production deployed teacher workflow smoke",
+    "Live production learning PPT playback smoke",
+    "Live production route smoke",
+    "Remote HTTPS external storage readiness/smoke",
+    "Manual WPS/PowerPoint PPT playback acceptance"
+  ],
+  "safety": {
+    "realSecretsRead": false,
+    "realSecretsPrinted": false,
+    "envLocalInspected": false,
+    "deploymentUrlsRedactedInEvidence": true,
+    "responseBodiesOmitted": true,
+    "responseHeadersOmitted": true,
+    "productionMutationPerformed": false,
+    "valuesRedacted": true
+  }
+}

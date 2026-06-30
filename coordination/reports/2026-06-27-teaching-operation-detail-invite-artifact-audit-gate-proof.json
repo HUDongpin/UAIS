@@ -1,0 +1,98 @@
+{
+  "target": "teaching-operation-detail-invite-artifact-audit-gate-proof",
+  "status": "passed",
+  "generatedAt": "2026-06-27T17:14:00+08:00",
+  "responsibleSession": "S22",
+  "scope": {
+    "releaseGate": "scripts/production-e2e-release-gate.mjs",
+    "browserSmoke": "scripts/teaching-operation-detail-browser-smoke.mjs",
+    "tests": [
+      "tests/production-release-gate.test.ts",
+      "tests/teaching-operation-detail-browser-smoke.test.ts"
+    ],
+    "productionMutation": "none",
+    "secretsRead": false,
+    "responseBodiesOmitted": true
+  },
+  "redTestObserved": {
+    "command": "npx vitest run tests/production-release-gate.test.ts --reporter=dot -t \"invite artifact audit gating\"",
+    "exitCode": 1,
+    "expectedFailure": "production release gate accepted legacy teaching-operation-detail browser evidence without operationInviteArtifactAuditGated"
+  },
+  "proofs": [
+    {
+      "id": "browser-smoke-detail-invite-artifact-audit-gated",
+      "status": "passed",
+      "summary": "The teaching operation detail browser smoke opens /teaching/invite-code, clicks Generate New Invite Code, holds audit readback as the 25th audit gate, verifies the new invite artifact is hidden while audit evidence is pending, then releases readback and requires the artifact/success state."
+    },
+    {
+      "id": "release-gate-requires-detail-invite-artifact-proof",
+      "status": "passed",
+      "summary": "The production release gate now requires operationInviteArtifactAuditGated in teaching-operation-detail-browser-smoke results and blocks stale evidence with teaching-operation-detail-browser-smoke-results-not-proven when it is missing."
+    },
+    {
+      "id": "live-api-fixture-counts-updated",
+      "status": "passed",
+      "summary": "The smoke test runtime records 25 ordinary teaching operation calls and 25 audit readback calls, distinguishing main-page invite generation from operation-detail invite generation."
+    }
+  ],
+  "checks": [
+    {
+      "command": "node --check scripts/teaching-operation-detail-browser-smoke.mjs",
+      "status": "passed"
+    },
+    {
+      "command": "node --check scripts/production-e2e-release-gate.mjs",
+      "status": "passed"
+    },
+    {
+      "command": "npx vitest run tests/production-release-gate.test.ts --reporter=dot -t \"invite artifact audit gating\"",
+      "status": "passed",
+      "tests": "1 passed, 286 skipped"
+    },
+    {
+      "command": "npx vitest run tests/teaching-operation-detail-browser-smoke.test.ts --reporter=dot -t \"continues live teaching operation API calls\"",
+      "status": "passed",
+      "tests": "1 passed, 5 skipped"
+    },
+    {
+      "command": "npx vitest run tests/teaching-operation-detail-browser-smoke.test.ts --reporter=dot",
+      "status": "passed",
+      "tests": "6 passed"
+    },
+    {
+      "command": "npx vitest run tests/production-release-gate.test.ts --reporter=dot",
+      "status": "passed",
+      "tests": "287 passed"
+    },
+    {
+      "command": "npm run lint",
+      "status": "passed"
+    },
+    {
+      "command": "npm run test",
+      "status": "passed",
+      "tests": "66 files passed, 1276 tests passed",
+      "notes": "Existing jsdom navigation warnings remained non-fatal."
+    },
+    {
+      "command": "npm run build",
+      "status": "passed"
+    },
+    {
+      "command": "node -e \"JSON.parse(require('node:fs').readFileSync('coordination/reports/2026-06-27-teaching-operation-detail-invite-artifact-audit-gate-proof.json','utf8')); console.log('json-ok')\"",
+      "status": "passed"
+    },
+    {
+      "command": "git diff --check",
+      "status": "passed",
+      "notes": "Current repository has many untracked worktree files; git diff --check covers tracked diffs in this checkout."
+    }
+  ],
+  "enterpriseCompletionImpact": {
+    "gateTightened": true,
+    "freshLiveProductionEvidenceGenerated": false,
+    "aggregateEnterpriseGateReady": false,
+    "remainingBlockerSummary": "This local release-gate and browser-smoke contract hardening does not replace the missing same-run live production teaching-operation-detail browser smoke artifact."
+  }
+}

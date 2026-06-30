@@ -1,0 +1,69 @@
+{
+  "target": "external-storage-docker-container-refresh-summary",
+  "date": "2026-06-20",
+  "responsibleSession": "S22",
+  "status": "local-docker-reference-passed",
+  "scope": {
+    "proved": [
+      "Docker external storage image builds from Dockerfile.external-storage",
+      "Container production launcher contract is ready inside the image",
+      "Production-mode external storage service answers health over local loopback",
+      "Teacher ownership merge and lifecycle audit append succeed over real HTTP",
+      "Teacher ownership and lifecycle audit markers survive container restart through the same Docker volume",
+      "Broad external-storage smoke passes health, ownership merge/read, and lifecycle audit append/read"
+    ],
+    "notProved": [
+      "Remote HTTPS external storage service",
+      "Vercel production or preview env placement",
+      "Production release-run-bound external-storage smoke",
+      "Production deployment end-to-end chain"
+    ]
+  },
+  "evidence": {
+    "containerBuildReadiness": "coordination/reports/2026-06-20-external-storage-container-build-readiness-current-refresh.json",
+    "containerLaunchContract": "coordination/reports/2026-06-20-external-storage-production-launcher-container-refresh.json",
+    "serviceReadiness": "coordination/reports/2026-06-20-external-storage-service-readiness-container-refresh.json",
+    "persistenceWrite": "coordination/reports/2026-06-20-external-storage-persistence-write-container-refresh.json",
+    "persistenceReadAfterRestart": "coordination/reports/2026-06-20-external-storage-persistence-read-after-restart-container-refresh.json",
+    "broadSmoke": "coordination/reports/2026-06-20-external-storage-smoke-container-refresh.json"
+  },
+  "evidenceStatuses": {
+    "containerBuildReadiness": "ready",
+    "containerLaunchContract": "ready",
+    "serviceReadiness": "blocked-local-production-only-with-health-ok",
+    "persistenceWrite": "passed",
+    "persistenceReadAfterRestart": "passed",
+    "broadSmoke": "passed"
+  },
+  "checksRun": [
+    {
+      "command": "npm run test -- tests/external-storage-container-build-readiness.test.ts tests/external-storage-service-container.test.ts tests/external-storage-service-production-launcher.test.ts tests/external-storage-service-readiness.test.ts tests/external-storage-persistence-smoke.test.ts tests/external-storage-smoke.test.ts",
+      "status": "passed",
+      "files": 6,
+      "tests": 31
+    },
+    {
+      "command": "redaction scan on new external-storage reports",
+      "status": "passed",
+      "matches": 0
+    },
+    {
+      "command": "docker ps after cleanup",
+      "status": "passed",
+      "runningContainers": 0
+    }
+  ],
+  "safety": {
+    "realSecretsUsed": false,
+    "localPrivatePathsOmitted": true,
+    "dockerOutputOmitted": true,
+    "responseBodiesOmitted": true,
+    "serviceUrlOmittedInEvidence": true,
+    "fixtureTokenNotAProductionSecret": true
+  },
+  "remainingBlockers": [
+    "No approved UAIS production Vercel env placement evidence for auth, provider, and external storage variables",
+    "No remote HTTPS external storage endpoint has been bound and smoked",
+    "Production release gate remains blocked until env sync, production deploy evidence, route smoke, external storage smoke, and manual PPT acceptance are all live-proved"
+  ]
+}

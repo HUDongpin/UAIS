@@ -1,0 +1,40 @@
+{
+  "target": "external-storage-container-build-readiness",
+  "mode": "build",
+  "status": "ready",
+  "dockerfile": {
+    "path": "Dockerfile.external-storage",
+    "status": "present",
+    "contract": "passed"
+  },
+  "dockerignore": {
+    "path": ".dockerignore",
+    "status": "present",
+    "secretExclusion": "passed",
+    "generatedOutputExclusion": "passed"
+  },
+  "buildCommand": "docker build -f Dockerfile.external-storage -t <image-tag> .",
+  "image": {
+    "tagStatus": "present",
+    "valueRedacted": true
+  },
+  "docker": {
+    "client": "present",
+    "daemon": "available",
+    "outputRedacted": true
+  },
+  "build": {
+    "outputRedacted": true,
+    "status": "passed",
+    "invoked": true
+  },
+  "blockedReasons": [],
+  "safety": {
+    "imageTagOmitted": true,
+    "dockerOutputOmitted": true,
+    "localPrivatePathsOmitted": true,
+    "secretsExcludedFromContext": true,
+    "buildNotRunInDryRun": false,
+    "buildRunInApprovedMode": true
+  }
+}

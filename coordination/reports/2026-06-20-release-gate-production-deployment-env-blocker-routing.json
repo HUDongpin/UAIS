@@ -1,0 +1,66 @@
+{
+  "date": "2026-06-20",
+  "sessionId": "S22",
+  "workstream": "production reliability and release engineering",
+  "status": "completed-for-release-gate-blocker-routing",
+  "overallGoalStatus": "active-incomplete",
+  "summary": {
+    "change": "The aggregate production E2E release gate now preserves the specific Vercel production deployment blocker when live production deployment evidence is preflight-blocked by missing env-sync proof.",
+    "previousBehavior": "A live production deployment evidence file with status blocked fell through to vercel-production-deployment-not-proven.",
+    "currentBehavior": "The same evidence is classified as vercel-production-deployment-env-sync-not-proven, with operationStatus blocked-before-invocation and redacted deployment fingerprint/origin metadata."
+  },
+  "evidence": {
+    "aggregateGate": "coordination/reports/2026-06-20-production-e2e-release-gate-current-www-uais-top-production-env-blocked-specific.json",
+    "productionDeploymentEvidence": "coordination/reports/2026-06-20-vercel-production-deployment-evidence-www-uais-top-production-env-blocked.json",
+    "blockedReason": "vercel-production-deployment-env-sync-not-proven",
+    "evidenceStatus": "live-blocked",
+    "evidenceEnvironment": "production",
+    "projectReadinessGuard": "proved",
+    "envSyncGuard": "missing",
+    "envSyncApplyPreflightGuard": "missing",
+    "operationStatus": "blocked-before-invocation",
+    "deploymentFingerprint": "present",
+    "deploymentOrigin": "remote-https"
+  },
+  "qualityGates": [
+    {
+      "command": "npm run test -- tests/production-release-gate.test.ts -t \"preflight-blocked\"",
+      "result": "red-before-implementation-then-green"
+    },
+    {
+      "command": "node --check scripts/production-e2e-release-gate.mjs",
+      "result": "passed"
+    },
+    {
+      "command": "npm run test -- tests/production-release-gate.test.ts tests/vercel-production-deployment-evidence.test.ts",
+      "result": "passed, 2 files / 166 tests"
+    },
+    {
+      "command": "npm run test",
+      "result": "passed, 43 files / 574 tests"
+    },
+    {
+      "command": "npm run lint",
+      "result": "passed"
+    },
+    {
+      "command": "npm run build",
+      "result": "passed"
+    }
+  ],
+  "remainingBlockers": [
+    "teacher-workflow-browser-smoke-api-interception-not-proven",
+    "vercel-env-not-applied",
+    "teacher-auth-provider-readiness-not-live-ready",
+    "external-storage-service-readiness-not-live-ready",
+    "vercel-production-deployment-env-sync-not-proven",
+    "deployment-route-smoke-not-live-passed",
+    "external-storage-smoke-not-production",
+    "ppt-manual-acceptance-evidence-missing"
+  ],
+  "redaction": {
+    "generatedGateReportSecretLikeScan": "passed",
+    "notes": "Only redacted variable names/statuses and redacted deployment metadata are recorded. No secret values were read or written."
+  },
+  "nextRecommendedStep": "S19/S22 should apply approved production and preview Vercel env values, rerun remote env inventory, then rerun production deployment evidence and protected route smoke."
+}

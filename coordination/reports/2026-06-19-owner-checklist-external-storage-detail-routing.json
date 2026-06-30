@@ -1,0 +1,67 @@
+{
+  "target": "owner-checklist-external-storage-detail-routing",
+  "date": "2026-06-19",
+  "responsibleSession": "S22",
+  "status": "hardened",
+  "objective": "Route detailed external storage production-launch, container build, service-readiness, and smoke blockers to the external-storage owner decision instead of collapsing them into the generic production release-run decision.",
+  "changedFiles": [
+    "scripts/production-owner-decision-checklist.mjs",
+    "tests/production-owner-decision-checklist.test.ts",
+    "coordination/reports/2026-06-19-production-owner-decision-checklist-current-auth-storage-launch-bound-readiness.json"
+  ],
+  "newRoutingCoverage": {
+    "externalStorageProductionService": [
+      "build-failed",
+      "build-not-approved",
+      "build-not-run",
+      "dockerfile-contract-failed",
+      "dockerfile-missing",
+      "dockerignore-generated-output-exclusion-missing",
+      "dockerignore-missing",
+      "dockerignore-secret-exclusion-missing",
+      "external-storage-port-invalid",
+      "external-storage-production-launch-container-artifact-not-proven",
+      "external-storage-production-launch-contract-missing",
+      "external-storage-production-launch-contract-not-ready",
+      "external-storage-production-launch-contract-target-mismatch",
+      "external-storage-production-launch-env-contract-not-proven",
+      "external-storage-production-launch-redaction-not-proven",
+      "external-storage-production-launch-runtime-not-proven",
+      "external-storage-service-production-launch-contract-not-proven",
+      "external-storage-service-readiness-target-mismatch",
+      "external-storage-service-vercel-env-sync-release-run-not-proven",
+      "external-storage-smoke-evidence-missing",
+      "external-storage-smoke-evidence-target-mismatch",
+      "external-storage-smoke-service-readiness-release-run-not-proven"
+    ]
+  },
+  "evidence": {
+    "redTest": {
+      "command": "npm run test -- tests/production-owner-decision-checklist.test.ts -t \"detailed external storage launch and smoke blockers\"",
+      "statusBeforeImplementation": "failed",
+      "failureMode": "external storage production-launch and smoke blockers were retained only by production-release-run"
+    },
+    "greenTest": {
+      "command": "npm run test -- tests/production-owner-decision-checklist.test.ts -t \"detailed external storage launch and smoke blockers\"",
+      "statusAfterImplementation": "passed"
+    },
+    "focusedSuite": {
+      "command": "npm run test -- tests/production-owner-decision-checklist.test.ts",
+      "result": "1 file / 13 tests passed"
+    }
+  },
+  "currentOwnerChecklist": {
+    "path": "coordination/reports/2026-06-19-production-owner-decision-checklist-current-auth-storage-launch-bound-readiness.json",
+    "status": "owner-decisions-required",
+    "releaseGateStatus": "blocked"
+  },
+  "safety": {
+    "valuesRedacted": true,
+    "secretsOmitted": true,
+    "imageTagsOmitted": true,
+    "deploymentUrlsOmitted": true,
+    "localPrivatePathsOmitted": true,
+    "productionMutationPerformed": false,
+    "vercelMutationPerformed": false
+  }
+}

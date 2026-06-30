@@ -1,0 +1,83 @@
+{
+  "target": "teacher-workflow-deployment-smoke",
+  "mode": "live",
+  "environment": "preview",
+  "network": "enabled",
+  "status": "failed",
+  "responsibleSession": "S22",
+  "route": "/teaching",
+  "deploymentFingerprint": {
+    "status": "present",
+    "value": "sha256:34b27b884ceb1371"
+  },
+  "deploymentOrigin": {
+    "status": "present",
+    "originClass": "remote-https",
+    "valueRedacted": true
+  },
+  "networkRetryPolicy": {
+    "maxAttempts": 3,
+    "perAttemptTimeoutMs": 10000,
+    "retryOn": [
+      "request-error"
+    ],
+    "valuesRedacted": true
+  },
+  "anchors": [
+    "teacherWorkflowTitle",
+    "voiceSampleUpload",
+    "voiceSampleSelect",
+    "uploadedSampleAudioPayload",
+    "voiceSampleDurationGate",
+    "selectedSampleIdentity",
+    "preflight",
+    "pptNarrationGenerate",
+    "perSlideWavDownloads",
+    "signedSessionBootstrap",
+    "workflowSessionActions",
+    "serverWorkflowStatus",
+    "serverWorkflowProgress"
+  ],
+  "prerequisites": [
+    {
+      "id": "s22-deployment-base-url",
+      "responsibleSession": "S22",
+      "requiredEnv": "UAIS_DEPLOYMENT_BASE_URL",
+      "status": "present"
+    }
+  ],
+  "blockedReasons": [
+    "teacher-workflow-deployment-request-failed"
+  ],
+  "safety": {
+    "valuesRedacted": true,
+    "responseBodyOmitted": true,
+    "liveRequiresApproval": true,
+    "checksRenderedTeacherWorkflowAnchors": true
+  },
+  "results": {
+    "teacherWorkflowTitle": "missing",
+    "voiceSampleUpload": "missing",
+    "voiceSampleSelect": "missing",
+    "uploadedSampleAudioPayload": "missing",
+    "voiceSampleDurationGate": "missing",
+    "selectedSampleIdentity": "missing",
+    "preflight": "missing",
+    "pptNarrationGenerate": "missing",
+    "perSlideWavDownloads": "missing",
+    "signedSessionBootstrap": "missing",
+    "workflowSessionActions": "missing",
+    "serverWorkflowStatus": "missing",
+    "serverWorkflowProgress": "missing"
+  },
+  "networkAttempts": {
+    "attempted": 3,
+    "maxAttempts": 3,
+    "retried": true,
+    "valueRedacted": true
+  },
+  "networkError": {
+    "class": "TypeError",
+    "valueRedacted": true
+  }
+}

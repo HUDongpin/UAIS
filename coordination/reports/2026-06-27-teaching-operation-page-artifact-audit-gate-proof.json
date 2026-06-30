@@ -1,0 +1,78 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-06-27T16:59:32+08:00",
+  "status": "passed",
+  "scope": "teaching-operation-detail-page-artifact-audit-gate",
+  "enterpriseGapAddressed": "/teaching/[operation] detail pages no longer expose invite-code/export artifacts from a traced persistence response before audit readback verifies the saved operation record, audit event, and domain projection.",
+  "changedFiles": [
+    "src/components/teaching/teaching-operation-page.tsx",
+    "tests/teaching-operation-page.test.tsx"
+  ],
+  "proofSummary": {
+    "regression": "The invite-code operation page receives a new invite-code artifact with a traceId, while audit readback is still pending.",
+    "expectedBehavior": "The page keeps the previous invite code visible during audit pending, suppresses the new code, then applies the new code only after audit readback verifies the matching operation record, audit event, and domain projection.",
+    "guardedArtifacts": [
+      "invite-code",
+      "export-file"
+    ],
+    "legacyBoundary": "Responses without traceId still apply artifacts immediately after receipt and domain-persistence checks, preserving existing contract-test behavior."
+  },
+  "redGreenEvidence": [
+    {
+      "phase": "red",
+      "command": "npx vitest run tests/teaching-operation-page.test.tsx --reporter=dot -t \"invite artifacts hidden\"",
+      "observedBeforeImplementation": "failed as expected because the old invite code 55395057 disappeared during audit pending after the traced response returned a new invite-code artifact"
+    },
+    {
+      "phase": "green",
+      "command": "npx vitest run tests/teaching-operation-page.test.tsx --reporter=dot -t \"invite artifacts hidden\"",
+      "result": "passed",
+      "testFilesPassed": 1,
+      "testsPassed": 1,
+      "testsSkipped": 19
+    }
+  ],
+  "verification": [
+    {
+      "command": "npx vitest run tests/teaching-operation-page.test.tsx --reporter=dot",
+      "result": "passed",
+      "testFilesPassed": 1,
+      "testsPassed": 20
+    },
+    {
+      "command": "npm run lint",
+      "result": "passed"
+    },
+    {
+      "command": "npm run test",
+      "result": "passed",
+      "testFilesPassed": 66,
+      "testsPassed": 1275
+    },
+    {
+      "command": "npm run build",
+      "result": "passed"
+    },
+    {
+      "command": "git diff --check",
+      "result": "passed"
+    }
+  ],
+  "boundaries": [
+    "This is local frontend detail-page error-closure hardening for traced artifact display.",
+    "It does not replace live production /teaching/[operation] browser smoke or /api/teaching/operations route smoke evidence.",
+    "The overall enterprise release gate remains blocked until owner-approved production app-auth, external-storage readiness, ordinary teaching route/browser smoke, and provider mutation proof are regenerated in one release run."
+  ],
+  "secretHandling": {
+    "realSecretsInspected": false,
+    "realSecretsLogged": false,
+    "credentialsMutated": false
+  },
+  "gitMutation": {
+    "staged": false,
+    "committed": false,
+    "branched": false,
+    "pushed": false,
+    "resetOrReverted": false
+  }
+}

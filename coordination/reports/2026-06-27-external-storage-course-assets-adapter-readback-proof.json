@@ -1,0 +1,62 @@
+{
+  "target": "external-storage-course-assets-adapter-readback-proof",
+  "date": "2026-06-27",
+  "responsibleSessions": ["S12", "S22"],
+  "status": "passed",
+  "summary": "Production-mode external storage course-assets readback now returns managed database adapter proof, allowing /api/teaching/course-cover preflight to proceed without falling back to local JSON or hiding adapter readiness.",
+  "codeChanged": [
+    "scripts/external-storage-service.mjs",
+    "scripts/teaching-course-management-route-smoke.mjs",
+    "scripts/local-production-e2e-smoke.mjs"
+  ],
+  "testsChanged": [
+    "tests/external-storage-smoke.test.ts",
+    "tests/teaching-course-management-route-smoke.test.ts",
+    "tests/local-production-e2e-smoke.test.ts"
+  ],
+  "redGreenEvidence": [
+    {
+      "command": "./node_modules/.bin/vitest run tests/teaching-course-management-route-smoke.test.ts -t \"prints sanitized course-cover failure diagnostics\"",
+      "redReason": "route smoke omitted course-cover 502 diagnostics",
+      "greenStatus": "passed"
+    },
+    {
+      "command": "./node_modules/.bin/vitest run tests/local-production-e2e-smoke.test.ts -t \"preserves course-management route-smoke diagnostics\"",
+      "redReason": "local-production check omitted route-smoke diagnostics",
+      "greenStatus": "passed"
+    },
+    {
+      "command": "./node_modules/.bin/vitest run tests/external-storage-smoke.test.ts -t \"course-assets readback\"",
+      "redReason": "course-assets GET readback omitted productionDatabaseAdapter",
+      "greenStatus": "passed"
+    }
+  ],
+  "localProductionEvidence": {
+    "path": "coordination/reports/2026-06-27-local-production-e2e-smoke-current-course-assets-adapter-fix-refresh.json",
+    "status": "passed",
+    "blockedReasons": [],
+    "courseCoverStatus": 200,
+    "existingCourseCoverStatus": 200,
+    "teachingCourseManagementRouteSmoke": "passed",
+    "teachingOperationsRouteSmoke": "passed"
+  },
+  "finalVerification": {
+    "npmRunTest": "passed: 66 files, 1331 tests",
+    "npmRunLint": "passed",
+    "npmRunBuild": "passed",
+    "gitDiffCheck": "passed"
+  },
+  "ownerChecklistEvidence": {
+    "path": "coordination/reports/2026-06-27-production-owner-decision-checklist-current-local-production-course-assets-adapter-fix-refresh.json",
+    "status": "owner-decisions-required",
+    "localProductionDiagnostic": "passed-current",
+    "releaseEligible": false
+  },
+  "safety": {
+    "secrets": "omitted",
+    "localFiles": "omitted",
+    "responseBodies": "omitted",
+    "productionMutationPerformed": false
+  },
+  "remainingEnterpriseBlocker": "Aggregate production release remains blocked until owner-approved same-run production env, deployment, external-storage readiness, route/browser smoke, and live provider generation evidence are regenerated."
+}

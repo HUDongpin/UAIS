@@ -1,0 +1,70 @@
+{
+  "target": "app-auth-provider-readiness",
+  "mode": "dry-run",
+  "environment": "production",
+  "network": "disabled",
+  "status": "blocked",
+  "releaseRunId": "uais-enterprise-2026-06-27-app-auth",
+  "responsibleSession": "S12/S19/S22",
+  "appAuthProviderMode": "trusted-account-provider",
+  "endpointSecurity": "remote-https",
+  "appSessionCookieContract": {
+    "signingSecretStrength": "sufficient",
+    "httpOnly": "required",
+    "sameSite": "lax",
+    "secureInProduction": true,
+    "maxAgeBounded": true,
+    "cookiePair": [
+      {
+        "name": "uais_app_session",
+        "purpose": "signed-app-session-claims",
+        "httpOnly": true,
+        "sameSite": "Lax",
+        "secure": "required-in-production",
+        "path": "/",
+        "maxAge": "bounded-by-session-ttl",
+        "priority": "High",
+        "valueRedacted": true
+      },
+      {
+        "name": "uais_app_session_signature",
+        "purpose": "hmac-sha256-signature",
+        "httpOnly": true,
+        "sameSite": "Lax",
+        "secure": "required-in-production",
+        "path": "/",
+        "maxAge": "bounded-by-session-ttl",
+        "priority": "High",
+        "valueRedacted": true
+      }
+    ],
+    "valueRedacted": true
+  },
+  "trustedAccountProviderContract": {
+    "providerKind": "trusted-account-provider",
+    "endpoint": "configured",
+    "bearerCredential": "configured",
+    "accessTokenStrength": "sufficient",
+    "requestMethod": "POST",
+    "responseUserShape": [
+      "account",
+      "role",
+      "displayName",
+      "department"
+    ],
+    "valueRedacted": true
+  },
+  "blockedReasons": [
+    "app-auth-provider-live-readiness-not-run"
+  ],
+  "safety": {
+    "valuesRedacted": true,
+    "secretsOmitted": true,
+    "passwordsOmitted": true,
+    "providerUrlsOmitted": true,
+    "responseBodiesOmitted": true,
+    "localPrivatePathsOmitted": true,
+    "liveRequiresApproval": true,
+    "cookieValuesOmitted": true
+  }
+}

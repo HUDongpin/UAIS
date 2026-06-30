@@ -1,0 +1,57 @@
+{
+  "target": "learning-ppt-playback-deployment-smoke",
+  "mode": "live",
+  "environment": "preview",
+  "network": "enabled",
+  "status": "failed",
+  "responsibleSession": "S22",
+  "routes": {
+    "learningPage": "/learning",
+    "playbackManifest": "/api/learning/ppt-playback/<course-id>",
+    "firstSlideAudio": "/api/learning/ppt-playback/audio/<manifest-id>/<audio-id>"
+  },
+  "deploymentFingerprint": {
+    "status": "present",
+    "value": "sha256:71989ff1c55f47be"
+  },
+  "deploymentOrigin": {
+    "status": "present",
+    "originClass": "remote-https",
+    "valueRedacted": true
+  },
+  "prerequisites": [
+    {
+      "id": "s22-deployment-base-url",
+      "responsibleSession": "S22",
+      "requiredEnv": "UAIS_DEPLOYMENT_BASE_URL",
+      "status": "present"
+    }
+  ],
+  "checks": [
+    "learning-page-http-200",
+    "kang-xia-manifest-19-slides",
+    "student-safe-manifest-redaction",
+    "first-slide-audio-wav-response"
+  ],
+  "blockedReasons": [
+    "learning-ppt-playback-smoke-request-failed"
+  ],
+  "safety": {
+    "valuesRedacted": true,
+    "responseBodiesOmitted": true,
+    "audioPayloadOmitted": true,
+    "liveRequiresApproval": true,
+    "checksPublishedLearningPlayback": true
+  },
+  "results": {
+    "learningPageHttp200": "failed",
+    "playbackManifestKangXiaVoice": "failed",
+    "playbackManifestSlideCount": "failed",
+    "playbackManifestStudentSafeRedaction": "failed",
+    "firstSlideAudioWavHeaders": "failed"
+  },
+  "networkError": {
+    "class": "TimeoutError",
+    "valueRedacted": true
+  }
+}

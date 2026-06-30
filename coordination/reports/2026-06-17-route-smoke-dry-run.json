@@ -1,0 +1,177 @@
+{
+  "target": "deployment-route-smoke",
+  "mode": "dry-run",
+  "environment": "unspecified",
+  "authProviderMode": "missing",
+  "network": "disabled",
+  "status": "blocked",
+  "responsibleSession": "S22",
+  "deploymentFingerprint": {
+    "status": "missing"
+  },
+  "deploymentOrigin": {
+    "status": "missing",
+    "originClass": "missing",
+    "valueRedacted": true
+  },
+  "routeChecks": [
+    {
+      "id": "s22-retention-readiness-route",
+      "route": "/api/ai/voice-assets/retention-readiness",
+      "method": "GET",
+      "action": "verify-admin-retention-readiness-route",
+      "auth": "signed-admin-ai-access",
+      "expectedStatus": 200,
+      "responsibleSessions": [
+        "S22",
+        "S12",
+        "S24"
+      ]
+    },
+    {
+      "id": "s22-voice-lifecycle-audit-route",
+      "route": "/api/ai/voice-clone/lifecycle-audit",
+      "method": "GET",
+      "action": "verify-admin-voice-lifecycle-audit-route",
+      "auth": "signed-admin-ai-access",
+      "expectedStatus": 200,
+      "responsibleSessions": [
+        "S22",
+        "S12",
+        "S24"
+      ]
+    },
+    {
+      "id": "s22-teacher-auth-issuer-route",
+      "route": "/api/ai/teacher-auth/issue",
+      "method": "POST",
+      "action": "verify-admin-teacher-auth-issuer-route",
+      "auth": "signed-admin-ai-access",
+      "expectedStatus": 200,
+      "responsibleSessions": [
+        "S22",
+        "S12",
+        "S19"
+      ],
+      "requestBodyShape": "teacher-auth-session-issue",
+      "responseHeaderChecks": [
+        "teacherAuthClaimsSetCookie",
+        "teacherAuthSignatureSetCookie",
+        "httpOnlySameSiteSecureMaxAge",
+        "priorityHigh",
+        "issuerProofBoundedMaxAge"
+      ]
+    },
+    {
+      "id": "s22-teacher-ai-session-route",
+      "route": "/api/ai/session",
+      "method": "POST",
+      "action": "verify-issued-teacher-ai-session-route",
+      "auth": "issued-teacher-auth-cookie",
+      "expectedStatus": 200,
+      "responsibleSessions": [
+        "S22",
+        "S12",
+        "S19"
+      ],
+      "requestBodyShape": "teacher-ai-session-issue",
+      "responseShapeChecks": [
+        "accessSession",
+        "accessPlan",
+        "authProviderContract",
+        "s12TeacherAiSessionBoundary"
+      ]
+    },
+    {
+      "id": "s22-teacher-ownership-route",
+      "route": "/api/ai/teacher-ownership",
+      "method": "GET",
+      "action": "verify-issued-teacher-ownership-route",
+      "auth": "issued-teacher-auth-cookie",
+      "expectedStatus": 200,
+      "responsibleSessions": [
+        "S22",
+        "S12",
+        "S24",
+        "S19"
+      ],
+      "responseShapeChecks": [
+        "ownership",
+        "consistency",
+        "s12TeacherOwnershipSummary"
+      ]
+    },
+    {
+      "id": "s22-teacher-ppt-workflow-route",
+      "route": "/api/ai/teacher-ppt-workflow",
+      "method": "GET",
+      "action": "verify-signed-teacher-ppt-workflow-route",
+      "auth": "issued-teacher-auth-cookie",
+      "expectedStatus": 200,
+      "responsibleSessions": [
+        "S22",
+        "S12",
+        "S24",
+        "S19"
+      ],
+      "responseShapeChecks": [
+        "workflow",
+        "workflowReadyForDownloads",
+        "workflowDownloadContract",
+        "workflowAudioDownloadPattern",
+        "workflowExportDownloadUrl",
+        "agentHandoffPlan",
+        "agentHandoffPlanFramework",
+        "s22ReleaseSmokeAgent"
+      ]
+    }
+  ],
+  "prerequisites": [
+    {
+      "id": "s22-deployment-base-url",
+      "responsibleSession": "S22",
+      "requiredEnv": "UAIS_DEPLOYMENT_BASE_URL",
+      "status": "missing"
+    },
+    {
+      "id": "s19-ai-access-signing-secret",
+      "responsibleSession": "S19",
+      "requiredEnv": "UAIS_AI_ACCESS_SIGNING_SECRET",
+      "status": "missing"
+    },
+    {
+      "id": "s12-teacher-auth-provider",
+      "responsibleSession": "S12",
+      "requiredEnv": "UAIS_TEACHER_AUTH_PROVIDER",
+      "status": "missing"
+    },
+    {
+      "id": "s19-teacher-auth-session-signing-secret",
+      "responsibleSession": "S19",
+      "requiredEnv": "UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET",
+      "status": "missing"
+    },
+    {
+      "id": "s12-teacher-auth-issuer-secret",
+      "responsibleSession": "S12",
+      "requiredEnv": "UAIS_TEACHER_AUTH_ISSUER_SECRET",
+      "status": "missing"
+    }
+  ],
+  "blockedReasons": [
+    "missing-UAIS_DEPLOYMENT_BASE_URL",
+    "missing-UAIS_AI_ACCESS_SIGNING_SECRET",
+    "missing-UAIS_TEACHER_AUTH_PROVIDER",
+    "missing-UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET",
+    "missing-UAIS_TEACHER_AUTH_ISSUER_SECRET"
+  ],
+  "safety": {
+    "secretsRedacted": true,
+    "valuesRedacted": true,
+    "signedAdminAccess": true,
+    "issuedTeacherAuthCookie": true,
+    "oidcBearerTokenOmitted": true,
+    "responseBodiesOmitted": true,
+    "liveRequiresApproval": true
+  }
+}

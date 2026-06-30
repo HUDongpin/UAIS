@@ -1,0 +1,114 @@
+{
+  "schemaVersion": "uais-enterprise-evidence-v1",
+  "generatedAt": "2026-06-27T15:16:00+08:00",
+  "responsibleSession": "S12",
+  "status": "contract-hardened",
+  "releaseGateEligible": false,
+  "scope": {
+    "surface": "/api/teaching/operations",
+    "backend": "teaching-course-management-external-store",
+    "runtime": "production",
+    "storagePolicy": "external-redacted-teaching-course-management-snapshot"
+  },
+  "enterpriseGapClosed": {
+    "category": "production-persistence-concurrency-control",
+    "description": "Production external course-management readback and write acknowledgements now require non-empty snapshot revisions before ordinary teaching domain-object writes can be treated as successful.",
+    "failClosedBehavior": [
+      "returns 502 when production read acknowledgement omits snapshot revision",
+      "does not issue the external course-management PUT after missing revision readback",
+      "returns 502 when production write acknowledgement omits snapshot revision",
+      "returns partial-failure recovery context after the operation ledger was persisted",
+      "attempts teaching-operation rollback compensation for the persisted ledger record"
+    ],
+    "redaction": {
+      "secrets": "omitted",
+      "localFiles": "omitted",
+      "assets": "ids-only"
+    }
+  },
+  "filesChanged": [
+    "src/lib/server/teaching-course-management-external-store.ts",
+    "tests/teaching-operation-backend.test.ts",
+    "coordination/reports/2026-06-27-teaching-course-management-production-revision-guard.json",
+    "coordination/reports/2026-06-27-enterprise-runthrough-current-gate-refresh.md",
+    "coordination/reports/2026-06-26-current-enterprise-evidence-path-manifest.md",
+    "coordination/session-logs/2026-06-27-S12.md"
+  ],
+  "redGreenEvidence": [
+    {
+      "phase": "red",
+      "command": "npx vitest run tests/teaching-operation-backend.test.ts --reporter=dot -t \"fails closed when production course-management readback lacks a snapshot revision\"",
+      "result": "failed-before-implementation",
+      "observedFailure": "Expected 502 but received 200."
+    },
+    {
+      "phase": "green",
+      "command": "npx vitest run tests/teaching-operation-backend.test.ts --reporter=dot -t \"fails closed when production course-management readback lacks a snapshot revision\"",
+      "result": "passed-after-implementation",
+      "tests": {
+        "passed": 1,
+        "skipped": 148
+      }
+    },
+    {
+      "phase": "red",
+      "command": "npx vitest run tests/teaching-operation-backend.test.ts --reporter=dot -t \"fails closed when production course-management write acknowledgement lacks a snapshot revision\"",
+      "result": "failed-before-implementation",
+      "observedFailure": "Expected 502 but received 200."
+    },
+    {
+      "phase": "green",
+      "command": "npx vitest run tests/teaching-operation-backend.test.ts --reporter=dot -t \"fails closed when production course-management write acknowledgement lacks a snapshot revision\"",
+      "result": "passed-after-implementation",
+      "tests": {
+        "passed": 1,
+        "skipped": 149
+      }
+    }
+  ],
+  "verification": [
+    {
+      "command": "npx vitest run tests/teaching-operation-backend.test.ts --reporter=dot",
+      "result": "passed",
+      "tests": {
+        "passed": 150
+      }
+    },
+    {
+      "command": "npm run test",
+      "result": "passed",
+      "tests": {
+        "filesPassed": 66,
+        "passed": 1268
+      }
+    },
+    {
+      "command": "npm run lint",
+      "result": "passed"
+    },
+    {
+      "command": "npm run build",
+      "result": "passed"
+    },
+    {
+      "command": "git diff --check",
+      "result": "passed"
+    }
+  ],
+  "notRun": [
+    "owner-approved Vercel env apply",
+    "live production app-auth readiness",
+    "production deployment",
+    "production ordinary teaching route smoke",
+    "teaching operation detail browser smoke",
+    "teaching course-management route smoke",
+    "external-storage live smoke",
+    "live provider generation or mutation"
+  ],
+  "remainingEnterpriseBlockers": [
+    "aggregate production release gate remains blocked",
+    "external-storage service readiness still needs ordinary teaching schemas and live managed database adapter proof",
+    "same-release-run production route and browser smokes remain missing",
+    "Docker daemon remains unavailable for local external-storage container build proof"
+  ]
+}

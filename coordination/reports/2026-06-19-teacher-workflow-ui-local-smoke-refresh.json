@@ -1,0 +1,68 @@
+{
+  "target": "teacher-workflow-ui-local-smoke-refresh",
+  "date": "2026-06-19",
+  "sessionId": "S05/S22",
+  "status": "accepted-local-ui-evidence-refreshed",
+  "overallGoalStatus": "active-incomplete",
+  "objective": "Refresh local website-level teacher PPT workflow UI evidence after confirming the current /teaching page already covers voice upload/select, preflight, voiceRef, PPT narration generation, and per-slide WAV download markers.",
+  "sourceEvidence": "coordination/reports/2026-06-19-teacher-workflow-ui-smoke-current.json",
+  "summary": [
+    "The current TeachingPage renders the teacher PPT narration workflow panel with owner-provided Kang Xia 10-second voice selection, upload/select audio input, browser metadata duration gating, signed-session bootstrap marker, protected workflow action manifest, server workflow status bridge, preflight, voiceRef display, PPT narration generation, and per-slide WAV download links.",
+    "The local redacted UI smoke command accepted all required feature markers.",
+    "This evidence supports local website UI readiness only. Production deployed page smoke, real browser production interaction smoke, trusted teacher auth provider proof, remote external storage proof, Vercel deployment proof, and manual PowerPoint/WPS playback acceptance remain incomplete."
+  ],
+  "features": {
+    "voiceSampleUpload": true,
+    "uploadedSampleAudioPayload": true,
+    "voiceSampleDurationGate": true,
+    "voiceSampleSelect": true,
+    "selectedSampleIdentity": true,
+    "preflight": true,
+    "voiceRefDisplay": true,
+    "pptNarrationGenerate": true,
+    "perSlideWavDownloads": true,
+    "workflowStepGating": true,
+    "signedSessionBootstrap": true,
+    "authFailClosed": true,
+    "serverWorkflowStatus": true
+  },
+  "checksRun": [
+    {
+      "command": "node scripts/teacher-workflow-ui-smoke.mjs",
+      "result": "passed with status accepted and evidenceStatus feature-evidence-passed"
+    },
+    {
+      "command": "npm run test -- tests/teaching-page.test.tsx tests/teacher-workflow-ui-smoke.test.ts tests/teacher-workflow-deployment-smoke.test.ts",
+      "result": "passed: 3 files / 25 tests"
+    },
+    {
+      "command": "npm run test",
+      "result": "passed later in the same work turn: 37 files / 519 tests"
+    },
+    {
+      "command": "npm run lint",
+      "result": "passed later in the same work turn"
+    },
+    {
+      "command": "npm run build",
+      "result": "initially failed in the sandbox while fetching Google Fonts, then passed with approved network access later in the same work turn"
+    }
+  ],
+  "checksNotRun": [
+    "No deployed teacher workflow page smoke was run.",
+    "No production live Playwright browser smoke was run.",
+    "No Vercel deployment, production route smoke, production external-storage smoke, or manual PowerPoint/WPS playback acceptance was run."
+  ],
+  "blockers": [
+    "Production Vercel project/link/env/deploy proof is still missing.",
+    "Trusted teacher auth/session provider readiness is still not production-live proved.",
+    "External durable storage still needs remote-HTTPS service readiness and live write/read smoke.",
+    "The overall enterprise UAIS E2E goal remains incomplete."
+  ],
+  "redaction": {
+    "commandOutputOmitted": true,
+    "realSecretsLogged": false,
+    "localPrivatePathsLogged": false,
+    "valuesRedacted": true
+  }
+}

@@ -1,0 +1,84 @@
+{
+  "target": "external-storage-smoke-release-run-guard",
+  "generatedAt": "2026-06-19T01:17:32+08:00",
+  "sessionId": "S22",
+  "status": "guarded",
+  "objective": "Prevent live production external storage write/read smoke evidence from being generated without a non-secret release-run id.",
+  "guard": {
+    "script": "scripts/external-storage-smoke.mjs",
+    "appliesTo": {
+      "mode": "live",
+      "environment": "production"
+    },
+    "requires": "--release-run-id",
+    "guardOrder": "after explicit owner approval validation and before env-file loading, readiness planning, or network writes",
+    "missingReleaseRunIdBehavior": {
+      "exitStatus": 1,
+      "stdout": "empty",
+      "stderrMessage": "External storage smoke checks require --release-run-id.",
+      "commandArgumentsRedacted": true
+    }
+  },
+  "tddEvidence": {
+    "red": {
+      "observed": true,
+      "command": "npm run test -- tests/ai-env-and-smoke.test.ts -t external storage live smoke without a release-run id",
+      "result": "failed before implementation because the script reached the live smoke request path and produced smoke output instead of rejecting the missing release-run id"
+    },
+    "green": {
+      "observed": true,
+      "command": "npm run test -- tests/ai-env-and-smoke.test.ts -t external storage live smoke without a release-run id",
+      "result": "passed after adding the guard"
+    }
+  },
+  "checks": [
+    {
+      "command": "node --check scripts/external-storage-smoke.mjs",
+      "status": "passed"
+    },
+    {
+      "command": "node scripts/external-storage-smoke.mjs --live --approved --base-url REDACTED_REMOTE_HTTPS_PLACEHOLDER --teacher-id REDACTED_TEACHER --environment production",
+      "status": "passed",
+      "result": "exited 1 with release-run-id-required message before env loading or network writes"
+    },
+    {
+      "command": "npm run test -- tests/ai-env-and-smoke.test.ts",
+      "status": "passed",
+      "summary": "1 file / 48 tests"
+    },
+    {
+      "command": "npm run test",
+      "status": "passed",
+      "summary": "34 files / 447 tests"
+    },
+    {
+      "command": "npm run lint",
+      "status": "passed"
+    },
+    {
+      "command": "npm run build",
+      "status": "passed",
+      "summary": "Next.js 16.2.9 production build compiled successfully and generated 8 static pages"
+    }
+  ],
+  "releaseImpact": {
+    "improved": [
+      "External storage production smoke evidence is now bound to the same release-run id expected by env apply, auth readiness, storage readiness, deployment evidence, deployed smokes, and manual PPT acceptance.",
+      "Missing release-run id now fails before any storage access token can be read from an env file and before any network write/read smoke request can be attempted."
+    ],
+    "stillBlocked": [
+      "Owner-approved Vercel team/project/link and env apply remain incomplete.",
+      "Production trusted teacher auth/session provider readiness remains incomplete.",
+      "Real remote-HTTPS durable external storage service readiness and live smoke remain incomplete.",
+      "Production deployment evidence and deployed route/browser smokes remain incomplete.",
+      "Manual PowerPoint/WPS playback acceptance remains incomplete."
+    ]
+  },
+  "redaction": {
+    "secretsPrinted": false,
+    "baseUrlsPrinted": false,
+    "teacherIdsPrinted": false,
+    "localPrivatePathsPrinted": false,
+    "commandArgumentsRedacted": true
+  }
+}

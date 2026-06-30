@@ -1,0 +1,33 @@
+{
+  "target": "teacher-workflow-ui-smoke",
+  "mode": "local-ui-test",
+  "status": "accepted",
+  "responsibleSession": "S05",
+  "evidenceStatus": "feature-evidence-passed",
+  "test": {
+    "file": "tests/teaching-page.test.tsx",
+    "scenario": "teacher workflow server-status bridge plus uploaded-audio duration gate, selected sample identity, fail-closed auth, step gating, preflight, voiceRef, and per-slide WAV downloads"
+  },
+  "features": {
+    "voiceSampleUpload": true,
+    "uploadedSampleAudioPayload": true,
+    "voiceSampleDurationGate": true,
+    "voiceSampleSelect": true,
+    "selectedSampleIdentity": true,
+    "preflight": true,
+    "voiceRefDisplay": true,
+    "pptNarrationGenerate": true,
+    "perSlideWavDownloads": true,
+    "workflowStepGating": true,
+    "signedSessionBootstrap": true,
+    "authFailClosed": true,
+    "serverWorkflowStatus": true
+  },
+  "blockedReasons": [],
+  "safety": {
+    "secretsRedacted": true,
+    "commandOutputOmitted": true,
+    "localPrivatePathsOmitted": true,
+    "providerValuesOmitted": true
+  }
+}

@@ -1,0 +1,44 @@
+{
+  "target": "lrs-live-write-read-smoke",
+  "mode": "dry-run",
+  "environment": "production",
+  "releaseRunId": "uais-lrs-live-2026-06-27-2347",
+  "status": "ready",
+  "blockedReasons": [],
+  "endpoint": {
+    "status": "present",
+    "fingerprint": "sha256:17b4c445a9705113",
+    "valueRedacted": true
+  },
+  "requiredEnv": [
+    {
+      "name": "UAIS_LRS_ENDPOINT",
+      "status": "present",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_LRS_USERNAME",
+      "status": "present",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_LRS_PASSWORD",
+      "status": "present",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_LRS_XAPI_VERSION",
+      "status": "present",
+      "valueRedacted": true
+    }
+  ],
+  "xapiVersion": "1.0.3",
+  "safety": {
+    "liveWriteRequiresApproval": true,
+    "responseBodiesOmitted": true,
+    "endpointRedacted": true,
+    "credentialsRedacted": true,
+    "statementIdFingerprinted": true,
+    "queryPolicy": "statementId-plus-agent-verb-activity"
+  }
+}

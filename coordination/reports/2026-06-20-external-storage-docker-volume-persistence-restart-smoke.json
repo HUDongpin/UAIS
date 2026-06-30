@@ -1,0 +1,164 @@
+{
+  "target": "external-storage-docker-volume-persistence-restart-smoke",
+  "date": "2026-06-20",
+  "responsibleSession": "S22",
+  "status": "passed-local-production-restart-persistence",
+  "overallGoalStatus": "active-incomplete",
+  "summary": {
+    "objective": "Prove the Dockerized UAIS external storage service persists ownership and lifecycle-audit records across a container restart when its data directory is bound to durable host storage.",
+    "result": "The write phase passed in the first container, the container was removed, a second container was launched against the same data directory, and the read phase passed against the same redacted persistence proof fingerprint.",
+    "productionBoundary": "This is local-production Docker evidence only. It strengthens the durable-service proof but does not replace a remote HTTPS service, Vercel env apply evidence, production deployment evidence, or production external-storage smoke."
+  },
+  "harness": {
+    "script": "scripts/external-storage-persistence-smoke.mjs",
+    "test": "tests/external-storage-persistence-smoke.test.ts",
+    "phases": [
+      "write",
+      "read-after-container-restart"
+    ],
+    "persistenceProofFingerprint": {
+      "status": "matched",
+      "write": "sha256:78d621c33928e264",
+      "read": "sha256:78d621c33928e264",
+      "valueRedacted": true
+    }
+  },
+  "dockerEvidence": {
+    "image": "uais-external-storage:codex-s22-20260619",
+    "serviceMode": "production",
+    "dataDirectoryBinding": "host-bind-mount-redacted",
+    "containerRestart": "proved-by-remove-and-recreate",
+    "writeContainer": {
+      "status": "removed",
+      "valuesRedacted": true
+    },
+    "readContainer": {
+      "status": "removed",
+      "valuesRedacted": true
+    },
+    "dockerPsAfterCleanup": "no-running-containers"
+  },
+  "generatedEvidence": [
+    {
+      "path": "coordination/reports/2026-06-20-external-storage-docker-volume-persistence-write.json",
+      "target": "external-storage-persistence-smoke",
+      "status": "passed",
+      "mode": "live",
+      "environment": "local-production",
+      "phase": "write",
+      "results": [
+        "s22-external-storage-persistence-health",
+        "s12-external-storage-persistence-ownership-write",
+        "s24-external-storage-persistence-audit-write"
+      ]
+    },
+    {
+      "path": "coordination/reports/2026-06-20-external-storage-docker-volume-persistence-read-after-restart.json",
+      "target": "external-storage-persistence-smoke",
+      "status": "passed",
+      "mode": "live",
+      "environment": "local-production",
+      "phase": "read",
+      "results": [
+        "s22-external-storage-persistence-health",
+        "s22-external-storage-persisted-ownership-read",
+        "s24-external-storage-persisted-audit-read"
+      ]
+    },
+    {
+      "path": "coordination/reports/2026-06-20-production-e2e-release-gate-current-docker-persistence.json",
+      "target": "uais-production-e2e-release-gate",
+      "status": "blocked",
+      "purpose": "Confirms local Docker persistence evidence does not unlock production release."
+    },
+    {
+      "path": "coordination/reports/2026-06-20-production-owner-decision-checklist-current-docker-persistence.json",
+      "target": "production-owner-decision-checklist",
+      "status": "owner-decisions-required",
+      "purpose": "Refreshes owner decisions after Docker persistence proof."
+    }
+  ],
+  "checksRun": [
+    {
+      "command": "npm run test -- tests/external-storage-persistence-smoke.test.ts",
+      "result": "red-then-green: failed before script/policy payload existed; passed after harness implementation"
+    },
+    {
+      "command": "node --check scripts/external-storage-persistence-smoke.mjs",
+      "result": "passed"
+    },
+    {
+      "command": "docker run -d --name <write-container> -v <redacted-host-dir>:/data/uais-external-storage ...",
+      "result": "passed"
+    },
+    {
+      "command": "node scripts/external-storage-persistence-smoke.mjs --live --approved --environment local-production --phase write ...",
+      "result": "passed"
+    },
+    {
+      "command": "docker rm -f <write-container>",
+      "result": "passed"
+    },
+    {
+      "command": "docker run -d --name <read-container> -v <same-redacted-host-dir>:/data/uais-external-storage ...",
+      "result": "passed"
+    },
+    {
+      "command": "node scripts/external-storage-persistence-smoke.mjs --live --approved --environment local-production --phase read ...",
+      "result": "passed"
+    },
+    {
+      "command": "docker rm -f <read-container>",
+      "result": "passed"
+    },
+    {
+      "command": "docker ps",
+      "result": "passed-no-running-containers"
+    },
+    {
+      "command": "node scripts/production-e2e-release-gate.mjs ...",
+      "result": "passed-blocked-gate-generated"
+    },
+    {
+      "command": "node scripts/production-owner-decision-checklist.mjs ...",
+      "result": "passed-owner-decisions-required"
+    },
+    {
+      "command": "rg -n <fixture-token-url-teacher-proof-host-path-sentinels> <persistence-evidence>",
+      "result": "passed-no-sentinels-found"
+    }
+  ],
+  "notRun": [
+    "Remote HTTPS external-storage service provisioning",
+    "Vercel env apply for external storage",
+    "Production external-storage readiness",
+    "Production external-storage write/read smoke",
+    "Vercel production deployment",
+    "Production protected route smoke",
+    "Manual WPS/PowerPoint PPT playback acceptance"
+  ],
+  "remainingReleaseBlockers": [
+    "deployed-teacher-workflow-page-not-live-passed",
+    "deployed-learning-ppt-playback-not-live-passed",
+    "vercel-env-not-applied",
+    "teacher-auth-provider-readiness-not-live-ready",
+    "external-storage-service-readiness-not-live-ready",
+    "vercel-production-deployment-not-proven",
+    "deployment-route-smoke-not-live-passed",
+    "external-storage-smoke-not-production",
+    "manual-ppt-playback-not-accepted"
+  ],
+  "safety": {
+    "realSecretsRead": false,
+    "realSecretsPrinted": false,
+    "envLocalInspected": false,
+    "fixtureTokenOnly": true,
+    "serviceUrlOmitted": true,
+    "teacherIdOmitted": true,
+    "proofIdOmitted": true,
+    "hostDataPathOmitted": true,
+    "responseBodiesOmitted": true,
+    "dockerContainersCleanedUp": true,
+    "valuesRedacted": true
+  }
+}

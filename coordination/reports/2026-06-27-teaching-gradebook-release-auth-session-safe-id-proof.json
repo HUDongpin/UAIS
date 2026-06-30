@@ -1,0 +1,64 @@
+{
+  "generatedAt": "2026-06-27T19:11:02+08:00",
+  "responsibleSession": "S12/S22",
+  "scope": "ordinary-teaching-gradebook-release-signed-session-safe-identity",
+  "status": "passed",
+  "summary": "The ordinary /api/teaching/gradebook-updates/[objectId]/release POST route now rejects signed teacher cookies whose actorId or sessionId is not a safe server identity before gradebook release writes can run.",
+  "filesChanged": [
+    "src/app/api/teaching/gradebook-updates/[objectId]/release/route.ts",
+    "tests/teaching-operation-backend.test.ts"
+  ],
+  "redGreenEvidence": [
+    {
+      "phase": "red",
+      "command": "./node_modules/.bin/vitest run tests/teaching-operation-backend.test.ts --reporter=dot -t \"unsafe signed gradebook release\"",
+      "expectedFailure": true,
+      "observed": "The unsafe gradebook release actorId case failed with HTTP 500 because the validly signed unsafe actorId reached later ownership lookup. The unsafe gradebook release sessionId case failed with HTTP 200 because the validly signed unsafe sessionId allowed a gradebook release write."
+    },
+    {
+      "phase": "green",
+      "command": "./node_modules/.bin/vitest run tests/teaching-operation-backend.test.ts --reporter=dot -t \"unsafe signed gradebook release|lets the owning teacher release a pending gradebook update\"",
+      "exitCode": 0,
+      "observed": "3 passed, 163 skipped."
+    }
+  ],
+  "behaviorHardened": [
+    "Signed gradebook release cookies whose actorId fails the safe-id boundary now resolve as unauthenticated and return HTTP 401 with authenticated-session-required.",
+    "Signed gradebook release cookies whose sessionId fails the safe-id boundary now resolve as unauthenticated and return HTTP 401 with authenticated-session-required.",
+    "Unsafe signed identity claims are rejected before gradebook update release writes, release notifications, or teaching-gradebook-update.released audit events can be written.",
+    "The denial response preserves trace id and redaction without echoing unsafe local-path or secret-like identity values."
+  ],
+  "verification": [
+    {
+      "command": "./node_modules/.bin/vitest run tests/teaching-operation-backend.test.ts --reporter=dot -t \"unsafe signed gradebook release|lets the owning teacher release a pending gradebook update\"",
+      "exitCode": 0,
+      "observed": "3 passed, 163 skipped."
+    },
+    {
+      "command": "./node_modules/.bin/vitest run tests/teaching-operation-backend.test.ts --reporter=dot",
+      "exitCode": 0,
+      "observed": "166 passed."
+    },
+    {
+      "command": "npm run lint",
+      "exitCode": 0,
+      "observed": "ESLint passed."
+    },
+    {
+      "command": "npm run test",
+      "exitCode": 0,
+      "observed": "66 files passed, 1297 tests passed. Existing jsdom navigation warnings remained non-fatal."
+    },
+    {
+      "command": "npm run build",
+      "exitCode": 0,
+      "observed": "Next.js production build completed."
+    }
+  ],
+  "boundary": "This is local backend/API auth-boundary hardening for the ordinary teaching gradebook release route. It does not replace fresh same-run live production ordinary teaching route/browser smoke artifacts or the aggregate enterprise gate.",
+  "redaction": {
+    "secrets": "omitted",
+    "localFiles": "omitted",
+    "assets": "ids-only"
+  }
+}

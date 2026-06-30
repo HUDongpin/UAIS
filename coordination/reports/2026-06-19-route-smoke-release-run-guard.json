@@ -1,0 +1,104 @@
+{
+  "target": "protected-route-smoke-release-run-guard",
+  "date": "2026-06-19",
+  "sessionId": "S22",
+  "status": "completed-for-incremental-guard",
+  "overallGoalStatus": "active-incomplete",
+  "summary": {
+    "change": "Production live protected route smoke now requires a non-secret --release-run-id before env-file loading, evidence planning, URL handling, or network requests.",
+    "why": "Trusted teacher auth/session and protected teacher workflow route evidence must be bound to the same release run as Vercel deployment, env apply, browser smoke, learning playback smoke, external storage smoke, and manual PPT acceptance evidence.",
+    "nodeV24HelpUpdate": "The protected route smoke help usage now shows node -- scripts/ai-route-smoke.mjs so --env-file remains a UAIS script argument instead of being parsed by Node."
+  },
+  "filesChanged": [
+    "scripts/ai-route-smoke.mjs",
+    "tests/ai-env-and-smoke.test.ts",
+    "coordination/reports/2026-06-19-route-smoke-release-run-guard.json",
+    "coordination/session-logs/2026-06-19-S22.md"
+  ],
+  "redGreenEvidence": [
+    {
+      "phase": "red",
+      "command": "npm run test -- tests/ai-env-and-smoke.test.ts -t \"protected route smoke env-file\"",
+      "result": "failed-before-implementation",
+      "evidence": "Help output still began with node scripts/ai-route-smoke.mjs."
+    },
+    {
+      "phase": "red",
+      "command": "npm run test -- tests/ai-env-and-smoke.test.ts -t \"without a release-run id before network requests\"",
+      "result": "failed-before-implementation",
+      "evidence": "The script emitted a production route smoke blocked plan instead of exiting before plan construction."
+    },
+    {
+      "phase": "green",
+      "command": "npm run test -- tests/ai-env-and-smoke.test.ts -t \"protected route smoke env-file\"",
+      "result": "passed",
+      "testFiles": 1,
+      "testsPassed": 1
+    },
+    {
+      "phase": "green",
+      "command": "npm run test -- tests/ai-env-and-smoke.test.ts -t \"without a release-run id before network requests\"",
+      "result": "passed",
+      "testFiles": 1,
+      "testsPassed": 1
+    }
+  ],
+  "verification": [
+    {
+      "command": "node --check scripts/ai-route-smoke.mjs",
+      "result": "passed"
+    },
+    {
+      "command": "node scripts/ai-route-smoke.mjs --live --approved --environment production --base-url REDACTED_DEPLOYMENT_URL",
+      "result": "exited-1-as-expected",
+      "stderr": "Protected route smoke checks require --release-run-id.",
+      "networkRequests": 0,
+      "safety": "No URL, local path, env value, response body, or secret value was printed."
+    },
+    {
+      "command": "npm run test -- tests/ai-env-and-smoke.test.ts",
+      "result": "passed",
+      "testFiles": 1,
+      "testsPassed": 50
+    },
+    {
+      "command": "npm run test -- tests/release-run-id-evidence.test.ts",
+      "result": "passed",
+      "testFiles": 1,
+      "testsPassed": 2
+    },
+    {
+      "command": "npm run test",
+      "result": "passed",
+      "testFiles": 34,
+      "testsPassed": 453
+    },
+    {
+      "command": "npm run lint",
+      "result": "passed"
+    },
+    {
+      "command": "npm run build",
+      "result": "passed",
+      "details": "Next.js 16.2.9 production build compiled successfully and generated 8 static pages."
+    }
+  ],
+  "safety": {
+    "secretsPrinted": false,
+    "urlsPrinted": false,
+    "localPathsPrinted": false,
+    "responseBodiesPrinted": false,
+    "liveProductionRequiresOwnerApproval": true,
+    "liveProductionRequiresReleaseRunId": true,
+    "releaseRunIdIsNonSecret": true
+  },
+  "remainingBlockers": [
+    "No owner-approved Vercel project/team/link and production deployment evidence are available yet.",
+    "Approved production env values and S19 env apply evidence are still pending.",
+    "Production trusted teacher auth/session provider readiness evidence is still pending.",
+    "Real remote external durable storage service/env/readiness and live smoke evidence are still pending.",
+    "Production deployed route/page/browser/learner smokes have not been run against a real production URL.",
+    "Human PowerPoint/WPS/PPT playback acceptance has not been completed."
+  ],
+  "nextRecommendedProofStep": "After Vercel project/link and approved production env evidence exist, run protected route smoke with the same --release-run-id used by deployment, env apply, storage, browser, learner playback, and manual PPT acceptance evidence."
+}

@@ -1,0 +1,86 @@
+{
+  "generatedAt": "2026-06-27T18:31:19+08:00",
+  "responsibleSession": "S05/S22",
+  "scope": "ordinary-teaching-class-create-readback-semester-match",
+  "status": "passed",
+  "summary": "The main /teaching class creation flow now rejects a server readback when the saved class semester does not match the semester submitted for the selected course.",
+  "filesChanged": [
+    "src/components/pages/teaching-page.tsx",
+    "tests/teaching-page.test.tsx"
+  ],
+  "redGreenEvidence": [
+    {
+      "phase": "red",
+      "command": "npx vitest run tests/teaching-page.test.tsx --reporter=dot -t \"saved class semester does not match\"",
+      "expectedFailure": true,
+      "observed": "Failed because the UI accepted a class whose response and readback semester differed from the submitted course semester, and no mismatch alert was rendered."
+    },
+    {
+      "phase": "red",
+      "command": "npx vitest run tests/teaching-page.test.tsx --reporter=dot -t \"keeps the new class dialog open while class creation is pending\"",
+      "expectedFailure": true,
+      "observed": "Failed after adding a request-body assertion because the class create request used the default semester instead of the persisted course semester `2026 春季`."
+    },
+    {
+      "phase": "green",
+      "command": "npx vitest run tests/teaching-page.test.tsx --reporter=dot -t \"saved class semester does not match\"",
+      "exitCode": 0,
+      "observed": "1 passed, 78 skipped."
+    },
+    {
+      "phase": "green",
+      "command": "npx vitest run tests/teaching-page.test.tsx --reporter=dot -t \"keeps the new class dialog open while class creation is pending\"",
+      "exitCode": 0,
+      "observed": "1 passed, 78 skipped."
+    }
+  ],
+  "behaviorHardened": [
+    "Class creation now derives persisted course semesters from the saved course status prefix before falling back to the default new-course semester.",
+    "Class creation now rejects POST responses whose classItem.semester does not match the semester submitted for the selected course.",
+    "Class creation now rejects course-list readback when the saved class semester differs from the submitted course semester.",
+    "Semester mismatches keep the New class dialog open and show the class-create readback mismatch alert instead of displaying the class as saved."
+  ],
+  "verification": [
+    {
+      "command": "npx vitest run tests/teaching-page.test.tsx --reporter=dot -t \"saved class semester does not match\"",
+      "exitCode": 0,
+      "observed": "1 passed, 78 skipped."
+    },
+    {
+      "command": "npx vitest run tests/teaching-page.test.tsx --reporter=dot -t \"keeps the new class dialog open while class creation is pending\"",
+      "exitCode": 0,
+      "observed": "1 passed, 78 skipped."
+    },
+    {
+      "command": "npx vitest run tests/teaching-page.test.tsx --reporter=dot -t \"requires course list readback|saved class name does not match|saved class belongs to another course|saved class semester does not match\"",
+      "exitCode": 0,
+      "observed": "5 passed, 74 skipped."
+    },
+    {
+      "command": "npx vitest run tests/teaching-page.test.tsx --reporter=dot",
+      "exitCode": 0,
+      "observed": "79 passed. Existing jsdom navigation warnings remained non-fatal."
+    },
+    {
+      "command": "npm run lint",
+      "exitCode": 0,
+      "observed": "ESLint passed."
+    },
+    {
+      "command": "npm run test",
+      "exitCode": 0,
+      "observed": "66 files passed, 1284 tests passed. Existing jsdom navigation warnings remained non-fatal."
+    },
+    {
+      "command": "npm run build",
+      "exitCode": 0,
+      "observed": "Next.js production build completed."
+    }
+  ],
+  "boundary": "This is local frontend error-closure hardening for main /teaching class creation. It does not replace fresh same-run live production ordinary teaching route/browser smoke artifacts or the aggregate enterprise gate.",
+  "redaction": {
+    "secrets": "omitted",
+    "localFiles": "omitted",
+    "assets": "ids-only"
+  }
+}

@@ -1,0 +1,118 @@
+{
+  "reportId": "2026-06-28-ai-access-legacy-scoped-header-safe-id-proof",
+  "generatedAt": "2026-06-28T00:07:29+08:00",
+  "sessionId": "S22",
+  "workstream": "Production reliability and release engineering",
+  "status": "local-contract-hardened",
+  "objective": "Harden the non-production legacy scoped-header AI access path so unsafe actor or resource identifiers cannot be locally authorized or echoed in denial payloads.",
+  "changedFiles": [
+    "src/lib/server/ai-access-control.ts",
+    "tests/ai-access-control.test.ts"
+  ],
+  "codeReferences": [
+    {
+      "file": "src/lib/server/ai-access-control.ts",
+      "line": 212,
+      "summary": "Legacy scoped-header actor id must pass the shared safe-id check before local authorization."
+    },
+    {
+      "file": "src/lib/server/ai-access-control.ts",
+      "line": 220,
+      "summary": "Legacy scoped-header resource ids must pass safe-id validation before scope authorization."
+    },
+    {
+      "file": "src/lib/server/ai-access-control.ts",
+      "line": 514,
+      "summary": "Resource safe-id helper validates every defined resource scope value."
+    },
+    {
+      "file": "tests/ai-access-control.test.ts",
+      "line": 362,
+      "summary": "Regression covers unsafe legacy actor ids and verifies unsafe values are not echoed."
+    },
+    {
+      "file": "tests/ai-access-control.test.ts",
+      "line": 391,
+      "summary": "Regression covers unsafe AI access resource ids and verifies unsafe values are not echoed."
+    }
+  ],
+  "redGreenEvidence": [
+    {
+      "phase": "red",
+      "command": "./node_modules/.bin/vitest run tests/ai-access-control.test.ts -t \"rejects unsafe legacy scoped header actor ids before local authorization\"",
+      "result": "failed-before-fix",
+      "observedFailure": "The unsafe path-like x-uais-actor-id was still authorized."
+    },
+    {
+      "phase": "red",
+      "command": "./node_modules/.bin/vitest run tests/ai-access-control.test.ts -t \"rejects unsafe AI access resource ids before local authorization\"",
+      "result": "failed-before-fix",
+      "observedFailure": "The unsafe path-like resource id reached scope denial and was echoed in the decision payload."
+    },
+    {
+      "phase": "green",
+      "command": "./node_modules/.bin/vitest run tests/ai-access-control.test.ts -t \"rejects unsafe legacy scoped header actor ids before local authorization|rejects unsafe AI access resource ids before local authorization\"",
+      "result": "passed",
+      "observedPass": "2 tests passed."
+    }
+  ],
+  "verification": [
+    {
+      "command": "./node_modules/.bin/vitest run tests/ai-access-control.test.ts",
+      "result": "passed",
+      "summary": "25 tests passed."
+    },
+    {
+      "command": "./node_modules/.bin/vitest run tests/ai-api-routes.test.ts",
+      "result": "passed",
+      "summary": "125 tests passed."
+    },
+    {
+      "command": "./node_modules/.bin/vitest run tests/production-release-gate.test.ts -t \"signed teacher-cookie helper route direct-call|teacher AI session\"",
+      "result": "passed",
+      "summary": "2 tests passed."
+    },
+    {
+      "command": "./node_modules/.bin/vitest run",
+      "result": "passed",
+      "summary": "69 files passed, 1347 tests passed."
+    },
+    {
+      "command": "npm run lint",
+      "result": "passed",
+      "summary": "ESLint completed with exit code 0."
+    },
+    {
+      "command": "npm run build",
+      "result": "passed",
+      "summary": "Next.js production build completed."
+    }
+  ],
+  "securityPosture": {
+    "unsafeActorIds": "Denied with actor-context-required before local scoped-header authorization.",
+    "unsafeResourceIds": "Denied with actor-context-required before local scoped-header authorization.",
+    "redaction": "Unsafe path-like identifiers and signing secret strings are not echoed by the new regressions.",
+    "productionSignedSessionBehavior": "Unchanged; production and requireSignedSession paths still require signed AI access sessions."
+  },
+  "aggregateEnterpriseGate": {
+    "source": "coordination/reports/2026-06-27-production-e2e-release-gate-current-latest-evidence-refresh.json",
+    "status": "blocked",
+    "requirementCount": 23,
+    "blockedRequirementIds": [
+      "teacher-workflow-browser-smoke",
+      "teacher-workflow-live-generation-smoke",
+      "vercel-env-placement",
+      "app-auth-provider-readiness",
+      "external-storage-container-build-readiness",
+      "external-storage-service-readiness",
+      "deployment-route-smoke",
+      "teaching-operations-route-smoke",
+      "teaching-operation-detail-browser-smoke",
+      "teaching-course-management-route-smoke",
+      "external-durable-storage-smoke",
+      "external-storage-service-consistency",
+      "production-release-run-consistency"
+    ],
+    "blockerSummary": "The local AI access contract is hardened, but enterprise completion still requires same-run owner-approved production env, deployment, storage, ordinary teaching smoke, browser smoke, app-auth, and live-provider generation evidence."
+  }
+}

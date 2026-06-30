@@ -1,0 +1,117 @@
+{
+  "target": "teaching-operations-course-scope-side-effects-release-gate-proof",
+  "date": "2026-06-28",
+  "session": "S22",
+  "status": "passed",
+  "scope": "release-gate-and-route-smoke-hardening",
+  "enterpriseGapAddressed": "A signed teacher course-scope denial on /api/teaching/operations must not persist operation records or domain projections for the denied foreign course.",
+  "proof": {
+    "releaseGateResult": "forbiddenCourseScopeNoWriteSideEffects",
+    "routeSmokeProof": "signed-teacher-course-scope-no-write-side-effects",
+    "deniedCourseId": "route-smoke-foreign-course",
+    "deniedSourceAction": "route-smoke-course-scope-denial",
+    "deniedTraceId": "trace-teaching-operations-route-smoke-course-denied",
+    "readbacksChecked": [
+      "/api/teaching/operations/audit",
+      "external /teaching-operations/{actorId}/audit",
+      "external /teaching-course-management/database"
+    ],
+    "sideEffectChecks": [
+      "readbacks must not contain the denied foreign course id",
+      "readbacks must not contain the denied sourceAction",
+      "readbacks must not contain the denied idempotency key"
+    ]
+  },
+  "changedFiles": [
+    "scripts/teaching-operations-route-smoke.mjs",
+    "scripts/production-e2e-release-gate.mjs",
+    "scripts/local-production-e2e-smoke.mjs",
+    "scripts/production-e2e-orchestrator.mjs",
+    "tests/teaching-operations-route-smoke.test.ts",
+    "tests/production-release-gate.test.ts",
+    "tests/local-production-e2e-smoke.test.ts",
+    "tests/production-e2e-orchestrator.test.ts"
+  ],
+  "redTestsObservedBeforeImplementation": [
+    {
+      "command": "./node_modules/.bin/vitest run tests/teaching-operations-route-smoke.test.ts -t \"prints a redacted dry-run plan\"",
+      "result": "failed before implementation because the route smoke proof list omitted signed-teacher-course-scope-no-write-side-effects"
+    },
+    {
+      "command": "./node_modules/.bin/vitest run tests/production-release-gate.test.ts -t \"evaluates production teaching operations route smoke evidence\"",
+      "result": "failed before implementation because production gate required forbiddenCourseScopeNoWriteSideEffects but sample evidence omitted it"
+    }
+  ],
+  "checks": [
+    {
+      "command": "./node_modules/.bin/vitest run tests/teaching-operations-route-smoke.test.ts -t \"prints a redacted dry-run plan\"",
+      "result": "passed",
+      "tests": "1 passed, 19 skipped"
+    },
+    {
+      "command": "./node_modules/.bin/vitest run tests/production-release-gate.test.ts -t \"evaluates production teaching operations route smoke evidence\"",
+      "result": "passed",
+      "tests": "1 passed, 295 skipped"
+    },
+    {
+      "command": "./node_modules/.bin/vitest run tests/teaching-operations-route-smoke.test.ts -t \"passes live approved smoke\"",
+      "result": "passed",
+      "tests": "1 passed, 19 skipped"
+    },
+    {
+      "command": "./node_modules/.bin/vitest run tests/teaching-operations-route-smoke.test.ts",
+      "result": "passed",
+      "tests": "20 passed"
+    },
+    {
+      "command": "./node_modules/.bin/vitest run tests/production-release-gate.test.ts -t \"teaching operations route smoke\"",
+      "result": "passed",
+      "tests": "59 passed, 237 skipped"
+    },
+    {
+      "command": "./node_modules/.bin/vitest run tests/production-release-gate.test.ts",
+      "result": "passed",
+      "tests": "296 passed"
+    },
+    {
+      "command": "./node_modules/.bin/vitest run tests/local-production-e2e-smoke.test.ts",
+      "result": "passed",
+      "tests": "9 passed"
+    },
+    {
+      "command": "./node_modules/.bin/vitest run tests/production-e2e-orchestrator.test.ts",
+      "result": "passed",
+      "tests": "5 passed"
+    },
+    {
+      "command": "node --check scripts/teaching-operations-route-smoke.mjs",
+      "result": "passed"
+    },
+    {
+      "command": "node --check scripts/production-e2e-release-gate.mjs",
+      "result": "passed"
+    },
+    {
+      "command": "./node_modules/.bin/vitest run",
+      "result": "passed",
+      "tests": "69 files passed, 1364 tests passed",
+      "notes": "Existing jsdom navigation warnings observed."
+    },
+    {
+      "command": "npm run lint",
+      "result": "passed"
+    },
+    {
+      "command": "npm run build",
+      "result": "passed"
+    }
+  ],
+  "safety": {
+    "secretsInspected": false,
+    "secretValuesLogged": false,
+    "liveProductionMutation": false,
+    "gitMutation": false,
+    "valuesRedacted": true
+  },
+  "remainingRisk": "This is smoke/gate hardening only. Same-run owner-approved live production evidence is still required before the aggregate enterprise goal can be considered complete."
+}

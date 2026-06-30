@@ -1,0 +1,38 @@
+{
+  "target": "teacher-ownership-redacted-chain-diagnostic",
+  "mode": "live",
+  "environment": "production",
+  "generatedAt": "2026-06-21T16:05:47.906Z",
+  "baseUrlClass": "www-uais-top",
+  "teacherId": "teacher-kang",
+  "valuesRedacted": true,
+  "issue": {
+    "httpStatus": 200,
+    "ok": true,
+    "setCookieCount": 2
+  },
+  "ownership": {
+    "httpStatus": 200,
+    "ok": true,
+    "counts": {
+      "courseIds": 0,
+      "sampleAssets": 0,
+      "pptAssets": 0,
+      "clonedVoiceRefs": 0,
+      "audioManifests": 0
+    },
+    "ids": {
+      "courseIds": [],
+      "sampleAssetIds": [],
+      "pptAssetIds": [],
+      "voiceRefIds": [],
+      "audioManifestIds": []
+    },
+    "chains": []
+  },
+  "redaction": {
+    "secrets": "omitted",
+    "cookies": "omitted",
+    "assets": "ids-only"
+  }
+}

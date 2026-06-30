@@ -1,0 +1,55 @@
+{
+  "target": "teacher-workflow-ui-smoke",
+  "mode": "local-ui-test",
+  "status": "accepted",
+  "responsibleSession": "S05",
+  "evidenceStatus": "feature-evidence-passed",
+  "test": {
+    "file": "tests/teaching-page.test.tsx",
+    "scenario": "teacher workflow server-status bridge plus signed-session readiness, uploaded-audio duration gate, selected sample identity, fail-closed auth, step gating, preflight, voiceRef, and per-slide WAV downloads"
+  },
+  "features": {
+    "voiceSampleUpload": true,
+    "uploadedSampleAudioPayload": true,
+    "voiceSampleDurationGate": true,
+    "voiceSampleSelect": true,
+    "selectedSampleIdentity": true,
+    "preflight": true,
+    "voiceRefDisplay": true,
+    "pptNarrationGenerate": true,
+    "perSlideWavDownloads": true,
+    "workflowStepGating": true,
+    "signedSessionBootstrap": true,
+    "signedSessionReadiness": true,
+    "authFailClosed": true,
+    "serverWorkflowStatus": true
+  },
+  "checksRun": [
+    {
+      "command": "node scripts/teacher-workflow-ui-smoke.mjs",
+      "status": "passed"
+    },
+    {
+      "command": "npm run test",
+      "status": "passed",
+      "testFiles": 44,
+      "tests": 607
+    },
+    {
+      "command": "npm run lint",
+      "status": "passed"
+    },
+    {
+      "command": "npm run build",
+      "status": "passed"
+    }
+  ],
+  "blockedReasons": [],
+  "safety": {
+    "secretsRedacted": true,
+    "commandOutputOmitted": true,
+    "localPrivatePathsOmitted": true,
+    "providerValuesOmitted": true,
+    "goalMarkedComplete": false
+  }
+}

@@ -1,0 +1,109 @@
+{
+  "target": "teaching-operation-detail-coverage-release-gate-proof",
+  "responsibleSession": "S22",
+  "recordedAtHkt": "2026-06-28 11:35:06 HKT",
+  "status": "local-gate-ready",
+  "productionReleaseEligible": false,
+  "remainingBlocker": "owner-approved-live-production-same-run-evidence-required",
+  "scope": {
+    "releaseGate": "scripts/production-e2e-release-gate.mjs",
+    "browserSmoke": "scripts/teaching-operation-detail-browser-smoke.mjs",
+    "orchestrator": "scripts/production-e2e-orchestrator.mjs",
+    "tests": [
+      "tests/production-release-gate.test.ts",
+      "tests/teaching-operation-detail-browser-smoke.test.ts",
+      "tests/production-e2e-orchestrator.test.ts"
+    ],
+    "secretsInspected": false,
+    "liveProductionMutation": false,
+    "gitMutation": false
+  },
+  "coverageRequirement": {
+    "operationCount": 11,
+    "requiredRoutes": [
+      "/teaching/course-settings",
+      "/teaching/agents",
+      "/teaching/knowledge-base",
+      "/teaching/content",
+      "/teaching/admins",
+      "/teaching/students",
+      "/teaching/data-export",
+      "/teaching/dashboard",
+      "/teaching/quiz-board",
+      "/teaching/grading",
+      "/teaching/invite-code"
+    ],
+    "requiredPerOperation": [
+      "primaryButtonClick",
+      "primaryPostPersisted",
+      "secondaryButtonClick",
+      "secondaryPostPersisted"
+    ],
+    "requiredStatus": "passed"
+  },
+  "changes": [
+    "Production release gate now rejects teaching operation detail browser smoke evidence that omits any of the 11 operation detail routes or either primary/secondary persisted action.",
+    "Teaching operation detail browser smoke now emits a detailOperationCoverage plan and live coverage result for all 11 /teaching/[operation] pages.",
+    "Live test runtime now validates the expanded flow with 44 teaching operation POST continuations and 44 audit readback continuations.",
+    "Production E2E orchestrator dry-run proof summaries now explicitly list all-operation detail page primary/secondary coverage."
+  ],
+  "tddEvidence": {
+    "redTestObserved": "production release gate did not yet block missing all-operation detail coverage",
+    "newBlocker": "teaching-operation-detail-browser-smoke-operation-coverage-not-proven",
+    "greenTests": [
+      "./node_modules/.bin/vitest run tests/teaching-operation-detail-browser-smoke.test.ts -t \"redacted dry-run browser click plan|continues live teaching operation API calls\"",
+      "./node_modules/.bin/vitest run tests/production-release-gate.test.ts -t \"does not cover all operation pages|accepts operation detail browser click proof|operation detail browser\""
+    ]
+  },
+  "checks": [
+    {
+      "command": "node --check scripts/teaching-operation-detail-browser-smoke.mjs",
+      "status": "passed"
+    },
+    {
+      "command": "node --check scripts/production-e2e-release-gate.mjs",
+      "status": "passed"
+    },
+    {
+      "command": "./node_modules/.bin/vitest run tests/teaching-operation-detail-browser-smoke.test.ts",
+      "status": "passed",
+      "summary": "6 tests passed"
+    },
+    {
+      "command": "./node_modules/.bin/vitest run tests/production-release-gate.test.ts",
+      "status": "passed",
+      "summary": "297 tests passed"
+    },
+    {
+      "command": "node --check scripts/production-e2e-orchestrator.mjs",
+      "status": "passed"
+    },
+    {
+      "command": "./node_modules/.bin/vitest run tests/production-e2e-orchestrator.test.ts",
+      "status": "passed",
+      "summary": "5 tests passed"
+    },
+    {
+      "command": "node -- scripts/production-e2e-orchestrator.mjs --dry-run --report-date 2026-06-28",
+      "status": "passed",
+      "summary": "dry-run output included the all-operation detail primary/secondary proof summary"
+    },
+    {
+      "command": "npm run lint",
+      "status": "passed"
+    },
+    {
+      "command": "npm run build",
+      "status": "passed"
+    },
+    {
+      "command": "npm run test",
+      "status": "passed",
+      "summary": "69 test files passed; 1365 tests passed"
+    }
+  ],
+  "notes": [
+    "This is local release-gate and browser-smoke hardening only.",
+    "The aggregate enterprise goal remains blocked until fresh owner-approved live production evidence is generated and evaluated for the same release run."
+  ]
+}

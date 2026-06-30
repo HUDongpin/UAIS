@@ -1,0 +1,41 @@
+{
+  "target": "deployed-smoke-network-timeout-diagnostics-hardening",
+  "status": "completed",
+  "responsibleSession": "S22",
+  "summary": {
+    "teacherWorkflowDeploymentSmoke": "failed live request evidence now includes a redacted networkError.class such as TimeoutError or TypeError",
+    "learningPptPlaybackDeploymentSmoke": "failed live request evidence now includes a redacted networkError.class such as TimeoutError or TypeError",
+    "redactionPolicy": "URL, response body, audio payload, local private paths, and raw error messages remain omitted"
+  },
+  "evidence": {
+    "teacherWorkflowPreviewLive": "coordination/reports/2026-06-19-teacher-workflow-deployment-smoke-vercel-preview-live.json",
+    "learningPptPreviewLive": "coordination/reports/2026-06-19-learning-ppt-playback-deployment-smoke-vercel-preview-live.json",
+    "releaseGateWithLearning": "coordination/reports/2026-06-19-production-e2e-release-gate-current-vercel-preview-timeout-with-learning.json"
+  },
+  "checks": {
+    "focusedTeacher": "npm run test -- tests/teacher-workflow-deployment-smoke.test.ts -t \"classifies live request failures\" passed",
+    "focusedLearning": "npm run test -- tests/learning-ppt-playback-deployment-smoke.test.ts -t \"classifies live request failures\" passed",
+    "targeted": "npm run test -- tests/teacher-workflow-deployment-smoke.test.ts tests/learning-ppt-playback-deployment-smoke.test.ts tests/production-release-gate.test.ts passed: 3 files / 162 tests",
+    "full": "npm run test passed: 37 files / 524 tests",
+    "lint": "npm run lint passed",
+    "build": "npm run build passed"
+  },
+  "blockedReasonsStillPresent": [
+    "deployed-teacher-workflow-page-not-live-passed",
+    "deployed-learning-ppt-playback-not-live-passed",
+    "vercel-env-not-applied",
+    "teacher-auth-provider-readiness-not-live-ready",
+    "external-storage-service-readiness-not-live-ready",
+    "vercel-production-deployment-not-proven",
+    "deployment-route-smoke-not-live-passed",
+    "external-storage-smoke-not-live-passed",
+    "manual-ppt-playback-not-accepted"
+  ],
+  "safety": {
+    "valuesRedacted": true,
+    "responseBodiesOmitted": true,
+    "deploymentUrlsOmitted": true,
+    "localPrivatePathsOmitted": true,
+    "rawErrorMessagesOmitted": true
+  }
+}

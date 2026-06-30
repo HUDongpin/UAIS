@@ -1,0 +1,82 @@
+{
+  "target": "external-storage-service-identity-proof-hardening",
+  "date": "2026-06-19",
+  "responsibleSession": "S22",
+  "status": "hardened",
+  "objective": "Require the external durable storage service health endpoint and live smoke harness to carry explicit redacted service-identity proof instead of inferring production identity from the target string alone.",
+  "changedFiles": [
+    "scripts/external-storage-service.mjs",
+    "scripts/external-storage-service-readiness.mjs",
+    "scripts/external-storage-smoke.mjs",
+    "tests/external-storage-service-readiness.test.ts",
+    "tests/external-storage-service.test.ts",
+    "tests/external-storage-smoke.test.ts",
+    "tests/ai-env-and-smoke.test.ts"
+  ],
+  "newContract": {
+    "healthz": {
+      "productionServiceIdentity": {
+        "status": "proved-or-not-production",
+        "serviceMode": "reference-or-production",
+        "serviceTarget": "matches-health-target",
+        "valueRedacted": true
+      }
+    },
+    "readiness": "production identity is proved only when health includes explicit production service identity proof",
+    "smoke": "health response shape now fails when service identity proof is missing"
+  },
+  "evidence": {
+    "redTests": [
+      {
+        "command": "npm run test -- tests/external-storage-service-readiness.test.ts -t \"explicit production service identity\"",
+        "statusBeforeImplementation": "failed",
+        "failureMode": "readiness inferred production identity from target even when health omitted explicit identity proof"
+      },
+      {
+        "command": "npm run test -- tests/external-storage-smoke.test.ts -t \"service identity proof\"",
+        "statusBeforeImplementation": "failed",
+        "failureMode": "smoke harness passed when health omitted service identity proof"
+      }
+    ],
+    "greenChecks": [
+      {
+        "command": "npm run test -- tests/external-storage-service-readiness.test.ts",
+        "result": "1 file / 11 tests passed"
+      },
+      {
+        "command": "npm run test -- tests/external-storage-service.test.ts tests/external-storage-service-readiness.test.ts tests/external-storage-smoke.test.ts",
+        "result": "3 files / 16 tests passed"
+      },
+      {
+        "command": "npm run test -- tests/ai-env-and-smoke.test.ts -t \"external storage smoke CLI\"",
+        "result": "1 file / 2 tests passed"
+      },
+      {
+        "command": "npm run test",
+        "result": "37 files / 501 tests passed"
+      },
+      {
+        "command": "npm run lint",
+        "result": "passed"
+      },
+      {
+        "command": "npm run build",
+        "result": "passed"
+      }
+    ]
+  },
+  "safety": {
+    "valuesRedacted": true,
+    "tokensOmitted": true,
+    "serviceUrlsOmitted": true,
+    "localPrivatePathsOmitted": true,
+    "productionMutationPerformed": false,
+    "vercelMutationPerformed": false
+  },
+  "remainingBlockers": [
+    "remote HTTPS external storage service is not provisioned",
+    "Vercel env is not applied",
+    "production deployment smoke is not run",
+    "external storage live production smoke is not run"
+  ]
+}

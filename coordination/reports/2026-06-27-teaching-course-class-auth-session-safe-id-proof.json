@@ -1,0 +1,67 @@
+{
+  "generatedAt": "2026-06-27T19:21:52+08:00",
+  "responsibleSession": "S12/S22",
+  "scope": "ordinary-teaching-course-and-class-signed-session-safe-identity",
+  "status": "passed",
+  "summary": "The ordinary /api/teaching/courses POST route and /api/teaching/courses/[courseId]/classes POST route now reject signed teacher cookies whose actorId or sessionId is not a safe server identity before course or class writes can run.",
+  "filesChanged": [
+    "src/app/api/teaching/courses/route.ts",
+    "src/app/api/teaching/courses/[courseId]/classes/route.ts",
+    "tests/teaching-course-management-api.test.ts"
+  ],
+  "redGreenEvidence": [
+    {
+      "phase": "red",
+      "command": "./node_modules/.bin/vitest run tests/teaching-course-management-api.test.ts --reporter=dot -t \"unsafe signed (course|class) create\"",
+      "expectedFailure": true,
+      "observed": "Unsafe course/class actorId cases failed with HTTP 400 because validly signed unsafe actor ids reached later validation. Unsafe course/class sessionId cases failed with HTTP 201 because validly signed unsafe session ids allowed course/class writes."
+    },
+    {
+      "phase": "green",
+      "command": "./node_modules/.bin/vitest run tests/teaching-course-management-api.test.ts --reporter=dot -t \"unsafe signed (course|class) create|records redacted request source metadata on signed teacher course creation audits|creates a persisted class under a teacher-owned course\"",
+      "exitCode": 0,
+      "observed": "6 passed, 42 skipped."
+    }
+  ],
+  "behaviorHardened": [
+    "Signed course create cookies whose actorId fails the safe-id boundary now resolve as unauthenticated and return HTTP 401 with authenticated-session-required.",
+    "Signed course create cookies whose sessionId fails the safe-id boundary now resolve as unauthenticated and return HTTP 401 with authenticated-session-required.",
+    "Signed class create cookies whose actorId fails the safe-id boundary now resolve as unauthenticated and return HTTP 401 with authenticated-session-required.",
+    "Signed class create cookies whose sessionId fails the safe-id boundary now resolve as unauthenticated and return HTTP 401 with authenticated-session-required.",
+    "Unsafe signed identity claims are rejected before course writes, class writes, course-management audit events, or teacher ownership merge callbacks can run.",
+    "The denial responses preserve trace id and redaction without echoing unsafe local-path or secret-like identity values."
+  ],
+  "verification": [
+    {
+      "command": "./node_modules/.bin/vitest run tests/teaching-course-management-api.test.ts --reporter=dot -t \"unsafe signed (course|class) create|records redacted request source metadata on signed teacher course creation audits|creates a persisted class under a teacher-owned course\"",
+      "exitCode": 0,
+      "observed": "6 passed, 42 skipped."
+    },
+    {
+      "command": "./node_modules/.bin/vitest run tests/teaching-course-management-api.test.ts --reporter=dot",
+      "exitCode": 0,
+      "observed": "48 passed."
+    },
+    {
+      "command": "npm run lint",
+      "exitCode": 0,
+      "observed": "ESLint passed."
+    },
+    {
+      "command": "npm run test",
+      "exitCode": 0,
+      "observed": "66 files passed, 1303 tests passed. Existing jsdom navigation warnings remained non-fatal."
+    },
+    {
+      "command": "npm run build",
+      "exitCode": 0,
+      "observed": "Next.js production build completed."
+    }
+  ],
+  "boundary": "This is local backend/API auth-boundary hardening for the main teaching course and class creation routes. It does not replace fresh same-run live production ordinary teaching route/browser smoke artifacts or the aggregate enterprise gate.",
+  "redaction": {
+    "secrets": "omitted",
+    "localFiles": "omitted",
+    "assets": "ids-only"
+  }
+}

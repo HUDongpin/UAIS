@@ -1,0 +1,44 @@
+{
+  "target": "www-uais-new-course-class-qr-browser-smoke",
+  "mode": "live",
+  "environment": "preview",
+  "status": "passed",
+  "startedAt": "2026-06-20T10:39:43.271Z",
+  "finishedAt": "2026-06-20T10:39:45.834Z",
+  "route": "/teaching",
+  "deploymentOrigin": {
+    "status": "present",
+    "originClass": "remote-https",
+    "valueRedacted": true
+  },
+  "browser": "chromium",
+  "workflow": [
+    "open /teaching",
+    "open New course dialog",
+    "create course AI支持的初等数学研究",
+    "open New class dialog",
+    "create Peter测试班",
+    "open invitation QR modal"
+  ],
+  "expectedInvitationCode": "55395057",
+  "expectedExpiry": "2026-12-17",
+  "results": {
+    "openTeachingPage": "passed",
+    "newCourseDialog": "passed",
+    "createCourse": "passed",
+    "newClassButton": "passed",
+    "newClassDialog": "passed",
+    "createClass": "passed",
+    "openInvitationQr": "passed",
+    "invitationCode": "passed",
+    "qrRendered": "passed",
+    "expiryAndClassName": "passed"
+  },
+  "renderedPageFingerprint": "sha256:5227901455b0a0a8",
+  "safety": {
+    "deploymentUrlOmitted": true,
+    "screenshotsOmitted": true,
+    "responseBodiesOmitted": true,
+    "secretsRedacted": true
+  }
+}

@@ -1,0 +1,86 @@
+{
+  "date": "2026-06-19",
+  "sessionId": "S24",
+  "workstream": "asset-export-quality-manual-playback-acceptance",
+  "status": "hardened",
+  "objective": "Require the manual PowerPoint/WPS playback acceptance gate to bind the final narrated PPTX artifact to a full 64-hex SHA-256 fingerprint before manual acceptance can pass.",
+  "scope": {
+    "changedFiles": [
+      "scripts/ppt-manual-playback-acceptance.mjs",
+      "tests/ppt-playback-acceptance.test.ts",
+      "coordination/session-logs/2026-06-19-S24.md",
+      "coordination/reports/2026-06-19-kangxia-ppt-manual-artifact-fingerprint-hardening.json"
+    ],
+    "productionMutationPerformed": false,
+    "manualPlaybackPerformed": false
+  },
+  "behavior": {
+    "before": "The S24 manual playback acceptance gate accepted narrated PPTX artifact fingerprints as short as 16 hex characters after the sha256: prefix.",
+    "after": "The gate treats short artifact fingerprints as missing and requires a full sha256: plus 64 lowercase hex characters for the narrated PPTX artifact binding."
+  },
+  "checks": [
+    {
+      "phase": "RED",
+      "command": "npm run test -- tests/ppt-playback-acceptance.test.ts -t \"full SHA-256\"",
+      "result": "failed-before-implementation",
+      "failureMode": "manual acceptance with a short artifact fingerprint returned accepted"
+    },
+    {
+      "phase": "GREEN",
+      "command": "npm run test -- tests/ppt-playback-acceptance.test.ts -t \"full SHA-256\"",
+      "result": "passed",
+      "files": 1,
+      "testsPassed": 1
+    },
+    {
+      "phase": "targeted",
+      "command": "npm run test -- tests/ppt-playback-acceptance.test.ts",
+      "result": "passed",
+      "files": 1,
+      "testsPassed": 17
+    },
+    {
+      "phase": "related",
+      "command": "npm run test -- tests/production-release-gate.test.ts tests/production-owner-decision-checklist.test.ts",
+      "result": "passed",
+      "files": 2,
+      "testsPassed": 157
+    },
+    {
+      "phase": "syntax",
+      "command": "node --check scripts/ppt-manual-playback-acceptance.mjs",
+      "result": "passed"
+    },
+    {
+      "phase": "full",
+      "command": "npm run test",
+      "result": "passed",
+      "files": 37,
+      "testsPassed": 505
+    },
+    {
+      "phase": "full",
+      "command": "npm run lint",
+      "result": "passed"
+    },
+    {
+      "phase": "full",
+      "command": "npm run build",
+      "result": "passed",
+      "routesGenerated": 8
+    }
+  ],
+  "redaction": {
+    "secretValuesWritten": false,
+    "rawAudioOmitted": true,
+    "localPrivatePathsOmitted": true,
+    "notes": "The report records only status labels, commands, and non-secret artifact-fingerprint policy."
+  },
+  "remainingBlockers": [
+    "Human PowerPoint playback acceptance has not been performed.",
+    "Human WPS Presentation playback acceptance has not been performed.",
+    "Production trusted teacher auth/session provider still needs owner-approved Vercel env placement and live deployed route smoke.",
+    "External durable storage still requires real remote service provisioning, Vercel env binding, and live write/read smoke.",
+    "Production deployment and deployed route/browser smokes remain unproved."
+  ]
+}

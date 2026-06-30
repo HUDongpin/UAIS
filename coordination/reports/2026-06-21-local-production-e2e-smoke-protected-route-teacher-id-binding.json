@@ -1,0 +1,180 @@
+{
+  "reportDate": "2026-06-21",
+  "sessionId": "S22",
+  "workstream": "Production reliability and release engineering",
+  "target": "local-production-e2e-smoke",
+  "environment": "local-production",
+  "productionGateEligible": false,
+  "status": "passed",
+  "rootCause": {
+    "summary": "The local-production E2E fixture seeded external teacher AI ownership for s22-route-smoke-teacher, while ai-route-smoke defaults to teacher-kang under trusted-cookie-issuer when UAIS_TEACHER_AUTH_ROUTE_SMOKE_TEACHER_ID is absent.",
+    "previousSymptoms": [
+      "s22-teacher-ai-session-route returned 403 with the issued teacher auth cookie.",
+      "s22-teacher-ppt-workflow-route returned 200 but omitted ready download contract fields."
+    ],
+    "fixedBy": [
+      "Added UAIS_TEACHER_AUTH_ROUTE_SMOKE_TEACHER_ID to the local-production route-smoke fixture contract.",
+      "Bound the local external-storage ownership fixture, process env, and ai-route-smoke env file to the same redacted test teacher id."
+    ]
+  },
+  "tddEvidence": {
+    "red": {
+      "command": "npm run test -- tests/local-production-e2e-smoke.test.ts",
+      "expectedFailure": "requiredFixtureEnv missed UAIS_TEACHER_AUTH_ROUTE_SMOKE_TEACHER_ID"
+    },
+    "green": {
+      "command": "npm run test -- tests/local-production-e2e-smoke.test.ts",
+      "result": "1 file / 3 tests passed"
+    }
+  },
+  "liveSmokeEvidence": {
+    "command": "node scripts/local-production-e2e-smoke.mjs --live --approved --skip-build --timeout-ms 180000",
+    "network": "local-only",
+    "overallStatus": "passed",
+    "blockedReasons": [],
+    "checks": [
+      {
+        "id": "s22-local-external-storage-reference-service",
+        "status": "passed"
+      },
+      {
+        "id": "s22-next-production-build",
+        "status": "skipped"
+      },
+      {
+        "id": "s22-next-start-local-production-server",
+        "status": "passed"
+      },
+      {
+        "id": "s22-local-learning-ppt-playback-smoke",
+        "status": "passed",
+        "httpStatus": {
+          "learningPage": 200,
+          "playbackManifest": 200,
+          "firstSlideAudio": 200
+        },
+        "audio": {
+          "contentType": "audio/wav",
+          "contentLength": 745004,
+          "wavHeader": "RIFF/WAVE"
+        }
+      },
+      {
+        "id": "s22-local-teacher-workflow-page-smoke",
+        "status": "passed"
+      },
+      {
+        "id": "s22-local-teacher-workflow-browser-smoke",
+        "status": "passed"
+      },
+      {
+        "id": "s22-local-protected-route-smoke",
+        "status": "passed",
+        "requiredFixtureEnv": [
+          "UAIS_AI_ACCESS_SIGNING_SECRET",
+          "UAIS_TEACHER_AUTH_PROVIDER",
+          "UAIS_TEACHER_AUTH_ROUTE_SMOKE_TEACHER_ID",
+          "UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET",
+          "UAIS_TEACHER_AUTH_ISSUER_SECRET",
+          "UAIS_TEACHER_AI_OWNERSHIP_BACKEND",
+          "UAIS_VOICE_LIFECYCLE_AUDIT_BACKEND",
+          "UAIS_EXTERNAL_STORAGE_BASE_URL",
+          "UAIS_EXTERNAL_STORAGE_ACCESS_TOKEN"
+        ],
+        "routeResults": [
+          {
+            "id": "s22-retention-readiness-route",
+            "status": "ok",
+            "httpStatus": 200
+          },
+          {
+            "id": "s22-voice-lifecycle-audit-route",
+            "status": "ok",
+            "httpStatus": 200
+          },
+          {
+            "id": "s22-teacher-auth-issuer-route",
+            "status": "ok",
+            "httpStatus": 200,
+            "responseHeaders": "ok",
+            "responseShape": "ok"
+          },
+          {
+            "id": "s22-teacher-ai-session-route",
+            "status": "ok",
+            "httpStatus": 200,
+            "responseShape": "ok"
+          },
+          {
+            "id": "s22-teacher-ownership-route",
+            "status": "ok",
+            "httpStatus": 200,
+            "responseShape": "ok"
+          },
+          {
+            "id": "s22-teacher-ppt-workflow-route",
+            "status": "ok",
+            "httpStatus": 200,
+            "responseShape": "ok",
+            "downloadContract": "present"
+          }
+        ]
+      }
+    ]
+  },
+  "fullBuildLiveSmokeEvidence": {
+    "command": "node scripts/local-production-e2e-smoke.mjs --live --approved --timeout-ms 240000",
+    "network": "local-only",
+    "overallStatus": "passed",
+    "blockedReasons": [],
+    "checks": [
+      {
+        "id": "s22-local-external-storage-reference-service",
+        "status": "passed"
+      },
+      {
+        "id": "s22-next-production-build",
+        "status": "passed",
+        "command": "npm run build"
+      },
+      {
+        "id": "s22-next-start-local-production-server",
+        "status": "passed"
+      },
+      {
+        "id": "s22-local-learning-ppt-playback-smoke",
+        "status": "passed",
+        "firstSlideAudio": {
+          "contentType": "audio/wav",
+          "contentLength": 745004,
+          "wavHeader": "RIFF/WAVE"
+        }
+      },
+      {
+        "id": "s22-local-teacher-workflow-page-smoke",
+        "status": "passed"
+      },
+      {
+        "id": "s22-local-teacher-workflow-browser-smoke",
+        "status": "passed"
+      },
+      {
+        "id": "s22-local-protected-route-smoke",
+        "status": "passed",
+        "teacherAiSession": "ok",
+        "teacherPptWorkflowDownloadContract": "present"
+      }
+    ]
+  },
+  "remainingGoalGaps": [
+    "This is local-production loopback evidence, not proof that www.uais.top production env and deployed routes are complete.",
+    "Vercel production env and deployment smoke still need fresh end-to-end proof.",
+    "PPT/WPS/PowerPoint manual playback acceptance remains outside this smoke."
+  ],
+  "redaction": {
+    "secrets": "omitted",
+    "tempPaths": "omitted",
+    "cookies": "headers-only",
+    "responseBodies": "summarized"
+  }
+}

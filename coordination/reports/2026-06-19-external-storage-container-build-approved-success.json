@@ -1,0 +1,58 @@
+{
+  "target": "external-storage-container-build-approved-success",
+  "date": "2026-06-19",
+  "sessionId": "S22",
+  "status": "container-build-readiness-ready",
+  "overallGoalStatus": "active-incomplete",
+  "objective": "Use the now-running Docker Desktop engine to prove the external-storage production container artifact can build locally without exposing image tags, Docker output, local paths, or secrets.",
+  "sourceEvidence": "coordination/reports/2026-06-19-external-storage-container-readiness-current.json",
+  "summary": [
+    "Docker Desktop daemon became available after owner confirmation.",
+    "The first diagnostic Docker build failed while fetching the Docker Hub token for node:24-alpine, then a direct base-image pull succeeded.",
+    "The approved redacted container build-readiness harness then passed with Docker client present, daemon available, build invoked, Dockerfile contract passed, .dockerignore secret/generated-output exclusions passed, and no blocked reasons.",
+    "This proves local container build readiness only. It does not prove remote HTTPS service deployment, persistent hosted volume, Vercel env binding, production service readiness, production storage smoke, or end-to-end production deployment."
+  ],
+  "checksRun": [
+    {
+      "command": "docker version --format <redacted-format>",
+      "result": "passed outside the sandbox: Docker daemon available"
+    },
+    {
+      "command": "docker build --progress=plain -f Dockerfile.external-storage -t <redacted-image-tag> .",
+      "result": "initial diagnostic run failed on a Docker Hub TLS handshake timeout while fetching the base image token"
+    },
+    {
+      "command": "docker pull node:24-alpine",
+      "result": "passed"
+    },
+    {
+      "command": "node scripts/external-storage-container-build-readiness.mjs --build --approved --image-tag <redacted-image-tag>",
+      "result": "passed with status ready and build.status passed"
+    }
+  ],
+  "currentContainerReadiness": {
+    "status": "ready",
+    "dockerClient": "present",
+    "dockerDaemon": "available",
+    "dockerfileContract": "passed",
+    "dockerignoreSecretExclusion": "passed",
+    "dockerignoreGeneratedOutputExclusion": "passed",
+    "buildStatus": "passed",
+    "buildInvoked": true,
+    "blockedReasons": []
+  },
+  "remainingProductionBlockers": [
+    "Remote HTTPS external storage service has not been deployed.",
+    "A durable hosted volume for /data/uais-external-storage has not been proven.",
+    "Vercel env values for UAIS_EXTERNAL_STORAGE_BASE_URL and UAIS_EXTERNAL_STORAGE_ACCESS_TOKEN have not been applied.",
+    "Production external-storage service readiness and write/read smoke have not been run.",
+    "The enterprise UAIS production E2E goal remains incomplete."
+  ],
+  "safety": {
+    "imageTagOmitted": true,
+    "dockerOutputOmitted": true,
+    "localPrivatePathsOmitted": true,
+    "secretsExcludedFromContext": true,
+    "realSecretsLogged": false
+  }
+}

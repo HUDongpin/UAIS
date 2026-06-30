@@ -1,0 +1,60 @@
+{
+  "generatedAt": "2026-06-27T20:46:47+08:00",
+  "timezone": "Asia/Hong_Kong",
+  "scope": "teaching-operations-audit-student-session-safe-id",
+  "status": "local-auth-boundary-hardened",
+  "summary": "The /api/teaching/operations/audit GET route rejects signed student app-session cookies whose account is an unsafe server id before student role classification, course ownership reads, external audit reads, or audit record exposure can run.",
+  "filesChanged": [
+    "src/app/api/teaching/operations/audit/route.ts",
+    "tests/teaching-operation-backend.test.ts"
+  ],
+  "behaviorHardened": [
+    "Unsafe signed student account ids are treated as unauthenticated instead of valid student role denials.",
+    "Denied unsafe-student audit readback requests return HTTP 401 with authenticated-session-required and preserve the trace id.",
+    "Denied unsafe-student audit readback requests do not read course ownership, external audit storage, or expose operation records, audit events, domain projections, or rollback records.",
+    "Denied responses do not echo local-path-like student account values or hidden audit record identifiers."
+  ],
+  "redGreenEvidence": {
+    "red": {
+      "command": "./node_modules/.bin/vitest run tests/teaching-operation-backend.test.ts -t \"unsafe signed student account ids before audit readback role checks\"",
+      "observedFailure": "Focused regression failed before implementation with HTTP 403 teacher-role-required instead of HTTP 401."
+    },
+    "green": {
+      "command": "./node_modules/.bin/vitest run tests/teaching-operation-backend.test.ts -t \"unsafe signed student account ids before audit readback role checks\"",
+      "observedPass": "Focused regression passed after implementation with one test passed and 173 skipped."
+    }
+  },
+  "verification": [
+    {
+      "command": "./node_modules/.bin/vitest run tests/teaching-operation-backend.test.ts",
+      "result": "passed",
+      "details": "174 tests passed"
+    },
+    {
+      "command": "npm run test",
+      "result": "passed",
+      "details": "66 files passed, 1320 tests passed; existing jsdom navigation warnings remained non-fatal"
+    },
+    {
+      "command": "npm run lint",
+      "result": "passed"
+    },
+    {
+      "command": "npm run build",
+      "result": "passed"
+    }
+  ],
+  "secretsHandling": {
+    "realCredentialsInspected": false,
+    "realCredentialValuesLogged": false,
+    "unsafeStudentAccountEchoChecked": true,
+    "hiddenAuditRecordEchoChecked": true,
+    "responseRedactionChecked": true
+  },
+  "productionBoundary": {
+    "productionSystemMutated": false,
+    "liveProductionSmokeRun": false,
+    "aggregateEnterpriseGateCleared": false,
+    "remainingGateRisk": "This is local backend/API audit-readback auth-boundary hardening only. It does not replace fresh same-run production teaching operations audit smoke, ordinary teaching browser smoke, deployment, external-storage, or live provider proof."
+  }
+}

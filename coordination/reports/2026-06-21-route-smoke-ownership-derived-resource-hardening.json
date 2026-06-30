@@ -1,0 +1,148 @@
+{
+  "target": "protected-route-smoke-ownership-derived-resource-hardening",
+  "date": "2026-06-21",
+  "status": "local-production-proved-production-smoke-blocked-by-current-local-env-source",
+  "responsibleSessions": ["S22", "S12", "S19", "S24"],
+  "summary": {
+    "problem": "The production protected-route smoke could fail /api/ai/session with a 403 when the smoke CLI posted hard-coded resource ids that did not match the issued teacher ownership registry.",
+    "fix": "The smoke route order now fetches /api/ai/teacher-ownership before /api/ai/session and derives the teacher AI session resource from the ownership response when available.",
+    "impact": "Local-production E2E proves the issued teacher-auth cookie, teacher ownership response, derived teacher AI session resource, and teacher PPT workflow route chain all pass with external storage enabled."
+  },
+  "changedFiles": [
+    "scripts/ai-route-smoke.mjs",
+    "tests/ai-env-and-smoke.test.ts"
+  ],
+  "behavior": {
+    "routeOrder": [
+      "s22-retention-readiness-route",
+      "s22-voice-lifecycle-audit-route",
+      "s22-teacher-auth-issuer-route",
+      "s22-teacher-ownership-route",
+      "s22-teacher-ai-session-route",
+      "s22-teacher-ppt-workflow-route"
+    ],
+    "derivedResourceFields": [
+      "teacherId",
+      "courseId",
+      "sampleAssetId",
+      "pptAssetId",
+      "voiceRefId",
+      "audioManifestId"
+    ],
+    "fallbackPreserved": true,
+    "responseBodiesOmitted": true,
+    "secretValuesOmitted": true
+  },
+  "localProductionEvidence": {
+    "command": "node scripts/local-production-e2e-smoke.mjs --live --approved --timeout-ms 240000",
+    "status": "passed",
+    "environment": "local-production",
+    "routeSmokeStatus": "passed",
+    "routeResults": [
+      { "id": "s22-retention-readiness-route", "status": "ok", "httpStatus": 200 },
+      { "id": "s22-voice-lifecycle-audit-route", "status": "ok", "httpStatus": 200 },
+      { "id": "s22-teacher-auth-issuer-route", "status": "ok", "httpStatus": 200 },
+      { "id": "s22-teacher-ownership-route", "status": "ok", "httpStatus": 200 },
+      { "id": "s22-teacher-ai-session-route", "status": "ok", "httpStatus": 200 },
+      { "id": "s22-teacher-ppt-workflow-route", "status": "ok", "httpStatus": 200 }
+    ],
+    "workflowUiBrowserSmoke": "passed",
+    "learningPptPlaybackSmoke": "passed",
+    "externalStorageReferenceService": "passed"
+  },
+  "productionAttempt": {
+    "command": "node scripts/ai-route-smoke.mjs --live --approved --environment production --base-url https://www.uais.top --env-file .env.local --release-run-id uais-release-2026-06-20-teacher-auth-scope --vercel-production-deployment <redacted-evidence> --deployment-domain-reachability <redacted-evidence> --teacher-auth-provider-readiness <redacted-evidence>",
+    "status": "blocked-before-network-route-execution",
+    "reason": "Current .env.local does not contain the local signing source needed to prove the already-applied production teacher-auth route chain.",
+    "missingLocalEnvNames": [
+      "UAIS_AI_ACCESS_SIGNING_SECRET",
+      "UAIS_TEACHER_AUTH_PROVIDER",
+      "UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET",
+      "UAIS_TEACHER_AUTH_ISSUER_SECRET",
+      "UAIS_TEACHER_AUTH_ROUTE_SMOKE_TEACHER_ID"
+    ],
+    "notes": [
+      "2026-06-20 teacher-auth scope evidence shows these variables were present in the then-approved local source and applied to Vercel.",
+      "2026-06-21 current local env inventory shows the present .env.local contains provider keys but not the production teacher-auth or external-storage chain variables.",
+      "No secret values were printed, stored in this report, or copied from .env.local."
+    ]
+  },
+  "vercelAuthEvidence": {
+    "shellTokenVariables": {
+      "VERCEL_TOKEN": "missing",
+      "VERCEL_AUTH_TOKEN": "missing",
+      "valuesRedacted": true
+    },
+    "cliWhoami": {
+      "status": "blocked",
+      "failureClass": "vercel-oidc-discovery-tls-disconnected"
+    },
+    "cliDomainsInspect": {
+      "status": "blocked",
+      "failureClass": "vercel-oidc-discovery-tls-disconnected"
+    },
+    "apiVercelCom": {
+      "status": "reachable-without-management-auth",
+      "managementAuth": "missing"
+    }
+  },
+  "domainEvidence": {
+    "wwwUaisTop": {
+      "dns": "resolves-to-vercel-address",
+      "https": "reachable",
+      "rootResponse": "HTTP 307 to /courses",
+      "server": "Vercel"
+    },
+    "apexUaisTop": {
+      "https": "certificate-hostname-mismatch",
+      "status": "not-ready"
+    }
+  },
+  "checksRun": [
+    {
+      "command": "npm run test -- tests/ai-env-and-smoke.test.ts",
+      "result": "passed",
+      "files": 1,
+      "tests": 63
+    },
+    {
+      "command": "npm run test -- tests/teacher-auth-provider-readiness.test.ts tests/production-release-gate.test.ts tests/ai-env-and-smoke.test.ts",
+      "result": "passed",
+      "files": 3,
+      "tests": 244
+    },
+    {
+      "command": "node --check scripts/ai-route-smoke.mjs",
+      "result": "passed"
+    },
+    {
+      "command": "npm run lint",
+      "result": "passed"
+    },
+    {
+      "command": "npm run test",
+      "result": "passed",
+      "files": 48,
+      "tests": 618
+    },
+    {
+      "command": "npm run build",
+      "result": "passed"
+    }
+  ],
+  "remainingBlockers": [
+    "Restore or regenerate an approved local teacher-auth signing source for S19/S22 without logging secret values.",
+    "Apply or verify matching Vercel production env values with valid Vercel auth; current CLI OIDC and REST auth evidence remains blocked/forbidden.",
+    "Redeploy production after env proof is current.",
+    "Rerun full protected-route smoke against https://www.uais.top using the matching local signing source.",
+    "Provide a remote HTTPS external durable storage service and bind production env to it.",
+    "Complete PPT/WPS/PowerPoint manual playback acceptance."
+  ],
+  "safety": {
+    "secretsRedacted": true,
+    "valuesRedacted": true,
+    "localPrivatePathsOmitted": true,
+    "responseBodiesOmitted": true,
+    "goalMarkedComplete": false
+  }
+}

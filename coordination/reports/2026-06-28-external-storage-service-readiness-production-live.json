@@ -1,0 +1,171 @@
+{
+  "target": "external-storage-service-readiness",
+  "mode": "dry-run",
+  "environment": "production",
+  "network": "disabled",
+  "storageEndpoint": {
+    "status": "missing",
+    "networkClass": "missing",
+    "endpointClass": "missing",
+    "valueRedacted": true
+  },
+  "storageServiceFingerprint": {
+    "status": "missing",
+    "source": "origin",
+    "valueRedacted": true
+  },
+  "vercelEnvSyncEvidence": {
+    "target": "vercel-env-sync",
+    "valueRedacted": true,
+    "releaseRunIdStatus": "missing",
+    "status": "not-applied",
+    "applyPreflight": "missing"
+  },
+  "productionLaunchContractEvidence": {
+    "target": "external-storage-service-production-launcher",
+    "status": "ready",
+    "valueRedacted": true,
+    "serviceMode": "production",
+    "runtime": "proved",
+    "envContract": "proved",
+    "dataDirPersistence": "proved",
+    "containerArtifact": "proved",
+    "redactionSafety": "proved"
+  },
+  "status": "blocked",
+  "responsibleSession": "S22",
+  "networkRetryPolicy": {
+    "maxAttempts": 3,
+    "perAttemptTimeoutMs": 10000,
+    "retryOn": [
+      "request-error"
+    ],
+    "valuesRedacted": true
+  },
+  "checks": [
+    {
+      "id": "s22-external-storage-service-health",
+      "endpointTemplate": "/healthz",
+      "method": "GET",
+      "expectedStatus": 200,
+      "responsibleSessions": [
+        "S22",
+        "S12",
+        "S19",
+        "S24"
+      ],
+      "responseShapeChecks": [
+        "status",
+        "target",
+        "apiContractVersion",
+        "cacheControlNoStore",
+        "durableBackingStore",
+        "teachingOperationsStorageSchema",
+        "teachingOperationsStorageSchema.status",
+        "teachingOperationsStorageSchema.schemaVersion",
+        "teachingOperationsStorageSchema.migrationStatus",
+        "teachingOperationsStorageSchema.operationLedger",
+        "teachingOperationsStorageSchema.auditLedger",
+        "teachingOperationsStorageSchema.rollbackLedger",
+        "teachingOperationsStorageSchema.backupStore",
+        "teachingOperationsStorageSchema.restoreDrillLog",
+        "teachingOperationsStorageSchema.concurrencyControl",
+        "teachingOperationsStorageSchema.productionDatabaseAdapter",
+        "teachingOperationsStorageSchema.productionDatabaseAdapter.status",
+        "teachingOperationsStorageSchema.productionDatabaseAdapter.providerClass",
+        "teachingOperationsStorageSchema.productionDatabaseAdapter.migrationStatus",
+        "teachingOperationsStorageSchema.productionDatabaseAdapter.backupPolicy",
+        "teachingOperationsStorageSchema.productionDatabaseAdapter.concurrencyControl",
+        "teachingOperationsStorageSchema.productionDatabaseAdapter.valueRedacted",
+        "teachingOperationsStorageSchema.valueRedacted",
+        "teachingCourseManagementStorageSchema",
+        "teachingCourseManagementStorageSchema.status",
+        "teachingCourseManagementStorageSchema.schemaVersion",
+        "teachingCourseManagementStorageSchema.migrationStatus",
+        "teachingCourseManagementStorageSchema.snapshotStore",
+        "teachingCourseManagementStorageSchema.auditLog",
+        "teachingCourseManagementStorageSchema.backupStore",
+        "teachingCourseManagementStorageSchema.restoreDrillLog",
+        "teachingCourseManagementStorageSchema.revisionControl",
+        "teachingCourseManagementStorageSchema.concurrencyControl",
+        "teachingCourseManagementStorageSchema.productionDatabaseAdapter",
+        "teachingCourseManagementStorageSchema.productionDatabaseAdapter.status",
+        "teachingCourseManagementStorageSchema.productionDatabaseAdapter.providerClass",
+        "teachingCourseManagementStorageSchema.productionDatabaseAdapter.migrationStatus",
+        "teachingCourseManagementStorageSchema.productionDatabaseAdapter.backupPolicy",
+        "teachingCourseManagementStorageSchema.productionDatabaseAdapter.concurrencyControl",
+        "teachingCourseManagementStorageSchema.productionDatabaseAdapter.valueRedacted",
+        "teachingCourseManagementStorageSchema.valueRedacted",
+        "teachingCourseAssetsStorageSchema",
+        "teachingCourseAssetsStorageSchema.status",
+        "teachingCourseAssetsStorageSchema.schemaVersion",
+        "teachingCourseAssetsStorageSchema.migrationStatus",
+        "teachingCourseAssetsStorageSchema.snapshotStore",
+        "teachingCourseAssetsStorageSchema.auditLog",
+        "teachingCourseAssetsStorageSchema.backupStore",
+        "teachingCourseAssetsStorageSchema.restoreDrillLog",
+        "teachingCourseAssetsStorageSchema.revisionControl",
+        "teachingCourseAssetsStorageSchema.concurrencyControl",
+        "teachingCourseAssetsStorageSchema.productionDatabaseAdapter",
+        "teachingCourseAssetsStorageSchema.productionDatabaseAdapter.status",
+        "teachingCourseAssetsStorageSchema.productionDatabaseAdapter.providerClass",
+        "teachingCourseAssetsStorageSchema.productionDatabaseAdapter.migrationStatus",
+        "teachingCourseAssetsStorageSchema.productionDatabaseAdapter.backupPolicy",
+        "teachingCourseAssetsStorageSchema.productionDatabaseAdapter.concurrencyControl",
+        "teachingCourseAssetsStorageSchema.productionDatabaseAdapter.valueRedacted",
+        "teachingCourseAssetsStorageSchema.valueRedacted",
+        "productionServiceIdentity",
+        "redaction"
+      ]
+    }
+  ],
+  "prerequisites": [
+    {
+      "id": "s19-external-storage-base-url",
+      "responsibleSession": "S19",
+      "requiredEnv": "UAIS_EXTERNAL_STORAGE_BASE_URL",
+      "status": "missing"
+    },
+    {
+      "id": "s19-vercel-env-sync-apply-evidence",
+      "responsibleSession": "S19",
+      "requiredEvidence": "vercel-env-sync",
+      "status": "not-applied",
+      "valueRedacted": true
+    },
+    {
+      "id": "s22-external-storage-production-launch-contract",
+      "responsibleSession": "S22",
+      "requiredEvidence": "external-storage-service-production-launcher",
+      "status": "ready",
+      "valueRedacted": true
+    }
+  ],
+  "blockedReasons": [
+    "missing-UAIS_EXTERNAL_STORAGE_BASE_URL",
+    "vercel-env-sync-evidence-not-applied",
+    "external-storage-service-live-readiness-not-run"
+  ],
+  "safety": {
+    "valuesRedacted": true,
+    "serviceUrlOmitted": true,
+    "responseBodiesOmitted": true,
+    "localPrivatePathsOmitted": true,
+    "cookieValuesOmitted": true,
+    "liveRequiresApproval": true,
+    "remoteMutationRequiresApproval": true,
+    "noWriteOperations": true
+  },
+  "results": {
+    "externalStorageEndpointRemoteHttps": "blocked",
+    "externalStorageHealthContract": "blocked",
+    "externalStorageOrdinaryTeachingSchemas": "blocked",
+    "externalStorageTeachingOperationsSchema": "blocked",
+    "externalStorageTeachingCourseManagementSchema": "blocked",
+    "externalStorageTeachingCourseAssetsSchema": "blocked",
+    "externalStorageVercelEnvSync": "blocked",
+    "externalStorageProductionLaunchContract": "passed",
+    "externalStoragePersistenceEvidence": "blocked",
+    "externalStorageReadinessSafety": "passed"
+  }
+}

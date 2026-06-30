@@ -1,0 +1,92 @@
+{
+  "target": "vercel-production-deployment",
+  "mode": "live",
+  "action": "inspect",
+  "inspectMode": "public-http",
+  "environment": "production",
+  "network": "enabled",
+  "status": "deployed",
+  "responsibleSession": "S22",
+  "releaseRunId": "uais-release-2026-06-21-signed-admin-production-api",
+  "deploymentFingerprint": {
+    "status": "present",
+    "value": "sha256:7c8e0f8c7195d5b9"
+  },
+  "deploymentObservation": {
+    "status": "observed",
+    "observedAt": "2026-06-21T14:08:20.104Z",
+    "source": "public-vercel-edge"
+  },
+  "deploymentOrigin": {
+    "status": "present",
+    "originClass": "remote-https",
+    "valueRedacted": true
+  },
+  "envSyncApplyPreflightGuard": {
+    "status": "proved",
+    "requiredEvidence": "vercel-env-sync.applyPreflight",
+    "valuesRedacted": true,
+    "cliSafeToInvoke": true
+  },
+  "operation": {
+    "command": "vercel-public-http-inspect",
+    "status": "passed",
+    "stdoutOmitted": true,
+    "stderrOmitted": true
+  },
+  "prerequisites": [
+    {
+      "id": "s22-vercel-project-readiness",
+      "responsibleSession": "S22",
+      "requiredEvidence": "vercel-project-readiness",
+      "status": "ready",
+      "valueRedacted": true
+    },
+    {
+      "id": "s19-vercel-env-sync-apply-evidence",
+      "responsibleSession": "S19",
+      "requiredEvidence": "vercel-env-sync",
+      "status": "applied",
+      "valueRedacted": true
+    },
+    {
+      "id": "s22-production-deployment-url",
+      "responsibleSession": "S22",
+      "requiredEnv": "UAIS_DEPLOYMENT_BASE_URL",
+      "status": "present",
+      "valueRedacted": true
+    }
+  ],
+  "blockedReasons": [],
+  "safety": {
+    "valuesRedacted": true,
+    "deploymentUrlOmitted": true,
+    "deploymentUrlsOmitted": true,
+    "projectIdsOmitted": true,
+    "orgIdsOmitted": true,
+    "accountNamesOmitted": true,
+    "teamIdsOmitted": true,
+    "teamSlugsOmitted": true,
+    "tokenOmitted": true,
+    "tokenFlagForbidden": true,
+    "projectReadinessEvidencePathOmitted": true,
+    "envSyncEvidencePathOmitted": true,
+    "localPrivatePathsOmitted": true,
+    "cliOutputOmitted": true,
+    "liveRequiresApproval": true
+  },
+  "publicEdgeObservation": {
+    "status": "observed",
+    "httpStatus": 307,
+    "edgeProvider": "vercel",
+    "headerChecks": {
+      "serverVercel": "present",
+      "xVercelId": "present",
+      "location": "present"
+    },
+    "responseBodyOmitted": true,
+    "headerValuesOmitted": true,
+    "deploymentUrlOmitted": true,
+    "valuesRedacted": true
+  }
+}

@@ -1,0 +1,105 @@
+{
+  "target": "external-storage-service-readiness",
+  "mode": "live",
+  "environment": "local-reference",
+  "network": "enabled",
+  "storageEndpoint": {
+    "status": "present",
+    "networkClass": "local-loopback",
+    "endpointClass": "local-loopback",
+    "valueRedacted": true
+  },
+  "storageServiceFingerprint": {
+    "status": "present",
+    "value": "sha256:efde232628f39616",
+    "source": "origin",
+    "valueRedacted": true
+  },
+  "productionLaunchContractEvidence": {
+    "target": "external-storage-service-production-launcher",
+    "status": "ready",
+    "valueRedacted": true,
+    "serviceMode": "production",
+    "runtime": "proved",
+    "envContract": "proved",
+    "dataDirPersistence": "proved",
+    "containerArtifact": "proved",
+    "redactionSafety": "proved"
+  },
+  "status": "blocked",
+  "releaseRunId": "uais-release-2026-06-21-docker-storage",
+  "responsibleSession": "S22",
+  "networkRetryPolicy": {
+    "maxAttempts": 3,
+    "perAttemptTimeoutMs": 10000,
+    "retryOn": [
+      "request-error"
+    ],
+    "valuesRedacted": true
+  },
+  "checks": [
+    {
+      "id": "s22-external-storage-service-health",
+      "endpointTemplate": "/healthz",
+      "method": "GET",
+      "expectedStatus": 200,
+      "responsibleSessions": [
+        "S22",
+        "S12",
+        "S19",
+        "S24"
+      ],
+      "responseShapeChecks": [
+        "status",
+        "target",
+        "apiContractVersion",
+        "cacheControlNoStore",
+        "durableBackingStore",
+        "productionServiceIdentity",
+        "redaction"
+      ]
+    }
+  ],
+  "prerequisites": [
+    {
+      "id": "s19-external-storage-base-url",
+      "responsibleSession": "S19",
+      "requiredEnv": "UAIS_EXTERNAL_STORAGE_BASE_URL",
+      "status": "present"
+    },
+    {
+      "id": "s22-external-storage-production-launch-contract",
+      "responsibleSession": "S22",
+      "requiredEvidence": "external-storage-service-production-launcher",
+      "status": "ready",
+      "valueRedacted": true
+    }
+  ],
+  "blockedReasons": [
+    "external-storage-service-readiness-not-production"
+  ],
+  "safety": {
+    "valuesRedacted": true,
+    "serviceUrlOmitted": true,
+    "responseBodiesOmitted": true,
+    "localPrivatePathsOmitted": true,
+    "liveRequiresApproval": true,
+    "noWriteOperations": true
+  },
+  "health": {
+    "httpStatus": 200,
+    "status": "ok",
+    "target": "uais-external-storage-production-service",
+    "cacheControl": "no-store",
+    "productionServiceIdentity": "proved",
+    "apiContractVersion": "matched",
+    "durableBackingStore": "ready",
+    "redaction": "present",
+    "networkAttempts": {
+      "attempted": 1,
+      "maxAttempts": 3,
+      "retried": false,
+      "valueRedacted": true
+    }
+  }
+}

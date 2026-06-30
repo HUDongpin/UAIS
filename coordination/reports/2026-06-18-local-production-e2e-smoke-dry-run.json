@@ -1,0 +1,116 @@
+{
+  "target": "local-production-e2e-smoke",
+  "mode": "dry-run",
+  "environment": "local-production",
+  "network": "disabled",
+  "status": "ready",
+  "responsibleSession": "S22",
+  "server": {
+    "host": "127.0.0.1",
+    "port": "redacted",
+    "startCommand": "next start -H 127.0.0.1 -p <redacted-port>"
+  },
+  "checks": [
+    {
+      "id": "s22-next-production-build",
+      "status": "planned",
+      "command": "npm run build"
+    },
+    {
+      "id": "s22-local-external-storage-reference-service",
+      "status": "planned",
+      "environment": "local-production",
+      "command": "node scripts/external-storage-service.mjs --host 127.0.0.1 --port <redacted-port> --data-dir <ephemeral-dir>",
+      "storageBackends": [
+        "teacher-ai-ownership:external",
+        "qwen-voice-lifecycle-audit:external"
+      ],
+      "requiredFixtureEnv": [
+        "UAIS_EXTERNAL_STORAGE_BASE_URL",
+        "UAIS_EXTERNAL_STORAGE_ACCESS_TOKEN",
+        "UAIS_TEACHER_AI_OWNERSHIP_BACKEND",
+        "UAIS_VOICE_LIFECYCLE_AUDIT_BACKEND"
+      ]
+    },
+    {
+      "id": "s22-next-start-local-production-server",
+      "status": "planned",
+      "command": "next start -H 127.0.0.1 -p <redacted-port>"
+    },
+    {
+      "id": "s22-local-teacher-workflow-page-smoke",
+      "status": "planned",
+      "environment": "local-production",
+      "command": "node scripts/teacher-workflow-deployment-smoke.mjs --live --approved --environment local-production --base-url <local-production-url>"
+    },
+    {
+      "id": "s22-local-teacher-workflow-browser-smoke",
+      "status": "planned",
+      "environment": "local-production",
+      "command": "node scripts/teacher-workflow-browser-smoke.mjs --live --approved --environment local-production --base-url <local-production-url> --api-mode live-workflow-status",
+      "fallbackCommand": "npx --yes --package playwright --call <redacted-transient-browser-smoke-command>",
+      "browserInteractions": [
+        "verify-short-voice-sample-duration-gate",
+        "submit-voice-sample-with-signed-session",
+        "run-voice-clone-preflight",
+        "save-voice-ref",
+        "submit-ppt-narration",
+        "verify-ppt-narration-slide-payload",
+        "verify-per-slide-wav-download-links",
+        "verify-per-slide-wav-download-href-contract"
+      ],
+      "apiInterceptionPolicy": {
+        "workflowApis": "live-workflow-status",
+        "remoteMutations": "fixture-blocked",
+        "responseBodiesOmitted": true
+      }
+    },
+    {
+      "id": "s22-local-protected-route-smoke",
+      "status": "planned",
+      "environment": "local-production",
+      "command": "node scripts/ai-route-smoke.mjs --live --approved --environment local-production --base-url <local-production-url> --env-file <ephemeral-env>",
+      "authChain": [
+        "signed-admin-ai-access",
+        "signed-trusted-issuer-proof",
+        "issued-teacher-auth-cookie",
+        "teacher-ai-session",
+        "teacher-ppt-workflow"
+      ],
+      "requiredFixtureEnv": [
+        "UAIS_AI_ACCESS_SIGNING_SECRET",
+        "UAIS_TEACHER_AUTH_PROVIDER",
+        "UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET",
+        "UAIS_TEACHER_AUTH_ISSUER_SECRET",
+        "UAIS_TEACHER_AI_OWNERSHIP_BACKEND",
+        "UAIS_VOICE_LIFECYCLE_AUDIT_BACKEND",
+        "UAIS_EXTERNAL_STORAGE_BASE_URL",
+        "UAIS_EXTERNAL_STORAGE_ACCESS_TOKEN"
+      ],
+      "storageBackends": [
+        "teacher-ai-ownership:external",
+        "qwen-voice-lifecycle-audit:external"
+      ],
+      "routeProofSummary": [
+        "teacherAuthIssuer.responseHeaders",
+        "teacherAiSession.authProviderContract",
+        "teacherOwnership.responseShape",
+        "teacherPptWorkflow.responseShape",
+        "teacherPptWorkflow.downloadContract"
+      ]
+    }
+  ],
+  "blockedReasons": [],
+  "safety": {
+    "secretsRedacted": true,
+    "localPrivatePathsOmitted": true,
+    "tempEnvFileOmitted": true,
+    "responseBodiesOmitted": true,
+    "productionGateEligible": false,
+    "liveRequiresApproval": true
+  },
+  "diagnostics": {
+    "requestedPort": "ephemeral",
+    "nextBuildRequiredBeforeStart": true
+  }
+}

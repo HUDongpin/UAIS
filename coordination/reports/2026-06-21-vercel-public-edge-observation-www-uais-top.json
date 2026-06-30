@@ -1,0 +1,27 @@
+{
+  "target": "vercel-public-edge-observation",
+  "mode": "live",
+  "environment": "production",
+  "checkedAt": "2026-06-21T14:08:01.519Z",
+  "status": "observed",
+  "deploymentOrigin": {
+    "status": "present",
+    "originClass": "remote-https",
+    "valueRedacted": true
+  },
+  "deploymentFingerprint": {
+    "status": "present",
+    "value": "sha256:7c8e0f8c7195d5b9"
+  },
+  "httpStatus": 307,
+  "edgeProvider": "vercel",
+  "headerChecks": {
+    "serverVercel": "present",
+    "xVercelId": "present",
+    "location": "present"
+  },
+  "responseBodyOmitted": true,
+  "headerValuesOmitted": true,
+  "deploymentUrlOmitted": true,
+  "valuesRedacted": true
+}

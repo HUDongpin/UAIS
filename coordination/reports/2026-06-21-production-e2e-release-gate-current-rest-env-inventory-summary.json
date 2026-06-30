@@ -1,0 +1,119 @@
+{
+  "target": "uais-production-e2e-release-gate",
+  "date": "2026-06-21",
+  "status": "blocked",
+  "responsibleSession": "S22",
+  "command": "node scripts/production-e2e-release-gate.mjs --teacher-workflow-ui <current-ui> --deployed-teacher-workflow-ui <www-uais-top-current> --teacher-workflow-browser-ui <local-production-smoke> --vercel-project-readiness <current> --vercel-env-sync <current-local-env-dry-run-raw> --vercel-env-inventory <rest-auth-required> --trusted-teacher-auth-route-chain <proved> --teacher-auth-provider-readiness <session-route-blocked> --external-storage-production-launch-contract <docker-volume> --external-storage-container-build-readiness <build-ready> --external-storage-service-readiness <local-docker-health> --vercel-production-deployment <oidc-blocked-standard> --route-smoke <www-uais-top> --external-storage-smoke <local-docker> --ppt-acceptance <manual-blocked>",
+  "satisfiedRequirements": [
+    "website-teacher-workflow-ui",
+    "vercel-project-readiness",
+    "trusted-teacher-auth-route-chain",
+    "external-storage-production-launch-contract",
+    "external-storage-container-build-readiness"
+  ],
+  "blockedRequirements": [
+    {
+      "id": "deployed-teacher-workflow-page",
+      "blockedReason": "deployed-teacher-workflow-page-vercel-deployment-binding-not-proven",
+      "note": "The current www.uais.top /teaching page has all required anchors, but it is not bound to a successful production deployment for this release run."
+    },
+    {
+      "id": "teacher-workflow-browser-smoke",
+      "blockedReason": "teacher-workflow-browser-smoke-not-production",
+      "note": "The browser workflow passed locally with fixture-only workflow APIs; production browser workflow smoke is not proved."
+    },
+    {
+      "id": "vercel-env-placement",
+      "blockedReason": "vercel-env-not-applied",
+      "missingEnv": [
+        "UAIS_AI_ACCESS_SIGNING_SECRET",
+        "UAIS_TEACHER_AUTH_PROVIDER",
+        "UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET",
+        "UAIS_TEACHER_AI_OWNERSHIP_BACKEND",
+        "UAIS_VOICE_LIFECYCLE_AUDIT_BACKEND",
+        "UAIS_EXTERNAL_STORAGE_BASE_URL",
+        "UAIS_EXTERNAL_STORAGE_ACCESS_TOKEN"
+      ],
+      "remoteEnvInventory": {
+        "status": "blocked",
+        "method": "rest",
+        "failureClass": "auth-required",
+        "unobservedRequiredEnvCount": 22,
+        "apiOutputOmitted": true,
+        "valuesRedacted": true
+      }
+    },
+    {
+      "id": "teacher-auth-provider-readiness",
+      "blockedReason": "teacher-auth-provider-readiness-not-live-ready",
+      "note": "Issuer route is proved, but issued /api/ai/session route is not proved."
+    },
+    {
+      "id": "external-storage-service-readiness",
+      "blockedReason": "external-storage-service-readiness-not-live-ready",
+      "note": "Local Docker health is ready; remote HTTPS production storage service readiness is not proved."
+    },
+    {
+      "id": "vercel-production-deployment",
+      "blockedReason": "vercel-production-deployment-env-sync-not-proven",
+      "operationStatus": "blocked-before-upload",
+      "secondaryFailure": "vercel-cli-oidc-discovery-tls-failure",
+      "restEnvInventoryFailure": "auth-required",
+      "restAuthScopeFailure": {
+        "userEndpoint": "403-auth-required",
+        "projectEndpoint": "403-auth-required",
+        "envEndpoint": "403-auth-required",
+        "evidence": "2026-06-21-vercel-rest-auth-scope-readiness-live-cli-auth-forbidden.json"
+      }
+    },
+    {
+      "id": "deployment-route-smoke",
+      "blockedReason": "deployment-route-smoke-not-live-passed",
+      "missingRouteChecks": [
+        "s22-teacher-ai-session-route",
+        "s22-teacher-ppt-workflow-route"
+      ],
+      "routeResponseShapes": {
+        "teacherAuthIssuer": "proved",
+        "teacherAiSession": "failed",
+        "teacherOwnership": "proved",
+        "teacherPptWorkflow": "failed"
+      }
+    },
+    {
+      "id": "external-durable-storage-smoke",
+      "blockedReason": "external-storage-smoke-not-production",
+      "note": "All storage smoke checks passed against local Docker, but endpoint is local-loopback, not remote HTTPS production."
+    },
+    {
+      "id": "ppt-manual-playback-acceptance",
+      "blockedReason": "manual-ppt-playback-not-accepted",
+      "expectedSlideCount": 19,
+      "machinePreflightStatus": "passed",
+      "manualRecordEvidenceStatus": "missing"
+    }
+  ],
+  "blockedReasons": [
+    "deployed-teacher-workflow-page-vercel-deployment-binding-not-proven",
+    "teacher-workflow-browser-smoke-not-production",
+    "vercel-env-not-applied",
+    "teacher-auth-provider-readiness-not-live-ready",
+    "external-storage-service-readiness-not-live-ready",
+    "vercel-production-deployment-env-sync-not-proven",
+    "deployment-route-smoke-not-live-passed",
+    "external-storage-smoke-not-production",
+    "manual-ppt-playback-not-accepted"
+  ],
+  "qualityGate": {
+    "restInventoryCommandAcceptedByReleaseGate": true,
+    "externalStorageContainerBuildSatisfied": true,
+    "nextBuildNoGoogleFontsNetworkDependency": true,
+    "goalMarkedComplete": false
+  },
+  "safety": {
+    "secretsRedacted": true,
+    "evidenceValuesRedacted": true,
+    "responseBodiesOmitted": true,
+    "localPrivatePathsOmitted": true
+  }
+}

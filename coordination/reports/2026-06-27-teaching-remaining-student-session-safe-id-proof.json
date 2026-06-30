@@ -1,0 +1,76 @@
+{
+  "generatedAt": "2026-06-27T21:10:27+08:00",
+  "timezone": "Asia/Hong_Kong",
+  "scope": "teaching-remaining-student-session-safe-id",
+  "status": "local-auth-boundary-hardened",
+  "summary": "The remaining ordinary teaching API routes that read signed student app-session cookies now reject unsafe student account ids before role classification, export reads, rollback writes, backup restore writes, or membership approval writes can run.",
+  "filesChanged": [
+    "src/app/api/teaching/classes/[classId]/memberships/[membershipId]/approve/route.ts",
+    "src/app/api/teaching/operations/backups/[backupId]/restore/route.ts",
+    "src/app/api/teaching/operations/export/[manifestId]/route.ts",
+    "src/app/api/teaching/operations/records/[recordId]/rollback/route.ts",
+    "tests/teaching-course-management-api.test.ts",
+    "tests/teaching-operation-backend.test.ts"
+  ],
+  "behaviorHardened": [
+    "Unsafe signed student account ids are treated as unauthenticated for teaching class membership approval.",
+    "Unsafe signed student account ids are treated as unauthenticated for teaching operation backup restore.",
+    "Unsafe signed student account ids are treated as unauthenticated for teaching operation record rollback.",
+    "Unsafe signed student account ids are treated as unauthenticated for teaching operation export manifest readback.",
+    "Denied unsafe-student requests return HTTP 401 with authenticated-session-required and preserve trace ids.",
+    "Denied unsafe-student requests do not touch local teaching course or operation databases, parse rollback bodies, run ownership checks, expose manifest ids, restore backups, roll back records, or approve memberships.",
+    "A teaching API scan found every readAuthenticatedStudent app-session reader in src/app/api/teaching guarded by a route safe-id check."
+  ],
+  "redGreenEvidence": {
+    "red": {
+      "command": "./node_modules/.bin/vitest run tests/teaching-operation-backend.test.ts tests/teaching-course-management-api.test.ts -t \"unsafe signed student account ids before\"",
+      "observedFailure": "Focused regressions failed before implementation with four new failures returning HTTP 403 teacher-role-required instead of HTTP 401 for membership approval, backup restore, operation rollback, and export manifest readback."
+    },
+    "green": {
+      "command": "./node_modules/.bin/vitest run tests/teaching-operation-backend.test.ts tests/teaching-course-management-api.test.ts -t \"unsafe signed student account ids before\"",
+      "observedPass": "Focused regressions passed after implementation with 13 tests passed and 222 skipped."
+    }
+  },
+  "verification": [
+    {
+      "command": "./node_modules/.bin/vitest run tests/teaching-operation-backend.test.ts tests/teaching-course-management-api.test.ts",
+      "result": "passed",
+      "details": "235 tests passed"
+    },
+    {
+      "command": "npm run test",
+      "result": "passed",
+      "details": "66 files passed, 1328 tests passed; existing jsdom navigation warnings remained non-fatal"
+    },
+    {
+      "command": "npm run lint",
+      "result": "passed"
+    },
+    {
+      "command": "npm run build",
+      "result": "passed"
+    },
+    {
+      "command": "git diff --check",
+      "result": "passed"
+    },
+    {
+      "command": "rg -n \"function readAuthenticatedStudent|readAuthenticatedStudentSession|user\\.role !== \\\"student\\\"|user\\?\\.role === \\\"student\\\"\" src/app/api/teaching && rg -n \"isSafeTeaching.*\\(user\\.account\\)|isSafeTeachingOperationId\\(user\\.account\\)|isSafeTeachingMembershipActorId\\(user\\.account\\)|isSafeTeachingInviteStudentActorId\\(user\\.account\\)\" src/app/api/teaching",
+      "result": "passed",
+      "details": "All teaching API app-session student readers have a route safe-id check."
+    }
+  ],
+  "secretsHandling": {
+    "realCredentialsInspected": false,
+    "realCredentialValuesLogged": false,
+    "unsafeStudentAccountEchoChecked": true,
+    "manifestOrMembershipIdEchoChecked": true,
+    "responseRedactionChecked": true
+  },
+  "productionBoundary": {
+    "productionSystemMutated": false,
+    "liveProductionSmokeRun": false,
+    "aggregateEnterpriseGateCleared": false,
+    "remainingGateRisk": "This is local backend/API student-session identity hardening only. It does not replace fresh same-run production teaching API route smoke, ordinary teaching browser smoke, deployment, external-storage, or live provider proof."
+  }
+}

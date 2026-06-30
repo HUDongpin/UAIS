@@ -1,0 +1,80 @@
+{
+  "reportId": "2026-06-28-teaching-export-manifest-id-safe-id-proof",
+  "generatedAt": "2026-06-28T01:16:13+08:00",
+  "sessionId": "S22",
+  "workstream": "Production reliability and release engineering",
+  "status": "local-contract-hardened",
+  "objective": "Harden ordinary teaching operation export routes so unsafe export manifest identifiers are rejected before external course-management readback.",
+  "changedFiles": [
+    "src/app/api/teaching/operations/export/[manifestId]/route.ts",
+    "tests/teaching-operation-backend.test.ts"
+  ],
+  "codeReferences": [
+    {
+      "file": "src/app/api/teaching/operations/export/[manifestId]/route.ts",
+      "line": 134,
+      "summary": "The export route now resolves and validates manifestId before external course-management readback or ownership checks."
+    },
+    {
+      "file": "src/app/api/teaching/operations/export/[manifestId]/route.ts",
+      "line": 222,
+      "summary": "The route-level export manifest safe-id guard returns a stable redacted 400 error for unsafe manifest ids."
+    },
+    {
+      "file": "tests/teaching-operation-backend.test.ts",
+      "line": 3273,
+      "summary": "Regression proves unsafe export manifest ids do not trigger external readback or ownership checks."
+    }
+  ],
+  "redGreenEvidence": [
+    {
+      "phase": "red",
+      "command": "./node_modules/.bin/vitest run tests/teaching-operation-backend.test.ts -t \"rejects unsafe export manifest ids before external readback\"",
+      "result": "failed-before-fix",
+      "observedFailure": "The route returned 404 'Teaching export manifest not found.' after the unsafe manifest id entered the external readback path."
+    },
+    {
+      "phase": "green",
+      "command": "./node_modules/.bin/vitest run tests/teaching-operation-backend.test.ts -t \"rejects unsafe export manifest ids before external readback\"",
+      "result": "passed",
+      "observedPass": "1 focused test passed; unsafe manifest ids now return a redacted 400 response, external readback is not called, and ownership checks remain untouched."
+    }
+  ],
+  "verification": [
+    {
+      "command": "./node_modules/.bin/vitest run tests/teaching-operation-backend.test.ts",
+      "result": "passed",
+      "summary": "186 tests passed."
+    },
+    {
+      "command": "./node_modules/.bin/vitest run tests/production-release-gate.test.ts -t \"export manifest|ordinary teaching|teaching operations route smoke\"",
+      "result": "passed",
+      "summary": "62 focused production release-gate tests passed; 226 tests were skipped by filter."
+    },
+    {
+      "command": "./node_modules/.bin/vitest run",
+      "result": "passed",
+      "summary": "69 files passed, 1356 tests passed."
+    },
+    {
+      "command": "npm run lint",
+      "result": "passed",
+      "summary": "ESLint completed with exit code 0."
+    },
+    {
+      "command": "npm run build",
+      "result": "passed",
+      "summary": "Next.js production build completed with exit code 0."
+    }
+  ],
+  "securityPosture": {
+    "ordinaryTeachingRoute": "Export manifest download now rejects unsafe manifest ids before external course-management snapshot readback, local manifest lookup, ownership lookup, or file response generation.",
+    "rbacBoundary": "Teacher authentication and production auth-provider readiness still run first; unsafe export manifest ids are denied immediately after that trusted identity boundary and before resource lookup.",
+    "redaction": "The unsafe path-like manifest id, storage token variable value, external origin, and local data directory are not echoed in the response.",
+    "productionPersistence": "The regression uses production-style external teaching-operation and course-management storage configuration and proves no external readback request is made for unsafe manifest ids."
+  },
+  "aggregateEnterpriseGateImpact": {
+    "cleared": false,
+    "summary": "This closes a narrow ordinary teaching direct-call readback gap in export manifest retrieval. The full enterprise gate still requires same-run owner-approved production evidence for env placement, deployment, storage, ordinary teaching route/browser smokes, app-auth readiness, browser workflow smoke, and live provider generation."
+  }
+}

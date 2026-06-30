@@ -1,0 +1,131 @@
+{
+  "target": "teacher-auth-provider-readiness",
+  "mode": "live",
+  "environment": "production",
+  "network": "disabled",
+  "status": "blocked",
+  "releaseRunId": "uais-release-2026-06-20-teacher-auth-scope",
+  "responsibleSession": "S22",
+  "authProviderMode": "trusted-cookie-issuer",
+  "sessionCookieContract": {
+    "signingSecretStrength": "sufficient",
+    "httpOnly": "required",
+    "sameSite": "lax",
+    "secureInProduction": true,
+    "maxAgeBounded": true,
+    "cookiePair": [
+      {
+        "name": "uais_teacher_auth_claims",
+        "purpose": "signed-session-claims",
+        "httpOnly": true,
+        "sameSite": "Lax",
+        "secure": "required-in-production",
+        "path": "/",
+        "maxAge": "bounded-by-session-ttl",
+        "priority": "High",
+        "valueRedacted": true
+      },
+      {
+        "name": "uais_teacher_auth_signature",
+        "purpose": "hmac-sha256-signature",
+        "httpOnly": true,
+        "sameSite": "Lax",
+        "secure": "required-in-production",
+        "path": "/",
+        "maxAge": "bounded-by-session-ttl",
+        "priority": "High",
+        "valueRedacted": true
+      }
+    ],
+    "valueRedacted": true
+  },
+  "trustedIssuerContract": {
+    "issuerSecretStrength": "sufficient",
+    "sessionIssuerSecretSeparation": "proved",
+    "issuerProofRequired": true,
+    "issuerProofMaxAgeSeconds": 300,
+    "issuerProofBoundsCookieMaxAge": true,
+    "valueRedacted": true
+  },
+  "trustedCookieSessionRoundTrip": {
+    "status": "proved",
+    "cookiePair": "created-and-verified-in-memory",
+    "claimsCookie": "signed-session-claims",
+    "signatureCookie": "hmac-sha256-signature",
+    "signatureVerification": "passed",
+    "expiryCheck": "passed",
+    "tamperCheck": "passed",
+    "sessionIdRedacted": true,
+    "cookieValuesEmitted": false,
+    "valuesRedacted": true
+  },
+  "vercelEnvSyncEvidence": {
+    "target": "vercel-env-sync",
+    "deploymentScope": "teacher-auth",
+    "valueRedacted": true,
+    "status": "matched",
+    "applyPreflight": "proved",
+    "releaseRunIdStatus": "matched"
+  },
+  "trustedTeacherAuthRouteChainEvidence": {
+    "target": "trusted-teacher-auth-route-chain-contract",
+    "status": "proved",
+    "valueRedacted": true,
+    "authProvider": "trusted-cookie-issuer",
+    "routeChain": "proved",
+    "issuerProofValidation": "proved",
+    "issuerCookieHardening": "proved",
+    "sessionCookiePair": "proved",
+    "downstreamAiSession": "proved",
+    "workflowAction": "proved",
+    "localTrustedCookieRouteWiring": "proved",
+    "redactionSafety": "proved"
+  },
+  "trustedTeacherAuthRouteSmokeEvidence": {
+    "target": "deployment-route-smoke",
+    "status": "not-proven",
+    "valueRedacted": true,
+    "releaseRunIdStatus": "matched",
+    "deploymentBinding": "proved",
+    "teacherAuthIssuerRoute": "proved",
+    "issuedTeacherAiSessionRoute": "missing",
+    "responseHeaders": "proved",
+    "responseShape": "proved"
+  },
+  "prerequisites": [
+    {
+      "id": "s19-vercel-env-sync-apply-evidence",
+      "responsibleSession": "S19",
+      "requiredEvidence": "vercel-env-sync",
+      "status": "matched",
+      "valueRedacted": true
+    },
+    {
+      "id": "s12-trusted-teacher-auth-route-chain-contract",
+      "responsibleSession": "S12",
+      "requiredEvidence": "trusted-teacher-auth-route-chain-contract",
+      "status": "proved",
+      "valueRedacted": true
+    },
+    {
+      "id": "s22-trusted-teacher-auth-route-smoke",
+      "responsibleSession": "S22",
+      "requiredEvidence": "deployment-route-smoke",
+      "status": "not-proven",
+      "valueRedacted": true
+    }
+  ],
+  "blockedReasons": [
+    "trusted-teacher-auth-route-smoke-not-proven"
+  ],
+  "safety": {
+    "valuesRedacted": true,
+    "secretsOmitted": true,
+    "providerUrlsOmitted": true,
+    "responseBodiesOmitted": true,
+    "localPrivatePathsOmitted": true,
+    "liveRequiresApproval": true,
+    "noCookieIssued": true,
+    "cookiesOmitted": true
+  }
+}

@@ -1,0 +1,288 @@
+{
+  "target": "local-production-e2e-smoke",
+  "mode": "live",
+  "environment": "local-production",
+  "network": "local-only",
+  "status": "passed",
+  "responsibleSession": "S22",
+  "server": {
+    "host": "127.0.0.1",
+    "port": "redacted",
+    "startCommand": "next start -H 127.0.0.1 -p <redacted-port>"
+  },
+  "checks": [
+    {
+      "id": "s22-local-external-storage-reference-service",
+      "status": "passed",
+      "environment": "local-production",
+      "command": "node scripts/external-storage-service.mjs --host 127.0.0.1 --port <redacted-port> --data-dir <ephemeral-dir>",
+      "target": "uais-external-storage-reference-service",
+      "responsibleSession": "S12/S22/S24",
+      "endpoints": [
+        "GET /healthz",
+        "GET /teacher-ai-ownership/{teacherId}",
+        "POST /teacher-ai-ownership/{teacherId}/merge",
+        "GET /qwen-voice-lifecycle-audit",
+        "POST /qwen-voice-lifecycle-audit"
+      ],
+      "storageBackends": [
+        "teacher-ai-ownership:external",
+        "qwen-voice-lifecycle-audit:external"
+      ],
+      "requiredFixtureEnv": [
+        "UAIS_EXTERNAL_STORAGE_BASE_URL",
+        "UAIS_EXTERNAL_STORAGE_ACCESS_TOKEN",
+        "UAIS_TEACHER_AI_OWNERSHIP_BACKEND",
+        "UAIS_VOICE_LIFECYCLE_AUDIT_BACKEND"
+      ],
+      "safety": {
+        "bearerTokenOmitted": true,
+        "dataDirOmitted": true,
+        "localPrivatePathsOmitted": true,
+        "responseBodiesRedactedByContract": true
+      }
+    },
+    {
+      "id": "s22-next-production-build",
+      "status": "skipped",
+      "command": "skipped"
+    },
+    {
+      "id": "s22-next-start-local-production-server",
+      "status": "passed",
+      "command": "next start -H 127.0.0.1 -p <redacted-port>"
+    },
+    {
+      "id": "s22-local-learning-ppt-playback-smoke",
+      "status": "passed",
+      "environment": "local-production",
+      "command": "fetch /learning, /api/learning/ppt-playback/<course-id>, and first published WAV from <local-production-url>",
+      "learningPlaybackProofSummary": [
+        "learningPage.http200",
+        "playbackManifest.kangXiaVoice",
+        "playbackManifest.slideCount",
+        "playbackManifest.studentSafeRedaction",
+        "firstSlideAudio.wavHeadersAndMinimumLength"
+      ],
+      "httpStatus": {
+        "learningPage": 200,
+        "playbackManifest": 200,
+        "firstSlideAudio": 200
+      },
+      "playback": {
+        "courseId": "elementary-math-research",
+        "audioManifestId": "audio-manifest-elementary-math-research-natural-number-ordinal-theory-ppt1",
+        "teacherName": "康霞博士",
+        "voiceLabel": "康霞博士克隆声音",
+        "slideCount": 19,
+        "firstSlideTitle": "自然数的序数理论",
+        "lastSlideTitle": "作业布置",
+        "firstAudioUrl": "/api/learning/ppt-playback/audio/audio-manifest-elementary-math-research-natural-number-ordinal-theory-ppt1/tts_natural-number-ordinal-theory-ppt1_slide-01"
+      },
+      "audio": {
+        "contentType": "audio/wav",
+        "contentLength": 745004,
+        "wavHeader": "RIFF/WAVE"
+      },
+      "results": {
+        "learningPageHttp200": "passed",
+        "playbackManifestKangXiaVoice": "passed",
+        "playbackManifestStudentSafeRedaction": "passed",
+        "firstSlideAudioWavHeaders": "passed"
+      },
+      "blockedReasons": []
+    },
+    {
+      "id": "s22-local-teacher-workflow-page-smoke",
+      "status": "passed",
+      "environment": "local-production",
+      "command": "node scripts/teacher-workflow-deployment-smoke.mjs --live --approved --environment local-production --base-url <local-production-url>",
+      "httpStatus": 200,
+      "results": {
+        "teacherWorkflowTitle": "present",
+        "voiceSampleUpload": "present",
+        "voiceSampleSelect": "present",
+        "uploadedSampleAudioPayload": "present",
+        "voiceSampleDurationGate": "present",
+        "selectedSampleIdentity": "present",
+        "preflight": "present",
+        "pptNarrationGenerate": "present",
+        "perSlideWavDownloads": "present",
+        "signedSessionBootstrap": "present",
+        "workflowSessionActions": "present",
+        "serverWorkflowStatus": "present",
+        "serverWorkflowProgress": "present"
+      }
+    },
+    {
+      "id": "s22-local-teacher-workflow-browser-smoke",
+      "status": "skipped",
+      "environment": "local-production",
+      "command": "skipped",
+      "skipReason": "browser-automation-runtime-unavailable",
+      "browserInteractions": [
+        "verify-short-voice-sample-duration-gate",
+        "submit-voice-sample-with-signed-session",
+        "run-voice-clone-preflight",
+        "save-voice-ref",
+        "submit-ppt-narration",
+        "verify-ppt-narration-slide-payload",
+        "verify-per-slide-wav-download-links",
+        "verify-per-slide-wav-download-href-contract"
+      ],
+      "browserProofSummary": [
+        "voiceSampleDurationGate",
+        "signedSessionBootstrap",
+        "voiceClonePreflight",
+        "voiceCloneStatus",
+        "pptNarrationSubmit",
+        "pptNarrationSlidePayload",
+        "perSlideWavDownloadLinks",
+        "perSlideWavDownloadHrefContract"
+      ],
+      "apiInterceptionPolicy": {
+        "workflowApis": "live-workflow-status",
+        "remoteMutations": "fixture-blocked",
+        "responseBodiesOmitted": true
+      }
+    },
+    {
+      "id": "s22-local-protected-route-smoke",
+      "status": "passed",
+      "environment": "local-production",
+      "command": "node scripts/ai-route-smoke.mjs --live --approved --environment local-production --base-url <local-production-url> --env-file <ephemeral-env>",
+      "authChain": [
+        "signed-admin-ai-access",
+        "signed-trusted-issuer-proof",
+        "issued-teacher-auth-cookie",
+        "teacher-ai-session",
+        "teacher-ppt-workflow"
+      ],
+      "requiredFixtureEnv": [
+        "UAIS_AI_ACCESS_SIGNING_SECRET",
+        "UAIS_TEACHER_AUTH_PROVIDER",
+        "UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET",
+        "UAIS_TEACHER_AUTH_ISSUER_SECRET",
+        "UAIS_TEACHER_AI_OWNERSHIP_BACKEND",
+        "UAIS_VOICE_LIFECYCLE_AUDIT_BACKEND",
+        "UAIS_EXTERNAL_STORAGE_BASE_URL",
+        "UAIS_EXTERNAL_STORAGE_ACCESS_TOKEN"
+      ],
+      "storageBackends": [
+        "teacher-ai-ownership:external",
+        "qwen-voice-lifecycle-audit:external"
+      ],
+      "routeProofSummary": [
+        "teacherAuthIssuer.responseHeaders",
+        "teacherAiSession.authProviderContract",
+        "teacherOwnership.responseShape",
+        "teacherPptWorkflow.responseShape",
+        "teacherPptWorkflow.downloadContract"
+      ],
+      "routeResults": [
+        {
+          "id": "s22-retention-readiness-route",
+          "status": "ok",
+          "httpStatus": 200,
+          "auth": "signed-admin-ai-access"
+        },
+        {
+          "id": "s22-voice-lifecycle-audit-route",
+          "status": "ok",
+          "httpStatus": 200,
+          "auth": "signed-admin-ai-access"
+        },
+        {
+          "id": "s22-teacher-auth-issuer-route",
+          "status": "ok",
+          "httpStatus": 200,
+          "auth": "signed-admin-ai-access",
+          "responseShape": {
+            "checked": true,
+            "status": "ok",
+            "requiredFields": {
+              "teacherAuthSession": "present",
+              "authProviderContract": "present",
+              "s12TeacherAuthIssuerBoundary": "present"
+            }
+          },
+          "responseHeaders": {
+            "checked": true,
+            "status": "ok",
+            "requiredHeaders": {
+              "teacherAuthClaimsSetCookie": "present",
+              "teacherAuthSignatureSetCookie": "present",
+              "httpOnlySameSiteSecureMaxAge": "present",
+              "priorityHigh": "present",
+              "issuerProofBoundedMaxAge": "present"
+            }
+          }
+        },
+        {
+          "id": "s22-teacher-ai-session-route",
+          "status": "ok",
+          "httpStatus": 200,
+          "auth": "issued-teacher-auth-cookie",
+          "responseShape": {
+            "checked": true,
+            "status": "ok",
+            "requiredFields": {
+              "accessSession": "present",
+              "accessPlan": "present",
+              "authProviderContract": "present",
+              "s12TeacherAiSessionBoundary": "present"
+            }
+          }
+        },
+        {
+          "id": "s22-teacher-ownership-route",
+          "status": "ok",
+          "httpStatus": 200,
+          "auth": "issued-teacher-auth-cookie",
+          "responseShape": {
+            "checked": true,
+            "status": "ok",
+            "requiredFields": {
+              "ownership": "present",
+              "consistency": "present",
+              "s12TeacherOwnershipSummary": "present"
+            }
+          }
+        },
+        {
+          "id": "s22-teacher-ppt-workflow-route",
+          "status": "ok",
+          "httpStatus": 200,
+          "auth": "issued-teacher-auth-cookie",
+          "responseShape": {
+            "checked": true,
+            "status": "ok",
+            "requiredFields": {
+              "workflow": "present",
+              "workflowReadyForDownloads": "present",
+              "workflowDownloadContract": "present",
+              "workflowAudioDownloadPattern": "present",
+              "workflowExportDownloadUrl": "present",
+              "agentHandoffPlan": "present",
+              "agentHandoffPlanFramework": "present",
+              "s22ReleaseSmokeAgent": "present"
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "blockedReasons": [],
+  "safety": {
+    "secretsRedacted": true,
+    "localPrivatePathsOmitted": true,
+    "tempEnvFileOmitted": true,
+    "responseBodiesOmitted": true,
+    "productionGateEligible": false,
+    "liveRequiresApproval": true
+  },
+  "diagnostics": {
+    "browserAutomationRequiredForFullE2E": true,
+    "browserAutomationSkipped": true
+  }
+}

@@ -1,0 +1,79 @@
+{
+  "target": "external-storage-smoke-cache-control-hardening",
+  "status": "completed",
+  "date": "2026-06-19",
+  "responsibleSession": "S22",
+  "objective": "Require the external-storage write/read smoke health leg to prove /healthz Cache-Control no-store, matching the service-readiness health contract.",
+  "changes": [
+    {
+      "file": "scripts/external-storage-smoke.mjs",
+      "summary": "Added cacheControlNoStore to the smoke health responseShapeChecks and requiredFields by inspecting the /healthz Cache-Control response header."
+    },
+    {
+      "file": "tests/external-storage-smoke.test.ts",
+      "summary": "Added a RED/GREEN regression requiring smoke health results to expose missing cache-control proof."
+    },
+    {
+      "file": "tests/ai-env-and-smoke.test.ts",
+      "summary": "Updated dry-run and live smoke acceptance expectations for cacheControlNoStore."
+    },
+    {
+      "file": "tests/external-storage-service.test.ts",
+      "summary": "Updated the reference service smoke harness to assert Cache-Control no-store and cacheControlNoStore present."
+    }
+  ],
+  "evidence": {
+    "dockerLocalProductionReadiness": "coordination/reports/2026-06-19-external-storage-service-readiness-docker-local-production.json",
+    "dockerLocalReferenceSmoke": "coordination/reports/2026-06-19-external-storage-smoke-docker-local-reference.json",
+    "releaseGate": "coordination/reports/2026-06-19-production-e2e-release-gate-current-linked-vercel-preflight-docker-storage.json",
+    "ownerChecklist": "coordination/reports/2026-06-19-production-owner-decision-checklist-current-linked-vercel-preflight-docker-storage.json",
+    "smokeHealthProof": {
+      "status": "ok",
+      "httpStatus": 200,
+      "cacheControlNoStore": "present",
+      "allFiveSmokeChecks": "ok"
+    },
+    "releaseGateStatus": {
+      "status": "blocked",
+      "storageSmokeEvidenceStatus": "live-passed",
+      "storageSmokeBlockedReason": "external-storage-smoke-not-production"
+    }
+  },
+  "verification": {
+    "redTest": "npm run test -- tests/external-storage-smoke.test.ts -t cache-control failed before implementation because cacheControlNoStore was absent from smoke health results.",
+    "commandsPassed": [
+      "node --check scripts/external-storage-smoke.mjs",
+      "npm run test -- tests/external-storage-smoke.test.ts",
+      "npm run test -- tests/external-storage-smoke.test.ts tests/production-release-gate.test.ts tests/production-owner-decision-checklist.test.ts",
+      "npm run test -- tests/ai-env-and-smoke.test.ts tests/external-storage-service.test.ts",
+      "npm run test",
+      "npm run lint",
+      "npm run build",
+      "git diff --check"
+    ],
+    "fullVitest": {
+      "testFilesPassed": 39,
+      "testsPassed": 538
+    },
+    "redactionScan": {
+      "status": "passed",
+      "matchedLeakPatterns": 0
+    },
+    "dockerCleanup": "temporary local Docker container removed after evidence capture"
+  },
+  "remainingBlockers": [
+    "remote HTTPS external-storage production service not provisioned",
+    "Vercel production/preview env not applied",
+    "teacher auth provider live production readiness not proven",
+    "Vercel production deployment and deployed smokes not proven",
+    "manual PowerPoint/WPS playback acceptance not recorded"
+  ],
+  "safety": {
+    "valuesRedacted": true,
+    "serviceUrlOmitted": true,
+    "tokensOmitted": true,
+    "teacherIdsOmitted": true,
+    "localPrivatePathsOmitted": true,
+    "productionMutationPerformed": false
+  }
+}

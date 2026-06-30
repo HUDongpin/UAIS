@@ -1,0 +1,363 @@
+{
+  "target": "external-storage-smoke",
+  "mode": "live",
+  "environment": "local-reference",
+  "network": "enabled",
+  "storageEndpoint": {
+    "status": "present",
+    "networkClass": "local-loopback",
+    "endpointClass": "local-loopback",
+    "valueRedacted": true
+  },
+  "storageServiceFingerprint": {
+    "status": "present",
+    "value": "sha256:bc60f27cfab85864",
+    "source": "origin",
+    "valueRedacted": true
+  },
+  "externalStorageServiceReadinessEvidence": {
+    "target": "external-storage-service-readiness",
+    "valueRedacted": true,
+    "releaseRunIdStatus": "not-required",
+    "status": "local-reference-matched",
+    "productionLaunchContractEvidence": {
+      "target": "external-storage-service-production-launcher",
+      "status": "ready",
+      "valueRedacted": true,
+      "serviceMode": "production",
+      "runtime": "proved",
+      "envContract": "proved",
+      "dataDirPersistence": "proved",
+      "containerArtifact": "proved",
+      "redactionSafety": "proved"
+    }
+  },
+  "status": "passed",
+  "responsibleSession": "S22",
+  "networkRetryPolicy": {
+    "maxAttempts": 3,
+    "perAttemptTimeoutMs": 10000,
+    "retryOn": [
+      "request-error"
+    ],
+    "valuesRedacted": true
+  },
+  "checks": [
+    {
+      "id": "s22-external-storage-health",
+      "endpointTemplate": "/healthz",
+      "method": "GET",
+      "expectedStatus": 200,
+      "responsibleSessions": [
+        "S22",
+        "S12",
+        "S24",
+        "S19"
+      ],
+      "responseShapeChecks": [
+        "status",
+        "target",
+        "apiContractVersion",
+        "cacheControlNoStore",
+        "durableBackingStore",
+        "productionServiceIdentity",
+        "redaction"
+      ]
+    },
+    {
+      "id": "s12-external-teacher-ownership-merge",
+      "endpointTemplate": "/teacher-ai-ownership/{teacherId}/merge",
+      "method": "POST",
+      "expectedStatus": 200,
+      "responsibleSessions": [
+        "S22",
+        "S12",
+        "S19"
+      ],
+      "responseShapeChecks": [
+        "status",
+        "storageWritePolicy",
+        "redaction"
+      ]
+    },
+    {
+      "id": "s12-external-teacher-ownership-read",
+      "endpointTemplate": "/teacher-ai-ownership/{teacherId}",
+      "method": "GET",
+      "expectedStatus": 200,
+      "responsibleSessions": [
+        "S22",
+        "S12",
+        "S19"
+      ],
+      "responseShapeChecks": [
+        "teacherId",
+        "courseIds",
+        "assetCollections",
+        "smokeGrantMerged",
+        "runScopedSmokeGrant",
+        "privateFieldsOmitted"
+      ]
+    },
+    {
+      "id": "s24-external-lifecycle-audit-append",
+      "endpointTemplate": "/qwen-voice-lifecycle-audit",
+      "method": "POST",
+      "expectedStatus": 200,
+      "responsibleSessions": [
+        "S22",
+        "S24",
+        "S19"
+      ],
+      "responseShapeChecks": [
+        "status",
+        "provider",
+        "redaction"
+      ]
+    },
+    {
+      "id": "s24-external-lifecycle-audit-read",
+      "endpointTemplate": "/qwen-voice-lifecycle-audit",
+      "method": "GET",
+      "expectedStatus": 200,
+      "responsibleSessions": [
+        "S22",
+        "S24",
+        "S19"
+      ],
+      "responseShapeChecks": [
+        "provider",
+        "eventType",
+        "eventsArray",
+        "smokeAuditEventPresent",
+        "runScopedSmokeAuditEvent",
+        "redaction"
+      ]
+    }
+  ],
+  "prerequisites": [
+    {
+      "id": "s19-external-storage-base-url",
+      "responsibleSession": "S19",
+      "requiredEnv": "UAIS_EXTERNAL_STORAGE_BASE_URL",
+      "status": "present"
+    },
+    {
+      "id": "s19-external-storage-access-token",
+      "responsibleSession": "S19",
+      "requiredEnv": "UAIS_EXTERNAL_STORAGE_ACCESS_TOKEN",
+      "status": "present"
+    },
+    {
+      "id": "s22-external-storage-smoke-teacher-id",
+      "responsibleSession": "S22",
+      "requiredArg": "--teacher-id",
+      "status": "present"
+    },
+    {
+      "id": "s22-external-storage-service-readiness-evidence",
+      "responsibleSession": "S22",
+      "requiredEvidence": "external-storage-service-readiness",
+      "status": "local-reference-matched",
+      "valueRedacted": true
+    }
+  ],
+  "blockedReasons": [],
+  "safety": {
+    "secretsRedacted": true,
+    "valuesRedacted": true,
+    "approvedWriteThenRead": true,
+    "destructiveWrites": false,
+    "writePayloadsRedacted": true,
+    "responseBodiesOmitted": true,
+    "liveRequiresApproval": true
+  },
+  "results": [
+    {
+      "id": "s22-external-storage-health",
+      "endpointTemplate": "/healthz",
+      "method": "GET",
+      "expectedStatus": 200,
+      "responsibleSessions": [
+        "S22",
+        "S12",
+        "S24",
+        "S19"
+      ],
+      "responseShapeChecks": [
+        "status",
+        "target",
+        "apiContractVersion",
+        "cacheControlNoStore",
+        "durableBackingStore",
+        "productionServiceIdentity",
+        "redaction"
+      ],
+      "status": "ok",
+      "httpStatus": 200,
+      "responseShape": {
+        "checked": true,
+        "status": "ok",
+        "requiredFields": {
+          "status": "present",
+          "target": "present",
+          "apiContractVersion": "present",
+          "cacheControlNoStore": "present",
+          "durableBackingStore": "present",
+          "productionServiceIdentity": "present",
+          "redaction": "present"
+        }
+      },
+      "networkAttempts": {
+        "attempted": 1,
+        "maxAttempts": 3,
+        "retried": false,
+        "valueRedacted": true
+      }
+    },
+    {
+      "id": "s12-external-teacher-ownership-merge",
+      "endpointTemplate": "/teacher-ai-ownership/{teacherId}/merge",
+      "method": "POST",
+      "expectedStatus": 200,
+      "responsibleSessions": [
+        "S22",
+        "S12",
+        "S19"
+      ],
+      "responseShapeChecks": [
+        "status",
+        "storageWritePolicy",
+        "redaction"
+      ],
+      "status": "ok",
+      "httpStatus": 200,
+      "responseShape": {
+        "checked": true,
+        "status": "ok",
+        "requiredFields": {
+          "status": "present",
+          "storageWritePolicy": "present",
+          "redaction": "present"
+        }
+      },
+      "networkAttempts": {
+        "attempted": 1,
+        "maxAttempts": 3,
+        "retried": false,
+        "valueRedacted": true
+      }
+    },
+    {
+      "id": "s12-external-teacher-ownership-read",
+      "endpointTemplate": "/teacher-ai-ownership/{teacherId}",
+      "method": "GET",
+      "expectedStatus": 200,
+      "responsibleSessions": [
+        "S22",
+        "S12",
+        "S19"
+      ],
+      "responseShapeChecks": [
+        "teacherId",
+        "courseIds",
+        "assetCollections",
+        "smokeGrantMerged",
+        "runScopedSmokeGrant",
+        "privateFieldsOmitted"
+      ],
+      "status": "ok",
+      "httpStatus": 200,
+      "responseShape": {
+        "checked": true,
+        "status": "ok",
+        "requiredFields": {
+          "teacherId": "present",
+          "courseIds": "present",
+          "assetCollections": "present",
+          "smokeGrantMerged": "present",
+          "runScopedSmokeGrant": "present",
+          "privateFieldsOmitted": "present"
+        }
+      },
+      "networkAttempts": {
+        "attempted": 1,
+        "maxAttempts": 3,
+        "retried": false,
+        "valueRedacted": true
+      }
+    },
+    {
+      "id": "s24-external-lifecycle-audit-append",
+      "endpointTemplate": "/qwen-voice-lifecycle-audit",
+      "method": "POST",
+      "expectedStatus": 200,
+      "responsibleSessions": [
+        "S22",
+        "S24",
+        "S19"
+      ],
+      "responseShapeChecks": [
+        "status",
+        "provider",
+        "redaction"
+      ],
+      "status": "ok",
+      "httpStatus": 200,
+      "responseShape": {
+        "checked": true,
+        "status": "ok",
+        "requiredFields": {
+          "status": "present",
+          "provider": "present",
+          "redaction": "present"
+        }
+      },
+      "networkAttempts": {
+        "attempted": 1,
+        "maxAttempts": 3,
+        "retried": false,
+        "valueRedacted": true
+      }
+    },
+    {
+      "id": "s24-external-lifecycle-audit-read",
+      "endpointTemplate": "/qwen-voice-lifecycle-audit",
+      "method": "GET",
+      "expectedStatus": 200,
+      "responsibleSessions": [
+        "S22",
+        "S24",
+        "S19"
+      ],
+      "responseShapeChecks": [
+        "provider",
+        "eventType",
+        "eventsArray",
+        "smokeAuditEventPresent",
+        "runScopedSmokeAuditEvent",
+        "redaction"
+      ],
+      "status": "ok",
+      "httpStatus": 200,
+      "responseShape": {
+        "checked": true,
+        "status": "ok",
+        "requiredFields": {
+          "provider": "present",
+          "eventType": "present",
+          "eventsArray": "present",
+          "smokeAuditEventPresent": "present",
+          "runScopedSmokeAuditEvent": "present",
+          "redaction": "present"
+        }
+      },
+      "networkAttempts": {
+        "attempted": 1,
+        "maxAttempts": 3,
+        "retried": false,
+        "valueRedacted": true
+      }
+    }
+  ]
+}

@@ -1,0 +1,81 @@
+{
+  "target": "teacher-auth-issuer-proof-validation-hardening",
+  "status": "completed",
+  "date": "2026-06-19",
+  "responsibleSession": "S22",
+  "objective": "Move the trusted-cookie teacher auth issuer proof from a generation-side TTL convention to an enforced validation-side security boundary.",
+  "changes": [
+    {
+      "file": "src/lib/server/teacher-auth-issuer-proof.ts",
+      "summary": "Rejects validly signed trusted issuer claims when issuedAt is invalid or in the future, expiresAt is not after issuedAt, or proof lifetime exceeds 300 seconds."
+    },
+    {
+      "file": "scripts/trusted-teacher-auth-route-chain-contract.mjs",
+      "summary": "Adds redacted issuerProofValidation evidence covering max lifetime, future issuedAt rejection, invalid time-order rejection, and overlong lifetime rejection."
+    },
+    {
+      "file": "scripts/teacher-auth-provider-readiness.mjs",
+      "summary": "Requires issuerProofValidation to be proved before trusted-cookie route-chain evidence can satisfy teacher-auth provider readiness."
+    },
+    {
+      "file": "scripts/production-e2e-release-gate.mjs",
+      "summary": "Surfaces and requires issuerProofValidation in both direct trusted route-chain and nested teacher-auth provider readiness evidence."
+    }
+  ],
+  "evidence": {
+    "routeChain": "coordination/reports/2026-06-19-trusted-teacher-auth-route-chain-contract.json",
+    "teacherAuthProviderReadiness": "coordination/reports/2026-06-19-teacher-auth-provider-readiness-current-route-chain-bound.json",
+    "routeSmoke": "coordination/reports/2026-06-19-route-smoke-current-linked-vercel-preflight-dry-run.json",
+    "releaseGate": "coordination/reports/2026-06-19-production-e2e-release-gate-current-linked-vercel-preflight-docker-storage.json",
+    "ownerChecklist": "coordination/reports/2026-06-19-production-owner-decision-checklist-current-linked-vercel-preflight-docker-storage.json",
+    "issuerProofValidation": {
+      "maxLifetimeSeconds": 300,
+      "rejectsFutureIssuedAt": true,
+      "rejectsExpiresBeforeIssuedAt": true,
+      "rejectsOverlongLifetime": true,
+      "valuesRedacted": true
+    },
+    "releaseGateStatus": {
+      "status": "blocked",
+      "teacherAuthProviderReadiness": "dry-run-blocked",
+      "blockedReason": "teacher-auth-provider-readiness-not-live-ready"
+    }
+  },
+  "verification": {
+    "redTests": [
+      "npm run test -- tests/teacher-auth-issuer-proof.test.ts failed before implementation because validly signed future, overlong, and invalid-order proofs were authorized.",
+      "npm run test -- tests/trusted-teacher-auth-route-chain-contract.test.ts -t redacted local route-chain proof failed before issuerProofValidation evidence was emitted.",
+      "npm run test -- tests/teacher-auth-provider-readiness.test.ts -t issuer proof validation failed before readiness required the route-chain validation proof.",
+      "npm run test -- tests/production-release-gate.test.ts -t trusted route-chain proof failed before the release gate required issuerProofValidation."
+    ],
+    "commandsPassed": [
+      "node --check src/lib/server/teacher-auth-issuer-proof.ts",
+      "node --check scripts/trusted-teacher-auth-route-chain-contract.mjs",
+      "node --check scripts/teacher-auth-provider-readiness.mjs",
+      "node --check scripts/production-e2e-release-gate.mjs",
+      "npm run test -- tests/teacher-auth-issuer-proof.test.ts tests/trusted-teacher-auth-route-chain-contract.test.ts tests/teacher-auth-provider-readiness.test.ts tests/production-release-gate.test.ts tests/production-owner-decision-checklist.test.ts tests/ai-api-routes.test.ts",
+      "npm run test",
+      "npm run lint",
+      "npm run build"
+    ],
+    "fullVitest": {
+      "testFilesPassed": 40,
+      "testsPassed": 543
+    }
+  },
+  "remainingBlockers": [
+    "owner-approved Vercel production/preview env not applied",
+    "live production teacher-auth provider readiness not run with real server-only secrets",
+    "remote HTTPS external-storage production service not provisioned",
+    "Vercel production deployment and deployed smokes not proven",
+    "manual PowerPoint/WPS playback acceptance not recorded"
+  ],
+  "safety": {
+    "secretsOmitted": true,
+    "cookieValuesOmitted": true,
+    "sessionIdsOmitted": true,
+    "providerValuesOmitted": true,
+    "localPrivatePathsOmitted": true,
+    "productionMutationPerformed": false
+  }
+}

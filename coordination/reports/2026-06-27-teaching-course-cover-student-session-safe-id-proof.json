@@ -1,0 +1,60 @@
+{
+  "generatedAt": "2026-06-27T20:35:50+08:00",
+  "timezone": "Asia/Hong_Kong",
+  "scope": "teaching-course-cover-student-session-safe-id",
+  "status": "local-auth-boundary-hardened",
+  "summary": "The /api/teaching/course-cover route rejects signed student app-session cookies whose account is an unsafe server id before teacher-role classification, request body parsing, Qwen generation, ownership reads, or course-cover asset writes can run.",
+  "filesChanged": [
+    "src/app/api/teaching/course-cover/route.ts",
+    "tests/teaching-course-cover-api.test.ts"
+  ],
+  "behaviorHardened": [
+    "Course-cover generation now treats unsafe signed student account ids as unauthenticated instead of valid student role denials.",
+    "Denied unsafe-student requests return HTTP 401 with authenticated-session-required and preserve the trace id.",
+    "Denied unsafe-student requests do not parse malformed bodies, call Qwen, read ownership, or write course-cover assets or audit events.",
+    "Denied responses do not echo local-path-like student account values or provider secrets."
+  ],
+  "redGreenEvidence": {
+    "red": {
+      "command": "./node_modules/.bin/vitest run tests/teaching-course-cover-api.test.ts -t \"unsafe signed student account ids\"",
+      "observedFailure": "Focused regression failed before implementation with HTTP 403 teacher-role-required and the unsafe /Users/... student account echoed in the actor payload."
+    },
+    "green": {
+      "command": "./node_modules/.bin/vitest run tests/teaching-course-cover-api.test.ts -t \"unsafe signed student account ids\"",
+      "observedPass": "Focused regression passed after implementation with one test passed and twenty skipped."
+    }
+  },
+  "verification": [
+    {
+      "command": "./node_modules/.bin/vitest run tests/teaching-course-cover-api.test.ts",
+      "result": "passed",
+      "details": "21 tests passed"
+    },
+    {
+      "command": "npm run test",
+      "result": "passed",
+      "details": "66 files passed, 1318 tests passed; existing jsdom navigation warnings remained non-fatal"
+    },
+    {
+      "command": "npm run lint",
+      "result": "passed"
+    },
+    {
+      "command": "npm run build",
+      "result": "passed"
+    }
+  ],
+  "secretsHandling": {
+    "realCredentialsInspected": false,
+    "realCredentialValuesLogged": false,
+    "unsafeStudentAccountEchoChecked": true,
+    "providerSecretEchoChecked": true,
+    "responseRedactionChecked": true
+  },
+  "productionBoundary": {
+    "productionSystemMutated": false,
+    "liveProductionSmokeRun": false,
+    "aggregateEnterpriseGateCleared": false,
+    "remainingGateRisk": "This is local backend/API auth-boundary hardening only. It does not replace fresh same-run production course-cover generation, course-management route smoke, ordinary teaching browser smoke, deployment, external-storage, or live provider proof."
+  }
+}

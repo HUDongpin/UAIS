@@ -1,0 +1,38 @@
+{
+  "target": "vercel-env-inventory-cli-live",
+  "date": "2026-06-21",
+  "mode": "live",
+  "status": "listed",
+  "responsibleSession": "S19/S22",
+  "command": {
+    "name": "vercel env ls",
+    "stdoutOmitted": true,
+    "stderrOmitted": true
+  },
+  "environments": {
+    "production": {
+      "status": "listed",
+      "exitCode": 0,
+      "envNames": [],
+      "envNameCount": 0,
+      "valuesRedacted": true
+    },
+    "preview": {
+      "status": "listed",
+      "exitCode": 0,
+      "envNames": [],
+      "envNameCount": 0,
+      "valuesRedacted": true
+    }
+  },
+  "blockedReasons": [],
+  "safety": {
+    "valuesPrinted": false,
+    "valuesWritten": false,
+    "namesOnly": true,
+    "tokenOmitted": true,
+    "accountNamesOmitted": true,
+    "projectIdsOmitted": true,
+    "orgIdsOmitted": true
+  }
+}

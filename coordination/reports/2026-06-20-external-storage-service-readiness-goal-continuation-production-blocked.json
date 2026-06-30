@@ -1,0 +1,117 @@
+{
+  "target": "external-storage-service-readiness",
+  "mode": "live",
+  "environment": "production",
+  "network": "enabled",
+  "storageEndpoint": {
+    "status": "missing",
+    "networkClass": "missing",
+    "endpointClass": "missing",
+    "valueRedacted": true
+  },
+  "storageServiceFingerprint": {
+    "status": "missing",
+    "source": "origin",
+    "valueRedacted": true
+  },
+  "vercelEnvSyncEvidence": {
+    "target": "vercel-env-sync",
+    "valueRedacted": true,
+    "releaseRunIdStatus": "missing",
+    "status": "not-applied",
+    "applyPreflight": "missing"
+  },
+  "productionLaunchContractEvidence": {
+    "target": "external-storage-service-production-launcher",
+    "status": "ready",
+    "valueRedacted": true,
+    "serviceMode": "production",
+    "runtime": "proved",
+    "envContract": "proved",
+    "dataDirPersistence": "proved",
+    "containerArtifact": "proved",
+    "redactionSafety": "proved"
+  },
+  "persistenceEvidence": {
+    "target": "external-storage-persistence-smoke",
+    "valueRedacted": true,
+    "releaseRunIdStatus": "missing",
+    "status": "not-passed"
+  },
+  "status": "blocked",
+  "releaseRunId": "uais-production-chain-20260620",
+  "responsibleSession": "S22",
+  "networkRetryPolicy": {
+    "maxAttempts": 3,
+    "perAttemptTimeoutMs": 10000,
+    "retryOn": [
+      "request-error"
+    ],
+    "valuesRedacted": true
+  },
+  "checks": [
+    {
+      "id": "s22-external-storage-service-health",
+      "endpointTemplate": "/healthz",
+      "method": "GET",
+      "expectedStatus": 200,
+      "responsibleSessions": [
+        "S22",
+        "S12",
+        "S19",
+        "S24"
+      ],
+      "responseShapeChecks": [
+        "status",
+        "target",
+        "apiContractVersion",
+        "cacheControlNoStore",
+        "durableBackingStore",
+        "productionServiceIdentity",
+        "redaction"
+      ]
+    }
+  ],
+  "prerequisites": [
+    {
+      "id": "s19-external-storage-base-url",
+      "responsibleSession": "S19",
+      "requiredEnv": "UAIS_EXTERNAL_STORAGE_BASE_URL",
+      "status": "missing"
+    },
+    {
+      "id": "s19-vercel-env-sync-apply-evidence",
+      "responsibleSession": "S19",
+      "requiredEvidence": "vercel-env-sync",
+      "status": "not-applied",
+      "valueRedacted": true
+    },
+    {
+      "id": "s22-external-storage-production-launch-contract",
+      "responsibleSession": "S22",
+      "requiredEvidence": "external-storage-service-production-launcher",
+      "status": "ready",
+      "valueRedacted": true
+    },
+    {
+      "id": "s22-external-storage-persistence-evidence",
+      "responsibleSession": "S22",
+      "requiredEvidence": "external-storage-persistence-smoke",
+      "status": "not-passed",
+      "valueRedacted": true
+    }
+  ],
+  "blockedReasons": [
+    "missing-UAIS_EXTERNAL_STORAGE_BASE_URL",
+    "vercel-env-sync-evidence-not-applied",
+    "external-storage-persistence-evidence-not-passed"
+  ],
+  "safety": {
+    "valuesRedacted": true,
+    "serviceUrlOmitted": true,
+    "responseBodiesOmitted": true,
+    "localPrivatePathsOmitted": true,
+    "liveRequiresApproval": true,
+    "noWriteOperations": true
+  }
+}

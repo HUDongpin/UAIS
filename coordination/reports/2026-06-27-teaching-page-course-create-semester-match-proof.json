@@ -1,0 +1,68 @@
+{
+  "generatedAt": "2026-06-27T18:36:11+08:00",
+  "responsibleSession": "S05/S22",
+  "scope": "ordinary-teaching-course-create-readback-semester-match",
+  "status": "passed",
+  "summary": "The main /teaching course creation flow now rejects a server readback when the saved course semester does not match the submitted draft semester.",
+  "filesChanged": [
+    "src/components/pages/teaching-page.tsx",
+    "tests/teaching-page.test.tsx"
+  ],
+  "redGreenEvidence": [
+    {
+      "phase": "red",
+      "command": "npx vitest run tests/teaching-page.test.tsx --reporter=dot -t \"saved course semester does not match\"",
+      "expectedFailure": true,
+      "observed": "Failed because the UI accepted a course whose response and readback semester differed from the submitted draft semester, and no mismatch alert was rendered."
+    },
+    {
+      "phase": "green",
+      "command": "npx vitest run tests/teaching-page.test.tsx --reporter=dot -t \"saved course semester does not match\"",
+      "exitCode": 0,
+      "observed": "1 passed, 79 skipped."
+    }
+  ],
+  "behaviorHardened": [
+    "Course creation now rejects POST responses whose course.semester does not match the submitted draft semester.",
+    "Course creation now rejects course-list readback when the saved course status derives to a semester that differs from the submitted draft semester.",
+    "Semester mismatches keep the New course dialog open and show the course-create readback mismatch alert instead of displaying the course as saved."
+  ],
+  "verification": [
+    {
+      "command": "npx vitest run tests/teaching-page.test.tsx --reporter=dot -t \"saved course semester does not match\"",
+      "exitCode": 0,
+      "observed": "1 passed, 79 skipped."
+    },
+    {
+      "command": "npx vitest run tests/teaching-page.test.tsx --reporter=dot -t \"persists a new course|keeps the new course dialog open|requires course list readback|saved course name does not match|saved course semester does not match\"",
+      "exitCode": 0,
+      "observed": "5 passed, 75 skipped."
+    },
+    {
+      "command": "npx vitest run tests/teaching-page.test.tsx --reporter=dot",
+      "exitCode": 0,
+      "observed": "80 passed. Existing jsdom navigation warnings remained non-fatal."
+    },
+    {
+      "command": "npm run lint",
+      "exitCode": 0,
+      "observed": "ESLint passed."
+    },
+    {
+      "command": "npm run test",
+      "exitCode": 0,
+      "observed": "66 files passed, 1285 tests passed. Existing jsdom navigation warnings remained non-fatal."
+    },
+    {
+      "command": "npm run build",
+      "exitCode": 0,
+      "observed": "Next.js production build completed."
+    }
+  ],
+  "boundary": "This is local frontend error-closure hardening for main /teaching course creation. It does not replace fresh same-run live production ordinary teaching route/browser smoke artifacts or the aggregate enterprise gate.",
+  "redaction": {
+    "secrets": "omitted",
+    "localFiles": "omitted",
+    "assets": "ids-only"
+  }
+}

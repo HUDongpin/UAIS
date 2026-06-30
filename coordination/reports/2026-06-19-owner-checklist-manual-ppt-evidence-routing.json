@@ -1,0 +1,47 @@
+{
+  "target": "owner-checklist-manual-ppt-evidence-routing",
+  "date": "2026-06-19",
+  "responsibleSession": "S22",
+  "status": "hardened",
+  "objective": "Route missing or target-mismatched manual PPT playback acceptance evidence to the manual PPT human-QA owner decision instead of collapsing it into the generic production release-run decision.",
+  "changedFiles": [
+    "scripts/production-owner-decision-checklist.mjs",
+    "tests/production-owner-decision-checklist.test.ts",
+    "coordination/reports/2026-06-19-production-owner-decision-checklist-current-auth-storage-launch-bound-readiness.json"
+  ],
+  "newRoutingCoverage": {
+    "manualPptPlaybackAcceptance": [
+      "ppt-manual-acceptance-evidence-missing",
+      "ppt-manual-acceptance-target-mismatch"
+    ]
+  },
+  "evidence": {
+    "redTest": {
+      "command": "npm run test -- tests/production-owner-decision-checklist.test.ts -t \"missing or mismatched manual PPT acceptance evidence\"",
+      "statusBeforeImplementation": "failed",
+      "failureMode": "manual PPT evidence missing/target-mismatch blockers were retained only by production-release-run"
+    },
+    "greenTest": {
+      "command": "npm run test -- tests/production-owner-decision-checklist.test.ts -t \"missing or mismatched manual PPT acceptance evidence\"",
+      "statusAfterImplementation": "passed"
+    },
+    "focusedSuite": {
+      "command": "npm run test -- tests/production-owner-decision-checklist.test.ts",
+      "result": "1 file / 15 tests passed"
+    }
+  },
+  "currentOwnerChecklist": {
+    "path": "coordination/reports/2026-06-19-production-owner-decision-checklist-current-auth-storage-launch-bound-readiness.json",
+    "status": "owner-decisions-required",
+    "releaseGateStatus": "blocked"
+  },
+  "safety": {
+    "valuesRedacted": true,
+    "secretsOmitted": true,
+    "deploymentUrlsOmitted": true,
+    "localPrivatePathsOmitted": true,
+    "productionMutationPerformed": false,
+    "vercelMutationPerformed": false,
+    "humanAcceptanceNotClaimed": true
+  }
+}

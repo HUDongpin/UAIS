@@ -1,0 +1,74 @@
+{
+  "target": "www-uais-top-domain-and-browser-smoke-refresh",
+  "status": "www-domain-and-browser-workflows-passed-production-chain-incomplete",
+  "checkedAt": "2026-06-20T18:40:38+08:00",
+  "responsibleSession": "S22",
+  "domain": {
+    "requestedHost": "www.uais.top",
+    "httpsStatus": "reachable",
+    "httpStatus": 307,
+    "redirectLocation": "/courses",
+    "server": "Vercel",
+    "tlsStatus": "valid-for-www-uais-top",
+    "aRecordPublicResolvers": "76.76.21.21",
+    "nsObservedFromPublicResolvers": [
+      "dns11.hichina.com",
+      "dns12.hichina.com"
+    ],
+    "nsDelegationStatus": "not-yet-observed-as-vercel-dns-on-public-resolvers",
+    "apexHostStatus": "not-claimed-complete",
+    "notes": [
+      "www.uais.top is serving UAIS from Vercel.",
+      "Public resolvers still report HiChina NS for uais.top, so DNS delegation is not treated as globally converged.",
+      "The owner asked for www.uais.top; apex uais.top remains outside this completion claim."
+    ]
+  },
+  "browserSmokeEvidence": [
+    {
+      "file": "coordination/reports/2026-06-20-www-uais-teacher-workflow-browser-smoke-preview.json",
+      "status": "passed",
+      "scope": "teacher PPT voice workflow UI",
+      "resultSummary": [
+        "openTeachingPage",
+        "browserHydration",
+        "voiceSampleDurationGate",
+        "voiceSampleFileSelection",
+        "serverWorkflowRefresh",
+        "signedSessionBootstrap",
+        "voiceSampleSubmit",
+        "voiceClonePreflight",
+        "voiceCloneStatus",
+        "pptNarrationSubmit",
+        "pptNarrationSlidePayload",
+        "perSlideWavDownloadLinks",
+        "perSlideWavDownloadHrefContract"
+      ]
+    },
+    {
+      "file": "coordination/reports/2026-06-20-www-uais-new-course-class-qr-browser-smoke.json",
+      "status": "passed",
+      "scope": "new course, new class, invitation QR UI",
+      "courseName": "AI支持的初等数学研究",
+      "className": "Peter测试班",
+      "invitationCode": "55395057",
+      "expiry": "2026-12-17"
+    }
+  ],
+  "productionChainStatus": {
+    "productionReleaseEligible": false,
+    "reason": "Browser workflows pass on the live www domain, but production deployment evidence binding, approved Vercel env sync, production trusted auth/session smoke, remote external storage service, and manual PPT/WPS/PowerPoint playback acceptance remain incomplete.",
+    "notClaimedComplete": [
+      "production trusted teacher auth/session provider",
+      "approved Vercel env sync evidence",
+      "remote HTTPS external durable storage service",
+      "production deployment evidence binding",
+      "manual PPT/WPS/PowerPoint playback acceptance"
+    ]
+  },
+  "redaction": {
+    "secretsIncluded": false,
+    "deploymentUrlRedactedInSmokeReports": true,
+    "screenshotsIncluded": false,
+    "responseBodiesIncluded": false
+  }
+}

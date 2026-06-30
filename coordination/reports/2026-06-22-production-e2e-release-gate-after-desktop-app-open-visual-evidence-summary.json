@@ -1,0 +1,44 @@
+{
+  "target": "uais-production-e2e-release-gate",
+  "date": "2026-06-22",
+  "status": "blocked",
+  "responsibleSession": "S22",
+  "releaseRunId": "uais-release-2026-06-21-signed-admin-production-api",
+  "baseReleaseGateEvidence": "coordination/reports/2026-06-21-production-e2e-release-gate-signed-admin-production-api-final-manual-only-summary.json",
+  "newEvidence": [
+    {
+      "id": "kangxia-ppt-desktop-app-open-visual-evidence",
+      "status": "satisfied-for-visual-desktop-readiness",
+      "evidence": "coordination/reports/2026-06-22-kangxia-ppt-desktop-app-open-evidence-signed-admin-production-api.json",
+      "summary": "Microsoft PowerPoint and WPS Presentation both opened the final Kang Xia narrated PPTX and entered slide-show mode with the slide-one audio icon visible."
+    }
+  ],
+  "satisfiedAreasCarriedForward": [
+    "website-level-teacher-workflow-ui",
+    "production-signed-admin-api-route-chain",
+    "production-trusted-teacher-session-route-chain",
+    "external-durable-storage-read-merge-smoke",
+    "vercel-production-deployment",
+    "deployed-route-smoke",
+    "deployed-teacher-workflow-browser-smoke",
+    "deployed-learning-ppt-playback-smoke",
+    "openxml-and-embedded-wav-machine-readiness",
+    "powerpoint-and-wps-desktop-visual-slideshow-readiness"
+  ],
+  "blockedReasons": ["manual-ppt-playback-not-accepted"],
+  "remainingManualAcceptance": {
+    "id": "ppt-manual-playback-acceptance",
+    "status": "blocked",
+    "requiredApplications": ["Microsoft PowerPoint", "WPS Presentation"],
+    "requiredPerApplicationSlideChecks": 19,
+    "requiredConfirmation": "accepted-after-human-playback",
+    "reason": "The available tool channel can verify app/window state and slide-show visuals, but it cannot honestly certify that a human heard the target cloned voice on all 19 slides in both applications."
+  },
+  "safety": {
+    "secretsRedacted": true,
+    "rawAudioOmitted": true,
+    "providerValuesOmitted": true,
+    "manualAcceptanceNotFaked": true,
+    "goalMarkedComplete": false
+  }
+}

@@ -1,0 +1,243 @@
+{
+  "target": "vercel-env-inventory",
+  "mode": "live",
+  "responsibleSession": "S19",
+  "releaseRunId": "uais-www-domain-prod-chain-20260620",
+  "status": "blocked",
+  "environments": [
+    "production",
+    "preview"
+  ],
+  "command": {
+    "name": "vercel-env-list",
+    "format": "json",
+    "statusByEnvironment": {
+      "production": "passed",
+      "preview": "passed"
+    },
+    "failureClassByEnvironment": {
+      "production": "none",
+      "preview": "none"
+    },
+    "attemptsByEnvironment": {
+      "production": 1,
+      "preview": 1
+    },
+    "stdoutOmitted": true,
+    "stderrOmitted": true
+  },
+  "remoteEnvCounts": {
+    "production": 0,
+    "preview": 0
+  },
+  "remoteEnvNames": {
+    "production": [],
+    "preview": []
+  },
+  "requiredEnvCoverage": [
+    {
+      "name": "UAIS_LIVE_AI_APPROVAL_TOKEN",
+      "production": "missing",
+      "preview": "missing",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_AI_ACCESS_SIGNING_SECRET",
+      "production": "missing",
+      "preview": "missing",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_TEACHER_AUTH_PROVIDER",
+      "production": "missing",
+      "preview": "missing",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET",
+      "production": "missing",
+      "preview": "missing",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_TEACHER_AUTH_ISSUER_SECRET",
+      "production": "missing",
+      "preview": "missing",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_TEACHER_AI_OWNERSHIP_BACKEND",
+      "production": "missing",
+      "preview": "missing",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_VOICE_LIFECYCLE_AUDIT_BACKEND",
+      "production": "missing",
+      "preview": "missing",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_EXTERNAL_STORAGE_BASE_URL",
+      "production": "missing",
+      "preview": "missing",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_EXTERNAL_STORAGE_ACCESS_TOKEN",
+      "production": "missing",
+      "preview": "missing",
+      "valueRedacted": true
+    },
+    {
+      "name": "DEEPSEEK_API_KEY",
+      "production": "missing",
+      "preview": "missing",
+      "valueRedacted": true
+    },
+    {
+      "name": "DASHSCOPE_API_KEY",
+      "production": "missing",
+      "preview": "missing",
+      "valueRedacted": true
+    }
+  ],
+  "optionalEnvCoverage": [
+    {
+      "name": "UAIS_EXTERNAL_STORAGE_SERVICE_MODE",
+      "production": "missing",
+      "preview": "missing",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_EXTERNAL_STORAGE_SERVICE_DATA_DIR",
+      "production": "missing",
+      "preview": "missing",
+      "valueRedacted": true
+    }
+  ],
+  "missingRequiredEnv": [
+    {
+      "name": "UAIS_LIVE_AI_APPROVAL_TOKEN",
+      "environment": "production",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_LIVE_AI_APPROVAL_TOKEN",
+      "environment": "preview",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_AI_ACCESS_SIGNING_SECRET",
+      "environment": "production",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_AI_ACCESS_SIGNING_SECRET",
+      "environment": "preview",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_TEACHER_AUTH_PROVIDER",
+      "environment": "production",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_TEACHER_AUTH_PROVIDER",
+      "environment": "preview",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET",
+      "environment": "production",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET",
+      "environment": "preview",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_TEACHER_AUTH_ISSUER_SECRET",
+      "environment": "production",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_TEACHER_AUTH_ISSUER_SECRET",
+      "environment": "preview",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_TEACHER_AI_OWNERSHIP_BACKEND",
+      "environment": "production",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_TEACHER_AI_OWNERSHIP_BACKEND",
+      "environment": "preview",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_VOICE_LIFECYCLE_AUDIT_BACKEND",
+      "environment": "production",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_VOICE_LIFECYCLE_AUDIT_BACKEND",
+      "environment": "preview",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_EXTERNAL_STORAGE_BASE_URL",
+      "environment": "production",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_EXTERNAL_STORAGE_BASE_URL",
+      "environment": "preview",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_EXTERNAL_STORAGE_ACCESS_TOKEN",
+      "environment": "production",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_EXTERNAL_STORAGE_ACCESS_TOKEN",
+      "environment": "preview",
+      "valueRedacted": true
+    },
+    {
+      "name": "DEEPSEEK_API_KEY",
+      "environment": "production",
+      "valueRedacted": true
+    },
+    {
+      "name": "DEEPSEEK_API_KEY",
+      "environment": "preview",
+      "valueRedacted": true
+    },
+    {
+      "name": "DASHSCOPE_API_KEY",
+      "environment": "production",
+      "valueRedacted": true
+    },
+    {
+      "name": "DASHSCOPE_API_KEY",
+      "environment": "preview",
+      "valueRedacted": true
+    }
+  ],
+  "unobservedRequiredEnv": [],
+  "blockedReasons": [
+    "vercel-env-inventory-required-env-missing"
+  ],
+  "safety": {
+    "valuesRedacted": true,
+    "rawCliOutputOmitted": true,
+    "stderrOmitted": true,
+    "tokenOmitted": true,
+    "localPrivatePathsOmitted": true,
+    "noMutation": true
+  }
+}

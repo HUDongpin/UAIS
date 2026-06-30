@@ -1,0 +1,30 @@
+{
+  "target": "vercel-env-sync-forbidden-diagnostic",
+  "mode": "live",
+  "environment": "production",
+  "status": "blocked",
+  "releaseRunId": "uais-release-2026-06-21-external-storage-scope",
+  "deploymentScope": "external-storage",
+  "httpStatus": 403,
+  "errorCode": "forbidden",
+  "operation": "vercel-env-rest-list-and-upsert",
+  "affectedScope": "external-storage-env-api",
+  "valuesRedacted": true,
+  "secretValuesOmitted": true,
+  "blockedReasons": [
+    "vercel-env-api-forbidden-for-current-auth",
+    "vercel-cli-env-add-oidc-discovery-failed"
+  ],
+  "notes": [
+    "Current shell has no VERCEL_TOKEN; local Vercel CLI auth exists but REST env list and upsert both return 403 forbidden.",
+    "This blocks production Vercel env placement for external storage until a Vercel token/account with env write permission is available."
+  ],
+  "cliDiagnostic": {
+    "status": "blocked",
+    "operation": "vercel-env-add",
+    "failureClass": "vercel-oidc-discovery-network-failure",
+    "safeErrorSummary": "request to vercel well-known openid configuration failed before TLS connection established",
+    "valuesRedacted": true,
+    "secretValuesOmitted": true
+  }
+}

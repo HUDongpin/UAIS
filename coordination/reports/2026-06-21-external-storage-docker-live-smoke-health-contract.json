@@ -1,0 +1,193 @@
+{
+  "target": "external-storage-docker-live-smoke-health-contract",
+  "date": "2026-06-21",
+  "status": "passed-local-docker",
+  "responsibleSessions": ["S12", "S22", "S24"],
+  "scope": {
+    "goalItem": "external durable storage real service and smoke evidence",
+    "environment": "local-docker",
+    "productionCompletionStatus": "not-production-complete",
+    "notes": [
+      "This proves a Docker-backed external storage service from the current source can build, boot, expose production service identity locally, and pass live write/read smoke.",
+      "This does not prove remote HTTPS production storage, Vercel env placement, or deployed www.uais.top protected workflow parity."
+    ]
+  },
+  "sourceFix": {
+    "file": "scripts/external-storage-service.mjs",
+    "issue": "The standalone service health probe could throw before its redacted blocked-health branch when the backing store probe setup failed.",
+    "fix": "Moved probe directory creation, path validation, payload creation, write, read, and cleanup into the guarded probe block so health failures return a redacted 503 blocked contract.",
+    "redGreenEvidence": {
+      "red": {
+        "command": "npm run test -- tests/external-storage-service.test.ts",
+        "status": "failed-as-expected",
+        "failure": "Expected HTTP 503 but received HTTP 500 for backing-store probe failure."
+      },
+      "green": {
+        "command": "npm run test -- tests/external-storage-service.test.ts",
+        "status": "passed",
+        "testFiles": 1,
+        "tests": 4
+      }
+    }
+  },
+  "teacherWorkflowUiEvidence": {
+    "command": "node scripts/teacher-workflow-ui-smoke.mjs",
+    "status": "accepted",
+    "featureEvidenceStatus": "feature-evidence-passed",
+    "features": {
+      "voiceSampleUpload": true,
+      "uploadedSampleAudioPayload": true,
+      "voiceSampleDurationGate": true,
+      "voiceSampleSelect": true,
+      "selectedSampleIdentity": true,
+      "preflight": true,
+      "voiceRefDisplay": true,
+      "pptNarrationGenerate": true,
+      "perSlideWavDownloads": true,
+      "workflowStepGating": true,
+      "signedSessionBootstrap": true,
+      "signedSessionReadiness": true,
+      "authFailClosed": true,
+      "serverWorkflowStatus": true
+    }
+  },
+  "dockerEvidence": {
+    "existingDockerState": {
+      "dockerDesktop": "running",
+      "longRunningContainerObserved": "uais-external-storage-20260621",
+      "longRunningContainerUntouched": true
+    },
+    "readinessDryRun": {
+      "command": "node scripts/external-storage-container-build-readiness.mjs --dry-run --image-tag <redacted>",
+      "status": "ready",
+      "dockerClient": "present",
+      "dockerDaemon": "available",
+      "dockerfileContract": "passed",
+      "dockerignoreSecretExclusion": "passed"
+    },
+    "imageBuild": {
+      "command": "node scripts/external-storage-container-build-readiness.mjs --build --approved --image-tag <redacted>",
+      "status": "ready",
+      "build": "passed",
+      "dockerOutputOmitted": true
+    },
+    "shortLivedContainer": {
+      "purpose": "fresh live smoke against current rebuilt image",
+      "status": "removed-after-smoke",
+      "serviceMode": "production",
+      "endpoint": "local-loopback-redacted",
+      "startupOutputRedacted": true
+    },
+    "health": {
+      "httpStatus": 200,
+      "status": "ok",
+      "target": "uais-external-storage-production-service",
+      "apiContractVersion": "uais-external-storage-v1",
+      "productionServiceIdentity": "proved",
+      "durableBackingStore": "ready",
+      "cacheControl": "no-store",
+      "redaction": "present"
+    },
+    "liveSmoke": {
+      "command": "node scripts/external-storage-smoke.mjs --live --approved --base-url <local-loopback-redacted> --teacher-id <redacted> --environment local-reference",
+      "status": "passed",
+      "storageServiceFingerprint": "sha256:806e7ae900267d92",
+      "results": [
+        {
+          "id": "s22-external-storage-health",
+          "status": "ok",
+          "httpStatus": 200
+        },
+        {
+          "id": "s12-external-teacher-ownership-merge",
+          "status": "ok",
+          "httpStatus": 200
+        },
+        {
+          "id": "s12-external-teacher-ownership-read",
+          "status": "ok",
+          "httpStatus": 200
+        },
+        {
+          "id": "s24-external-lifecycle-audit-append",
+          "status": "ok",
+          "httpStatus": 200
+        },
+        {
+          "id": "s24-external-lifecycle-audit-read",
+          "status": "ok",
+          "httpStatus": 200
+        }
+      ]
+    }
+  },
+  "productionRecheck": {
+    "wwwUaisTopExternalStorageHealth": {
+      "command": "curl -I https://www.uais.top/api/external-storage/healthz",
+      "httpStatus": 500,
+      "server": "Vercel",
+      "status": "still-deployed-old-failure-shape"
+    },
+    "wwwUaisTopTeacherOwnership": {
+      "command": "curl -sS https://www.uais.top/api/external-storage/teacher-ai-ownership/teacher-kang",
+      "httpStatusClass": "service-unavailable-body",
+      "status": "blocked",
+      "reason": "External storage service access token is not configured.",
+      "redaction": "present"
+    },
+    "vercelCliInspect": {
+      "command": "npx vercel inspect https://www.uais.top",
+      "status": "blocked",
+      "failureClass": "vercel-oidc-discovery-tls-failure",
+      "alsoFailedWhenElevated": true
+    },
+    "vercelOidcEndpoint": {
+      "command": "curl -I https://vercel.com/.well-known/openid-configuration",
+      "status": "blocked",
+      "failureClass": "tls-connection-failed"
+    }
+  },
+  "checksRun": [
+    {
+      "command": "npm run test -- tests/teaching-page.test.tsx tests/teacher-workflow-ui-smoke.test.ts",
+      "status": "passed",
+      "testFiles": 2,
+      "tests": 20
+    },
+    {
+      "command": "npm run test -- tests/external-storage-service.test.ts tests/external-storage-container-build-readiness.test.ts tests/external-storage-service-container.test.ts tests/external-storage-service-production-launcher.test.ts",
+      "status": "passed",
+      "testFiles": 4,
+      "tests": 14
+    },
+    {
+      "command": "npm run lint",
+      "status": "passed"
+    },
+    {
+      "command": "npm run test",
+      "status": "passed",
+      "testFiles": 44,
+      "tests": 606
+    },
+    {
+      "command": "npm run build",
+      "status": "passed"
+    }
+  ],
+  "remainingBlockers": [
+    "The current Docker-backed proof is local; it is not a remote HTTPS production storage service.",
+    "Vercel production env placement for external storage remains blocked by missing/insufficient Vercel env-write authorization in the current shell.",
+    "The www.uais.top deployed build has not yet received the latest local health-contract fix.",
+    "Full protected teacher workflow smoke on www.uais.top remains incomplete until production env points at a reachable external storage service with the teacher ownership record.",
+    "PPT/WPS/PowerPoint manual playback acceptance remains incomplete."
+  ],
+  "safety": {
+    "secretsRedacted": true,
+    "tokensOmitted": true,
+    "localPrivatePathsOmitted": true,
+    "dockerOutputOmitted": true,
+    "responseBodiesOmittedWhereNeeded": true,
+    "goalMarkedComplete": false
+  }
+}

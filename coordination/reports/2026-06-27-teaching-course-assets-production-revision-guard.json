@@ -1,0 +1,97 @@
+{
+  "schemaVersion": "uais-enterprise-evidence-v1",
+  "generatedAt": "2026-06-27T15:28:30+08:00",
+  "responsibleSession": "S12",
+  "status": "contract-hardened",
+  "releaseGateEligible": false,
+  "scope": {
+    "surface": "/api/teaching/course-cover",
+    "backend": "teaching-course-assets-external-store",
+    "runtime": "production",
+    "storagePolicy": "external-redacted-teaching-course-cover-assets"
+  },
+  "enterpriseGapClosed": {
+    "category": "production-persistence-concurrency-control",
+    "description": "Production external course-assets write acknowledgements now require a non-empty snapshot revision before generated cover assets can be treated as persisted.",
+    "failClosedBehavior": [
+      "returns 502 when production course-cover asset PUT acknowledgement omits snapshot revision",
+      "does not write generated cover assets to local JSON fallback",
+      "returns a redacted error instead of reporting the cover asset as saved",
+      "preserves managed database adapter proof as a separate production acknowledgement requirement"
+    ],
+    "redaction": {
+      "secrets": "omitted",
+      "localFiles": "omitted",
+      "assets": "generated-url-only"
+    }
+  },
+  "filesChanged": [
+    "src/lib/server/teaching-course-assets-external-store.ts",
+    "tests/teaching-course-cover-api.test.ts",
+    "coordination/reports/2026-06-27-teaching-course-assets-production-revision-guard.json",
+    "coordination/reports/2026-06-27-enterprise-runthrough-current-gate-refresh.md",
+    "coordination/reports/2026-06-26-current-enterprise-evidence-path-manifest.md",
+    "coordination/session-logs/2026-06-27-S12.md"
+  ],
+  "redGreenEvidence": [
+    {
+      "phase": "red",
+      "command": "npx vitest run tests/teaching-course-cover-api.test.ts --reporter=dot -t \"fails closed in deployed production when cover asset persistence acknowledgement lacks snapshot revision\"",
+      "result": "failed-before-implementation",
+      "observedFailure": "Expected 502 but received 200."
+    },
+    {
+      "phase": "green",
+      "command": "npx vitest run tests/teaching-course-cover-api.test.ts --reporter=dot -t \"fails closed in deployed production when cover asset persistence acknowledgement lacks snapshot revision\"",
+      "result": "passed-after-implementation",
+      "tests": {
+        "passed": 1,
+        "skipped": 16
+      }
+    }
+  ],
+  "verification": [
+    {
+      "command": "npx vitest run tests/teaching-course-cover-api.test.ts --reporter=dot",
+      "result": "passed",
+      "tests": {
+        "passed": 17
+      }
+    },
+    {
+      "command": "npm run test",
+      "result": "passed",
+      "tests": {
+        "filesPassed": 66,
+        "passed": 1269
+      }
+    },
+    {
+      "command": "npm run lint",
+      "result": "passed"
+    },
+    {
+      "command": "npm run build",
+      "result": "passed"
+    },
+    {
+      "command": "git diff --check",
+      "result": "passed"
+    }
+  ],
+  "notRun": [
+    "owner-approved Vercel env apply",
+    "live production app-auth readiness",
+    "production deployment",
+    "production course-cover route smoke",
+    "teaching course-management route smoke",
+    "external-storage live smoke",
+    "live DashScope/Qwen provider generation"
+  ],
+  "remainingEnterpriseBlockers": [
+    "aggregate production release gate remains blocked",
+    "external-storage service readiness still needs live teaching-course-assets schema and managed database adapter proof",
+    "same-release-run production route and browser smokes remain missing",
+    "Docker daemon remains unavailable for local external-storage container build proof"
+  ]
+}

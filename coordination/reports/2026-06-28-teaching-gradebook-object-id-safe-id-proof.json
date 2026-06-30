@@ -1,0 +1,96 @@
+{
+  "reportId": "2026-06-28-teaching-gradebook-object-id-safe-id-proof",
+  "generatedAt": "2026-06-28T01:04:15+08:00",
+  "sessionId": "S22",
+  "workstream": "Production reliability and release engineering",
+  "status": "local-contract-hardened",
+  "objective": "Harden ordinary teaching gradebook release and rollback routes so unsafe gradebook update path identifiers are rejected before external audit reads or release writes.",
+  "changedFiles": [
+    "src/app/api/teaching/gradebook-updates/[objectId]/release/route.ts",
+    "src/app/api/teaching/gradebook-updates/[objectId]/rollback/route.ts",
+    "tests/teaching-operation-backend.test.ts"
+  ],
+  "codeReferences": [
+    {
+      "file": "src/app/api/teaching/gradebook-updates/[objectId]/release/route.ts",
+      "line": 96,
+      "summary": "The release route now resolves and validates the gradebook update objectId before external audit adapter creation and audit readback."
+    },
+    {
+      "file": "src/app/api/teaching/gradebook-updates/[objectId]/rollback/route.ts",
+      "line": 98,
+      "summary": "The rollback route now resolves and validates the gradebook update objectId before external audit adapter creation and audit readback."
+    },
+    {
+      "file": "src/app/api/teaching/gradebook-updates/[objectId]/release/route.ts",
+      "line": 214,
+      "summary": "The release route-level safe-id guard returns a stable redacted 400 error for unsafe gradebook update ids."
+    },
+    {
+      "file": "src/app/api/teaching/gradebook-updates/[objectId]/rollback/route.ts",
+      "line": 206,
+      "summary": "The rollback route-level safe-id guard returns the same stable redacted 400 error for unsafe gradebook update ids."
+    },
+    {
+      "file": "tests/teaching-operation-backend.test.ts",
+      "line": 5285,
+      "summary": "Regression proves unsafe release object ids do not trigger external audit reads or local writes."
+    },
+    {
+      "file": "tests/teaching-operation-backend.test.ts",
+      "line": 6204,
+      "summary": "Regression proves unsafe rollback object ids do not trigger external audit reads or local writes."
+    }
+  ],
+  "redGreenEvidence": [
+    {
+      "phase": "red",
+      "command": "./node_modules/.bin/vitest run tests/teaching-operation-backend.test.ts -t \"unsafe gradebook .* object ids\"",
+      "result": "failed-before-fix",
+      "observedFailure": "Both new route-boundary regressions returned 404 'Gradebook update was not found.' instead of the expected redacted 400, showing the unsafe path parameter reached external audit lookup flow before validation."
+    },
+    {
+      "phase": "green",
+      "command": "./node_modules/.bin/vitest run tests/teaching-operation-backend.test.ts -t \"unsafe gradebook .* object ids\"",
+      "result": "passed",
+      "observedPass": "2 focused tests passed; release and rollback unsafe object ids returned redacted 400 responses and external audit fetch arrays remained empty."
+    }
+  ],
+  "verification": [
+    {
+      "command": "./node_modules/.bin/vitest run tests/teaching-operation-backend.test.ts",
+      "result": "passed",
+      "summary": "184 tests passed."
+    },
+    {
+      "command": "./node_modules/.bin/vitest run tests/production-release-gate.test.ts -t \"gradebook|ordinary teaching|teaching operations route smoke\"",
+      "result": "passed",
+      "summary": "62 focused production release-gate tests passed; 226 tests were skipped by filter."
+    },
+    {
+      "command": "./node_modules/.bin/vitest run",
+      "result": "passed",
+      "summary": "69 files passed, 1354 tests passed."
+    },
+    {
+      "command": "npm run lint",
+      "result": "passed",
+      "summary": "ESLint completed with exit code 0."
+    },
+    {
+      "command": "npm run build",
+      "result": "passed",
+      "summary": "Next.js production build completed with exit code 0."
+    }
+  ],
+  "securityPosture": {
+    "ordinaryTeachingRoute": "Gradebook release and rollback now reject unsafe object ids before external teaching-operation audit readback, ownership lookup, provider synchronization, append, rollback, or local JSON writes.",
+    "rbacBoundary": "Teacher authentication and production auth-provider readiness still run first; unsafe gradebook object ids are denied immediately after that trusted identity boundary and before resource lookup.",
+    "redaction": "The unsafe path-like gradebook id, storage token variable value, external origin, and local data directory are not echoed in the response.",
+    "productionPersistence": "The regression uses production-style external teaching-operation storage configuration and proves no external audit request is made for unsafe gradebook object ids."
+  },
+  "aggregateEnterpriseGateImpact": {
+    "cleared": false,
+    "summary": "This closes a narrow ordinary teaching direct-call route-boundary gap for gradebook release and rollback. The full enterprise gate still requires same-run owner-approved production evidence for env placement, deployment, storage, ordinary teaching route/browser smokes, app-auth readiness, browser workflow smoke, and live provider generation."
+  }
+}

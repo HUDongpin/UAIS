@@ -1,0 +1,108 @@
+{
+  "target": "ppt-manual-playback-acceptance",
+  "mode": "plan",
+  "status": "blocked",
+  "responsibleSession": "S24",
+  "releaseRunId": "uais-release-2026-06-21-signed-admin-production-api",
+  "deploymentFingerprint": {
+    "status": "present",
+    "value": "sha256:7c8e0f8c7195d5b9"
+  },
+  "deploymentEvidenceSource": "vercel-production-deployment",
+  "deploymentObservationBindingStatus": "proved",
+  "packageId": "kangxia-natural-number-ordinal-theory-v1",
+  "sourceDeckTitle": "初等数学研究+PPT1+自然数的序数理论.pptx",
+  "packageArtifactFingerprintStatus": "present",
+  "packageTargetVoiceLabelStatus": "present",
+  "expectedSlideCount": 19,
+  "reviewArtifacts": [
+    {
+      "kind": "audio-manifest",
+      "label": "Audio manifest",
+      "relativePath": ".tmp/uais-ai-assets/ppt-narration/audio-manifest-elementary-math-research-natural-number-ordinal-theory-ppt1/manifest.json",
+      "fileName": "manifest.json"
+    },
+    {
+      "kind": "source-wav-folder",
+      "label": "Source WAV folder",
+      "relativePath": ".tmp/uais-ai-assets/ppt-narration/audio-manifest-elementary-math-research-natural-number-ordinal-theory-ppt1/",
+      "fileName": "audio-manifest-elementary-math-research-natural-number-ordinal-theory-ppt1"
+    },
+    {
+      "kind": "zip-export",
+      "label": "ZIP export",
+      "relativePath": ".tmp/uais-ai-assets/ppt-narration-exports/audio-manifest-elementary-math-research-natural-number-ordinal-theory-ppt1-ppt-narration.zip",
+      "fileName": "audio-manifest-elementary-math-research-natural-number-ordinal-theory-ppt1-ppt-narration.zip"
+    },
+    {
+      "kind": "narrated-pptx",
+      "label": "Narrated PPTX",
+      "relativePath": ".tmp/uais-ai-assets/ppt-narration-pptx/audio-manifest-elementary-math-research-natural-number-ordinal-theory-ppt1-kangxia-narrated.pptx",
+      "fileName": "audio-manifest-elementary-math-research-natural-number-ordinal-theory-ppt1-kangxia-narrated.pptx"
+    },
+    {
+      "kind": "pdf-render",
+      "label": "LibreOffice PDF render",
+      "relativePath": ".tmp/uais-ai-assets/ppt-narration-pptx/render-check/audio-manifest-elementary-math-research-natural-number-ordinal-theory-ppt1-kangxia-narrated.pdf",
+      "fileName": "audio-manifest-elementary-math-research-natural-number-ordinal-theory-ppt1-kangxia-narrated.pdf"
+    },
+    {
+      "kind": "render-contact-sheet",
+      "label": "Render contact sheet",
+      "relativePath": ".tmp/uais-ai-assets/ppt-narration-pptx/render-check/kangxia-narrated-contact-sheet.jpg",
+      "fileName": "kangxia-narrated-contact-sheet.jpg"
+    }
+  ],
+  "machinePreflightStatus": "passed",
+  "openxmlIntegrityStatus": "passed",
+  "embeddedNarrationWavStatus": "passed",
+  "openxmlIntegrityEvidence": {
+    "target": "ppt-narration-openxml-package-integrity",
+    "status": "passed",
+    "expectedSlideCount": 19,
+    "validEmbeddedNarrationWavs": 19,
+    "nonEmptyEmbeddedNarrationWavs": 19,
+    "rawAudioOmitted": true,
+    "valuesRedacted": true
+  },
+  "manualAcceptanceStatus": "pending",
+  "manualRecordEvidenceStatus": "missing",
+  "manualRecordPackageIdentityStatus": "missing",
+  "manualRecordArtifactFingerprintStatus": "missing",
+  "manualRecordReleaseRunStatus": "missing",
+  "manualRecordDeploymentFingerprintStatus": "missing",
+  "manualRecordAfterDeploymentStatus": "missing",
+  "manualRecordTimingStatus": "missing",
+  "manualRecordConfirmationStatus": "missing",
+  "acceptedApplications": [],
+  "blockedReasons": [
+    "manual-PowerPoint-playback-not-recorded",
+    "manual-WPS-playback-not-recorded"
+  ],
+  "manualRecordTemplate": {
+    "fileName": "2026-06-21-kangxia-ppt-manual-acceptance-record-template-openxml-wav-current.json",
+    "status": "created",
+    "accepted": false,
+    "applications": [
+      "Microsoft PowerPoint",
+      "WPS Presentation"
+    ],
+    "slideChecksPerApplication": 19,
+    "valuesRedacted": true
+  },
+  "checklist": {
+    "fileName": "2026-06-21-kangxia-ppt-manual-playback-acceptance-checklist-openxml-wav-current.md",
+    "slideChecks": 19,
+    "requiredApplications": [
+      "Microsoft PowerPoint",
+      "WPS Presentation"
+    ],
+    "reviewArtifacts": 6
+  },
+  "safety": {
+    "secretsRedacted": true,
+    "localPrivatePathsOmitted": true,
+    "machinePreflightNotFinalAcceptance": true,
+    "rawAudioOmitted": true
+  }
+}

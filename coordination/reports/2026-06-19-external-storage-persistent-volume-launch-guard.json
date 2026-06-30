@@ -1,0 +1,99 @@
+{
+  "target": "external-storage-persistent-volume-launch-guard",
+  "date": "2026-06-19",
+  "sessionId": "S22",
+  "status": "completed-for-contract-hardening",
+  "overallGoalStatus": "active-incomplete",
+  "objective": "Require the production external-storage launch contract, readiness binding, smoke planning, and final release gate to prove the service data directory is bound to the declared persistent volume path before treating external durable storage as production-ready.",
+  "summary": [
+    "The production launcher now classifies UAIS_EXTERNAL_STORAGE_DATA_DIR as persistent-volume only when it resolves to /data/uais-external-storage or one of its subdirectories.",
+    "The launcher blocks strong-token production dry-runs that point the storage data directory at temporary or otherwise unproved paths.",
+    "Service readiness evidence now marks production launch-contract binding as not-ready unless dataDirPersistence is proved.",
+    "Production external-storage smoke planning and the aggregate production release gate now reject stale readiness or launch evidence that predates the persistent-volume data-dir proof.",
+    "The current redacted launch-contract evidence was refreshed with launch.dataDirPersistence and requiredEnv[UAIS_EXTERNAL_STORAGE_DATA_DIR].persistence."
+  ],
+  "filesChanged": [
+    "scripts/external-storage-service-production-launcher.mjs",
+    "scripts/external-storage-service-readiness.mjs",
+    "scripts/external-storage-smoke.mjs",
+    "scripts/production-e2e-release-gate.mjs",
+    "tests/external-storage-service-production-launcher.test.ts",
+    "tests/external-storage-service-readiness.test.ts",
+    "tests/external-storage-smoke.test.ts",
+    "tests/production-release-gate.test.ts",
+    "tests/ai-env-and-smoke.test.ts",
+    "coordination/reports/2026-06-19-external-storage-production-launch-contract.json",
+    "coordination/reports/2026-06-19-external-storage-persistent-volume-launch-guard.json",
+    "coordination/session-logs/2026-06-19-S22.md"
+  ],
+  "redGreenEvidence": [
+    {
+      "phase": "red",
+      "command": "npm run test -- tests/external-storage-service-production-launcher.test.ts",
+      "result": "failed before implementation because the launcher omitted dataDirPersistence and accepted a temporary data directory as ready."
+    },
+    {
+      "phase": "green",
+      "command": "npm run test -- tests/external-storage-service-production-launcher.test.ts",
+      "result": "passed after adding persistent-volume data-dir classification and blocking unproved paths."
+    },
+    {
+      "phase": "red",
+      "command": "npm run test -- tests/external-storage-service-readiness.test.ts tests/external-storage-smoke.test.ts tests/production-release-gate.test.ts",
+      "result": "failed before downstream implementation because readiness, smoke planning, and the release gate accepted stale launch evidence without persistent-volume proof."
+    },
+    {
+      "phase": "green",
+      "command": "npm run test -- tests/external-storage-service-readiness.test.ts tests/external-storage-smoke.test.ts tests/production-release-gate.test.ts",
+      "result": "passed after making dataDirPersistence a required production launch-contract proof in all downstream evidence readers."
+    }
+  ],
+  "checksRun": [
+    {
+      "command": "node --check scripts/external-storage-service-production-launcher.mjs",
+      "result": "passed"
+    },
+    {
+      "command": "node --check scripts/external-storage-service-readiness.mjs",
+      "result": "passed"
+    },
+    {
+      "command": "node --check scripts/external-storage-smoke.mjs",
+      "result": "passed"
+    },
+    {
+      "command": "node --check scripts/production-e2e-release-gate.mjs",
+      "result": "passed"
+    },
+    {
+      "command": "npm run test -- tests/external-storage-service-production-launcher.test.ts tests/external-storage-service-readiness.test.ts tests/external-storage-smoke.test.ts tests/production-release-gate.test.ts",
+      "result": "passed: 4 files / 161 tests"
+    },
+    {
+      "command": "npm run test",
+      "result": "passed: 37 files / 509 tests"
+    },
+    {
+      "command": "npm run lint",
+      "result": "passed"
+    },
+    {
+      "command": "npm run build",
+      "result": "passed"
+    }
+  ],
+  "checksNotRun": [
+    "No real remote HTTPS external storage service was provisioned.",
+    "No Vercel env apply, Vercel production deploy, deployed route/browser smoke, production external-storage write/read smoke, or human PowerPoint/WPS playback acceptance was run."
+  ],
+  "blockers": [
+    "External durable storage still needs a real remote HTTPS service with a mounted persistent volume, owner-approved Vercel env binding, live service readiness, and production write/read smoke.",
+    "Vercel project/team/link readiness remains blocked, so production env/deploy/smoke proof cannot safely proceed.",
+    "The overall enterprise UAIS E2E goal remains incomplete."
+  ],
+  "redaction": {
+    "realSecretsLogged": false,
+    "localPrivatePathsLogged": false,
+    "valuesRedacted": true
+  }
+}

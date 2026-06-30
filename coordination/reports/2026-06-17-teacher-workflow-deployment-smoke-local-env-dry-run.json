@@ -1,0 +1,48 @@
+{
+  "target": "teacher-workflow-deployment-smoke",
+  "mode": "dry-run",
+  "environment": "unspecified",
+  "network": "disabled",
+  "status": "blocked",
+  "responsibleSession": "S22",
+  "route": "/teaching",
+  "deploymentFingerprint": {
+    "status": "missing"
+  },
+  "deploymentOrigin": {
+    "status": "missing",
+    "originClass": "missing",
+    "valueRedacted": true
+  },
+  "anchors": [
+    "teacherWorkflowTitle",
+    "voiceSampleUpload",
+    "voiceSampleSelect",
+    "uploadedSampleAudioPayload",
+    "voiceSampleDurationGate",
+    "selectedSampleIdentity",
+    "preflight",
+    "pptNarrationGenerate",
+    "perSlideWavDownloads",
+    "signedSessionBootstrap",
+    "workflowSessionActions",
+    "serverWorkflowStatus"
+  ],
+  "prerequisites": [
+    {
+      "id": "s22-deployment-base-url",
+      "responsibleSession": "S22",
+      "requiredEnv": "UAIS_DEPLOYMENT_BASE_URL",
+      "status": "missing"
+    }
+  ],
+  "blockedReasons": [
+    "missing-UAIS_DEPLOYMENT_BASE_URL"
+  ],
+  "safety": {
+    "valuesRedacted": true,
+    "responseBodyOmitted": true,
+    "liveRequiresApproval": true,
+    "checksRenderedTeacherWorkflowAnchors": true
+  }
+}

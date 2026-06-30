@@ -1,0 +1,84 @@
+{
+  "reportDate": "2026-06-21",
+  "checkedAtUtc": "2026-06-21T10:16:51Z",
+  "sessionIds": ["S22", "S12"],
+  "target": "external-storage-www-uais-top-health-current-production-recheck",
+  "environment": "production",
+  "baseUrl": "https://www.uais.top",
+  "status": "blocked",
+  "summary": "The deployed external-storage routes still prove env/service incompleteness. The ownership and lifecycle-audit routes return the redacted no-store 503 contract, while healthz still returns an empty Vercel 500 instead of the locally fixed health contract.",
+  "liveRouteEvidence": [
+    {
+      "route": "/api/external-storage/healthz",
+      "method": "GET",
+      "httpStatus": 500,
+      "contentType": "",
+      "contentLengthBytes": 0,
+      "cacheControl": "public, max-age=0, must-revalidate",
+      "server": "Vercel",
+      "matchedPath": "/api/external-storage/healthz",
+      "bodyShape": "empty",
+      "interpretation": "The deployed health route exists but does not reach the current source handler response path, which should emit no-store redacted JSON."
+    },
+    {
+      "route": "/api/external-storage/teacher-ai-ownership/teacher-kang",
+      "method": "GET",
+      "httpStatus": 503,
+      "contentType": "application/json",
+      "cacheControl": "no-store",
+      "server": "Vercel",
+      "matchedPath": "/api/external-storage/teacher-ai-ownership/[teacherId]",
+      "bodyShape": {
+        "error": "External storage service access token is not configured.",
+        "redaction": "present"
+      },
+      "interpretation": "The deployed ownership route is running the redacted contract and proves the production external-storage access token is not configured."
+    },
+    {
+      "route": "/api/external-storage/qwen-voice-lifecycle-audit",
+      "method": "GET",
+      "httpStatus": 503,
+      "contentType": "application/json",
+      "cacheControl": "no-store",
+      "server": "Vercel",
+      "matchedPath": "/api/external-storage/qwen-voice-lifecycle-audit",
+      "bodyShape": {
+        "error": "External storage service access token is not configured.",
+        "redaction": "present"
+      },
+      "interpretation": "The deployed lifecycle-audit route is running the redacted contract and proves the production external-storage access token is not configured."
+    }
+  ],
+  "localSourceEvidence": {
+    "testCommand": "npm run test -- tests/external-storage-next-route.test.ts",
+    "result": "passed",
+    "files": 1,
+    "tests": 2,
+    "contract": "Current source returns a redacted blocked health response with cache-control no-store when the durable backing store probe fails."
+  },
+  "rootCauseAssessment": {
+    "currentSourceBugReproduced": false,
+    "productionDeploymentCurrentWithLocalHealthFix": false,
+    "productionEnvExternalStorageTokenConfigured": false,
+    "productionDurableStorageServiceProved": false,
+    "mostLikelyBlocker": "Vercel production is still on a deployment/env state where the health route does not expose the current fixed contract, and the external-storage access token/service variables are not configured."
+  },
+  "blockedReasons": [
+    "external-storage-healthz-production-empty-500",
+    "external-storage-health-contract-not-currently-deployed",
+    "external-storage-production-access-token-missing",
+    "external-storage-service-readiness-not-live-ready",
+    "production-external-storage-smoke-not-runnable"
+  ],
+  "nextActions": [
+    "Restore a valid Vercel deployment auth path and deploy current source to production.",
+    "Apply production external-storage env with a strong access token and remote HTTPS durable service endpoint through a redacted channel.",
+    "Rerun production healthz, external-storage readiness, external-storage smoke, route smoke, and aggregate release gate after deployment/env placement."
+  ],
+  "redaction": {
+    "secrets": "omitted",
+    "tokens": "omitted",
+    "localPaths": "omitted",
+    "responseBodies": "summarized"
+  }
+}

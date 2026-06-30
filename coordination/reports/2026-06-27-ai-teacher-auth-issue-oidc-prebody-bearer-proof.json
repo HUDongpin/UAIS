@@ -1,0 +1,58 @@
+{
+  "generatedAt": "2026-06-27T20:19:34+08:00",
+  "timezone": "Asia/Hong_Kong",
+  "scope": "ai-teacher-auth-issue-oidc-prebody-bearer-auth",
+  "status": "local-auth-boundary-hardened",
+  "summary": "The OIDC JWKS branch of /api/ai/teacher-auth/issue rejects unauthenticated malformed direct calls before request body parsing, JWKS fetches, teacher-auth session id allocation, or cookie minting.",
+  "filesChanged": [
+    "src/app/api/ai/teacher-auth/issue/route.ts",
+    "tests/ai-api-routes.test.ts"
+  ],
+  "behaviorHardened": [
+    "OIDC provider mode now validates the bearer-auth boundary before calling request.json().",
+    "Unauthenticated malformed bodies return HTTP 403 with oidc-bearer-token-required instead of body parser details.",
+    "Denied pre-body requests do not fetch JWKS, allocate session ids, or set teacher-auth cookies.",
+    "Authenticated requested-teacher mismatch remains fail-closed after auth with a local mismatch denial and no second JWKS read."
+  ],
+  "redGreenEvidence": {
+    "red": {
+      "command": "./node_modules/.bin/vitest run tests/ai-api-routes.test.ts -t \"requires OIDC bearer auth before parsing malformed teacher auth issue bodies\"",
+      "observedFailure": "Focused regression failed before implementation with HTTP 400 instead of the expected HTTP 403."
+    },
+    "green": {
+      "command": "./node_modules/.bin/vitest run tests/ai-api-routes.test.ts -t \"requires OIDC bearer auth before parsing malformed teacher auth issue bodies\"",
+      "observedPass": "Focused regression passed after implementation with one test passed and 122 skipped."
+    }
+  },
+  "verification": [
+    {
+      "command": "./node_modules/.bin/vitest run tests/ai-api-routes.test.ts",
+      "result": "passed",
+      "details": "123 tests passed"
+    },
+    {
+      "command": "npm run test",
+      "result": "passed",
+      "details": "66 files passed, 1315 tests passed; existing jsdom navigation warnings remained non-fatal"
+    },
+    {
+      "command": "npm run lint",
+      "result": "passed"
+    },
+    {
+      "command": "npm run build",
+      "result": "passed"
+    }
+  ],
+  "secretsHandling": {
+    "realCredentialsInspected": false,
+    "realCredentialValuesLogged": false,
+    "responseRedactionChecked": true
+  },
+  "productionBoundary": {
+    "productionSystemMutated": false,
+    "liveProductionSmokeRun": false,
+    "aggregateEnterpriseGateCleared": false,
+    "remainingGateRisk": "This is local backend/API auth-boundary hardening only. It does not replace fresh same-run production teacher-auth issuance, AI workflow, ordinary teaching route, or browser smoke artifacts."
+  }
+}

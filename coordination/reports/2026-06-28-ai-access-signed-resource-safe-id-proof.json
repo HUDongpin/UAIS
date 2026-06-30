@@ -1,0 +1,90 @@
+{
+  "reportId": "2026-06-28-ai-access-signed-resource-safe-id-proof",
+  "generatedAt": "2026-06-28T00:29:09+08:00",
+  "sessionId": "S22",
+  "workstream": "Production reliability and release engineering",
+  "status": "local-contract-hardened",
+  "objective": "Harden signed AI access sessions so unsafe request resource identifiers are denied before scope authorization and are not echoed in access decisions.",
+  "changedFiles": [
+    "src/lib/server/ai-access-control.ts",
+    "tests/ai-access-control.test.ts"
+  ],
+  "codeReferences": [
+    {
+      "file": "src/lib/server/ai-access-control.ts",
+      "line": 98,
+      "summary": "Access decision reason codes now include resource-context-invalid for unsafe request resource identifiers."
+    },
+    {
+      "file": "src/lib/server/ai-access-control.ts",
+      "line": 305,
+      "summary": "Signed-session authorization derives a safeResource before any denial response can include request resource data."
+    },
+    {
+      "file": "src/lib/server/ai-access-control.ts",
+      "line": 322,
+      "summary": "Unsafe signed-session resources are denied before scope checks or admin authorization."
+    },
+    {
+      "file": "tests/ai-access-control.test.ts",
+      "line": 282,
+      "summary": "Regression proves path-like signed-session resource ids are denied and not echoed."
+    }
+  ],
+  "redGreenEvidence": [
+    {
+      "phase": "red",
+      "command": "./node_modules/.bin/vitest run tests/ai-access-control.test.ts -t \"rejects unsafe signed-session resource ids before scope authorization\"",
+      "result": "failed-before-fix",
+      "observedFailure": "The unsafe path-like course resource returned course-scope-denied and was echoed in the access decision."
+    },
+    {
+      "phase": "green",
+      "command": "./node_modules/.bin/vitest run tests/ai-access-control.test.ts -t \"rejects unsafe signed-session resource ids before scope authorization\"",
+      "result": "passed",
+      "observedPass": "1 focused test passed."
+    }
+  ],
+  "verification": [
+    {
+      "command": "./node_modules/.bin/vitest run tests/ai-access-control.test.ts",
+      "result": "passed",
+      "summary": "26 tests passed."
+    },
+    {
+      "command": "./node_modules/.bin/vitest run tests/ai-api-routes.test.ts",
+      "result": "passed",
+      "summary": "125 tests passed."
+    },
+    {
+      "command": "./node_modules/.bin/vitest run tests/production-release-gate.test.ts -t \"signed teacher-cookie helper route direct-call|teacher AI session\"",
+      "result": "passed",
+      "summary": "2 focused tests passed."
+    },
+    {
+      "command": "./node_modules/.bin/vitest run",
+      "result": "passed",
+      "summary": "69 files passed, 1349 tests passed."
+    },
+    {
+      "command": "npm run lint",
+      "result": "passed",
+      "summary": "ESLint completed with exit code 0."
+    },
+    {
+      "command": "npm run build",
+      "result": "passed",
+      "summary": "Next.js production build completed."
+    }
+  ],
+  "securityPosture": {
+    "signedClaims": "Previously hardened; unsafe actor and scope ids are rejected as signed-session-invalid.",
+    "signedResource": "Now denied as resource-context-invalid before scope authorization.",
+    "redaction": "Unsafe path-like request resource values and signing secret strings are not echoed.",
+    "adminBypass": "Unsafe resource validation happens before authorizeActorScope, so admin signed sessions cannot authorize path-like request resources."
+  },
+  "aggregateEnterpriseGateImpact": {
+    "cleared": false,
+    "summary": "This closes another local AI direct-call identity/resource injection edge. The full enterprise gate still requires same-run production env, deployment, storage, ordinary teaching smoke, app-auth, browser-smoke, and live-provider evidence."
+  }
+}

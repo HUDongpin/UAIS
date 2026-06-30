@@ -1,0 +1,70 @@
+{
+  "generatedAt": "2026-06-27T18:16:00+08:00",
+  "responsibleSession": "S22",
+  "scope": "ordinary-teaching-external-append-acknowledgement",
+  "status": "passed",
+  "summary": "External teaching operation append acknowledgements now fail closed unless the external service confirms a persisted append-only operation ledger write with the expected storage policy and responsible session.",
+  "filesChanged": [
+    "src/lib/server/teaching-operations-store.ts",
+    "tests/teaching-operation-backend.test.ts"
+  ],
+  "redGreenEvidence": [
+    {
+      "phase": "red",
+      "command": "npx vitest run tests/teaching-operation-backend.test.ts --reporter=dot -t \"external teaching operation acknowledgement has invalid persistence semantics\"",
+      "expectedFailure": true,
+      "observed": "Failed because the operation route returned HTTP 200 for an external append acknowledgement with status queued, local storage policy, local write policy, and the wrong responsible session."
+    },
+    {
+      "phase": "green",
+      "command": "npx vitest run tests/teaching-operation-backend.test.ts --reporter=dot -t \"external teaching operation acknowledgement has invalid persistence semantics\"",
+      "exitCode": 0,
+      "observed": "1 passed, 153 skipped."
+    }
+  ],
+  "behaviorHardened": [
+    "External append acknowledgements must return status persisted.",
+    "External append acknowledgements must return storagePolicy external-redacted-teaching-operation-append.",
+    "External append acknowledgements must return storageWritePolicy external-append-only-operation-log.",
+    "External append acknowledgements must return responsibleSession S12.",
+    "Invalid append acknowledgements now return HTTP 502 before domain-object persistence is attempted and no operation receipt is emitted."
+  ],
+  "verification": [
+    {
+      "command": "npx vitest run tests/teaching-operation-backend.test.ts --reporter=dot -t \"external teaching operation acknowledgement lacks append ledger sequence\"",
+      "exitCode": 0,
+      "observed": "1 passed, 153 skipped."
+    },
+    {
+      "command": "npx vitest run tests/teaching-operation-backend.test.ts --reporter=dot -t \"external teaching operation acknowledgement does not match\"",
+      "exitCode": 0,
+      "observed": "1 passed, 153 skipped."
+    },
+    {
+      "command": "npx vitest run tests/teaching-operation-backend.test.ts --reporter=dot",
+      "exitCode": 0,
+      "observed": "154 passed."
+    },
+    {
+      "command": "npm run lint",
+      "exitCode": 0,
+      "observed": "ESLint passed."
+    },
+    {
+      "command": "npm run test",
+      "exitCode": 0,
+      "observed": "66 files passed, 1282 tests passed. Existing jsdom navigation warnings remained non-fatal."
+    },
+    {
+      "command": "npm run build",
+      "exitCode": 0,
+      "observed": "Next.js production build completed."
+    }
+  ],
+  "boundary": "This is local backend/API append-contract hardening only. It does not replace fresh same-run live production ordinary teaching route/browser smoke artifacts, external-storage readiness, Vercel env/deployment evidence, or provider mutation evidence required for enterprise completion.",
+  "redaction": {
+    "secrets": "omitted",
+    "localFiles": "omitted",
+    "assets": "ids-only"
+  }
+}

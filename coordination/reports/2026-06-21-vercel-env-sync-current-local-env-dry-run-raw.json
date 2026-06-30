@@ -1,0 +1,203 @@
+{
+  "target": "vercel-env-sync",
+  "mode": "dry-run",
+  "project": "uais",
+  "responsibleSession": "S19",
+  "releaseRunId": "2026-06-21-current-local-env-dry-run",
+  "authProviderMode": "missing",
+  "externalStorageEndpoint": {
+    "status": "missing",
+    "endpointClass": "missing",
+    "valueRedacted": true
+  },
+  "externalStorageServiceFingerprint": {
+    "status": "missing",
+    "source": "origin",
+    "valueRedacted": true
+  },
+  "secretStrength": {
+    "minimumLength": 32,
+    "valuesRedacted": true,
+    "checks": [
+      {
+        "name": "UAIS_LIVE_AI_APPROVAL_TOKEN",
+        "status": "sufficient",
+        "valueRedacted": true
+      },
+      {
+        "name": "UAIS_AI_ACCESS_SIGNING_SECRET",
+        "status": "missing",
+        "valueRedacted": true
+      },
+      {
+        "name": "UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET",
+        "status": "missing",
+        "valueRedacted": true
+      },
+      {
+        "name": "UAIS_EXTERNAL_STORAGE_ACCESS_TOKEN",
+        "status": "missing",
+        "valueRedacted": true
+      }
+    ]
+  },
+  "projectReadinessEvidenceStatus": "ready",
+  "targets": ["production", "preview"],
+  "entries": [
+    {
+      "name": "UAIS_LIVE_AI_APPROVAL_TOKEN",
+      "status": "present"
+    },
+    {
+      "name": "UAIS_AI_ACCESS_SIGNING_SECRET",
+      "status": "missing"
+    },
+    {
+      "name": "UAIS_TEACHER_AUTH_PROVIDER",
+      "status": "missing"
+    },
+    {
+      "name": "UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET",
+      "status": "missing"
+    },
+    {
+      "name": "UAIS_TEACHER_AUTH_ISSUER_SECRET",
+      "status": "missing"
+    },
+    {
+      "name": "UAIS_TEACHER_AI_OWNERSHIP_BACKEND",
+      "status": "missing"
+    },
+    {
+      "name": "UAIS_VOICE_LIFECYCLE_AUDIT_BACKEND",
+      "status": "missing"
+    },
+    {
+      "name": "UAIS_EXTERNAL_STORAGE_BASE_URL",
+      "status": "missing"
+    },
+    {
+      "name": "UAIS_EXTERNAL_STORAGE_ACCESS_TOKEN",
+      "status": "missing"
+    },
+    {
+      "name": "UAIS_EXTERNAL_STORAGE_SERVICE_MODE",
+      "status": "missing"
+    },
+    {
+      "name": "UAIS_EXTERNAL_STORAGE_SERVICE_DATA_DIR",
+      "status": "missing"
+    },
+    {
+      "name": "DEEPSEEK_API_KEY",
+      "status": "present"
+    },
+    {
+      "name": "DEEPSEEK_BASE_URL",
+      "status": "present"
+    },
+    {
+      "name": "DEEPSEEK_MODEL",
+      "status": "present"
+    },
+    {
+      "name": "DASHSCOPE_API_KEY",
+      "status": "present"
+    },
+    {
+      "name": "DASHSCOPE_BASE_URL",
+      "status": "present"
+    },
+    {
+      "name": "QWEN_MULTIMODAL_MODEL",
+      "status": "present"
+    },
+    {
+      "name": "QWEN_IMAGE_MODEL",
+      "status": "present"
+    },
+    {
+      "name": "QWEN_TTS_MODEL",
+      "status": "present"
+    }
+  ],
+  "localOnlyEntries": [
+    {
+      "name": "UAIS_TEACHER_AUTH_OIDC_SMOKE_BEARER_TOKEN",
+      "status": "missing",
+      "localOnly": true,
+      "deploymentAction": "ignored"
+    },
+    {
+      "name": "UAIS_TEACHER_AUTH_OIDC_SMOKE_TEACHER_ID",
+      "status": "missing",
+      "localOnly": true,
+      "deploymentAction": "ignored"
+    }
+  ],
+  "safety": {
+    "valuesRedacted": true,
+    "applyRequiresApproval": true,
+    "applyRequiresLinkedProject": true,
+    "applyRequiresProjectReadiness": true,
+    "localOnlySmokeEnvNotSynced": true
+  },
+  "localSourceSummary": {
+    "status": "blocked",
+    "valuesRedacted": true,
+    "deploymentEntries": {
+      "total": 23,
+      "present": 9,
+      "missing": 14,
+      "missingNames": [
+        "UAIS_AI_ACCESS_SIGNING_SECRET",
+        "UAIS_TEACHER_AUTH_PROVIDER",
+        "UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET",
+        "UAIS_TEACHER_AUTH_ISSUER_SECRET",
+        "UAIS_TEACHER_AUTH_OIDC_ISSUER",
+        "UAIS_TEACHER_AUTH_OIDC_AUDIENCE",
+        "UAIS_TEACHER_AUTH_OIDC_JWKS_URL",
+        "UAIS_TEACHER_AUTH_OIDC_TEACHER_ID_CLAIM",
+        "UAIS_TEACHER_AI_OWNERSHIP_BACKEND",
+        "UAIS_VOICE_LIFECYCLE_AUDIT_BACKEND",
+        "UAIS_EXTERNAL_STORAGE_BASE_URL",
+        "UAIS_EXTERNAL_STORAGE_ACCESS_TOKEN",
+        "UAIS_EXTERNAL_STORAGE_SERVICE_MODE",
+        "UAIS_EXTERNAL_STORAGE_SERVICE_DATA_DIR"
+      ]
+    },
+    "selectedAuthProvider": {
+      "mode": "missing",
+      "requiredPresent": 0,
+      "requiredMissing": 2,
+      "missingRequiredNames": [
+        "UAIS_TEACHER_AUTH_PROVIDER",
+        "UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET"
+      ]
+    },
+    "productionSecretStrength": {
+      "minimumLength": 32,
+      "sufficient": 1,
+      "weak": 0,
+      "missing": 3,
+      "weakNames": [],
+      "missingNames": [
+        "UAIS_AI_ACCESS_SIGNING_SECRET",
+        "UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET",
+        "UAIS_EXTERNAL_STORAGE_ACCESS_TOKEN"
+      ]
+    },
+    "externalStorage": {
+      "endpointClass": "missing",
+      "fingerprintStatus": "missing"
+    }
+  },
+  "status": "blocked",
+  "blockedReasons": [
+    "vercel-env-apply-auth-provider-not-proven",
+    "vercel-env-apply-required-auth-env-missing",
+    "vercel-env-apply-secret-strength-not-sufficient",
+    "vercel-env-apply-external-storage-not-remote-https",
+    "vercel-env-apply-external-storage-fingerprint-not-proven"
+  ]
+}

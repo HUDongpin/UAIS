@@ -1,0 +1,89 @@
+{
+  "target": "release-gate-vercel-env-inventory-binding",
+  "date": "2026-06-20",
+  "responsibleSession": "S22",
+  "status": "completed-for-gate-evidence-binding",
+  "summary": {
+    "releaseGate": "scripts/production-e2e-release-gate.mjs now accepts --vercel-env-inventory and attaches a redacted remote inventory summary to the vercel-env-placement requirement.",
+    "redaction": "The gate records env names, target environments, counts, and safety flags only. Secret values, raw CLI output, and local paths remain omitted.",
+    "currentEvidence": "coordination/reports/2026-06-20-production-e2e-release-gate-current-www-uais-top-env-inventory-bound.json"
+  },
+  "currentRemoteInventory": {
+    "source": "coordination/reports/2026-06-20-vercel-env-inventory-www-uais-top-live.json",
+    "status": "blocked",
+    "remoteEnvCounts": {
+      "production": 0,
+      "preview": 0
+    },
+    "missingRequiredEnvCount": 20,
+    "valuesRedacted": true
+  },
+  "releaseGateResult": {
+    "status": "blocked",
+    "envPlacementStatus": "blocked",
+    "envPlacementBlockedReason": "vercel-env-not-applied",
+    "remoteInventoryAttached": true,
+    "blockedReasons": [
+      "teacher-workflow-browser-smoke-api-interception-not-proven",
+      "vercel-env-not-applied",
+      "teacher-auth-provider-readiness-not-live-ready",
+      "external-storage-service-readiness-not-live-ready",
+      "vercel-production-deployment-not-production",
+      "deployment-route-smoke-not-live-passed",
+      "external-storage-smoke-not-production",
+      "ppt-manual-acceptance-evidence-missing"
+    ]
+  },
+  "filesChanged": [
+    "scripts/production-e2e-release-gate.mjs",
+    "tests/production-release-gate.test.ts",
+    "coordination/reports/2026-06-20-production-e2e-release-gate-current-www-uais-top-env-inventory-bound.json",
+    "coordination/reports/2026-06-20-release-gate-vercel-env-inventory-binding.json",
+    "coordination/session-logs/2026-06-20-S22.md"
+  ],
+  "checks": [
+    {
+      "command": "npm run test -- tests/production-release-gate.test.ts -t \"remote Vercel env inventory\"",
+      "status": "passed"
+    },
+    {
+      "command": "node --check scripts/production-e2e-release-gate.mjs",
+      "status": "passed"
+    },
+    {
+      "command": "node scripts/production-e2e-release-gate.mjs --help",
+      "status": "passed"
+    },
+    {
+      "command": "npm run test -- tests/production-release-gate.test.ts tests/vercel-env-inventory.test.ts tests/production-owner-decision-checklist.test.ts tests/production-e2e-orchestrator.test.ts",
+      "status": "passed",
+      "result": "4 files / 173 tests"
+    },
+    {
+      "command": "npm run lint",
+      "status": "passed"
+    },
+    {
+      "command": "npm run build",
+      "status": "passed"
+    },
+    {
+      "command": "npm run test",
+      "status": "passed",
+      "result": "43 files / 573 tests"
+    }
+  ],
+  "remainingBlockers": [
+    "Approved production/preview Vercel env values are still absent from remote inventory.",
+    "Trusted teacher auth/session provider is not live-ready in production.",
+    "Remote HTTPS external durable storage service readiness and production smoke remain incomplete.",
+    "Production protected route/browser workflow smoke and PPT manual playback acceptance remain incomplete."
+  ],
+  "safety": {
+    "secretsRedacted": true,
+    "rawCliOutputOmitted": true,
+    "localPrivatePathsOmitted": true,
+    "noMutation": true,
+    "goalMarkedComplete": false
+  }
+}

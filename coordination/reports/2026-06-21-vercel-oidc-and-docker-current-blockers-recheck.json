@@ -1,0 +1,76 @@
+{
+  "reportDate": "2026-06-21",
+  "checkedAtUtc": "2026-06-21T10:19:09Z",
+  "sessionIds": ["S22"],
+  "target": "vercel-oidc-and-docker-current-blockers-recheck",
+  "environment": "local-control-plane-to-production",
+  "status": "blocked",
+  "summary": "The production release chain remains blocked by Vercel CLI OIDC discovery TLS failure and Docker daemon EOF responses. Vercel API and the deployed UAIS domain are reachable, so the blocker is narrower than full network outage.",
+  "vercelDeploymentPath": {
+    "gitRemote": "missing-origin",
+    "localProjectLink": "present",
+    "deployMethodRequired": "vercel-cli-direct-deploy",
+    "whoami": {
+      "status": "blocked",
+      "failureClass": "vercel-oidc-discovery-tls-disconnect",
+      "endpointClass": "https://vercel.com/.well-known/openid-configuration",
+      "valuesRedacted": true
+    },
+    "oidcDiscovery": {
+      "status": "blocked",
+      "httpClient": "curl",
+      "ipv4Retry": "blocked",
+      "failureClass": "LibreSSL SSL_connect SSL_ERROR_SYSCALL before secure TLS connection",
+      "valuesRedacted": true
+    },
+    "apiVercelReachability": {
+      "endpointClass": "https://api.vercel.com/v2/user",
+      "status": "reachable",
+      "httpStatus": 404,
+      "interpretation": "The Vercel API host is reachable from this environment; the deployment blocker remains the CLI/OIDC discovery host path."
+    },
+    "uaisDomainReachability": {
+      "endpoint": "https://www.uais.top",
+      "status": "reachable",
+      "httpStatus": 307,
+      "location": "/courses"
+    }
+  },
+  "dockerRuntimePath": {
+    "contextList": {
+      "status": "passed",
+      "activeContext": "desktop-linux",
+      "dockerEndpointClass": "docker-desktop-unix-socket"
+    },
+    "daemonCommands": [
+      {
+        "command": "docker ps",
+        "status": "blocked",
+        "failureClass": "EOF"
+      },
+      {
+        "command": "docker images",
+        "status": "blocked",
+        "failureClass": "EOF"
+      }
+    ],
+    "interpretation": "Docker Desktop context exists, but the CLI cannot complete daemon requests, so Docker-based external-storage service launch/smoke is not currently usable."
+  },
+  "blockedReasons": [
+    "vercel-oidc-discovery-tls-disconnect",
+    "vercel-production-deploy-not-runnable",
+    "docker-daemon-cli-eof",
+    "external-storage-docker-service-launch-not-runnable"
+  ],
+  "nextActions": [
+    "Retry Vercel deploy only after the OIDC discovery endpoint is reachable or a valid classic VERCEL_TOKEN is supplied through a redacted channel.",
+    "Retry Docker external-storage launch only after docker ps returns successfully.",
+    "After either control-plane blocker clears, rerun the corresponding production deployment or external-storage service smoke."
+  ],
+  "redaction": {
+    "secrets": "omitted",
+    "tokens": "omitted",
+    "accountIdentifiers": "omitted",
+    "localPaths": "summarized"
+  }
+}

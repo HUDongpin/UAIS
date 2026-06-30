@@ -1,0 +1,45 @@
+{
+  "target": "deployment-reachability-diagnostics-hardening",
+  "status": "completed",
+  "responsibleSession": "S22",
+  "summary": {
+    "newHarness": "scripts/deployment-reachability-diagnostics.mjs",
+    "purpose": "redacted DNS, transport, and route-level HEAD diagnostics for Vercel deployment smoke failures",
+    "currentFinding": "the raw deployment hostname and project alias resolve DNS but timeout at TLS transport and route-level HEAD checks; the sandy alias resolves DNS but fails TLS certificate alternate-name validation",
+    "productionGoalImpact": "narrows deployed smoke failure to reachability/TLS layer before app routes, while keeping final production release gate blocked"
+  },
+  "evidence": {
+    "rawDeploymentHost": "coordination/reports/2026-06-19-deployment-reachability-diagnostics-vercel-raw-host-live.json",
+    "projectAlias": "coordination/reports/2026-06-19-deployment-reachability-diagnostics-vercel-project-alias-live.json",
+    "sandyAlias": "coordination/reports/2026-06-19-deployment-reachability-diagnostics-vercel-sandy-alias-live.json"
+  },
+  "checks": {
+    "red": "npm run test -- tests/deployment-reachability-diagnostics.test.ts failed before the script existed / before networkError.code was implemented",
+    "targeted": "npm run test -- tests/deployment-reachability-diagnostics.test.ts tests/teacher-workflow-deployment-smoke.test.ts tests/learning-ppt-playback-deployment-smoke.test.ts passed: 3 files / 20 tests",
+    "full": "npm run test passed: 38 files / 526 tests",
+    "lint": "npm run lint passed",
+    "build": "npm run build passed",
+    "syntax": "node --check scripts/deployment-reachability-diagnostics.mjs passed"
+  },
+  "redactionSafety": {
+    "valuesRedacted": true,
+    "urlsOmitted": true,
+    "hostnamesOmitted": true,
+    "responseBodiesOmitted": true,
+    "responseHeadersOmitted": true,
+    "localPrivatePathsOmitted": true,
+    "rawErrorMessagesOmitted": true,
+    "networkErrorCodesSanitized": true
+  },
+  "remainingBlockers": [
+    "vercel-env-not-applied",
+    "vercel-production-deployment-not-proven",
+    "deployed-teacher-workflow-page-not-live-passed",
+    "deployed-learning-ppt-playback-not-live-passed",
+    "teacher-auth-provider-readiness-not-live-ready",
+    "external-storage-service-readiness-not-live-ready",
+    "deployment-route-smoke-not-live-passed",
+    "external-storage-smoke-not-live-passed",
+    "manual-ppt-playback-not-accepted"
+  ]
+}

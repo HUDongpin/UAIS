@@ -1,0 +1,147 @@
+{
+  "target": "teacher-workflow-live-generation-smoke",
+  "mode": "dry-run",
+  "environment": "production",
+  "network": "disabled",
+  "status": "blocked",
+  "responsibleSession": "S22",
+  "route": "/teaching",
+  "deploymentFingerprint": {
+    "status": "present",
+    "value": "sha256:7c8e0f8c7195d5b9"
+  },
+  "deploymentOrigin": {
+    "status": "present",
+    "originClass": "remote-https",
+    "valueRedacted": true
+  },
+  "storageServiceFingerprint": {
+    "status": "present",
+    "value": "sha256:7c8e0f8c7195d5b9",
+    "source": "origin",
+    "valueRedacted": true
+  },
+  "vercelProductionDeploymentEvidence": {
+    "target": "missing",
+    "status": "missing",
+    "deploymentObservationStatus": "missing",
+    "releaseRunIdStatus": "missing",
+    "valueRedacted": true
+  },
+  "teacherAuthProviderReadinessEvidence": {
+    "target": "teacher-auth-provider-readiness",
+    "authProviderMode": "missing",
+    "releaseRunIdStatus": "missing",
+    "valueRedacted": true,
+    "status": "not-ready"
+  },
+  "externalStorageServiceReadinessEvidence": {
+    "target": "external-storage-service-readiness",
+    "releaseRunIdStatus": "missing",
+    "valueRedacted": true,
+    "status": "not-ready"
+  },
+  "liveGenerationInteractions": [
+    "issue-signed-teacher-ai-session",
+    "submit-live-voice-sample",
+    "run-live-provider-preflight",
+    "poll-live-voice-clone-status",
+    "submit-live-ppt-narration",
+    "verify-generated-audio-manifest",
+    "verify-generated-export-download",
+    "verify-generated-per-slide-audio-download"
+  ],
+  "providerMutationPolicy": {
+    "workflowApis": "live-workflow-status",
+    "remoteMutations": "live-provider-approved",
+    "liveProviderApproved": true,
+    "responseBodiesOmitted": true,
+    "providerTaskIdsRedacted": true
+  },
+  "prerequisites": [
+    {
+      "id": "s22-deployment-base-url",
+      "responsibleSession": "S22",
+      "requiredEnv": "UAIS_DEPLOYMENT_BASE_URL",
+      "status": "present"
+    },
+    {
+      "id": "s12-teacher-auth-session-signing-secret",
+      "responsibleSession": "S12",
+      "requiredEnv": "UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET",
+      "status": "required-for-live",
+      "valueRedacted": true
+    },
+    {
+      "id": "s12-ai-access-signing-secret",
+      "responsibleSession": "S12",
+      "requiredEnv": "UAIS_AI_ACCESS_SIGNING_SECRET",
+      "status": "required-for-live",
+      "valueRedacted": true
+    },
+    {
+      "id": "s12-teacher-auth-issuer-secret",
+      "responsibleSession": "S12",
+      "requiredEnv": "UAIS_TEACHER_AUTH_ISSUER_SECRET",
+      "status": "required-for-live",
+      "valueRedacted": true
+    },
+    {
+      "id": "s19-dashscope-api-key",
+      "responsibleSession": "S19",
+      "requiredEnv": "DASHSCOPE_API_KEY",
+      "status": "required-for-live",
+      "valueRedacted": true
+    },
+    {
+      "id": "s19-live-ai-approval-token",
+      "responsibleSession": "S19",
+      "requiredEnv": "UAIS_LIVE_AI_APPROVAL_TOKEN",
+      "status": "required-for-live",
+      "valueRedacted": true
+    },
+    {
+      "id": "s24-approved-teacher-voice-sample",
+      "responsibleSession": "S24",
+      "requiredEnv": "UAIS_TEACHER_WORKFLOW_LIVE_SAMPLE_AUDIO_BASE64",
+      "alternativeEnv": "UAIS_TEACHER_WORKFLOW_LIVE_SAMPLE_AUDIO_BASE64_FILE",
+      "status": "required-for-live",
+      "valueRedacted": true
+    },
+    {
+      "id": "s22-vercel-production-deployment-evidence",
+      "responsibleSession": "S22",
+      "requiredEvidence": "vercel-production-deployment",
+      "status": "missing",
+      "valueRedacted": true
+    },
+    {
+      "id": "s22-teacher-auth-provider-readiness-evidence",
+      "responsibleSession": "S22",
+      "requiredEvidence": "teacher-auth-provider-readiness",
+      "status": "not-ready",
+      "valueRedacted": true
+    },
+    {
+      "id": "s22-external-storage-service-readiness-evidence",
+      "responsibleSession": "S22",
+      "requiredEvidence": "external-storage-service-readiness",
+      "status": "not-ready",
+      "valueRedacted": true
+    }
+  ],
+  "blockedReasons": [
+    "missing-vercel-production-deployment",
+    "s22-teacher-auth-provider-readiness-evidence-not-ready",
+    "s22-external-storage-service-readiness-evidence-not-ready",
+    "vercel-production-deployment-evidence-missing",
+    "teacher-auth-provider-readiness-not-proven",
+    "external-storage-service-readiness-evidence-not-ready"
+  ],
+  "safety": {
+    "valuesRedacted": true,
+    "providerTaskIdsRedacted": true,
+    "responseBodiesOmitted": true,
+    "liveRequiresApproval": true
+  }
+}

@@ -1,0 +1,49 @@
+{
+  "target": "external-storage-container-build-approved-attempt",
+  "date": "2026-06-19",
+  "responsibleSession": "S22",
+  "status": "blocked",
+  "scope": {
+    "containerReadiness": "Ran the approved external-storage container build-readiness harness in build mode with a redacted local image tag.",
+    "ownerChecklist": "scripts/production-owner-decision-checklist.mjs now summarizes raw external-storage-container-build-readiness evidence directly."
+  },
+  "currentEvidence": {
+    "containerReadiness": "coordination/reports/2026-06-19-external-storage-container-readiness-current.json",
+    "releaseGate": "coordination/reports/2026-06-19-production-e2e-release-gate-current-auth-storage-launch-bound-readiness.json",
+    "ownerChecklist": "coordination/reports/2026-06-19-production-owner-decision-checklist-current-auth-storage-launch-bound-readiness.json"
+  },
+  "result": {
+    "mode": "build",
+    "status": "blocked",
+    "dockerClient": "present",
+    "dockerDaemon": "unavailable",
+    "dockerfileContract": "passed",
+    "dockerignoreSecretExclusion": "passed",
+    "dockerignoreGeneratedOutputExclusion": "passed",
+    "buildInvoked": false,
+    "blockedReasons": [
+      "docker-daemon-unavailable"
+    ]
+  },
+  "releaseImpact": {
+    "finalGateStatus": "blocked",
+    "containerRequirement": "external-storage-container-build-readiness-not-ready",
+    "ownerChecklistStorageDecision": "owner-decision-needed",
+    "safeNextStep": "start-or-provide-access-to-a-local-or-CI-Docker-daemon-and rerun the approved build-readiness harness"
+  },
+  "verification": {
+    "redGreen": {
+      "command": "npm run test -- tests/production-owner-decision-checklist.test.ts -t \"raw external storage container\"",
+      "redStatus": "failed-before-raw-evidence-summary",
+      "greenStatus": "passed-after-raw-evidence-summary"
+    }
+  },
+  "safety": {
+    "imageTagOmitted": true,
+    "dockerOutputOmitted": true,
+    "localPrivatePathsOmitted": true,
+    "secretsExcludedFromContext": true,
+    "productionMutationPerformed": false,
+    "vercelMutationPerformed": false
+  }
+}

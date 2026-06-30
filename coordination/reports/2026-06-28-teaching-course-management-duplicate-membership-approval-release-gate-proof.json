@@ -1,0 +1,105 @@
+{
+  "target": "teaching-course-management-duplicate-membership-approval-release-gate-proof",
+  "date": "2026-06-28",
+  "ownerSession": "S22",
+  "status": "passed",
+  "objectiveLink": "enterprise ordinary teaching management chain",
+  "gapAddressed": "Course-management invite membership approval was production-gated for first approval, ownership denial, audit source readback, and post-approval student visibility, but stale production route-smoke evidence could omit proof that a duplicate teacher approval remains idempotent and does not append a second approval audit event.",
+  "newRequiredProductionResult": "duplicateMembershipApprovalIdempotentReturned",
+  "newRouteSmokeProof": "duplicate-membership-approval-idempotent-returned",
+  "behaviorProven": [
+    "The teaching course-management route smoke sends a second signed-teacher POST to /api/teaching/classes/{classId}/memberships/{membershipId}/approve after the first approval.",
+    "The duplicate approval response must return HTTP 200, the duplicate trace id in both header and body, the same approved membership, and class/course student counts that remain one.",
+    "The external course-management database readback after the duplicate approval must not contain an approve-class-membership audit event for the duplicate trace id.",
+    "The production release gate blocks stale teaching course-management route-smoke evidence when duplicateMembershipApprovalIdempotentReturned is missing.",
+    "The production orchestrator and local-production smoke proof summaries advertise the new proof so execution planning and release-gate requirements stay aligned."
+  ],
+  "filesChanged": [
+    "scripts/teaching-course-management-route-smoke.mjs",
+    "scripts/production-e2e-release-gate.mjs",
+    "scripts/production-e2e-orchestrator.mjs",
+    "scripts/local-production-e2e-smoke.mjs",
+    "tests/teaching-course-management-route-smoke.test.ts",
+    "tests/production-release-gate.test.ts",
+    "tests/production-e2e-orchestrator.test.ts",
+    "tests/local-production-e2e-smoke.test.ts",
+    "coordination/session-logs/2026-06-28-S22.md",
+    "coordination/reports/2026-06-28-teaching-course-management-duplicate-membership-approval-release-gate-proof.json"
+  ],
+  "redTestsObserved": [
+    {
+      "command": "./node_modules/.bin/vitest run tests/production-release-gate.test.ts -t \"duplicate membership approval idempotency\"",
+      "expectedFailure": "release gate did not block stale course-management route-smoke evidence missing duplicateMembershipApprovalIdempotentReturned"
+    },
+    {
+      "command": "./node_modules/.bin/vitest run tests/teaching-course-management-route-smoke.test.ts -t \"passes live approved smoke\"",
+      "expectedFailure": "route smoke did not send the second signed-teacher membership approval request"
+    }
+  ],
+  "verification": [
+    {
+      "command": "./node_modules/.bin/vitest run tests/production-release-gate.test.ts -t \"duplicate membership approval idempotency\"",
+      "result": "passed: 1 test, 292 skipped"
+    },
+    {
+      "command": "./node_modules/.bin/vitest run tests/teaching-course-management-route-smoke.test.ts -t \"passes live approved smoke\"",
+      "result": "passed: 1 test, 5 skipped"
+    },
+    {
+      "command": "./node_modules/.bin/vitest run tests/teaching-course-management-route-smoke.test.ts",
+      "result": "passed: 6 tests"
+    },
+    {
+      "command": "./node_modules/.bin/vitest run tests/production-release-gate.test.ts -t \"teaching course management route smoke|duplicate membership approval idempotency\"",
+      "result": "passed: 25 tests, 268 skipped"
+    },
+    {
+      "command": "node --check scripts/teaching-course-management-route-smoke.mjs",
+      "result": "passed"
+    },
+    {
+      "command": "node --check scripts/production-e2e-release-gate.mjs",
+      "result": "passed"
+    },
+    {
+      "command": "node --check scripts/local-production-e2e-smoke.mjs",
+      "result": "passed"
+    },
+    {
+      "command": "node --check scripts/production-e2e-orchestrator.mjs",
+      "result": "passed"
+    },
+    {
+      "command": "./node_modules/.bin/vitest run tests/production-release-gate.test.ts",
+      "result": "passed: 293 tests"
+    },
+    {
+      "command": "./node_modules/.bin/vitest run tests/local-production-e2e-smoke.test.ts",
+      "result": "passed: 9 tests"
+    },
+    {
+      "command": "./node_modules/.bin/vitest run tests/production-e2e-orchestrator.test.ts",
+      "result": "passed: 5 tests"
+    },
+    {
+      "command": "./node_modules/.bin/vitest run",
+      "result": "passed: 69 files, 1361 tests; existing jsdom navigation warnings observed"
+    },
+    {
+      "command": "npm run lint",
+      "result": "passed"
+    },
+    {
+      "command": "npm run build",
+      "result": "passed; Next.js reported .env.local loaded, values were not inspected"
+    }
+  ],
+  "safety": {
+    "secretValuesInspected": false,
+    "envValuesPrinted": false,
+    "gitMutationPerformed": false,
+    "liveProviderCallPerformed": false,
+    "productionMutationPerformed": false
+  },
+  "remainingLimitation": "This is release-gate and smoke-harness hardening. The aggregate enterprise goal still needs same-run owner-approved live production evidence for the full ordinary teaching management release package before the thread goal can be marked complete."
+}

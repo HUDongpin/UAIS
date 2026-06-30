@@ -1,0 +1,447 @@
+{
+  "target": "production-e2e-release-orchestrator",
+  "mode": "dry-run",
+  "environment": "production",
+  "network": "disabled",
+  "status": "planned",
+  "responsibleSession": "S22",
+  "reportDate": "2026-06-19",
+  "outputDir": "redacted",
+  "evidenceFiles": {
+    "vercelProjectReadiness": "2026-06-19-vercel-project-readiness.json",
+    "vercelEnvSync": "2026-06-19-vercel-env-sync-production-apply.json",
+    "trustedTeacherAuthRouteChain": "2026-06-19-trusted-teacher-auth-route-chain-contract.json",
+    "teacherAuthProviderReadiness": "2026-06-19-teacher-auth-provider-readiness-production-live.json",
+    "externalStorageProductionLauncher": "2026-06-19-external-storage-production-launch-contract.json",
+    "externalStorageContainerBuildReadiness": "2026-06-19-external-storage-container-build-readiness.json",
+    "externalStorageServiceReadiness": "2026-06-19-external-storage-service-readiness-production-live.json",
+    "vercelProductionDeployment": "2026-06-19-vercel-production-deployment.json",
+    "deployedTeacherWorkflowUi": "2026-06-19-teacher-workflow-deployment-smoke-production-live.json",
+    "teacherWorkflowBrowserUi": "2026-06-19-teacher-workflow-browser-smoke-production-live.json",
+    "learningPptPlayback": "2026-06-19-learning-ppt-playback-deployment-smoke-production-live.json",
+    "routeSmoke": "2026-06-19-route-smoke-production-live.json",
+    "externalStorageSmoke": "2026-06-19-external-storage-smoke-production-live.json",
+    "pptAcceptance": "2026-06-19-kangxia-ppt-manual-acceptance-production.json",
+    "releaseGate": "2026-06-19-production-e2e-release-gate.json"
+  },
+  "evidenceReadiness": [
+    {
+      "key": "vercelProjectReadiness",
+      "file": "2026-06-19-vercel-project-readiness.json",
+      "presence": "present",
+      "target": "vercel-project-readiness",
+      "evidenceStatus": "local-blocked",
+      "releaseStatus": "blocked",
+      "blockedReasons": [
+        "vercel-team-scope-missing",
+        "vercel-project-candidate-missing",
+        "vercel-project-not-linked"
+      ]
+    },
+    {
+      "key": "vercelEnvSync",
+      "file": "2026-06-19-vercel-env-sync-production-apply.json",
+      "presence": "missing",
+      "releaseStatus": "missing"
+    },
+    {
+      "key": "trustedTeacherAuthRouteChain",
+      "file": "2026-06-19-trusted-teacher-auth-route-chain-contract.json",
+      "presence": "present",
+      "target": "trusted-teacher-auth-route-chain-contract",
+      "evidenceStatus": "proved-locally",
+      "releaseStatus": "proved-locally",
+      "blockedReasons": []
+    },
+    {
+      "key": "teacherAuthProviderReadiness",
+      "file": "2026-06-19-teacher-auth-provider-readiness-production-live.json",
+      "presence": "missing",
+      "releaseStatus": "missing"
+    },
+    {
+      "key": "externalStorageProductionLauncher",
+      "file": "2026-06-19-external-storage-production-launch-contract.json",
+      "presence": "present",
+      "target": "external-storage-service-production-launcher",
+      "evidenceStatus": "dry-run-ready",
+      "releaseStatus": "ready",
+      "blockedReasons": []
+    },
+    {
+      "key": "externalStorageContainerBuildReadiness",
+      "file": "2026-06-19-external-storage-container-build-readiness.json",
+      "presence": "missing",
+      "releaseStatus": "missing"
+    },
+    {
+      "key": "externalStorageServiceReadiness",
+      "file": "2026-06-19-external-storage-service-readiness-production-live.json",
+      "presence": "missing",
+      "releaseStatus": "missing"
+    },
+    {
+      "key": "vercelProductionDeployment",
+      "file": "2026-06-19-vercel-production-deployment.json",
+      "presence": "missing",
+      "releaseStatus": "missing"
+    },
+    {
+      "key": "deployedTeacherWorkflowUi",
+      "file": "2026-06-19-teacher-workflow-deployment-smoke-production-live.json",
+      "presence": "missing",
+      "releaseStatus": "missing"
+    },
+    {
+      "key": "teacherWorkflowBrowserUi",
+      "file": "2026-06-19-teacher-workflow-browser-smoke-production-live.json",
+      "presence": "missing",
+      "releaseStatus": "missing"
+    },
+    {
+      "key": "learningPptPlayback",
+      "file": "2026-06-19-learning-ppt-playback-deployment-smoke-production-live.json",
+      "presence": "missing",
+      "releaseStatus": "missing"
+    },
+    {
+      "key": "routeSmoke",
+      "file": "2026-06-19-route-smoke-production-live.json",
+      "presence": "missing",
+      "releaseStatus": "missing"
+    },
+    {
+      "key": "externalStorageSmoke",
+      "file": "2026-06-19-external-storage-smoke-production-live.json",
+      "presence": "missing",
+      "releaseStatus": "missing"
+    },
+    {
+      "key": "pptAcceptance",
+      "file": "2026-06-19-kangxia-ppt-manual-acceptance-production.json",
+      "presence": "missing",
+      "releaseStatus": "missing"
+    },
+    {
+      "key": "releaseGate",
+      "file": "2026-06-19-production-e2e-release-gate.json",
+      "presence": "present",
+      "target": "uais-production-e2e-release-gate",
+      "evidenceStatus": "blocked",
+      "releaseStatus": "blocked",
+      "blockedReasons": [
+        "deployed-teacher-workflow-page-not-live-passed",
+        "vercel-team-scope-missing",
+        "vercel-env-not-applied",
+        "teacher-auth-provider-readiness-not-live-ready",
+        "external-storage-service-readiness-not-live-ready",
+        "vercel-production-deployment-not-proven",
+        "deployment-route-smoke-not-live-passed",
+        "external-storage-smoke-not-live-passed",
+        "manual-ppt-playback-not-accepted"
+      ]
+    }
+  ],
+  "steps": [
+    {
+      "order": 1,
+      "id": "s22-vercel-project-readiness",
+      "owner": "S22",
+      "evidence": "2026-06-19-vercel-project-readiness.json",
+      "command": "node -- scripts/vercel-project-readiness.mjs --project-name <approved-project-name> > <evidence>",
+      "mutatesRemote": false,
+      "requiresOwnerApproval": false,
+      "proves": [
+        "vercel-cli-present",
+        "authenticated-vercel-account-redacted",
+        "single-current-team-scope",
+        "approved-project-candidate",
+        "project-link-marker",
+        "vercelignore-upload-hygiene"
+      ]
+    },
+    {
+      "order": 2,
+      "id": "s19-vercel-env-sync-apply-evidence",
+      "owner": "S19",
+      "evidence": "2026-06-19-vercel-env-sync-production-apply.json",
+      "command": "node -- scripts/vercel-env-sync.mjs --apply --approved --project <approved-project> --env-file <env-file> --vercel-project-readiness <vercel-project-readiness-evidence> --release-run-id <release-run-id> > <evidence>",
+      "mutatesRemote": true,
+      "requiresOwnerApproval": true,
+      "proves": [
+        "server-only-env-applied-to-production-and-preview",
+        "teacher-auth-provider-selector",
+        "production-secret-strength",
+        "remote-https-external-storage-endpoint",
+        "redacted-external-storage-service-fingerprint",
+        "redacted-env-apply-preflight",
+        "redacted-env-apply-summary",
+        "release-run-id-bound"
+      ]
+    },
+    {
+      "order": 3,
+      "id": "s12-trusted-teacher-auth-route-chain-contract",
+      "owner": "S12",
+      "evidence": "2026-06-19-trusted-teacher-auth-route-chain-contract.json",
+      "command": "node -- scripts/trusted-teacher-auth-route-chain-contract.mjs > <evidence>",
+      "mutatesRemote": false,
+      "requiresOwnerApproval": false,
+      "proves": [
+        "trusted-cookie-issuer-route-chain",
+        "issued-cookie-pair-to-scoped-ai-session",
+        "ppt-narration-submit-scoped-session",
+        "cookie-and-session-values-omitted"
+      ]
+    },
+    {
+      "order": 4,
+      "id": "s22-teacher-auth-provider-readiness",
+      "owner": "S22",
+      "evidence": "2026-06-19-teacher-auth-provider-readiness-production-live.json",
+      "command": "node -- scripts/teacher-auth-provider-readiness.mjs --live --approved --environment production --env-file <env-file> --release-run-id <release-run-id> --vercel-env-sync <vercel-env-sync-evidence> --trusted-teacher-auth-route-chain <trusted-teacher-auth-route-chain-evidence> > <evidence>",
+      "mutatesRemote": false,
+      "requiresOwnerApproval": true,
+      "proves": [
+        "local-trusted-route-chain-contract-present",
+        "teacher-auth-provider-selector",
+        "vercel-env-auth-provider-selector-bound",
+        "teacher-auth-session-cookie-contract",
+        "production-session-cookie-pair-contract",
+        "trusted-issuer-or-oidc-provider-readiness",
+        "secret-strength-redacted",
+        "release-run-id-bound"
+      ]
+    },
+    {
+      "order": 5,
+      "id": "s22-external-storage-production-launch-contract",
+      "owner": "S22",
+      "evidence": "2026-06-19-external-storage-production-launch-contract.json",
+      "command": "node -- scripts/external-storage-service-production-launcher.mjs --dry-run > <evidence>",
+      "mutatesRemote": false,
+      "requiresOwnerApproval": false,
+      "proves": [
+        "env-only-secret-launch",
+        "production-service-mode-forced",
+        "persistent-data-dir-required",
+        "container-runtime-artifact",
+        "redacted-launch-contract"
+      ]
+    },
+    {
+      "order": 6,
+      "id": "s22-external-storage-container-build-readiness",
+      "owner": "S22",
+      "evidence": "2026-06-19-external-storage-container-build-readiness.json",
+      "command": "node -- scripts/external-storage-container-build-readiness.mjs --dry-run > <evidence>",
+      "mutatesRemote": false,
+      "requiresOwnerApproval": false,
+      "proves": [
+        "dockerfile-contract",
+        "docker-context-secret-exclusion",
+        "docker-daemon-availability-status",
+        "container-build-not-run-in-dry-run"
+      ]
+    },
+    {
+      "order": 7,
+      "id": "s22-external-storage-service-readiness",
+      "owner": "S22",
+      "evidence": "2026-06-19-external-storage-service-readiness-production-live.json",
+      "command": "node -- scripts/external-storage-service-readiness.mjs --live --approved --environment production --env-file <env-file> --release-run-id <release-run-id> --vercel-env-sync <vercel-env-sync-evidence> --external-storage-production-launch-contract <external-storage-production-launch-contract-evidence> > <evidence>",
+      "mutatesRemote": false,
+      "requiresOwnerApproval": true,
+      "proves": [
+        "remote-https-storage-service-endpoint",
+        "redacted-storage-service-fingerprint",
+        "vercel-env-storage-service-fingerprint-bound",
+        "production-launch-contract-bound",
+        "production-service-mode-health-target",
+        "production-storage-service-identity",
+        "durable-backing-store-readiness",
+        "redacted-health-readiness",
+        "release-run-id-bound"
+      ]
+    },
+    {
+      "order": 8,
+      "id": "s22-vercel-production-deployment",
+      "owner": "S22",
+      "evidence": "2026-06-19-vercel-production-deployment.json",
+      "command": "node -- scripts/vercel-production-deployment-evidence.mjs --live --approved --deploy --environment production --env-file <env-file> --scope <approved-scope> --vercel-project-readiness <vercel-project-readiness-evidence> --vercel-env-sync <vercel-env-sync-evidence> --release-run-id <release-run-id> > <evidence>",
+      "mutatesRemote": true,
+      "requiresOwnerApproval": true,
+      "proves": [
+        "production-deployment-created-or-inspected",
+        "ready-project-readiness-guard",
+        "applied-env-sync-guard",
+        "env-sync-storage-fingerprint-guard",
+        "env-sync-apply-summary-guard",
+        "env-sync-apply-preflight-guard",
+        "deployment-url-redacted",
+        "deployment-fingerprint-source-for-smokes",
+        "release-run-id-bound"
+      ]
+    },
+    {
+      "order": 9,
+      "id": "s22-deployed-teacher-workflow-page-smoke",
+      "owner": "S22",
+      "evidence": "2026-06-19-teacher-workflow-deployment-smoke-production-live.json",
+      "command": "node -- scripts/teacher-workflow-deployment-smoke.mjs --live --approved --environment production --base-url <deployment-url> --env-file <env-file> --release-run-id <release-run-id> --vercel-production-deployment <vercel-production-deployment-evidence> > <evidence>",
+      "mutatesRemote": false,
+      "requiresOwnerApproval": true,
+      "proves": [
+        "remote-https-deployment-origin",
+        "rendered-teacher-workflow-anchors",
+        "voice-sample-select-marker",
+        "uploaded-audio-payload-marker",
+        "selected-sample-identity-marker",
+        "signed-session-bootstrap-marker",
+        "protected-workflow-session-action-manifest",
+        "server-workflow-status-marker",
+        "deployment-fingerprint",
+        "rendered-page-fingerprint",
+        "release-run-id-bound",
+        "vercel-production-deployment-fingerprint-bound"
+      ]
+    },
+    {
+      "order": 10,
+      "id": "s22-deployed-teacher-workflow-browser-smoke",
+      "owner": "S22",
+      "evidence": "2026-06-19-teacher-workflow-browser-smoke-production-live.json",
+      "command": "node -- scripts/teacher-workflow-browser-smoke.mjs --live --approved --environment production --base-url <deployment-url> --env-file <env-file> --release-run-id <release-run-id> --vercel-production-deployment <vercel-production-deployment-evidence> --api-mode live-workflow-status > <evidence>",
+      "mutatesRemote": false,
+      "requiresOwnerApproval": true,
+      "proves": [
+        "real-browser-hydration",
+        "real-protected-workflow-status-read",
+        "fixture-blocked-workflow-mutations",
+        "ppt-narration-slide-payload-contract",
+        "voice-sample-file-selection",
+        "signed-session-bootstrap-request",
+        "protected-workflow-click-sequence",
+        "per-slide-wav-download-links",
+        "protected-wav-download-href-contract",
+        "no-remote-provider-or-storage-mutation",
+        "matching-deployment-fingerprint",
+        "release-run-id-bound",
+        "vercel-production-deployment-fingerprint-bound"
+      ]
+    },
+    {
+      "order": 11,
+      "id": "s22-deployed-learning-ppt-playback-smoke",
+      "owner": "S22",
+      "evidence": "2026-06-19-learning-ppt-playback-deployment-smoke-production-live.json",
+      "command": "node -- scripts/learning-ppt-playback-deployment-smoke.mjs --live --approved --environment production --base-url <deployment-url> --env-file <env-file> --release-run-id <release-run-id> --vercel-production-deployment <vercel-production-deployment-evidence> > <evidence>",
+      "mutatesRemote": false,
+      "requiresOwnerApproval": true,
+      "proves": [
+        "kang-xia-learning-playback-19-slides",
+        "student-safe-playback-manifest",
+        "first-slide-public-wav-response",
+        "first-slide-wav-minimum-content-length",
+        "matching-deployment-fingerprint",
+        "release-run-id-bound",
+        "vercel-production-deployment-fingerprint-bound"
+      ]
+    },
+    {
+      "order": 12,
+      "id": "s22-protected-deployment-route-smoke",
+      "owner": "S22",
+      "evidence": "2026-06-19-route-smoke-production-live.json",
+      "command": "node -- scripts/ai-route-smoke.mjs --live --approved --environment production --base-url <deployment-url> --env-file <env-file> --release-run-id <release-run-id> --vercel-production-deployment <vercel-production-deployment-evidence> --teacher-auth-provider-readiness <teacher-auth-provider-readiness-evidence> > <evidence>",
+      "mutatesRemote": false,
+      "requiresOwnerApproval": true,
+      "proves": [
+        "trusted-teacher-auth-session",
+        "issuer-cookie-hardening",
+        "teacher-ai-session-response-shape",
+        "teacher-ownership-response-shape",
+        "teacher-ppt-workflow-response-shape",
+        "teacher-ppt-workflow-download-contract",
+        "matching-deployment-fingerprint",
+        "release-run-id-bound",
+        "vercel-production-deployment-fingerprint-bound",
+        "teacher-auth-provider-readiness-selector-bound"
+      ]
+    },
+    {
+      "order": 13,
+      "id": "s22-production-external-storage-smoke",
+      "owner": "S22",
+      "evidence": "2026-06-19-external-storage-smoke-production-live.json",
+      "command": "node -- scripts/external-storage-smoke.mjs --live --approved --environment production --teacher-id <redacted-smoke-teacher-id> --env-file <env-file> --release-run-id <release-run-id> --external-storage-service-readiness <external-storage-service-readiness-evidence> > <evidence>",
+      "mutatesRemote": true,
+      "requiresOwnerApproval": true,
+      "proves": [
+        "remote-https-storage-endpoint",
+        "durable-backing-store-write-read-delete",
+        "teacher-ownership-merge-read-after-write",
+        "qwen-lifecycle-audit-append-read-after-write",
+        "same-run-smoke-marker-readback",
+        "redacted-storage-service-fingerprint",
+        "release-run-id-bound",
+        "external-storage-service-readiness-fingerprint-bound"
+      ]
+    },
+    {
+      "order": 14,
+      "id": "s24-manual-ppt-playback-acceptance",
+      "owner": "S24",
+      "evidence": "2026-06-19-kangxia-ppt-manual-acceptance-production.json",
+      "command": "node -- scripts/ppt-manual-playback-acceptance.mjs --package-json <kangxia-package-json> --preflight-report <desktop-preflight-report> --manual-record <manual-record> --vercel-production-deployment <vercel-production-deployment-evidence> > <evidence>",
+      "mutatesRemote": false,
+      "requiresOwnerApproval": false,
+      "proves": [
+        "package-identity-matched",
+        "manual-powerpoint-playback-accepted",
+        "manual-wps-playback-accepted",
+        "non-future-tested-at",
+        "all-19-slide-audio-checks",
+        "release-run-id-bound",
+        "deployment-fingerprint-bound",
+        "deployment-observation-bound",
+        "vercel-production-deployment-evidence-bound"
+      ]
+    },
+    {
+      "order": 15,
+      "id": "s22-production-e2e-release-gate",
+      "owner": "S22",
+      "evidence": "2026-06-19-production-e2e-release-gate.json",
+      "command": "node -- scripts/production-e2e-release-gate.mjs --teacher-workflow-ui <teacher-workflow-ui-evidence> --deployed-teacher-workflow-ui <deployed-teacher-workflow-ui-evidence> --teacher-workflow-browser-ui <teacher-workflow-browser-ui-evidence> --learning-ppt-playback <learning-ppt-playback-evidence> --vercel-project-readiness <vercel-project-readiness-evidence> --vercel-env-sync <vercel-env-sync-evidence> --trusted-teacher-auth-route-chain <trusted-teacher-auth-route-chain-evidence> --teacher-auth-provider-readiness <teacher-auth-provider-readiness-evidence> --external-storage-production-launch-contract <external-storage-production-launch-contract-evidence> --external-storage-container-build-readiness <external-storage-container-build-readiness-evidence> --external-storage-service-readiness <external-storage-service-readiness-evidence> --vercel-production-deployment <vercel-production-deployment-evidence> --route-smoke <route-smoke-evidence> --external-storage-smoke <external-storage-smoke-evidence> --ppt-acceptance <ppt-acceptance-evidence> > <evidence>",
+      "mutatesRemote": false,
+      "requiresOwnerApproval": false,
+      "proves": [
+        "all-production-e2e-requirements-satisfied",
+        "no-stale-or-local-only-evidence-accepted",
+        "learning-playback-deployment-fingerprint-match",
+        "trusted-teacher-auth-route-chain-contract",
+        "external-storage-production-launch-contract",
+        "external-storage-container-build-readiness",
+        "vercel-env-storage-service-fingerprint-match",
+        "storage-service-fingerprint-match"
+      ]
+    }
+  ],
+  "notRunReasons": [
+    "dry-run-only",
+    "vercel-env-apply-separated-from-plan",
+    "production-live-smokes-require-approved-deployment-url-and-secrets",
+    "manual-ppt-playback-record-required"
+  ],
+  "safety": {
+    "valuesRedacted": true,
+    "envFilePathOmitted": true,
+    "deploymentUrlOmitted": true,
+    "responseBodiesOmitted": true,
+    "liveRequiresApproval": true,
+    "vercelEnvApplyNotRunInDryRun": true,
+    "remoteMutationCommandsSeparated": true
+  }
+}

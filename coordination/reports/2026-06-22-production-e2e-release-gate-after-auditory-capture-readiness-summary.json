@@ -1,0 +1,86 @@
+{
+  "target": "uais-production-e2e-release-gate",
+  "date": "2026-06-22",
+  "status": "blocked",
+  "responsibleSession": "S22",
+  "releaseRunId": "uais-release-2026-06-21-signed-admin-production-api",
+  "baseReleaseGateEvidence": "coordination/reports/2026-06-22-production-e2e-release-gate-after-desktop-app-open-visual-evidence-summary.json",
+  "newEvidence": [
+    {
+      "id": "ppt-auditory-capture-readiness",
+      "status": "blocked",
+      "evidence": "coordination/reports/2026-06-22-ppt-auditory-capture-readiness-current.json",
+      "summary": "Local ffmpeg/AVFoundation and system audio inspection found only microphone or meeting-virtual audio inputs. A malformed BlackHole-like HAL bundle is present, but no dedicated system-output loopback capture device is currently visible, so automated capture cannot honestly replace human auditory PowerPoint/WPS playback acceptance."
+    },
+    {
+      "id": "kangxia-ppt-manual-record-template-desktop-prefilled",
+      "status": "ready-for-human-auditory-fill",
+      "evidence": "coordination/reports/2026-06-22-kangxia-ppt-manual-acceptance-record-template-desktop-prefilled.json",
+      "gateEvidence": "coordination/reports/2026-06-22-kangxia-ppt-manual-playback-acceptance-gate-desktop-prefilled.json",
+      "summary": "The manual acceptance record template is now bound to the signed-admin production release and prefilled with observed PowerPoint/WPS versions from desktop visual evidence, while all per-slide audioPlays/heardTargetVoice fields remain false."
+    }
+  ],
+  "satisfiedAreasCarriedForward": [
+    "website-level-teacher-workflow-ui",
+    "production-signed-admin-api-route-chain",
+    "production-trusted-teacher-session-route-chain",
+    "external-durable-storage-read-merge-smoke",
+    "vercel-production-deployment",
+    "deployed-route-smoke",
+    "deployed-teacher-workflow-browser-smoke",
+    "deployed-learning-ppt-playback-smoke",
+    "openxml-and-embedded-wav-machine-readiness",
+    "powerpoint-and-wps-desktop-visual-slideshow-readiness"
+  ],
+  "blockedReasons": ["manual-ppt-playback-not-accepted"],
+  "remainingManualAcceptance": {
+    "id": "ppt-manual-playback-acceptance",
+    "status": "blocked",
+    "requiredApplications": ["Microsoft PowerPoint", "WPS Presentation"],
+    "requiredPerApplicationSlideChecks": 19,
+    "requiredConfirmation": "accepted-after-human-playback",
+    "reason": "The local environment does not expose a dedicated system-output loopback capture input. The current HAL plugin layout suggests a malformed BlackHole-like install, and microphone or meeting-device capture is intentionally excluded from final manual acceptance because it could record unrelated room audio and still would not prove a human heard the target cloned voice on every slide."
+  },
+  "humanRecordTemplate": {
+    "status": "prepared-not-accepted",
+    "file": "coordination/reports/2026-06-22-kangxia-ppt-manual-acceptance-record-template-desktop-prefilled.json",
+    "prefilledFields": [
+      "releaseRunId",
+      "deploymentFingerprint",
+      "deploymentObservedAt",
+      "artifactFingerprint",
+      "Microsoft PowerPoint version",
+      "WPS Presentation version",
+      "slideId/audioId bindings"
+    ],
+    "stillEmptyOrFalse": [
+      "tester",
+      "testedAt",
+      "record status remains template-not-accepted",
+      "19 PowerPoint audioPlays/heardTargetVoice checks",
+      "19 WPS Presentation audioPlays/heardTargetVoice checks"
+    ]
+  },
+  "loopbackRemediationReadiness": {
+    "status": "system-admin-action-required",
+    "evidence": "coordination/reports/2026-06-22-ppt-auditory-capture-readiness-current.json",
+    "noninteractiveReadinessEvidence": "coordination/reports/2026-06-22-ppt-loopback-remediation-noninteractive-readiness.json",
+    "findings": [
+      "blackhole-hal-contents-at-plugin-root",
+      "blackhole-executable-has-txt-extension"
+    ],
+    "passwordlessSudo": "not-available",
+    "homebrewBlackHoleCask": "available-but-not-installed",
+    "noninteractiveRepairAttempted": false,
+    "recommendedNextCheckAfterRepair": "node scripts/ppt-audio-capture-readiness.mjs --out coordination/reports/2026-06-22-ppt-auditory-capture-readiness-current.json"
+  },
+  "safety": {
+    "secretsRedacted": true,
+    "rawAudioCaptured": false,
+    "rawAudioOmitted": true,
+    "microphoneCaptureAvoided": true,
+    "systemSettingsChanged": false,
+    "manualAcceptanceNotFaked": true,
+    "goalMarkedComplete": false
+  }
+}

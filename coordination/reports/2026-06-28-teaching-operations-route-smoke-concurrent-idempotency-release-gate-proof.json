@@ -1,0 +1,65 @@
+{
+  "target": "teaching-operations-route-smoke-concurrent-idempotency-release-gate-proof",
+  "date": "2026-06-28",
+  "session": "S22",
+  "status": "passed",
+  "scope": {
+    "releaseGate": "scripts/production-e2e-release-gate.mjs",
+    "routeSmoke": "scripts/teaching-operations-route-smoke.mjs",
+    "localProductionHarness": "scripts/local-production-e2e-smoke.mjs",
+    "tests": [
+      "tests/production-release-gate.test.ts",
+      "tests/teaching-operations-route-smoke.test.ts",
+      "tests/local-production-e2e-smoke.test.ts"
+    ]
+  },
+  "redGreenEvidence": {
+    "red": {
+      "command": "./node_modules/.bin/vitest run tests/production-release-gate.test.ts -t \"concurrent idempotent retry append-sequence\"",
+      "exitCode": 1,
+      "observedFailure": "Old production gate did not block teaching operations route-smoke evidence that omitted concurrentIdempotentRetryAppendSequenceStableReturned."
+    },
+    "green": [
+      {
+        "command": "./node_modules/.bin/vitest run tests/production-release-gate.test.ts -t \"concurrent idempotent retry append-sequence\"",
+        "result": "1 passed, 289 skipped"
+      },
+      {
+        "command": "./node_modules/.bin/vitest run tests/teaching-operations-route-smoke.test.ts",
+        "result": "20 passed"
+      },
+      {
+        "command": "./node_modules/.bin/vitest run tests/production-release-gate.test.ts",
+        "result": "290 passed"
+      },
+      {
+        "command": "./node_modules/.bin/vitest run tests/local-production-e2e-smoke.test.ts",
+        "result": "9 passed"
+      },
+      {
+        "command": "./node_modules/.bin/vitest run",
+        "result": "69 files passed, 1358 tests passed"
+      },
+      {
+        "command": "npm run lint",
+        "result": "passed"
+      },
+      {
+        "command": "npm run build",
+        "result": "passed"
+      }
+    ]
+  },
+  "enterpriseClosure": {
+    "newRequiredResult": "concurrentIdempotentRetryAppendSequenceStableReturned",
+    "routeSmokeBehavior": "After the first authorized operation and sequential idempotent retry, the live route-smoke sends two concurrent POST requests with the same idempotency key and requires both responses to return the original receipt id, already-persisted idempotency status, and identical external append sequence.",
+    "releaseGateBehavior": "Production release evidence without the concurrent idempotent retry append-sequence proof is blocked with teaching-operations-route-smoke-results-not-proven.",
+    "safety": {
+      "secretsLogged": false,
+      "envValuesInspected": false,
+      "gitMutated": false,
+      "liveProviderCalled": false,
+      "deploymentMutated": false
+    }
+  }
+}

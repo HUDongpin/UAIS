@@ -1,0 +1,91 @@
+{
+  "target": "teacher-workflow-browser-smoke",
+  "mode": "live",
+  "environment": "production",
+  "network": "enabled",
+  "status": "blocked",
+  "responsibleSession": "S22",
+  "releaseRunId": "uais-release-2026-06-21-signed-admin-production-api",
+  "route": "/teaching",
+  "deploymentFingerprint": {
+    "status": "present",
+    "value": "sha256:7c8e0f8c7195d5b9"
+  },
+  "deploymentOrigin": {
+    "status": "present",
+    "originClass": "remote-https",
+    "valueRedacted": true
+  },
+  "networkAddressOverride": {
+    "status": "disabled",
+    "valueRedacted": true
+  },
+  "vercelProductionDeploymentEvidence": {
+    "target": "vercel-production-deployment",
+    "deploymentObservationStatus": "observed",
+    "valueRedacted": true,
+    "status": "matched",
+    "releaseRunIdStatus": "matched"
+  },
+  "browserInteractions": [
+    "open-teaching-page",
+    "hydrate-teacher-workflow",
+    "verify-short-voice-sample-duration-gate",
+    "select-voice-sample-file",
+    "refresh-server-workflow",
+    "submit-voice-sample-with-signed-session",
+    "run-voice-clone-preflight",
+    "save-voice-ref",
+    "submit-ppt-narration",
+    "verify-ppt-narration-slide-payload",
+    "verify-per-slide-wav-download-links",
+    "verify-per-slide-wav-download-href-contract"
+  ],
+  "apiInterceptionPolicy": {
+    "workflowApis": "fixture-only",
+    "remoteMutations": "blocked",
+    "responseBodiesOmitted": true
+  },
+  "runtimeSetup": {
+    "packageName": "playwright",
+    "moduleResolution": "node-require-resolution",
+    "moduleStatus": "missing",
+    "npxStatus": "present",
+    "packageInstallCommand": "npm install --save-dev playwright",
+    "browserInstallCommand": "npx playwright install chromium",
+    "liveCommand": "node -- scripts/teacher-workflow-browser-smoke.mjs --live --approved --environment production --base-url <deployment-url> --env-file <env-file> --release-run-id <release-run-id> --vercel-production-deployment <vercel-production-deployment-evidence>",
+    "transientRuntimeCommand": "npx --yes --package playwright --call 'NODE_PATH=\"$(dirname \"$(dirname \"$(command -v playwright)\")\")\" node -- scripts/teacher-workflow-browser-smoke.mjs --live --approved --environment production --base-url <deployment-url> --env-file <env-file> --release-run-id <release-run-id> --vercel-production-deployment <vercel-production-deployment-evidence>'"
+  },
+  "prerequisites": [
+    {
+      "id": "s22-deployment-base-url",
+      "responsibleSession": "S22",
+      "requiredEnv": "UAIS_DEPLOYMENT_BASE_URL",
+      "status": "present"
+    },
+    {
+      "id": "s22-browser-automation-runtime",
+      "responsibleSession": "S22",
+      "runtime": "playwright",
+      "status": "missing"
+    },
+    {
+      "id": "s22-vercel-production-deployment-evidence",
+      "responsibleSession": "S22",
+      "requiredEvidence": "vercel-production-deployment",
+      "status": "matched",
+      "valueRedacted": true
+    }
+  ],
+  "blockedReasons": [
+    "teacher-workflow-browser-runtime-missing"
+  ],
+  "safety": {
+    "valuesRedacted": true,
+    "deploymentUrlOmitted": true,
+    "responseBodiesOmitted": true,
+    "screenshotsOmitted": true,
+    "audioPayloadOmitted": true,
+    "liveRequiresApproval": true
+  }
+}

@@ -1,0 +1,155 @@
+{
+  "target": "current-production-e2e-evidence-refresh",
+  "date": "2026-06-20",
+  "responsibleSession": "S22",
+  "status": "refreshed-blocked-current-state",
+  "overallGoalStatus": "active-incomplete",
+  "summary": {
+    "vercelProject": "Refreshed redacted Vercel project readiness evidence; the linked uais project is locally ready and no longer a current release blocker.",
+    "dockerStorage": "Started the existing local Docker external-storage image, generated retry-aware local-production readiness evidence and retry-aware local-reference write/read smoke evidence, then removed the container.",
+    "releaseGate": "Refreshed the aggregate production E2E release gate against current linked-Vercel, retry-aware route-smoke, and retry-aware Docker storage evidence.",
+    "ownerChecklist": "Refreshed the owner decision checklist against the current gate so Vercel project selection is satisfied and only true upstream production decisions remain."
+  },
+  "generatedEvidence": [
+    {
+      "path": "coordination/reports/2026-06-20-vercel-project-readiness-current-linked-ready.json",
+      "target": "vercel-project-readiness",
+      "status": "ready",
+      "mode": "local"
+    },
+    {
+      "path": "coordination/reports/2026-06-20-route-smoke-current-linked-vercel-preflight-retry-aware-dry-run.json",
+      "target": "deployment-route-smoke",
+      "status": "blocked",
+      "mode": "dry-run",
+      "environment": "production",
+      "retryAware": true
+    },
+    {
+      "path": "coordination/reports/2026-06-20-external-storage-service-readiness-docker-local-production-launch-bound-retry-aware.json",
+      "target": "external-storage-service-readiness",
+      "status": "blocked",
+      "mode": "live",
+      "environment": "local-production",
+      "blockedOnlyBecauseNotProduction": true,
+      "retryAware": true
+    },
+    {
+      "path": "coordination/reports/2026-06-20-external-storage-smoke-docker-local-launch-bound-retry-aware.json",
+      "target": "external-storage-smoke",
+      "status": "passed",
+      "mode": "live",
+      "environment": "local-reference",
+      "retryAware": true
+    },
+    {
+      "path": "coordination/reports/2026-06-20-production-e2e-release-gate-current-retry-aware-docker-storage.json",
+      "target": "uais-production-e2e-release-gate",
+      "status": "blocked"
+    },
+    {
+      "path": "coordination/reports/2026-06-20-production-owner-decision-checklist-current-retry-aware-docker-storage.json",
+      "target": "production-owner-decision-checklist",
+      "status": "owner-decisions-required"
+    }
+  ],
+  "currentSatisfiedRequirements": [
+    "website-teacher-workflow-ui",
+    "vercel-project-readiness",
+    "trusted-teacher-auth-route-chain",
+    "external-storage-production-launch-contract",
+    "external-storage-container-build-readiness"
+  ],
+  "currentBlockedRequirements": [
+    "deployed-teacher-workflow-page",
+    "teacher-workflow-browser-smoke",
+    "deployed-learning-ppt-playback",
+    "vercel-env-placement",
+    "teacher-auth-provider-readiness",
+    "external-storage-service-readiness",
+    "vercel-production-deployment",
+    "deployment-route-smoke",
+    "teacher-auth-provider-consistency",
+    "external-durable-storage-smoke",
+    "external-storage-service-consistency",
+    "ppt-manual-playback-acceptance",
+    "production-release-run-consistency"
+  ],
+  "remainingReleaseBlockers": [
+    "deployed-teacher-workflow-page-not-live-passed",
+    "deployed-learning-ppt-playback-not-live-passed",
+    "vercel-env-not-applied",
+    "teacher-auth-provider-readiness-not-live-ready",
+    "external-storage-service-readiness-not-live-ready",
+    "vercel-production-deployment-not-proven",
+    "deployment-route-smoke-not-live-passed",
+    "external-storage-smoke-not-production",
+    "manual-ppt-playback-not-accepted"
+  ],
+  "ownerDecisionsStillNeeded": [
+    "choose production trusted teacher auth/session provider and approved server-only env source",
+    "provision or approve a remote HTTPS external durable storage service",
+    "approve Vercel env apply and production deployment smoke chain after upstream auth/storage decisions",
+    "complete human WPS/PowerPoint PPT playback acceptance"
+  ],
+  "checksRun": [
+    {
+      "command": "node scripts/vercel-project-readiness.mjs --project-name uais",
+      "result": "passed"
+    },
+    {
+      "command": "docker run -d ... uais-external-storage:codex-s22-20260619",
+      "result": "passed",
+      "valuesRedacted": true
+    },
+    {
+      "command": "curl -sS http://127.0.0.1:<redacted-port>/healthz",
+      "result": "passed",
+      "valuesRedacted": true
+    },
+    {
+      "command": "node scripts/external-storage-service-readiness.mjs --live --approved --environment local-production ...",
+      "result": "blocked-as-local-production-only",
+      "blockedReasons": [
+        "external-storage-service-readiness-not-production"
+      ]
+    },
+    {
+      "command": "node scripts/external-storage-smoke.mjs --live --approved --environment local-reference ...",
+      "result": "passed"
+    },
+    {
+      "command": "docker rm -f uais-storage-retry-refresh",
+      "result": "passed"
+    },
+    {
+      "command": "docker ps",
+      "result": "passed-no-running-containers"
+    },
+    {
+      "command": "node scripts/production-e2e-release-gate.mjs ...",
+      "result": "passed-blocked-gate-generated"
+    },
+    {
+      "command": "node scripts/production-owner-decision-checklist.mjs ...",
+      "result": "passed-owner-decisions-required"
+    }
+  ],
+  "notRun": [
+    "Vercel env apply",
+    "Vercel production deploy",
+    "live production deployed teacher workflow smoke",
+    "live production deployed learning PPT playback smoke",
+    "live production protected route smoke",
+    "live production remote HTTPS external-storage readiness/smoke",
+    "manual WPS/PowerPoint PPT playback acceptance"
+  ],
+  "safety": {
+    "realSecretsRead": false,
+    "realSecretsPrinted": false,
+    "envLocalInspected": false,
+    "fixtureTokenOnly": true,
+    "dockerContainerCleanedUp": true,
+    "valuesRedacted": true
+  }
+}

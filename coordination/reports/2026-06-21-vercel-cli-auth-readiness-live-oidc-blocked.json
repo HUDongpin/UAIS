@@ -1,0 +1,69 @@
+{
+  "target": "vercel-cli-auth-readiness",
+  "date": "2026-06-21",
+  "mode": "live",
+  "status": "blocked",
+  "responsibleSession": "S22",
+  "readyAuthMethod": "missing",
+  "projectLink": {
+    "status": "linked",
+    "projectName": "uais",
+    "projectId": "present",
+    "orgId": "present",
+    "valuesRedacted": true
+  },
+  "authMethods": {
+    "envToken": "missing",
+    "vercelAuthToken": "missing",
+    "cliAuthJson": "present",
+    "oidcDiscovery": "failed",
+    "valuesRedacted": true
+  },
+  "interpretation": "A local Vercel CLI auth file exists, but this CLI auth path still requires Vercel OIDC discovery, which fails from the current shell. A VERCEL_TOKEN-style env token remains the cleanest way to bypass this OIDC failure.",
+  "blockedReasons": [
+    "vercel-oidc-discovery-not-proven"
+  ],
+  "checksRun": [
+    {
+      "command": "npm run test -- tests/vercel-cli-auth-readiness.test.ts",
+      "status": "passed",
+      "testFiles": 1,
+      "tests": 3
+    },
+    {
+      "command": "node scripts/vercel-cli-auth-readiness.mjs --live --approved --env-file .env.local --project-file .vercel/project.json",
+      "status": "blocked-redacted-diagnostic"
+    },
+    {
+      "command": "npm run test -- tests/vercel-cli-auth-readiness.test.ts tests/production-release-gate.test.ts tests/teacher-auth-provider-readiness.test.ts",
+      "status": "passed",
+      "testFiles": 3,
+      "tests": 183
+    },
+    {
+      "command": "npm run test",
+      "status": "passed",
+      "testFiles": 45,
+      "tests": 610
+    },
+    {
+      "command": "npm run lint",
+      "status": "passed"
+    },
+    {
+      "command": "npm run build",
+      "status": "passed"
+    }
+  ],
+  "safety": {
+    "valuesRedacted": true,
+    "tokenValuesOmitted": true,
+    "authFilePathOmitted": true,
+    "envFilePathOmitted": true,
+    "projectIdsOmitted": true,
+    "orgIdsOmitted": true,
+    "liveRequiresApproval": true,
+    "productionMutationPerformed": false,
+    "goalMarkedComplete": false
+  }
+}

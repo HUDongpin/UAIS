@@ -1,0 +1,101 @@
+{
+  "target": "production-route-smoke-stale-deployment-diagnosis",
+  "date": "2026-06-21",
+  "status": "diagnosed",
+  "responsibleSession": "S22",
+  "finding": "The latest local-production build proves the current source code satisfies the protected route/session/workflow contract; the still-failing www.uais.top route smoke is therefore a deployment/env/control-plane blocker, not an unpatched current-source route contract blocker.",
+  "currentLocalProductionEvidence": {
+    "path": "coordination/reports/2026-06-21-local-production-e2e-smoke-current-route-contract-refresh.json",
+    "target": "local-production-e2e-smoke",
+    "status": "passed",
+    "build": "skipped-existing-production-build",
+    "protectedRouteSmoke": "passed",
+    "routeResults": {
+      "s22-teacher-auth-issuer-route": {
+        "httpStatus": 200,
+        "responseShape": "ok"
+      },
+      "s22-teacher-ownership-route": {
+        "httpStatus": 200,
+        "responseShape": "ok"
+      },
+      "s22-teacher-ai-session-route": {
+        "httpStatus": 200,
+        "responseShape": "ok",
+        "requiredFields": [
+          "accessSession",
+          "accessPlan",
+          "authProviderContract",
+          "s12TeacherAiSessionBoundary"
+        ]
+      },
+      "s22-teacher-ppt-workflow-route": {
+        "httpStatus": 200,
+        "responseShape": "ok",
+        "requiredFields": [
+          "workflow",
+          "workflowReadyForDownloads",
+          "workflowDownloadContract",
+          "workflowAudioDownloadPattern",
+          "workflowExportDownloadUrl",
+          "agentHandoffPlan",
+          "agentHandoffPlanFramework",
+          "s22ReleaseSmokeAgent"
+        ]
+      }
+    }
+  },
+  "latestFailingProductionEvidence": {
+    "path": "coordination/reports/2026-06-20-protected-route-smoke-www-uais-top-teacher-auth-live.json",
+    "target": "deployment-route-smoke",
+    "status": "failed",
+    "environment": "production",
+    "failedRoutes": {
+      "s22-teacher-ai-session-route": {
+        "httpStatus": 403,
+        "responseShape": "skipped"
+      },
+      "s22-teacher-ppt-workflow-route": {
+        "httpStatus": 200,
+        "responseShape": "failed",
+        "missingFields": [
+          "workflowReadyForDownloads",
+          "workflowDownloadContract",
+          "workflowAudioDownloadPattern",
+          "workflowExportDownloadUrl"
+        ]
+      }
+    }
+  },
+  "vercelDeployEvidence": {
+    "oidcPath": "coordination/reports/2026-06-21-vercel-production-deploy-retry-oidc-tls-blocked.json",
+    "tokenAuthPath": "coordination/reports/2026-06-21-vercel-production-deploy-token-auth-retry.json",
+    "status": "blocked-before-upload",
+    "blockedReasons": [
+      "vercel-cli-oidc-discovery-tls-failure",
+      "vercel-token-env-invalid"
+    ]
+  },
+  "vercelEnvInventoryEvidence": {
+    "path": "coordination/reports/2026-06-21-vercel-env-inventory-cli-json-live.json",
+    "status": "blocked",
+    "blockedReasons": [
+      "vercel-env-json-list-production-failed",
+      "vercel-env-json-list-preview-failed"
+    ]
+  },
+  "nextRequiredProof": [
+    "Restore a valid Vercel deployment auth path, preferably a classic VERCEL_TOKEN passed through a non-logged environment channel.",
+    "Run a production deploy that uploads the current source build.",
+    "Rerun protected route smoke against www.uais.top and require /api/ai/session plus /api/ai/teacher-ppt-workflow to match the local-production route contract.",
+    "Rerun the aggregate production E2E release gate."
+  ],
+  "safety": {
+    "secretsPrinted": false,
+    "tokenValuesPrinted": false,
+    "envValuesPrinted": false,
+    "deploymentUrlsOmitted": true,
+    "localPrivatePathsOmitted": true,
+    "goalMarkedComplete": false
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "target": "external-storage-healthz-500-classification",
+  "generatedAt": "2026-06-21T12:23:06.902Z",
+  "httpStatus": 500,
+  "headers": {
+    "cacheControl": "public, max-age=0, must-revalidate",
+    "contentType": null,
+    "server": "Vercel",
+    "xVercelId": "present"
+  },
+  "bodyClass": "other",
+  "bodySampleRedacted": ""
+}

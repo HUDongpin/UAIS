@@ -1,0 +1,76 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-06-27T16:40:07+08:00",
+  "status": "passed",
+  "scope": "main-teaching-inline-workspace-error-closure",
+  "enterpriseGapAddressed": "Main /teaching inline workspace actions no longer treat a persisted backend receipt as success when the receipt identifies a different operation or action slot.",
+  "changedFiles": [
+    "src/components/pages/teaching-page.tsx",
+    "tests/teaching-page.test.tsx"
+  ],
+  "proofSummary": {
+    "regression": "A mismatched persisted receipt for course-settings:primary is rejected when the user clicked knowledge-base:primary.",
+    "userVisibleFailureMessage": {
+      "zh-CN": "服务端回执未匹配当前操作，请稍后重试。",
+      "en-US": "The server receipt did not match the current operation. Please retry later."
+    },
+    "successSuppressed": "The backend displayMessage from the mismatched receipt is not shown as a saved success state."
+  },
+  "redGreenEvidence": [
+    {
+      "phase": "red",
+      "command": "npx vitest run tests/teaching-page.test.tsx --reporter=dot -t \"different operation\"",
+      "observedBeforeImplementation": "failed as expected because the page accepted a persisted receipt whose operationId/actionSlot did not match the clicked inline workspace action"
+    },
+    {
+      "phase": "green",
+      "command": "npx vitest run tests/teaching-page.test.tsx --reporter=dot -t \"different operation\"",
+      "result": "passed",
+      "testFilesPassed": 1,
+      "testsPassed": 1,
+      "testsSkipped": 74
+    }
+  ],
+  "verification": [
+    {
+      "command": "npx vitest run tests/teaching-page.test.tsx --reporter=dot",
+      "result": "passed",
+      "testFilesPassed": 1,
+      "testsPassed": 75
+    },
+    {
+      "command": "npm run lint",
+      "result": "passed"
+    },
+    {
+      "command": "npm run test",
+      "result": "passed",
+      "testFilesPassed": 66,
+      "testsPassed": 1272
+    },
+    {
+      "command": "npm run build",
+      "result": "passed"
+    },
+    {
+      "command": "git diff --check",
+      "result": "passed"
+    }
+  ],
+  "boundaries": [
+    "This is frontend error-closure hardening for local evidence and tests; it is not live production route smoke evidence.",
+    "The overall enterprise release gate remains blocked until owner-approved production app-auth, external-storage readiness, ordinary teaching route/browser smoke, and provider mutation proof are regenerated in one release run."
+  ],
+  "secretHandling": {
+    "realSecretsInspected": false,
+    "realSecretsLogged": false,
+    "credentialsMutated": false
+  },
+  "gitMutation": {
+    "staged": false,
+    "committed": false,
+    "branched": false,
+    "pushed": false,
+    "resetOrReverted": false
+  }
+}

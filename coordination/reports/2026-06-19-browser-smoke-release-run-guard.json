@@ -1,0 +1,114 @@
+{
+  "target": "browser-smoke-release-run-guard",
+  "generatedAt": "2026-06-19T02:21:12+08:00",
+  "sessionId": "S22",
+  "status": "verified",
+  "objective": "Prevent production live deployed teacher workflow browser smoke evidence from being generated without a non-secret release-run id.",
+  "guard": {
+    "script": "scripts/teacher-workflow-browser-smoke.mjs",
+    "appliesTo": {
+      "mode": "live",
+      "environment": "production"
+    },
+    "requires": "--release-run-id",
+    "guardOrder": "after explicit owner approval validation and before env-file loading, deployment evidence planning, Playwright runtime loading, or browser navigation",
+    "missingReleaseRunIdBehavior": {
+      "exitStatus": 1,
+      "stdout": "empty",
+      "stderrMessage": "Teacher workflow browser smoke requires --release-run-id.",
+      "deploymentUrlRedacted": true
+    }
+  },
+  "runtimeCommandGuidance": {
+    "liveCommandShape": "node -- scripts/teacher-workflow-browser-smoke.mjs --live --approved --environment production --base-url <deployment-url> --env-file <env-file> --release-run-id <release-run-id> --vercel-production-deployment <vercel-production-deployment-evidence>",
+    "transientRuntimeCommandShape": "npx --yes --package playwright --call 'NODE_PATH=<transient-node-path> node -- scripts/teacher-workflow-browser-smoke.mjs ... --env-file <env-file> --release-run-id <release-run-id> ...'",
+    "helpUsageShape": "Usage: node -- scripts/teacher-workflow-browser-smoke.mjs ... --env-file PATH --release-run-id ID ...",
+    "nodeEnvFileCompatibility": "uses node -- so --env-file remains a UAIS script argument on Node v24"
+  },
+  "tddEvidence": {
+    "red": {
+      "observed": true,
+      "command": "npm run test -- tests/teacher-workflow-browser-smoke.test.ts -t without a release-run id",
+      "result": "failed before implementation because the browser smoke could run through the fake browser path without --release-run-id"
+    },
+    "green": {
+      "observed": true,
+      "command": "npm run test -- tests/teacher-workflow-browser-smoke.test.ts",
+      "result": "passed: 1 file / 12 tests"
+    }
+  },
+  "checks": [
+    {
+      "command": "node --check scripts/teacher-workflow-browser-smoke.mjs",
+      "status": "passed"
+    },
+    {
+      "command": "node scripts/teacher-workflow-browser-smoke.mjs --live --approved --environment production --base-url REDACTED_DEPLOYMENT_URL",
+      "status": "passed",
+      "result": "exited 1 with release-run-id-required message before browser navigation"
+    },
+    {
+      "command": "npm run test -- tests/teacher-workflow-browser-smoke.test.ts -t without a release-run id",
+      "status": "passed"
+    },
+    {
+      "command": "npm run test -- tests/teacher-workflow-browser-smoke.test.ts",
+      "status": "passed",
+      "summary": "1 file / 13 tests"
+    },
+    {
+      "command": "npm run test",
+      "status": "passed",
+      "summary": "34 files / 451 tests"
+    },
+    {
+      "command": "npm run lint",
+      "status": "passed"
+    },
+    {
+      "command": "npm run build",
+      "status": "passed",
+      "summary": "Next.js 16.2.9 production build compiled successfully and generated 8 static pages"
+    },
+    {
+      "command": "JSON parse check for this report",
+      "status": "passed"
+    },
+    {
+      "command": "direct trailing-whitespace scan over touched browser-smoke paths",
+      "status": "passed"
+    },
+    {
+      "command": "redaction scan over this report and S22 log",
+      "status": "passed",
+      "summary": "no raw deployment URL, loopback URL, secret fixture, private path, bearer token, NODE_PATH, marker path, screenshot, response body, or audio data URI found"
+    },
+    {
+      "command": "unsafe browser-smoke command scan",
+      "status": "passed",
+      "summary": "no actual node scripts/... --env-file command or unsafe help usage found; only a negative assertion in the test references the old usage string"
+    }
+  ],
+  "releaseImpact": {
+    "improved": [
+      "The production live browser smoke for the teacher workflow UI is now release-run bound before Playwright launches or navigates.",
+      "The browser smoke runtime setup and help usage now point operators to Node v24-safe node -- command shapes and include the required release-run id placeholder.",
+      "This directly strengthens the website-level teacher workflow UI proof path: hydration, voice sample selection, preflight, PPT narration, and per-slide WAV link checks cannot produce production evidence without a release-run id."
+    ],
+    "stillBlocked": [
+      "Owner-approved Vercel team/project/link and env apply remain incomplete.",
+      "Production trusted teacher auth/session provider readiness remains incomplete.",
+      "Real remote-HTTPS durable external storage service readiness and live smoke remain incomplete.",
+      "Production deployment evidence and deployed route/browser smokes remain incomplete.",
+      "Manual PowerPoint/WPS playback acceptance remains incomplete."
+    ]
+  },
+  "redaction": {
+    "secretsPrinted": false,
+    "deploymentUrlsPrinted": false,
+    "envFilePathsPrinted": false,
+    "responseBodiesPrinted": false,
+    "screenshotsPrinted": false,
+    "audioPayloadsPrinted": false
+  }
+}

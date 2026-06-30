@@ -1,0 +1,38 @@
+{
+  "target": "deployment-domain-reachability",
+  "mode": "live",
+  "environment": "production",
+  "status": "reachable",
+  "releaseRunId": "uais-release-2026-06-20-teacher-auth-scope",
+  "deploymentFingerprint": {
+    "status": "present",
+    "value": "sha256:7c8e0f8c7195d5b9",
+    "valueRedacted": true
+  },
+  "domainOrigin": {
+    "status": "present",
+    "originClass": "remote-https",
+    "valueRedacted": true
+  },
+  "httpObservation": {
+    "status": "observed",
+    "checkedRoutes": [
+      "/",
+      "/teaching",
+      "/learning"
+    ],
+    "valueRedacted": true
+  },
+  "sourceDiagnostics": {
+    "path": "coordination/reports/2026-06-21-deployment-reachability-www-uais-top-live.json",
+    "target": "deployment-reachability-diagnostics",
+    "status": "passed",
+    "valuesRedacted": true
+  },
+  "safety": {
+    "valuesRedacted": true,
+    "urlsOmitted": true,
+    "responseBodiesOmitted": true,
+    "noMutation": true
+  }
+}

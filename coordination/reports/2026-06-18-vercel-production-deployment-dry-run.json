@@ -1,0 +1,76 @@
+{
+  "target": "vercel-production-deployment",
+  "mode": "dry-run",
+  "action": "deploy",
+  "environment": "production",
+  "network": "disabled",
+  "status": "blocked",
+  "responsibleSession": "S22",
+  "releaseRunId": "uais-release-2026-06-17T000000Z",
+  "deploymentFingerprint": {
+    "status": "missing"
+  },
+  "deploymentObservation": {
+    "status": "not-run"
+  },
+  "deploymentOrigin": {
+    "status": "missing",
+    "originClass": "missing",
+    "valueRedacted": true
+  },
+  "envSyncApplyPreflightGuard": {
+    "status": "missing",
+    "requiredEvidence": "vercel-env-sync.applyPreflight",
+    "valuesRedacted": true,
+    "cliSafeToInvoke": false
+  },
+  "operation": {
+    "command": "vercel-deploy-production",
+    "status": "not-run",
+    "stdoutOmitted": true,
+    "stderrOmitted": true
+  },
+  "prerequisites": [
+    {
+      "id": "s22-vercel-token-env",
+      "responsibleSession": "S22",
+      "requiredEnv": "VERCEL_TOKEN",
+      "status": "missing",
+      "valueRedacted": true
+    },
+    {
+      "id": "s22-vercel-project-readiness",
+      "responsibleSession": "S22",
+      "requiredEvidence": "vercel-project-readiness",
+      "status": "blocked",
+      "valueRedacted": true
+    },
+    {
+      "id": "s19-vercel-env-sync-apply-evidence",
+      "responsibleSession": "S19",
+      "requiredEvidence": "vercel-env-sync",
+      "status": "blocked",
+      "valueRedacted": true
+    }
+  ],
+  "blockedReasons": [
+    "vercel-production-deployment-live-not-run"
+  ],
+  "safety": {
+    "valuesRedacted": true,
+    "deploymentUrlOmitted": true,
+    "deploymentUrlsOmitted": true,
+    "projectIdsOmitted": true,
+    "orgIdsOmitted": true,
+    "accountNamesOmitted": true,
+    "teamIdsOmitted": true,
+    "teamSlugsOmitted": true,
+    "tokenOmitted": true,
+    "tokenFlagForbidden": true,
+    "projectReadinessEvidencePathOmitted": true,
+    "envSyncEvidencePathOmitted": true,
+    "localPrivatePathsOmitted": true,
+    "cliOutputOmitted": true,
+    "liveRequiresApproval": true
+  }
+}

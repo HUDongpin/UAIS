@@ -1,0 +1,187 @@
+{
+  "reportId": "2026-06-28-teaching-operations-route-smoke-safe-id-release-gate-proof",
+  "generatedAt": "2026-06-28T09:48:45+08:00",
+  "sessionId": "S22",
+  "workstream": "Production reliability and release engineering",
+  "status": "local-release-gate-hardened",
+  "objective": "Require ordinary teaching production route-smoke evidence to prove unsafe path identifiers are rejected on export manifest download, gradebook release/rollback, and backup restore direct-call routes.",
+  "changedFiles": [
+    "scripts/production-e2e-release-gate.mjs",
+    "scripts/teaching-operations-route-smoke.mjs",
+    "scripts/local-production-e2e-smoke.mjs",
+    "tests/production-release-gate.test.ts",
+    "tests/teaching-operations-route-smoke.test.ts",
+    "tests/local-production-e2e-smoke.test.ts",
+    "tests/lrs-enterprise-instrumentation.test.ts"
+  ],
+  "codeReferences": [
+    {
+      "file": "scripts/production-e2e-release-gate.mjs",
+      "line": 294,
+      "summary": "The aggregate production release gate now requires unsafeExportManifestIdDenied in teaching operations route-smoke evidence."
+    },
+    {
+      "file": "scripts/production-e2e-release-gate.mjs",
+      "line": 328,
+      "summary": "The aggregate production release gate now requires unsafeGradebookReleaseObjectIdDenied and unsafeGradebookRollbackObjectIdDenied."
+    },
+    {
+      "file": "scripts/production-e2e-release-gate.mjs",
+      "line": 342,
+      "summary": "The aggregate production release gate now requires unsafeBackupRestoreIdDenied."
+    },
+    {
+      "file": "scripts/teaching-operations-route-smoke.mjs",
+      "line": 1404,
+      "summary": "The ordinary teaching route-smoke script probes an authenticated unsafe export manifest id direct call."
+    },
+    {
+      "file": "scripts/teaching-operations-route-smoke.mjs",
+      "line": 2334,
+      "summary": "Route-smoke output marks unsafeExportManifestIdDenied only when the response is a redacted 400 with matching trace header and no unsafe id echo."
+    },
+    {
+      "file": "scripts/teaching-operations-route-smoke.mjs",
+      "line": 2634,
+      "summary": "Route-smoke output marks gradebook unsafe release and rollback object ids as proved only through redacted 400 denials."
+    },
+    {
+      "file": "scripts/teaching-operations-route-smoke.mjs",
+      "line": 2729,
+      "summary": "Route-smoke output marks unsafeBackupRestoreIdDenied only when the backup restore route denies the unsafe id before restore planning."
+    },
+    {
+      "file": "scripts/teaching-operations-route-smoke.mjs",
+      "line": 4604,
+      "summary": "Shared unsafe path-id denial checker verifies HTTP 400, trace binding, redaction, and no unsafe id echo."
+    },
+    {
+      "file": "scripts/local-production-e2e-smoke.mjs",
+      "line": 184,
+      "summary": "Local production smoke proof summary stays aligned with the new export unsafe-id result."
+    },
+    {
+      "file": "scripts/local-production-e2e-smoke.mjs",
+      "line": 218,
+      "summary": "Local production smoke proof summary stays aligned with the new gradebook unsafe-id results."
+    },
+    {
+      "file": "scripts/local-production-e2e-smoke.mjs",
+      "line": 232,
+      "summary": "Local production smoke proof summary stays aligned with the new backup restore unsafe-id result."
+    },
+    {
+      "file": "tests/production-release-gate.test.ts",
+      "line": 7542,
+      "summary": "Regression proves stale teaching operations route-smoke evidence that omits unsafe path-id denial proof blocks release."
+    },
+    {
+      "file": "tests/teaching-operations-route-smoke.test.ts",
+      "line": 3123,
+      "summary": "Live route-smoke mock now exercises the unsafe export manifest route and returns a redacted 400."
+    },
+    {
+      "file": "tests/teaching-operations-route-smoke.test.ts",
+      "line": 5260,
+      "summary": "Live route-smoke expected results include unsafeExportManifestIdDenied."
+    },
+    {
+      "file": "tests/teaching-operations-route-smoke.test.ts",
+      "line": 5288,
+      "summary": "Live route-smoke expected results include unsafeBackupRestoreIdDenied."
+    },
+    {
+      "file": "tests/teaching-operations-route-smoke.test.ts",
+      "line": 5303,
+      "summary": "Live route-smoke expected results include gradebook unsafe object-id denials."
+    },
+    {
+      "file": "tests/lrs-enterprise-instrumentation.test.ts",
+      "line": 302,
+      "summary": "The LRS privacy-guard fixture now uses a long-lived app-session cookie so the test does not expire after 2026-06-27."
+    }
+  ],
+  "redGreenEvidence": [
+    {
+      "phase": "red",
+      "command": "./node_modules/.bin/vitest run tests/production-release-gate.test.ts -t \"unsafe path id denial proof\"",
+      "result": "failed-before-fix",
+      "observedFailure": "The release gate did not return teaching-operations-route-smoke-results-not-proven when stale route-smoke results omitted unsafe path-id denial proof."
+    },
+    {
+      "phase": "green",
+      "command": "./node_modules/.bin/vitest run tests/production-release-gate.test.ts -t \"unsafe path id denial proof\"",
+      "result": "passed",
+      "observedPass": "The focused gate regression passed after the new required result keys and accepted fixtures were added."
+    },
+    {
+      "phase": "followup-red",
+      "command": "./node_modules/.bin/vitest run",
+      "result": "failed-before-fixture-sync",
+      "observedFailure": "Full Vitest first found local-production proof summary drift, then an unrelated LRS app-session fixture had expired because it used the default 8-hour TTL from 2026-06-27T14:00:00Z."
+    },
+    {
+      "phase": "followup-green",
+      "command": "./node_modules/.bin/vitest run",
+      "result": "passed",
+      "observedPass": "69 test files and 1357 tests passed after syncing local-production proof summaries and extending only the LRS test fixture cookie TTL."
+    }
+  ],
+  "verification": [
+    {
+      "command": "./node_modules/.bin/vitest run tests/production-release-gate.test.ts -t \"unsafe path id denial proof\"",
+      "result": "passed",
+      "summary": "1 focused release-gate regression passed."
+    },
+    {
+      "command": "./node_modules/.bin/vitest run tests/production-release-gate.test.ts -t \"ordinary teaching|teaching operations route smoke|unsafe path id|export manifest|gradebook|backup restore\"",
+      "result": "passed",
+      "summary": "64 focused production release-gate tests passed."
+    },
+    {
+      "command": "./node_modules/.bin/vitest run tests/teaching-operations-route-smoke.test.ts",
+      "result": "passed",
+      "summary": "20 route-smoke evidence tests passed."
+    },
+    {
+      "command": "./node_modules/.bin/vitest run tests/local-production-e2e-smoke.test.ts",
+      "result": "passed",
+      "summary": "9 local-production harness tests passed."
+    },
+    {
+      "command": "./node_modules/.bin/vitest run tests/lrs-enterprise-instrumentation.test.ts",
+      "result": "passed",
+      "summary": "5 LRS instrumentation tests passed after fixture TTL repair."
+    },
+    {
+      "command": "./node_modules/.bin/vitest run tests/production-release-gate.test.ts",
+      "result": "passed",
+      "summary": "289 production release-gate tests passed."
+    },
+    {
+      "command": "./node_modules/.bin/vitest run",
+      "result": "passed",
+      "summary": "69 files passed, 1357 tests passed."
+    },
+    {
+      "command": "npm run lint",
+      "result": "passed",
+      "summary": "ESLint completed with exit code 0."
+    },
+    {
+      "command": "npm run build",
+      "result": "passed",
+      "summary": "Next.js production build completed with exit code 0."
+    }
+  ],
+  "securityPosture": {
+    "ordinaryTeachingRouteSmoke": "Production route-smoke evidence must now prove authenticated unsafe path identifiers return redacted 400 responses for export manifest download, gradebook release, gradebook rollback, and backup restore.",
+    "directCallRisk": "The aggregate release gate no longer accepts ordinary teaching route-smoke evidence that only proves happy-path readback and legacy auth denials while omitting authenticated unsafe-id denial probes.",
+    "redaction": "The route-smoke checker rejects evidence unless the response omits both the raw unsafe id and its encoded form.",
+    "localProductionParity": "The local production smoke proof summary now matches the aggregate release-gate required result list."
+  },
+  "aggregateEnterpriseGateImpact": {
+    "cleared": false,
+    "summary": "This closes a production-gate coverage gap for ordinary teaching direct-call safe-id proof. The full enterprise gate still requires same-run owner-approved production evidence for env placement, deployment, storage, ordinary teaching route/browser smokes, app-auth readiness, browser workflow smoke, and live provider generation."
+  }
+}

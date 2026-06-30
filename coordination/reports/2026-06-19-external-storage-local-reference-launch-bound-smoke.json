@@ -1,0 +1,68 @@
+{
+  "target": "external-storage-local-reference-launch-bound-smoke",
+  "date": "2026-06-19",
+  "responsibleSession": "S22",
+  "status": "advanced-local-reference-evidence",
+  "scope": "Bind local Docker external-storage smoke evidence to launch-contract-proved local readiness without weakening production gates.",
+  "changes": [
+    {
+      "file": "scripts/external-storage-smoke.mjs",
+      "summary": "Allows local-reference smoke planning to accept live local readiness evidence that is blocked only because it is not production, while still requiring matching storage fingerprint and proved production launch contract."
+    },
+    {
+      "file": "tests/external-storage-smoke.test.ts",
+      "summary": "Adds RED/GREEN coverage for local-reference smoke readiness binding with a persistent-volume launch contract proof."
+    }
+  ],
+  "newEvidence": {
+    "readiness": "coordination/reports/2026-06-19-external-storage-service-readiness-docker-local-production-launch-bound.json",
+    "smoke": "coordination/reports/2026-06-19-external-storage-smoke-docker-local-launch-bound.json",
+    "releaseGate": "coordination/reports/2026-06-19-production-e2e-release-gate-current-linked-vercel-preflight-docker-storage-launch-bound.json",
+    "ownerChecklist": "coordination/reports/2026-06-19-production-owner-decision-checklist-current-linked-vercel-preflight-docker-storage-launch-bound.json"
+  },
+  "observedEvidence": {
+    "dockerContainerCleanedUp": true,
+    "localReadinessStatus": "blocked",
+    "localReadinessBlockedReason": "external-storage-service-readiness-not-production",
+    "localReadinessLaunchContract": "ready",
+    "localSmokeStatus": "passed",
+    "localSmokeReadinessBinding": "local-reference-matched",
+    "localSmokeResults": [
+      "s22-external-storage-health",
+      "s12-external-teacher-ownership-merge",
+      "s12-external-teacher-ownership-read",
+      "s24-external-lifecycle-audit-append",
+      "s24-external-lifecycle-audit-read"
+    ],
+    "productionReleaseGateStatus": "blocked",
+    "productionGateStillBlocksOn": [
+      "deployed-teacher-workflow-page-not-live-passed",
+      "deployed-learning-ppt-playback-not-live-passed",
+      "vercel-env-not-applied",
+      "teacher-auth-provider-readiness-not-live-ready",
+      "external-storage-service-readiness-not-live-ready",
+      "vercel-production-deployment-not-proven",
+      "deployment-route-smoke-not-live-passed",
+      "external-storage-smoke-not-production",
+      "manual-ppt-playback-not-accepted"
+    ]
+  },
+  "redGreen": {
+    "red": "npm run test -- tests/external-storage-smoke.test.ts -t \"allows local reference smoke planning\" failed with external-storage-service-readiness-evidence-not-live-ready before implementation.",
+    "green": "npm run test -- tests/external-storage-smoke.test.ts -t \"allows local reference smoke planning\" passed after implementation."
+  },
+  "safety": {
+    "secretsRedacted": true,
+    "fixtureTokenOnly": true,
+    "serviceUrlOmittedFromEvidence": true,
+    "responseBodiesOmitted": true,
+    "localPrivatePathsOmitted": true,
+    "productionReadinessNotClaimed": true
+  },
+  "nextRequiredForProduction": [
+    "Owner-approved remote HTTPS external-storage service endpoint.",
+    "Owner-approved Vercel env apply evidence matching the storage service fingerprint.",
+    "Live production readiness evidence for that remote service.",
+    "Live production external-storage smoke bound to the production readiness evidence and release run."
+  ]
+}

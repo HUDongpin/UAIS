@@ -1,0 +1,99 @@
+{
+  "reportDate": "2026-06-21",
+  "sessionIds": ["S22", "S12"],
+  "target": "external-storage-www-uais-top-health-blocker-and-contract-fix",
+  "environment": "production",
+  "status": "blocked-with-local-contract-fix",
+  "productionEndpointEvidence": {
+    "baseUrl": "https://www.uais.top",
+    "checks": [
+      {
+        "route": "/api/external-storage/healthz",
+        "method": "HEAD",
+        "httpStatus": 500,
+        "server": "Vercel",
+        "interpretation": "The deployed health route exists but currently fails before returning the external-storage readiness contract."
+      },
+      {
+        "route": "/api/external-storage/teacher-ai-ownership/teacher-kang",
+        "method": "GET",
+        "httpStatus": 503,
+        "bodyShape": {
+          "error": "External storage service access token is not configured.",
+          "redaction": "present"
+        },
+        "interpretation": "The deployed ownership route exists but the service access token is not configured."
+      },
+      {
+        "route": "/api/external-storage/qwen-voice-lifecycle-audit",
+        "method": "GET",
+        "httpStatus": 503,
+        "bodyShape": {
+          "error": "External storage service access token is not configured.",
+          "redaction": "present"
+        },
+        "interpretation": "The deployed lifecycle audit route exists but the service access token is not configured."
+      }
+    ]
+  },
+  "rootCause": {
+    "currentDeployment": [
+      "UAIS_EXTERNAL_STORAGE_ACCESS_TOKEN is not configured on the deployed external storage route.",
+      "The deployed health route can fail before producing the redacted readiness JSON when the durable backing store probe throws.",
+      "Existing Vercel env inventory evidence still shows required production/preview env variables missing."
+    ],
+    "codeContractGap": "The Next-hosted health handler caught write/read/delete failures but not mkdir/path-probe failures, which can surface as an empty Vercel 500 instead of a redacted blocked health contract."
+  },
+  "localContractFix": {
+    "files": [
+      "src/lib/server/external-storage-route-service.ts",
+      "tests/external-storage-next-route.test.ts"
+    ],
+    "behavior": "The health probe now catches durable backing store probe failures before returning a redacted 503 contract with durableBackingStore.status=blocked.",
+    "productionEffect": "Requires a new deployment before www.uais.top can exhibit the fixed health contract."
+  },
+  "tddEvidence": {
+    "red": {
+      "command": "npm run test -- tests/external-storage-next-route.test.ts",
+      "expectedFailure": "EACCES from probeDurableBackingStore escaped the health handler instead of returning a 503 health contract."
+    },
+    "green": {
+      "command": "npm run test -- tests/external-storage-next-route.test.ts",
+      "result": "1 file / 2 tests passed"
+    }
+  },
+  "regressionEvidence": [
+    {
+      "command": "npm run test -- tests/external-storage-next-route.test.ts tests/external-storage-service-readiness.test.ts tests/external-storage-smoke.test.ts tests/external-storage-service.test.ts",
+      "result": "4 files / 25 tests passed"
+    },
+    {
+      "command": "npm run test -- tests/production-release-gate.test.ts",
+      "result": "1 file / 162 tests passed"
+    },
+    {
+      "command": "npm run lint",
+      "result": "passed"
+    },
+    {
+      "command": "npm run test",
+      "result": "44 files / 605 tests passed"
+    },
+    {
+      "command": "npm run build",
+      "result": "passed"
+    }
+  ],
+  "remainingBlockers": [
+    "The local fix is not deployed to www.uais.top yet.",
+    "Vercel env write/apply remains blocked by missing VERCEL_TOKEN and local Vercel CLI OIDC/TLS failure.",
+    "Production external storage still needs a remote HTTPS service with a strong access token and durable backing store.",
+    "A production external-storage write/read merge smoke is still not complete."
+  ],
+  "redaction": {
+    "secrets": "omitted",
+    "tokens": "omitted",
+    "localPaths": "omitted",
+    "responseBodies": "summarized"
+  }
+}

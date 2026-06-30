@@ -1,0 +1,107 @@
+{
+  "schemaVersion": "uais-enterprise-evidence-v1",
+  "generatedAt": "2026-06-27T15:43:00+08:00",
+  "responsibleSession": "S12",
+  "status": "contract-hardened",
+  "releaseGateEligible": false,
+  "scope": {
+    "surface": "/api/teaching/course-cover",
+    "backend": "teaching-course-assets-external-store",
+    "runtime": "production",
+    "storagePolicy": "external-redacted-teaching-course-cover-assets"
+  },
+  "enterpriseGapClosed": {
+    "category": "production-persistence-read-before-provider-mutation",
+    "description": "Production course-cover generation now preflights external course-assets readback before creating a Qwen image client or invoking provider generation.",
+    "failClosedBehavior": [
+      "returns 502 when production external course-assets readback omits managed database adapter evidence",
+      "does not call Qwen image generation when the production asset store read acknowledgement is not enterprise-ready",
+      "does not write generated cover assets to local JSON fallback after a failed read preflight",
+      "requires production external course-assets readback to include a snapshot revision for concurrency-controlled writes"
+    ],
+    "redaction": {
+      "secrets": "omitted",
+      "localFiles": "omitted",
+      "assets": "ids-only"
+    }
+  },
+  "filesChanged": [
+    "src/app/api/teaching/course-cover/route.ts",
+    "src/lib/server/teaching-course-assets-external-store.ts",
+    "tests/teaching-course-cover-api.test.ts",
+    "tests/teaching-course-management-api.test.ts",
+    "coordination/reports/2026-06-27-teaching-course-assets-production-read-preflight.json",
+    "coordination/reports/2026-06-27-enterprise-runthrough-current-gate-refresh.md",
+    "coordination/reports/2026-06-26-current-enterprise-evidence-path-manifest.md",
+    "coordination/session-logs/2026-06-27-S12.md"
+  ],
+  "redGreenEvidence": [
+    {
+      "phase": "red",
+      "command": "npx vitest run tests/teaching-course-cover-api.test.ts --reporter=dot -t \"fails closed before Qwen when production cover asset readback lacks managed database adapter proof\"",
+      "result": "failed-before-implementation",
+      "observedFailure": "Expected 502 before Qwen but received 200, proving the provider path could run before external asset readback proof."
+    },
+    {
+      "phase": "green",
+      "command": "npx vitest run tests/teaching-course-cover-api.test.ts --reporter=dot -t \"fails closed before Qwen when production cover asset readback lacks managed database adapter proof\"",
+      "result": "passed-after-implementation",
+      "tests": {
+        "passed": 1,
+        "skipped": 17
+      }
+    }
+  ],
+  "verification": [
+    {
+      "command": "npx vitest run tests/teaching-course-cover-api.test.ts --reporter=dot",
+      "result": "passed",
+      "tests": {
+        "passed": 18
+      }
+    },
+    {
+      "command": "npx vitest run tests/teaching-course-management-api.test.ts --reporter=dot -t \"uses external cover asset storage for deployed-production course creation with a generated cover\"",
+      "result": "passed",
+      "tests": {
+        "passed": 1,
+        "skipped": 43
+      }
+    },
+    {
+      "command": "npm run test",
+      "result": "passed",
+      "tests": {
+        "filesPassed": 66,
+        "passed": 1270
+      }
+    },
+    {
+      "command": "npm run lint",
+      "result": "passed"
+    },
+    {
+      "command": "npm run build",
+      "result": "passed"
+    },
+    {
+      "command": "git diff --check",
+      "result": "passed"
+    }
+  ],
+  "notRun": [
+    "owner-approved Vercel env apply",
+    "live production app-auth readiness",
+    "production deployment",
+    "production course-cover route smoke",
+    "teaching course-management route smoke",
+    "external-storage live smoke",
+    "live DashScope/Qwen provider generation"
+  ],
+  "remainingEnterpriseBlockers": [
+    "aggregate production release gate remains blocked",
+    "external-storage service readiness still needs live teaching-course-assets schema and managed database adapter proof",
+    "same-release-run production route and browser smokes remain missing",
+    "Docker daemon remains unavailable for local external-storage container build proof"
+  ]
+}

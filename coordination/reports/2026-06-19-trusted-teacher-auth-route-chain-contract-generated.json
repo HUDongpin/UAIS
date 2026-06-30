@@ -1,0 +1,50 @@
+{
+  "target": "trusted-teacher-auth-route-chain-contract",
+  "status": "proved-locally",
+  "responsibleSessions": [
+    "S12",
+    "S22"
+  ],
+  "scope": "local-route-contract-regression",
+  "command": {
+    "status": "passed",
+    "stdoutOmitted": true,
+    "stderrOmitted": true
+  },
+  "evidence": {
+    "routeChain": [
+      "/api/ai/teacher-auth/issue",
+      "/api/ai/session"
+    ],
+    "authProvider": "trusted-cookie-issuer",
+    "providerContract": "production-ready-with-fixture-secrets",
+    "issuerProof": "signed-admin-ai-access-plus-trusted-issuer-proof",
+    "sessionCookiePair": [
+      "uais_teacher_auth_claims",
+      "uais_teacher_auth_signature"
+    ],
+    "downstreamAiSession": "scoped-teacher-ai-session-issued",
+    "workflowAction": "ppt-narration-submit",
+    "scopes": [
+      "teacherIds",
+      "courseIds",
+      "sampleAssetIds",
+      "pptAssetIds",
+      "voiceRefIds"
+    ]
+  },
+  "releaseImpact": {
+    "localTrustedCookieRouteWiring": "proved",
+    "productionTeacherAuthReadiness": "still-blocked-without-owner-approved-vercel-env-and-live-route-smoke",
+    "releaseGateEligible": false
+  },
+  "blockedReasons": [],
+  "safety": {
+    "secretsRedacted": true,
+    "cookieValuesOmitted": true,
+    "sessionIdsOmitted": true,
+    "commandOutputOmitted": true,
+    "localPrivatePathsOmitted": true,
+    "productionMutationPerformed": false
+  }
+}

@@ -1,0 +1,140 @@
+{
+  "target": "external-storage-transient-retry-hardening",
+  "date": "2026-06-20",
+  "responsibleSession": "S22",
+  "status": "completed-for-harness-hardening",
+  "overallGoalStatus": "active-incomplete",
+  "summary": {
+    "change": "External storage service readiness and external storage write/read smoke now emit a redacted networkRetryPolicy and retry request-level fetch exceptions before evaluating HTTP status or response-shape evidence.",
+    "readinessScope": "scripts/external-storage-service-readiness.mjs retries /healthz request exceptions and records networkAttempts on health evidence.",
+    "smokeScope": "scripts/external-storage-smoke.mjs retries each health, ownership merge/read, and lifecycle audit request independently and records networkAttempts on each result.",
+    "strictnessPreserved": "HTTP failures, missing cache-control, missing production service identity, non-ready durable backing-store proof, invalid ownership merge/read shape, invalid lifecycle audit shape, and production release blockers remain hard failures."
+  },
+  "filesChanged": [
+    "scripts/external-storage-service-readiness.mjs",
+    "scripts/external-storage-smoke.mjs",
+    "tests/external-storage-service-readiness.test.ts",
+    "tests/external-storage-smoke.test.ts",
+    "coordination/reports/2026-06-20-external-storage-transient-retry-hardening.json",
+    "coordination/session-logs/2026-06-20-S22.md"
+  ],
+  "networkRetryPolicy": {
+    "maxAttempts": 3,
+    "perAttemptTimeoutMs": 10000,
+    "retryOn": [
+      "request-error"
+    ],
+    "valuesRedacted": true
+  },
+  "evidenceContract": {
+    "readinessHealthField": "health.networkAttempts",
+    "smokePerResultField": "results[].networkAttempts",
+    "networkErrorField": "networkError",
+    "networkErrorRedaction": "error class only; no endpoint URL, token, response body, local path, or error message",
+    "retryScope": "request-level exceptions only",
+    "responseBodiesOmitted": true,
+    "secretsRedacted": true
+  },
+  "tests": [
+    {
+      "phase": "RED",
+      "command": "npm run test -- tests/external-storage-service-readiness.test.ts -t \"retries transient health request failures\"",
+      "result": "failed-before-implementation",
+      "observedFailure": "readiness produced no JSON evidence after first destroyed /healthz socket"
+    },
+    {
+      "phase": "RED",
+      "command": "npm run test -- tests/external-storage-smoke.test.ts -t \"retries transient storage smoke request failures\"",
+      "result": "failed-before-implementation",
+      "observedFailure": "storage smoke exited 1 after first destroyed /healthz socket"
+    },
+    {
+      "phase": "GREEN",
+      "command": "npm run test -- tests/external-storage-service-readiness.test.ts -t \"retries transient health request failures\"",
+      "result": "passed",
+      "count": "1 file / 1 targeted test"
+    },
+    {
+      "phase": "GREEN",
+      "command": "npm run test -- tests/external-storage-smoke.test.ts -t \"retries transient storage smoke request failures\"",
+      "result": "passed",
+      "count": "1 file / 1 targeted test"
+    },
+    {
+      "phase": "storage-regression",
+      "command": "npm run test -- tests/external-storage-service-readiness.test.ts tests/external-storage-smoke.test.ts tests/production-release-gate.test.ts",
+      "result": "passed",
+      "count": "3 files / 167 tests"
+    },
+    {
+      "phase": "full-suite",
+      "command": "npm run test",
+      "result": "passed",
+      "count": "40 files / 549 tests"
+    },
+    {
+      "phase": "lint",
+      "command": "npm run lint",
+      "result": "passed"
+    },
+    {
+      "phase": "build",
+      "command": "npm run build",
+      "result": "passed"
+    },
+    {
+      "phase": "syntax",
+      "command": "node --check scripts/external-storage-service-readiness.mjs",
+      "result": "passed"
+    },
+    {
+      "phase": "syntax",
+      "command": "node --check scripts/external-storage-smoke.mjs",
+      "result": "passed"
+    },
+    {
+      "phase": "dry-run-shape",
+      "command": "node scripts/external-storage-service-readiness.mjs --dry-run --environment production",
+      "result": "passed",
+      "observed": "dry-run includes networkRetryPolicy and remains blocked on missing external storage base URL/live readiness"
+    },
+    {
+      "phase": "dry-run-shape",
+      "command": "node scripts/external-storage-smoke.mjs --dry-run --environment production",
+      "result": "passed",
+      "observed": "dry-run includes networkRetryPolicy and remains blocked on missing external storage base URL/access token/teacher id"
+    }
+  ],
+  "notRun": [
+    "owner-approved remote HTTPS external-storage service deployment",
+    "Vercel env apply",
+    "live production external-storage readiness",
+    "live production external-storage write/read smoke",
+    "Vercel production deployment",
+    "manual WPS/PowerPoint PPT playback acceptance"
+  ],
+  "remainingReleaseBlockers": [
+    "deployed-teacher-workflow-page-not-live-passed",
+    "deployed-learning-ppt-playback-not-live-passed",
+    "vercel-env-not-applied",
+    "teacher-auth-provider-readiness-not-live-ready",
+    "external-storage-service-readiness-not-live-ready",
+    "vercel-production-deployment-not-proven",
+    "deployment-route-smoke-not-live-passed",
+    "external-storage-smoke-not-production",
+    "manual-ppt-playback-not-accepted"
+  ],
+  "ownerDecisionsNeeded": [
+    "approve and provide production trusted teacher auth/session provider configuration source",
+    "provision or approve a remote HTTPS external durable storage service",
+    "approve Vercel env apply and production deployment smoke chain",
+    "complete human PPT/WPS/PowerPoint playback acceptance"
+  ],
+  "safety": {
+    "realSecretsRead": false,
+    "realSecretsPrinted": false,
+    "envLocalInspected": false,
+    "responseBodiesOmitted": true,
+    "valuesRedacted": true
+  }
+}

@@ -1,0 +1,85 @@
+{
+  "generatedAt": "2026-06-21T12:47:13.840Z",
+  "baseUrl": "https://www.uais.top/api/external-storage",
+  "environment": "production",
+  "deploymentDomain": "www.uais.top",
+  "token": {
+    "source": ".env.local",
+    "valueRedacted": true
+  },
+  "requests": {
+    "healthz": {
+      "httpStatus": 200,
+      "ok": true,
+      "shape": {
+        "status": "ok",
+        "target": "uais-external-storage-production-service",
+        "apiContractVersion": "uais-external-storage-v1",
+        "serviceMode": "production",
+        "durableBackingStoreStatus": "ready",
+        "accessTokenStatus": "present",
+        "redaction": "present"
+      }
+    },
+    "mergeTeacherKang": {
+      "httpStatus": 200,
+      "ok": true,
+      "body": {
+        "teacherId": "teacher-kang",
+        "status": "merged",
+        "storagePolicy": "external-redacted-teacher-ai-ownership-merge",
+        "storageWritePolicy": "external-atomic-merge",
+        "responsibleSession": "S12",
+        "updatedAt": "2026-06-21T12:47:10.276Z",
+        "redaction": {
+          "secrets": "omitted",
+          "localFiles": "omitted",
+          "assets": "ids-only"
+        }
+      }
+    },
+    "readTeacherKang": {
+      "httpStatus": 200,
+      "ok": true,
+      "counts": {
+        "courseIds": 1,
+        "sampleAssets": 1,
+        "pptAssets": 1,
+        "clonedVoiceRefs": 1,
+        "audioManifests": 1
+      },
+      "ownership": {
+        "teacherId": "teacher-kang",
+        "courseIds": [
+          "elementary-math-research"
+        ],
+        "sampleAssets": [
+          {
+            "sampleAssetId": "teacher-kang-10s-sample",
+            "courseId": "elementary-math-research"
+          }
+        ],
+        "pptAssets": [
+          {
+            "pptAssetId": "kang-xia-ppt-19",
+            "courseId": "elementary-math-research"
+          }
+        ],
+        "clonedVoiceRefs": [
+          {
+            "voiceRefId": "qwen-voice-ref-teacher-kang-10s-sample",
+            "sampleAssetId": "teacher-kang-10s-sample"
+          }
+        ],
+        "audioManifests": [
+          {
+            "audioManifestId": "audio-manifest-kang-xia-ppt-19",
+            "courseId": "elementary-math-research",
+            "pptAssetId": "kang-xia-ppt-19",
+            "voiceRefId": "qwen-voice-ref-teacher-kang-10s-sample"
+          }
+        ]
+      }
+    }
+  }
+}

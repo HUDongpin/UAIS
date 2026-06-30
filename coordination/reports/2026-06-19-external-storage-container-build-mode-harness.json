@@ -1,0 +1,77 @@
+{
+  "target": "external-storage-container-build-mode-harness",
+  "status": "harness-hardened",
+  "responsibleSession": "S22",
+  "scope": "external-storage-container-build-readiness",
+  "summary": {
+    "change": "Added approval-gated container build mode to the external storage container readiness harness.",
+    "dryRunBehavior": "Dockerfile, dockerignore, Docker client, and Docker daemon checks remain redacted and do not build an image.",
+    "buildBehavior": "docker build is invoked only with --build --approved --image-tag TAG.",
+    "outputPolicy": "Image tags, Docker output, local paths, and sensitive-looking values are omitted from JSON evidence."
+  },
+  "currentHostEvidence": {
+    "report": "coordination/reports/2026-06-19-external-storage-container-readiness-current.json",
+    "mode": "dry-run",
+    "status": "blocked",
+    "dockerClient": "present",
+    "dockerDaemon": "unavailable",
+    "dockerfileContract": "passed",
+    "dockerignoreSecretExclusion": "passed",
+    "dockerignoreGeneratedOutputExclusion": "passed",
+    "buildInvoked": false,
+    "blockedReasons": ["docker-daemon-unavailable"]
+  },
+  "checks": [
+    {
+      "command": "npm run test -- tests/external-storage-container-build-readiness.test.ts",
+      "status": "passed",
+      "files": 1,
+      "tests": 5
+    },
+    {
+      "command": "node --check scripts/external-storage-container-build-readiness.mjs",
+      "status": "passed"
+    },
+    {
+      "command": "node scripts/external-storage-container-build-readiness.mjs --dry-run --image-tag <redacted>",
+      "status": "passed",
+      "report": "coordination/reports/2026-06-19-external-storage-container-readiness-current.json"
+    },
+    {
+      "command": "npm run test -- tests/external-storage-container-build-readiness.test.ts tests/external-storage-service-container.test.ts tests/external-storage-service-readiness.test.ts tests/external-storage-service.test.ts tests/external-storage-service-production-launcher.test.ts",
+      "status": "passed",
+      "files": 5,
+      "tests": 21
+    },
+    {
+      "command": "npm run lint",
+      "status": "passed"
+    },
+    {
+      "command": "npm run test",
+      "status": "passed",
+      "files": 35,
+      "tests": 476
+    }
+  ],
+  "releaseImpact": {
+    "containerBuildHarness": "ready-for-approved-build-attempt",
+    "localImageBuild": "not-proven-docker-daemon-unavailable",
+    "remoteProductionStorageService": "not-proven",
+    "releaseGateEligible": false
+  },
+  "remainingBlockers": [
+    "Docker daemon is unavailable on the current host, so no real local image build was performed.",
+    "No owner-approved remote HTTPS external storage service endpoint exists yet.",
+    "No Vercel env apply evidence binds the storage endpoint/fingerprint yet.",
+    "No production external-storage smoke has run against a remote service."
+  ],
+  "safety": {
+    "secretsRedacted": true,
+    "imageTagsOmitted": true,
+    "dockerOutputOmitted": true,
+    "localPrivatePathsOmitted": true,
+    "productionMutationPerformed": false,
+    "vercelMutationPerformed": false
+  }
+}

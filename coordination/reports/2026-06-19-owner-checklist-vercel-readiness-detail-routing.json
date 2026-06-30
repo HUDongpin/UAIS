@@ -1,0 +1,69 @@
+{
+  "target": "owner-checklist-vercel-readiness-detail-routing",
+  "date": "2026-06-19",
+  "responsibleSession": "S22",
+  "status": "hardened",
+  "objective": "Route detailed Vercel CLI/auth/project readiness, Vercel env-sync, and production deployment blockers to the owner decisions that can unblock them instead of collapsing them into the generic production release-run decision.",
+  "changedFiles": [
+    "scripts/production-owner-decision-checklist.mjs",
+    "tests/production-owner-decision-checklist.test.ts",
+    "coordination/reports/2026-06-19-production-owner-decision-checklist-current-auth-storage-launch-bound-readiness.json"
+  ],
+  "newRoutingCoverage": {
+    "vercelProjectSelection": [
+      "vercel-cli-missing",
+      "vercel-auth-missing",
+      "vercel-project-readiness-evidence-missing",
+      "vercel-project-readiness-evidence-target-mismatch",
+      "vercel-project-readiness-not-ready",
+      "vercel-project-readiness-redaction-not-proven",
+      "vercelignore-upload-hygiene-incomplete"
+    ],
+    "vercelEnvDeployAndSmokeChain": [
+      "vercel-env-evidence-missing",
+      "vercel-env-evidence-target-mismatch",
+      "vercel-env-target-coverage-not-proven",
+      "vercel-env-local-only-smoke-exclusion-not-proven",
+      "vercel-env-auth-provider-mode-not-proven",
+      "vercel-env-oidc-endpoint-security-not-proven",
+      "vercel-env-external-storage-endpoint-not-proven",
+      "vercel-env-external-storage-fingerprint-not-proven",
+      "vercel-env-secret-strength-not-proven",
+      "vercel-env-project-readiness-not-proven",
+      "vercel-env-apply-preflight-not-proven",
+      "vercel-production-deployment-evidence-target-mismatch",
+      "vercel-production-deployment-not-production",
+      "vercel-production-deployment-origin-not-remote-https",
+      "vercel-production-deployment-redaction-not-proven"
+    ]
+  },
+  "evidence": {
+    "redTest": {
+      "command": "npm run test -- tests/production-owner-decision-checklist.test.ts -t \"detailed Vercel project env and deployment blockers\"",
+      "statusBeforeImplementation": "failed",
+      "failureMode": "detailed Vercel blockers were only retained by production-release-run and were missing from project/env/deploy owner decisions"
+    },
+    "greenTest": {
+      "command": "npm run test -- tests/production-owner-decision-checklist.test.ts -t \"detailed Vercel project env and deployment blockers\"",
+      "statusAfterImplementation": "passed"
+    },
+    "focusedSuite": {
+      "command": "npm run test -- tests/production-owner-decision-checklist.test.ts",
+      "result": "1 file / 12 tests passed"
+    }
+  },
+  "currentOwnerChecklist": {
+    "path": "coordination/reports/2026-06-19-production-owner-decision-checklist-current-auth-storage-launch-bound-readiness.json",
+    "status": "owner-decisions-required",
+    "releaseGateStatus": "blocked"
+  },
+  "safety": {
+    "valuesRedacted": true,
+    "secretsOmitted": true,
+    "projectIdsOmitted": true,
+    "deploymentUrlsOmitted": true,
+    "localPrivatePathsOmitted": true,
+    "productionMutationPerformed": false,
+    "vercelMutationPerformed": false
+  }
+}

@@ -1,0 +1,196 @@
+{
+  "target": "vercel-env-sync",
+  "mode": "apply",
+  "project": "uais",
+  "responsibleSession": "S19",
+  "deploymentScope": "teacher-auth",
+  "releaseRunId": "uais-release-2026-06-20-teacher-auth-scope",
+  "authProviderMode": "trusted-cookie-issuer",
+  "externalStorageEndpoint": {
+    "status": "missing",
+    "endpointClass": "missing",
+    "valueRedacted": true
+  },
+  "externalStorageServiceFingerprint": {
+    "status": "missing",
+    "source": "origin",
+    "valueRedacted": true
+  },
+  "secretStrength": {
+    "minimumLength": 32,
+    "valuesRedacted": true,
+    "checks": [
+      {
+        "name": "UAIS_LIVE_AI_APPROVAL_TOKEN",
+        "status": "sufficient",
+        "valueRedacted": true
+      },
+      {
+        "name": "UAIS_AI_ACCESS_SIGNING_SECRET",
+        "status": "sufficient",
+        "valueRedacted": true
+      },
+      {
+        "name": "UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET",
+        "status": "sufficient",
+        "valueRedacted": true
+      },
+      {
+        "name": "UAIS_TEACHER_AUTH_ISSUER_SECRET",
+        "status": "sufficient",
+        "valueRedacted": true
+      }
+    ]
+  },
+  "projectReadinessEvidenceStatus": "ready",
+  "targets": [
+    "production",
+    "preview"
+  ],
+  "entries": [
+    {
+      "name": "UAIS_LIVE_AI_APPROVAL_TOKEN",
+      "provider": "uais",
+      "roles": [],
+      "valueType": "secret",
+      "status": "present",
+      "requiredForSelectedAuthProvider": false,
+      "serverOnly": true,
+      "actions": [
+        "set-production",
+        "set-preview"
+      ]
+    },
+    {
+      "name": "UAIS_AI_ACCESS_SIGNING_SECRET",
+      "provider": "uais",
+      "roles": [],
+      "valueType": "secret",
+      "status": "present",
+      "requiredForSelectedAuthProvider": false,
+      "serverOnly": true,
+      "actions": [
+        "set-production",
+        "set-preview"
+      ]
+    },
+    {
+      "name": "UAIS_TEACHER_AUTH_PROVIDER",
+      "provider": "uais",
+      "roles": [],
+      "valueType": "auth-provider",
+      "status": "present",
+      "requiredForSelectedAuthProvider": true,
+      "serverOnly": true,
+      "actions": [
+        "set-production",
+        "set-preview"
+      ]
+    },
+    {
+      "name": "UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET",
+      "provider": "uais",
+      "roles": [],
+      "valueType": "secret",
+      "status": "present",
+      "requiredForSelectedAuthProvider": true,
+      "serverOnly": true,
+      "actions": [
+        "set-production",
+        "set-preview"
+      ]
+    },
+    {
+      "name": "UAIS_TEACHER_AUTH_ISSUER_SECRET",
+      "provider": "uais",
+      "roles": [],
+      "valueType": "secret",
+      "status": "present",
+      "requiredForSelectedAuthProvider": true,
+      "serverOnly": true,
+      "actions": [
+        "set-production",
+        "set-preview"
+      ]
+    }
+  ],
+  "localOnlyEntries": [
+    {
+      "name": "UAIS_TEACHER_AUTH_OIDC_SMOKE_BEARER_TOKEN",
+      "provider": "uais",
+      "reason": "approved-live-route-smoke-only",
+      "status": "missing",
+      "localOnly": true,
+      "deploymentAction": "ignored"
+    },
+    {
+      "name": "UAIS_TEACHER_AUTH_OIDC_SMOKE_TEACHER_ID",
+      "provider": "uais",
+      "reason": "approved-live-route-smoke-only",
+      "status": "missing",
+      "localOnly": true,
+      "deploymentAction": "ignored"
+    }
+  ],
+  "safety": {
+    "valuesRedacted": true,
+    "applyRequiresApproval": true,
+    "applyRequiresLinkedProject": true,
+    "applyRequiresProjectReadiness": true,
+    "localOnlySmokeEnvNotSynced": true
+  },
+  "localSourceSummary": {
+    "status": "ready",
+    "valuesRedacted": true,
+    "deploymentScope": "teacher-auth",
+    "deploymentEntries": {
+      "total": 5,
+      "present": 5,
+      "missing": 0,
+      "missingNames": []
+    },
+    "selectedAuthProvider": {
+      "mode": "trusted-cookie-issuer",
+      "requiredPresent": 3,
+      "requiredMissing": 0,
+      "missingRequiredNames": []
+    },
+    "productionSecretStrength": {
+      "minimumLength": 32,
+      "sufficient": 4,
+      "weak": 0,
+      "missing": 0,
+      "weakNames": [],
+      "missingNames": []
+    },
+    "externalStorage": {
+      "endpointClass": "not-required-for-scope",
+      "fingerprintStatus": "not-required-for-scope"
+    },
+    "localOnlyEntries": {
+      "total": 2,
+      "present": 0,
+      "ignored": 2
+    }
+  },
+  "status": "applied",
+  "blockedReasons": [],
+  "applyPreflight": {
+    "status": "passed",
+    "blockedReasons": [],
+    "valuesRedacted": true,
+    "cliSafeToInvoke": true
+  },
+  "applySummary": {
+    "status": "applied",
+    "appliedEntries": 5,
+    "appliedActions": 10,
+    "appliedByTarget": {
+      "production": 5,
+      "preview": 5
+    },
+    "localOnlyEntriesSkipped": 2,
+    "valuesRedacted": true,
+    "apiOutputOmitted": true
+  }
+}

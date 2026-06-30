@@ -1,0 +1,71 @@
+{
+  "target": "route-smoke-target-mismatch-refresh",
+  "status": "completed",
+  "date": "2026-06-19",
+  "responsibleSession": "S22",
+  "objective": "Replace the stale route-smoke guard artifact in the aggregate release gate with a correctly shaped deployment-route-smoke evidence artifact.",
+  "changedEvidence": [
+    {
+      "file": "coordination/reports/2026-06-19-route-smoke-current-linked-vercel-preflight-dry-run.json",
+      "summary": "New dry-run route-smoke evidence with target deployment-route-smoke, release-run id, Vercel deployment binding, and teacher-auth readiness binding."
+    },
+    {
+      "file": "coordination/reports/2026-06-19-production-e2e-release-gate-current-linked-vercel-preflight-docker-storage.json",
+      "summary": "Refreshed aggregate gate now reports deployment-route-smoke-not-live-passed instead of deployment-route-smoke-evidence-target-mismatch."
+    },
+    {
+      "file": "coordination/reports/2026-06-19-production-owner-decision-checklist-current-linked-vercel-preflight-docker-storage.json",
+      "summary": "Refreshed owner checklist now carries the real route-smoke blocker rather than a target-mismatch blocker."
+    }
+  ],
+  "routeSmokeEvidence": {
+    "target": "deployment-route-smoke",
+    "mode": "dry-run",
+    "environment": "production",
+    "status": "blocked",
+    "blockedReasons": [
+      "missing-UAIS_DEPLOYMENT_BASE_URL",
+      "missing-UAIS_AI_ACCESS_SIGNING_SECRET",
+      "missing-UAIS_TEACHER_AUTH_PROVIDER",
+      "missing-UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET",
+      "missing-UAIS_TEACHER_AUTH_ISSUER_SECRET",
+      "vercel-production-deployment-evidence-not-deployed",
+      "teacher-auth-provider-readiness-evidence-not-live-ready"
+    ],
+    "bindings": {
+      "vercelProductionDeployment": "not-deployed",
+      "teacherAuthProviderReadiness": "not-live-ready",
+      "releaseRunId": "matched"
+    }
+  },
+  "releaseGateResult": {
+    "status": "blocked",
+    "routeSmokeBlockedReason": "deployment-route-smoke-not-live-passed",
+    "removedBlockedReason": "deployment-route-smoke-evidence-target-mismatch"
+  },
+  "verification": {
+    "commandsPassed": [
+      "npm run test -- tests/ai-env-and-smoke.test.ts -t \"route smoke\"",
+      "npm run test -- tests/production-release-gate.test.ts tests/production-owner-decision-checklist.test.ts",
+      "JSON parse check for refreshed route-smoke, release-gate, and owner-checklist evidence"
+    ],
+    "redactionScan": {
+      "status": "passed",
+      "matchedLeakPatterns": 0
+    }
+  },
+  "remainingBlockers": [
+    "route smoke is dry-run only because deployment URL and production env are not available",
+    "Vercel production deployment is not proven",
+    "teacher auth provider readiness is not live-ready",
+    "remote storage and manual PPT playback acceptance remain incomplete"
+  ],
+  "safety": {
+    "valuesRedacted": true,
+    "secretsOmitted": true,
+    "providerUrlsOmitted": true,
+    "responseBodiesOmitted": true,
+    "localPrivatePathsOmitted": true,
+    "productionMutationPerformed": false
+  }
+}

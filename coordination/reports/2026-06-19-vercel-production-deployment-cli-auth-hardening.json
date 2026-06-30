@@ -1,0 +1,31 @@
+{
+  "target": "vercel-production-deployment-cli-auth-hardening",
+  "status": "hardened",
+  "responsibleSession": "S22",
+  "summary": {
+    "problem": "deployment evidence previously required VERCEL_TOKEN even when Vercel CLI was already authenticated",
+    "fix": "live deployment evidence accepts either VERCEL_TOKEN or redacted vercel-cli-login proof from vercel whoami",
+    "blockedLiveOperationStatus": "blocked-before-invocation",
+    "tokenFlagPolicy": "forbidden"
+  },
+  "currentPreflight": {
+    "target": "vercel-production-deployment",
+    "mode": "live",
+    "status": "blocked",
+    "authMethod": "vercel-cli-login",
+    "projectReadiness": "ready",
+    "blockedReasons": [
+      "vercel-env-sync-not-applied"
+    ],
+    "productionDeployInvoked": false
+  },
+  "safety": {
+    "valuesRedacted": true,
+    "cliOutputOmitted": true,
+    "accountNamesOmitted": true,
+    "projectIdsOmitted": true,
+    "deploymentUrlsOmitted": true,
+    "tokensOmitted": true,
+    "localPrivatePathsOmitted": true
+  }
+}

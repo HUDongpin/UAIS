@@ -1,0 +1,93 @@
+{
+  "reportId": "2026-06-20-learning-page-arrow-navigation-fix",
+  "createdAt": "2026-06-20T11:15:00+08:00",
+  "sessionId": "S22",
+  "workstream": "Production reliability and release engineering / learning PPT player arrow navigation",
+  "status": "ready",
+  "scope": {
+    "surface": "https://www.uais.top/learning",
+    "issue": "Bottom narration dock previous/next arrow buttons did not change the active published PPT slide."
+  },
+  "rootCause": {
+    "summary": "The slide thumbnail rail was wired to activePublishedSlideIndex, but the bottom narration dock arrow buttons were static controls.",
+    "details": [
+      "SlideChapterRail received onSelectPublishedSlide and called setActivePublishedSlideIndex(index).",
+      "NarrationDock received activePublishedSlide but did not receive activePublishedSlideIndex or previous/next handlers.",
+      "The bottom arrow buttons rendered aria labels but had no onClick handlers, so clicks never updated the active slide state or audio source."
+    ]
+  },
+  "implementation": {
+    "filesChanged": [
+      "src/components/pages/learning-page.tsx",
+      "tests/learning-page.test.tsx",
+      "coordination/reports/2026-06-20-learning-page-arrow-navigation-fix.json",
+      "coordination/session-logs/2026-06-20-S22.md"
+    ],
+    "changes": [
+      "Added a failing regression test that clicks the bottom next and previous arrows and asserts the active published PPT audio source/page label changes.",
+      "Added previous/next handlers in LearningPage that update activePublishedSlideIndex with first/last slide clamping.",
+      "Passed activePublishedSlideIndex and previous/next handlers into NarrationDock.",
+      "Wired the NarrationDock arrow buttons to those handlers and disabled them at the first/last published slide."
+    ]
+  },
+  "localVerification": [
+    {
+      "command": "npm run test -- tests/learning-page.test.tsx",
+      "phase": "RED",
+      "result": "failed as expected before implementation",
+      "evidence": "Clicking the bottom next arrow left the audio src on slide-01 instead of slide-02."
+    },
+    {
+      "command": "npm run test -- tests/learning-page.test.tsx",
+      "phase": "GREEN",
+      "result": "passed",
+      "evidence": "1 file / 4 tests passed."
+    },
+    {
+      "command": "npm run test",
+      "result": "passed",
+      "evidence": "42 files / 557 tests passed."
+    },
+    {
+      "command": "npm run lint",
+      "result": "passed"
+    },
+    {
+      "command": "npm run build",
+      "result": "passed",
+      "evidence": "Next.js production build compiled, type checked, and generated static pages successfully."
+    }
+  ],
+  "deployment": {
+    "command": "npx vercel deploy --prod --yes",
+    "result": "ready",
+    "deploymentId": "dpl_49avw9CVLnMHwMGf6vZPTazRqaD1",
+    "deploymentUrl": "https://uais-a3mmtvx86-peter-dongpin-hu-s-projects.vercel.app",
+    "alias": "https://www.uais.top",
+    "target": "production"
+  },
+  "productionVerification": [
+    {
+      "tool": "playwright-cli",
+      "target": "https://www.uais.top/learning",
+      "result": "passed",
+      "evidence": [
+        "Initial page showed heading 自然数的序数理论, stage page 1 / 19, bottom label 第 1 页 / 约 15.52 秒, and previous button disabled.",
+        "Clicking 下一段 changed the heading to 学习线索, stage page to 2 / 19, and bottom label to 第 2 页 / 约 14.56 秒.",
+        "After clicking 下一段, the audio element src was /api/learning/ppt-playback/audio/audio-manifest-elementary-math-research-natural-number-ordinal-theory-ppt1/tts_natural-number-ordinal-theory-ppt1_slide-02.",
+        "Clicking 上一段 returned the heading to 自然数的序数理论, stage page to 1 / 19, bottom label to 第 1 页 / 约 15.52 秒, and previous button disabled again."
+      ]
+    }
+  ],
+  "redaction": {
+    "secrets": "omitted",
+    "deploymentTokens": "not logged",
+    "browserSession": "closed after verification"
+  },
+  "remainingGoalBlockers": [
+    "Production-grade trusted teacher auth/session provider is still not fully integrated.",
+    "External durable storage still needs the real service, Vercel env binding, and deployed smoke proof.",
+    "Manual PPT/WPS/PowerPoint playback acceptance is still not complete.",
+    "Full enterprise UAIS website teacher workflow remains to be proven end to end under the production auth/storage chain."
+  ]
+}

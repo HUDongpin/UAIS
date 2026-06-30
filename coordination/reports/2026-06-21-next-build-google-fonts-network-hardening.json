@@ -1,0 +1,61 @@
+{
+  "target": "next-production-build-hygiene",
+  "date": "2026-06-21",
+  "status": "passed",
+  "responsibleSession": "S22",
+  "problem": {
+    "buildFailure": "next/font/google failed to fetch Geist and Geist Mono from fonts.googleapis.com",
+    "impact": "production build was network-dependent and failed even after external-network rerun",
+    "affectedFile": "src/app/layout.tsx"
+  },
+  "changes": [
+    {
+      "file": "src/app/layout.tsx",
+      "change": "removed next/font/google imports and generated font variable classes"
+    },
+    {
+      "file": "src/app/globals.css",
+      "change": "replaced remote font variables with stable system sans/mono font stacks"
+    },
+    {
+      "file": "tests/build-hygiene.test.ts",
+      "change": "added regression coverage preventing next/font/google from re-entering the root layout"
+    }
+  ],
+  "redGreenEvidence": {
+    "red": {
+      "command": "npm run test -- tests/build-hygiene.test.ts",
+      "status": "failed-as-expected",
+      "reason": "src/app/layout.tsx imported next/font/google"
+    },
+    "green": {
+      "command": "npm run test -- tests/build-hygiene.test.ts tests/vercel-rest-auth-scope-readiness.test.ts",
+      "status": "passed",
+      "testFiles": 2,
+      "tests": 3
+    }
+  },
+  "checksRun": [
+    {
+      "command": "npm run build",
+      "status": "passed",
+      "note": "build no longer fetches Google Fonts"
+    },
+    {
+      "command": "npm run test",
+      "status": "passed",
+      "testFiles": 47,
+      "tests": 615
+    },
+    {
+      "command": "npm run lint",
+      "status": "passed"
+    }
+  ],
+  "safety": {
+    "secretsRedacted": true,
+    "localPrivatePathsOmitted": true,
+    "productionMutationPerformed": false,
+    "goalMarkedComplete": false
+  }
+}

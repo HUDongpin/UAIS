@@ -1,0 +1,73 @@
+{
+  "target": "teacher-auth-readiness-release-run-guard",
+  "date": "2026-06-19",
+  "sessionId": "S22",
+  "status": "completed-for-auth-readiness-hardening",
+  "overallGoalStatus": "active-incomplete",
+  "objective": "Prevent live production teacher-auth provider readiness from issuing reusable ready evidence unless it is bound to a non-secret release-run id.",
+  "summary": [
+    "The teacher-auth provider readiness harness now blocks live production runs when --release-run-id is missing.",
+    "This closes a gap where otherwise-valid trusted-cookie issuer evidence could be marked ready without being tied to the same release attempt as Vercel env apply, deployment, route smoke, browser smoke, storage smoke, and manual PPT acceptance.",
+    "The guard does not provision a production teacher auth provider; it hardens the evidence chain required before production proof can be accepted."
+  ],
+  "filesChanged": [
+    "scripts/teacher-auth-provider-readiness.mjs",
+    "tests/teacher-auth-provider-readiness.test.ts",
+    "coordination/reports/2026-06-19-teacher-auth-readiness-release-run-guard.json",
+    "coordination/session-logs/2026-06-19-S22.md"
+  ],
+  "redGreenEvidence": [
+    {
+      "phase": "red",
+      "command": "npm run test -- tests/teacher-auth-provider-readiness.test.ts -t \"release-run id\"",
+      "result": "failed before implementation because live production teacher-auth readiness exited 0 without --release-run-id."
+    },
+    {
+      "phase": "green",
+      "command": "npm run test -- tests/teacher-auth-provider-readiness.test.ts -t \"release-run id\"",
+      "result": "passed after adding the release-run id guard."
+    }
+  ],
+  "checksRun": [
+    {
+      "command": "npm run test -- tests/teacher-auth-provider-readiness.test.ts tests/ai-api-routes.test.ts tests/production-release-gate.test.ts",
+      "result": "passed: 3 files / 227 tests"
+    },
+    {
+      "command": "node --check scripts/teacher-auth-provider-readiness.mjs",
+      "result": "passed"
+    },
+    {
+      "command": "node --check scripts/production-e2e-release-gate.mjs",
+      "result": "passed"
+    },
+    {
+      "command": "npm run test",
+      "result": "passed: 37 files / 510 tests"
+    },
+    {
+      "command": "npm run lint",
+      "result": "passed"
+    },
+    {
+      "command": "npm run build",
+      "result": "passed"
+    }
+  ],
+  "checksNotRun": [
+    "No live production teacher-auth provider was invoked with real credentials.",
+    "No Vercel env apply, production deploy, deployed route smoke, deployed browser smoke, external-storage production smoke, or manual PowerPoint/WPS playback acceptance was run."
+  ],
+  "blockers": [
+    "Trusted teacher auth/session provider still needs owner-approved production env and live provider readiness evidence.",
+    "The Vercel project/team/link/env/deploy chain remains unproved.",
+    "External durable storage and manual PPT playback acceptance remain incomplete.",
+    "The overall enterprise UAIS E2E goal remains incomplete."
+  ],
+  "redaction": {
+    "realSecretsLogged": false,
+    "cookieValuesLogged": false,
+    "localPrivatePathsLogged": false,
+    "valuesRedacted": true
+  }
+}

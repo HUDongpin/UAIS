@@ -1,0 +1,57 @@
+{
+  "version": 1,
+  "target": "vercel-env-apply-release-run-guard",
+  "generatedAt": "2026-06-19T00:58:22+08:00",
+  "mode": "local-guard-verification",
+  "status": "passed",
+  "guard": {
+    "script": "scripts/vercel-env-sync.mjs",
+    "commandClass": "vercel-env-sync-apply",
+    "requiresExplicitOwnerApproval": true,
+    "requiresLinkedProject": true,
+    "requiresReadyProjectReadiness": true,
+    "requiresReleaseRunId": true,
+    "releaseRunIdRequiredBeforeMutation": true
+  },
+  "directCliProbe": {
+    "arguments": ["--apply", "--approved", "--project", "uais"],
+    "exitStatus": 1,
+    "stderrMessageClass": "release-run-id-required",
+    "stdoutOmitted": true,
+    "stderrOmitted": true,
+    "valuesRedacted": true
+  },
+  "automatedRegression": {
+    "testFile": "tests/ai-env-and-smoke.test.ts",
+    "testName": "rejects Vercel env sync apply mode without a release-run id before mutation",
+    "red": {
+      "observed": true,
+      "failureClass": "apply-did-not-throw-before-mutation"
+    },
+    "green": {
+      "observed": true,
+      "focusedCommand": "npm run test -- tests/ai-env-and-smoke.test.ts -t release-run id before mutation"
+    },
+    "mutationProof": {
+      "fakeVercelCliLogAbsent": true,
+      "vercelEnvAddNotInvoked": true
+    }
+  },
+  "releaseImpact": {
+    "preventsReusableEnvApplyEvidenceWithoutReleaseRunBinding": true,
+    "downstreamEvidenceBindingStrengthened": [
+      "teacher-auth-provider-readiness",
+      "external-storage-service-readiness",
+      "vercel-production-deployment",
+      "production-e2e-release-gate"
+    ],
+    "productionReleaseStillBlocked": true
+  },
+  "redactionSafety": {
+    "projectIdsOmitted": true,
+    "deploymentUrlsOmitted": true,
+    "envValuesOmitted": true,
+    "tokensOmitted": true,
+    "localPrivatePathsOmitted": true
+  }
+}

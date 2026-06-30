@@ -1,0 +1,78 @@
+{
+  "target": "external-storage-service-readiness",
+  "mode": "dry-run",
+  "environment": "production",
+  "network": "disabled",
+  "storageEndpoint": {
+    "status": "missing",
+    "networkClass": "missing",
+    "endpointClass": "missing",
+    "valueRedacted": true
+  },
+  "storageServiceFingerprint": {
+    "status": "missing",
+    "source": "origin",
+    "valueRedacted": true
+  },
+  "productionLaunchContractEvidence": {
+    "target": "external-storage-service-production-launcher",
+    "status": "ready",
+    "valueRedacted": true,
+    "serviceMode": "production",
+    "runtime": "proved",
+    "envContract": "proved",
+    "containerArtifact": "proved",
+    "redactionSafety": "proved"
+  },
+  "status": "blocked",
+  "responsibleSession": "S22",
+  "checks": [
+    {
+      "id": "s22-external-storage-service-health",
+      "endpointTemplate": "/healthz",
+      "method": "GET",
+      "expectedStatus": 200,
+      "responsibleSessions": [
+        "S22",
+        "S12",
+        "S19",
+        "S24"
+      ],
+      "responseShapeChecks": [
+        "status",
+        "target",
+        "apiContractVersion",
+        "durableBackingStore",
+        "productionServiceIdentity",
+        "redaction"
+      ]
+    }
+  ],
+  "prerequisites": [
+    {
+      "id": "s19-external-storage-base-url",
+      "responsibleSession": "S19",
+      "requiredEnv": "UAIS_EXTERNAL_STORAGE_BASE_URL",
+      "status": "missing"
+    },
+    {
+      "id": "s22-external-storage-production-launch-contract",
+      "responsibleSession": "S22",
+      "requiredEvidence": "external-storage-service-production-launcher",
+      "status": "ready",
+      "valueRedacted": true
+    }
+  ],
+  "blockedReasons": [
+    "missing-UAIS_EXTERNAL_STORAGE_BASE_URL",
+    "external-storage-service-live-readiness-not-run"
+  ],
+  "safety": {
+    "valuesRedacted": true,
+    "serviceUrlOmitted": true,
+    "responseBodiesOmitted": true,
+    "localPrivatePathsOmitted": true,
+    "liveRequiresApproval": true,
+    "noWriteOperations": true
+  }
+}

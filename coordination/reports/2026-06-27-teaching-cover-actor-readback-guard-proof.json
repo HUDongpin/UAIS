@@ -1,0 +1,63 @@
+{
+  "generatedAt": "2026-06-27T23:17:31+08:00",
+  "status": "passed-local",
+  "scope": "teaching-page-draft-course-cover-actor-readback-guard",
+  "ownerSession": "S05/S12/S22",
+  "summary": "Draft course-cover generation now fails closed until the /api/teaching/courses readback supplies a teacher-scoped actor receipt. The UI no longer falls back to the static teacher-kang actor for new draft cover course ids.",
+  "localBehaviorProof": [
+    {
+      "case": "missing-teacher-readback",
+      "expected": "The dialog shows a teacher-readback-required alert and does not call /api/teaching/course-cover.",
+      "test": "tests/teaching-page.test.tsx > does not generate a draft cover with the default teacher actor before teacher readback"
+    },
+    {
+      "case": "teacher-readback",
+      "expected": "A teacher list-courses receipt supplies the actor used in the provisional cover course id.",
+      "test": "tests/teaching-page.test.tsx > uses the signed teacher actor from course readback when generating a draft cover"
+    },
+    {
+      "case": "student-readback",
+      "expected": "A student list-student-courses receipt is not accepted as teacher identity and does not trigger cover generation.",
+      "test": "tests/teaching-page.test.tsx > does not treat a student course readback receipt as the teacher actor for draft covers"
+    },
+    {
+      "case": "cover-asset-binding",
+      "expected": "Existing cover generation, asset binding, partial binding failure recovery, and stale-cover clearing still pass once teacher readback exists.",
+      "test": "tests/teaching-page.test.tsx -t cover"
+    }
+  ],
+  "redGreenEvidence": {
+    "red": {
+      "command": "./node_modules/.bin/vitest run tests/teaching-page.test.tsx -t \"does not generate a draft cover with the default teacher actor before teacher readback\"",
+      "result": "failed before implementation because the UI still called /api/teaching/course-cover with the default teacher actor path instead of showing the teacher readback alert"
+    },
+    "green": [
+      {
+        "command": "./node_modules/.bin/vitest run tests/teaching-page.test.tsx -t \"cover\"",
+        "result": "passed, 9 tests"
+      },
+      {
+        "command": "./node_modules/.bin/vitest run tests/teaching-page.test.tsx",
+        "result": "passed, 82 tests"
+      },
+      {
+        "command": "npm run test",
+        "result": "passed, 68 files and 1339 tests"
+      },
+      {
+        "command": "npm run lint",
+        "result": "passed"
+      }
+    ]
+  },
+  "securityAndPrivacy": {
+    "secretsInspected": false,
+    "liveProviderCalled": false,
+    "productionMutation": false,
+    "credentialOutput": "none"
+  },
+  "remainingRisk": [
+    "This is a local UI provenance guard only; it does not replace server-side authorization, production deployment proof, or same-run browser smoke evidence.",
+    "The aggregate enterprise gate remains blocked until the current production release run provides owner-approved env, deployment, external-storage, ordinary teaching, app-auth, and live provider artifacts."
+  ]
+}

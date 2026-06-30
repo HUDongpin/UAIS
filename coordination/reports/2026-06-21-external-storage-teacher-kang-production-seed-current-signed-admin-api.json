@@ -1,0 +1,76 @@
+{
+  "target": "teacher-kang-production-ownership-seed",
+  "mode": "live",
+  "environment": "production",
+  "generatedAt": "2026-06-21T16:06:51.471Z",
+  "baseUrlClass": "www-uais-top",
+  "valuesRedacted": true,
+  "token": {
+    "source": ".env.local",
+    "valueRedacted": true
+  },
+  "requests": {
+    "health": {
+      "httpStatus": 200,
+      "ok": true
+    },
+    "mergeTeacherKang": {
+      "httpStatus": 200,
+      "ok": true,
+      "body": {
+        "teacherId": "teacher-kang",
+        "status": "merged",
+        "storagePolicy": "external-redacted-teacher-ai-ownership-merge",
+        "storageWritePolicy": "external-atomic-merge",
+        "responsibleSession": "S12",
+        "updatedAt": "2026-06-21T16:06:48.823Z",
+        "redaction": {
+          "secrets": "omitted",
+          "localFiles": "omitted",
+          "assets": "ids-only"
+        }
+      }
+    },
+    "readTeacherKang": {
+      "httpStatus": 200,
+      "ok": true,
+      "counts": {
+        "courseIds": 2,
+        "sampleAssets": 2,
+        "pptAssets": 2,
+        "clonedVoiceRefs": 3,
+        "audioManifests": 2
+      },
+      "ids": {
+        "teacherId": "teacher-kang",
+        "courseIds": [
+          "elementary-math-research",
+          "research-methods"
+        ],
+        "sampleAssetIds": [
+          "teacher-kang-10s-sample",
+          "asset-voice-10s"
+        ],
+        "pptAssetIds": [
+          "kang-xia-ppt-19",
+          "research-methods-unit-3"
+        ],
+        "voiceRefIds": [
+          "qwen-voice-ref-teacher-kang-teacher-kang-10s-sample",
+          "qwen-voice-ref-teacher-kang-10s-sample",
+          "qwen-voice-ref-teacher-kang-asset-voice-10s"
+        ],
+        "audioManifestIds": [
+          "audio-manifest-kang-xia-ppt-19",
+          "audio-manifest-research-methods-unit-3"
+        ]
+      }
+    }
+  },
+  "status": "passed",
+  "redaction": {
+    "secrets": "omitted",
+    "localFiles": "omitted",
+    "assets": "ids-only"
+  }
+}

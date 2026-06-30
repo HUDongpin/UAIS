@@ -1,0 +1,452 @@
+{
+  "target": "vercel-env-sync",
+  "mode": "dry-run",
+  "project": "uais",
+  "responsibleSession": "S19",
+  "releaseRunId": "uais-release-2026-06-21-storage-auth",
+  "authProviderMode": "trusted-cookie-issuer",
+  "externalStorageEndpoint": {
+    "status": "present",
+    "endpointClass": "remote-https",
+    "valueRedacted": true
+  },
+  "externalStorageServiceFingerprint": {
+    "status": "present",
+    "value": "sha256:7c8e0f8c7195d5b9",
+    "source": "origin",
+    "valueRedacted": true
+  },
+  "secretStrength": {
+    "minimumLength": 32,
+    "valuesRedacted": true,
+    "checks": [
+      {
+        "name": "UAIS_LIVE_AI_APPROVAL_TOKEN",
+        "status": "sufficient",
+        "valueRedacted": true
+      },
+      {
+        "name": "UAIS_AI_ACCESS_SIGNING_SECRET",
+        "status": "sufficient",
+        "valueRedacted": true
+      },
+      {
+        "name": "UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET",
+        "status": "sufficient",
+        "valueRedacted": true
+      },
+      {
+        "name": "UAIS_EXTERNAL_STORAGE_ACCESS_TOKEN",
+        "status": "sufficient",
+        "valueRedacted": true
+      },
+      {
+        "name": "UAIS_TEACHER_AUTH_ISSUER_SECRET",
+        "status": "sufficient",
+        "valueRedacted": true
+      }
+    ]
+  },
+  "projectReadinessEvidenceStatus": "ready",
+  "targets": [
+    "production",
+    "preview"
+  ],
+  "entries": [
+    {
+      "name": "UAIS_LIVE_AI_APPROVAL_TOKEN",
+      "provider": "uais",
+      "roles": [],
+      "valueType": "secret",
+      "status": "present",
+      "requiredForSelectedAuthProvider": false,
+      "serverOnly": true,
+      "actions": [
+        "set-production",
+        "set-preview"
+      ]
+    },
+    {
+      "name": "UAIS_AI_ACCESS_SIGNING_SECRET",
+      "provider": "uais",
+      "roles": [],
+      "valueType": "secret",
+      "status": "present",
+      "requiredForSelectedAuthProvider": false,
+      "serverOnly": true,
+      "actions": [
+        "set-production",
+        "set-preview"
+      ]
+    },
+    {
+      "name": "UAIS_TEACHER_AUTH_PROVIDER",
+      "provider": "uais",
+      "roles": [],
+      "valueType": "auth-provider",
+      "status": "present",
+      "requiredForSelectedAuthProvider": true,
+      "serverOnly": true,
+      "actions": [
+        "set-production",
+        "set-preview"
+      ]
+    },
+    {
+      "name": "UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET",
+      "provider": "uais",
+      "roles": [],
+      "valueType": "secret",
+      "status": "present",
+      "requiredForSelectedAuthProvider": true,
+      "serverOnly": true,
+      "actions": [
+        "set-production",
+        "set-preview"
+      ]
+    },
+    {
+      "name": "UAIS_TEACHER_AUTH_ISSUER_SECRET",
+      "provider": "uais",
+      "roles": [],
+      "valueType": "secret",
+      "status": "present",
+      "requiredForSelectedAuthProvider": true,
+      "serverOnly": true,
+      "actions": [
+        "set-production",
+        "set-preview"
+      ]
+    },
+    {
+      "name": "UAIS_TEACHER_AUTH_OIDC_ISSUER",
+      "provider": "uais",
+      "roles": [],
+      "valueType": "base-url",
+      "status": "missing",
+      "requiredForSelectedAuthProvider": false,
+      "serverOnly": true,
+      "actions": [
+        "set-production",
+        "set-preview"
+      ]
+    },
+    {
+      "name": "UAIS_TEACHER_AUTH_OIDC_AUDIENCE",
+      "provider": "uais",
+      "roles": [],
+      "valueType": "auth-provider",
+      "status": "missing",
+      "requiredForSelectedAuthProvider": false,
+      "serverOnly": true,
+      "actions": [
+        "set-production",
+        "set-preview"
+      ]
+    },
+    {
+      "name": "UAIS_TEACHER_AUTH_OIDC_JWKS_URL",
+      "provider": "uais",
+      "roles": [],
+      "valueType": "base-url",
+      "status": "missing",
+      "requiredForSelectedAuthProvider": false,
+      "serverOnly": true,
+      "actions": [
+        "set-production",
+        "set-preview"
+      ]
+    },
+    {
+      "name": "UAIS_TEACHER_AUTH_OIDC_TEACHER_ID_CLAIM",
+      "provider": "uais",
+      "roles": [],
+      "valueType": "auth-provider",
+      "status": "missing",
+      "requiredForSelectedAuthProvider": false,
+      "serverOnly": true,
+      "actions": [
+        "set-production",
+        "set-preview"
+      ]
+    },
+    {
+      "name": "UAIS_TEACHER_AI_OWNERSHIP_BACKEND",
+      "provider": "uais",
+      "roles": [],
+      "valueType": "storage-backend",
+      "status": "present",
+      "requiredForSelectedAuthProvider": false,
+      "serverOnly": true,
+      "actions": [
+        "set-production",
+        "set-preview"
+      ]
+    },
+    {
+      "name": "UAIS_VOICE_LIFECYCLE_AUDIT_BACKEND",
+      "provider": "uais",
+      "roles": [],
+      "valueType": "storage-backend",
+      "status": "present",
+      "requiredForSelectedAuthProvider": false,
+      "serverOnly": true,
+      "actions": [
+        "set-production",
+        "set-preview"
+      ]
+    },
+    {
+      "name": "UAIS_EXTERNAL_STORAGE_BASE_URL",
+      "provider": "uais",
+      "roles": [],
+      "valueType": "base-url",
+      "status": "present",
+      "requiredForSelectedAuthProvider": false,
+      "serverOnly": true,
+      "actions": [
+        "set-production",
+        "set-preview"
+      ]
+    },
+    {
+      "name": "UAIS_EXTERNAL_STORAGE_ACCESS_TOKEN",
+      "provider": "uais",
+      "roles": [],
+      "valueType": "secret",
+      "status": "present",
+      "requiredForSelectedAuthProvider": false,
+      "serverOnly": true,
+      "actions": [
+        "set-production",
+        "set-preview"
+      ]
+    },
+    {
+      "name": "UAIS_EXTERNAL_STORAGE_SERVICE_MODE",
+      "provider": "uais",
+      "roles": [],
+      "valueType": "service-mode",
+      "status": "present",
+      "requiredForSelectedAuthProvider": false,
+      "serverOnly": true,
+      "actions": [
+        "set-production",
+        "set-preview"
+      ]
+    },
+    {
+      "name": "UAIS_EXTERNAL_STORAGE_SERVICE_DATA_DIR",
+      "provider": "uais",
+      "roles": [],
+      "valueType": "storage-path",
+      "status": "present",
+      "requiredForSelectedAuthProvider": false,
+      "serverOnly": true,
+      "actions": [
+        "set-production",
+        "set-preview"
+      ]
+    },
+    {
+      "name": "DEEPSEEK_API_KEY",
+      "provider": "deepseek",
+      "roles": [
+        "text-reasoning"
+      ],
+      "valueType": "secret",
+      "status": "missing",
+      "requiredForSelectedAuthProvider": false,
+      "serverOnly": true,
+      "actions": [
+        "set-production",
+        "set-preview"
+      ]
+    },
+    {
+      "name": "DEEPSEEK_BASE_URL",
+      "provider": "deepseek",
+      "roles": [
+        "text-reasoning"
+      ],
+      "valueType": "base-url",
+      "status": "missing",
+      "requiredForSelectedAuthProvider": false,
+      "serverOnly": true,
+      "actions": [
+        "set-production",
+        "set-preview"
+      ]
+    },
+    {
+      "name": "DEEPSEEK_MODEL",
+      "provider": "deepseek",
+      "roles": [
+        "text-reasoning"
+      ],
+      "valueType": "model",
+      "status": "missing",
+      "requiredForSelectedAuthProvider": false,
+      "serverOnly": true,
+      "actions": [
+        "set-production",
+        "set-preview"
+      ]
+    },
+    {
+      "name": "DASHSCOPE_API_KEY",
+      "provider": "qwen",
+      "roles": [
+        "multimodal",
+        "image-generation",
+        "voice-clone",
+        "ppt-narration"
+      ],
+      "valueType": "secret",
+      "status": "missing",
+      "requiredForSelectedAuthProvider": false,
+      "serverOnly": true,
+      "actions": [
+        "set-production",
+        "set-preview"
+      ]
+    },
+    {
+      "name": "DASHSCOPE_BASE_URL",
+      "provider": "qwen",
+      "roles": [
+        "multimodal",
+        "image-generation",
+        "voice-clone",
+        "ppt-narration"
+      ],
+      "valueType": "base-url",
+      "status": "missing",
+      "requiredForSelectedAuthProvider": false,
+      "serverOnly": true,
+      "actions": [
+        "set-production",
+        "set-preview"
+      ]
+    },
+    {
+      "name": "QWEN_MULTIMODAL_MODEL",
+      "provider": "qwen",
+      "roles": [
+        "multimodal"
+      ],
+      "valueType": "model",
+      "status": "missing",
+      "requiredForSelectedAuthProvider": false,
+      "serverOnly": true,
+      "actions": [
+        "set-production",
+        "set-preview"
+      ]
+    },
+    {
+      "name": "QWEN_IMAGE_MODEL",
+      "provider": "qwen",
+      "roles": [
+        "image-generation"
+      ],
+      "valueType": "model",
+      "status": "missing",
+      "requiredForSelectedAuthProvider": false,
+      "serverOnly": true,
+      "actions": [
+        "set-production",
+        "set-preview"
+      ]
+    },
+    {
+      "name": "QWEN_TTS_MODEL",
+      "provider": "qwen",
+      "roles": [
+        "voice-clone",
+        "ppt-narration"
+      ],
+      "valueType": "model",
+      "status": "missing",
+      "requiredForSelectedAuthProvider": false,
+      "serverOnly": true,
+      "actions": [
+        "set-production",
+        "set-preview"
+      ]
+    }
+  ],
+  "localOnlyEntries": [
+    {
+      "name": "UAIS_TEACHER_AUTH_OIDC_SMOKE_BEARER_TOKEN",
+      "provider": "uais",
+      "reason": "approved-live-route-smoke-only",
+      "status": "missing",
+      "localOnly": true,
+      "deploymentAction": "ignored"
+    },
+    {
+      "name": "UAIS_TEACHER_AUTH_OIDC_SMOKE_TEACHER_ID",
+      "provider": "uais",
+      "reason": "approved-live-route-smoke-only",
+      "status": "missing",
+      "localOnly": true,
+      "deploymentAction": "ignored"
+    }
+  ],
+  "safety": {
+    "valuesRedacted": true,
+    "applyRequiresApproval": true,
+    "applyRequiresLinkedProject": true,
+    "applyRequiresProjectReadiness": true,
+    "localOnlySmokeEnvNotSynced": true
+  },
+  "localSourceSummary": {
+    "status": "ready",
+    "valuesRedacted": true,
+    "deploymentEntries": {
+      "total": 23,
+      "present": 11,
+      "missing": 12,
+      "missingNames": [
+        "UAIS_TEACHER_AUTH_OIDC_ISSUER",
+        "UAIS_TEACHER_AUTH_OIDC_AUDIENCE",
+        "UAIS_TEACHER_AUTH_OIDC_JWKS_URL",
+        "UAIS_TEACHER_AUTH_OIDC_TEACHER_ID_CLAIM",
+        "DEEPSEEK_API_KEY",
+        "DEEPSEEK_BASE_URL",
+        "DEEPSEEK_MODEL",
+        "DASHSCOPE_API_KEY",
+        "DASHSCOPE_BASE_URL",
+        "QWEN_MULTIMODAL_MODEL",
+        "QWEN_IMAGE_MODEL",
+        "QWEN_TTS_MODEL"
+      ]
+    },
+    "selectedAuthProvider": {
+      "mode": "trusted-cookie-issuer",
+      "requiredPresent": 3,
+      "requiredMissing": 0,
+      "missingRequiredNames": []
+    },
+    "productionSecretStrength": {
+      "minimumLength": 32,
+      "sufficient": 5,
+      "weak": 0,
+      "missing": 0,
+      "weakNames": [],
+      "missingNames": []
+    },
+    "externalStorage": {
+      "endpointClass": "remote-https",
+      "fingerprintStatus": "present"
+    },
+    "localOnlyEntries": {
+      "total": 2,
+      "present": 0,
+      "ignored": 2
+    }
+  },
+  "status": "ready",
+  "blockedReasons": []
+}

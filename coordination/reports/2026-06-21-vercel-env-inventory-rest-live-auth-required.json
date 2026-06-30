@@ -1,0 +1,246 @@
+{
+  "target": "vercel-env-inventory",
+  "mode": "live",
+  "responsibleSession": "S19",
+  "releaseRunId": "2026-06-21-vercel-env-inventory-rest-live",
+  "status": "blocked",
+  "environments": ["production", "preview"],
+  "command": {
+    "name": "vercel-env-rest-list",
+    "format": "json",
+    "statusByEnvironment": {
+      "production": "failed",
+      "preview": "failed"
+    },
+    "failureClassByEnvironment": {
+      "production": "auth-required",
+      "preview": "auth-required"
+    },
+    "attemptsByEnvironment": {
+      "production": 1,
+      "preview": 1
+    },
+    "stdoutOmitted": true,
+    "stderrOmitted": true,
+    "apiOutputOmitted": true
+  },
+  "remoteEnvCounts": {
+    "production": 0,
+    "preview": 0
+  },
+  "remoteEnvNames": {
+    "production": [],
+    "preview": []
+  },
+  "requiredEnvCoverage": [
+    {
+      "name": "UAIS_LIVE_AI_APPROVAL_TOKEN",
+      "production": "unknown",
+      "preview": "unknown",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_AI_ACCESS_SIGNING_SECRET",
+      "production": "unknown",
+      "preview": "unknown",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_TEACHER_AUTH_PROVIDER",
+      "production": "unknown",
+      "preview": "unknown",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET",
+      "production": "unknown",
+      "preview": "unknown",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_TEACHER_AUTH_ISSUER_SECRET",
+      "production": "unknown",
+      "preview": "unknown",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_TEACHER_AI_OWNERSHIP_BACKEND",
+      "production": "unknown",
+      "preview": "unknown",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_VOICE_LIFECYCLE_AUDIT_BACKEND",
+      "production": "unknown",
+      "preview": "unknown",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_EXTERNAL_STORAGE_BASE_URL",
+      "production": "unknown",
+      "preview": "unknown",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_EXTERNAL_STORAGE_ACCESS_TOKEN",
+      "production": "unknown",
+      "preview": "unknown",
+      "valueRedacted": true
+    },
+    {
+      "name": "DEEPSEEK_API_KEY",
+      "production": "unknown",
+      "preview": "unknown",
+      "valueRedacted": true
+    },
+    {
+      "name": "DASHSCOPE_API_KEY",
+      "production": "unknown",
+      "preview": "unknown",
+      "valueRedacted": true
+    }
+  ],
+  "optionalEnvCoverage": [
+    {
+      "name": "UAIS_EXTERNAL_STORAGE_SERVICE_MODE",
+      "production": "unknown",
+      "preview": "unknown",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_EXTERNAL_STORAGE_SERVICE_DATA_DIR",
+      "production": "unknown",
+      "preview": "unknown",
+      "valueRedacted": true
+    }
+  ],
+  "missingRequiredEnv": [],
+  "unobservedRequiredEnv": [
+    {
+      "name": "UAIS_LIVE_AI_APPROVAL_TOKEN",
+      "environment": "production",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_LIVE_AI_APPROVAL_TOKEN",
+      "environment": "preview",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_AI_ACCESS_SIGNING_SECRET",
+      "environment": "production",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_AI_ACCESS_SIGNING_SECRET",
+      "environment": "preview",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_TEACHER_AUTH_PROVIDER",
+      "environment": "production",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_TEACHER_AUTH_PROVIDER",
+      "environment": "preview",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET",
+      "environment": "production",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET",
+      "environment": "preview",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_TEACHER_AUTH_ISSUER_SECRET",
+      "environment": "production",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_TEACHER_AUTH_ISSUER_SECRET",
+      "environment": "preview",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_TEACHER_AI_OWNERSHIP_BACKEND",
+      "environment": "production",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_TEACHER_AI_OWNERSHIP_BACKEND",
+      "environment": "preview",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_VOICE_LIFECYCLE_AUDIT_BACKEND",
+      "environment": "production",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_VOICE_LIFECYCLE_AUDIT_BACKEND",
+      "environment": "preview",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_EXTERNAL_STORAGE_BASE_URL",
+      "environment": "production",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_EXTERNAL_STORAGE_BASE_URL",
+      "environment": "preview",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_EXTERNAL_STORAGE_ACCESS_TOKEN",
+      "environment": "production",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_EXTERNAL_STORAGE_ACCESS_TOKEN",
+      "environment": "preview",
+      "valueRedacted": true
+    },
+    {
+      "name": "DEEPSEEK_API_KEY",
+      "environment": "production",
+      "valueRedacted": true
+    },
+    {
+      "name": "DEEPSEEK_API_KEY",
+      "environment": "preview",
+      "valueRedacted": true
+    },
+    {
+      "name": "DASHSCOPE_API_KEY",
+      "environment": "production",
+      "valueRedacted": true
+    },
+    {
+      "name": "DASHSCOPE_API_KEY",
+      "environment": "preview",
+      "valueRedacted": true
+    }
+  ],
+  "unobservedRequiredEnvCount": 22,
+  "blockedReasons": ["vercel-env-inventory-command-not-passed"],
+  "interpretation": {
+    "networkReachability": "api.vercel.com reached outside sandbox",
+    "restAuth": "blocked",
+    "deploymentImpact": "production env inventory and env apply cannot be proved through REST until a valid Vercel access token is available or local Vercel auth is repaired",
+    "valuesRedacted": true
+  },
+  "safety": {
+    "valuesRedacted": true,
+    "rawCliOutputOmitted": true,
+    "stderrOmitted": true,
+    "tokenOmitted": true,
+    "localPrivatePathsOmitted": true,
+    "noMutation": true
+  }
+}

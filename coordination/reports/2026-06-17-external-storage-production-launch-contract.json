@@ -1,0 +1,48 @@
+{
+  "target": "external-storage-service-production-launcher",
+  "mode": "dry-run",
+  "status": "ready",
+  "serviceMode": "production",
+  "command": "node scripts/external-storage-service.mjs --host <host> --port <port> --data-dir <data-dir> --service-mode production",
+  "runtime": {
+    "node": "required",
+    "longRunningProcess": true,
+    "healthEndpoint": "/healthz",
+    "serviceTarget": "uais-external-storage-production-service"
+  },
+  "launch": {
+    "hostBinding": "0.0.0.0",
+    "portSource": "PORT",
+    "dataDirSource": "UAIS_EXTERNAL_STORAGE_DATA_DIR",
+    "persistentVolumeRequired": true,
+    "valuesRedacted": true
+  },
+  "containerArtifact": {
+    "dockerfile": "Dockerfile.external-storage",
+    "dockerignore": ".dockerignore",
+    "persistentVolumePath": "/data/uais-external-storage",
+    "imageSecretsPolicy": "env-only-at-runtime",
+    "valueRedacted": true
+  },
+  "requiredEnv": [
+    {
+      "name": "UAIS_EXTERNAL_STORAGE_ACCESS_TOKEN",
+      "status": "present",
+      "strength": "sufficient",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_EXTERNAL_STORAGE_DATA_DIR",
+      "status": "present",
+      "valueRedacted": true
+    }
+  ],
+  "blockedReasons": [],
+  "safety": {
+    "accessTokenOmitted": true,
+    "dataDirOmitted": true,
+    "localPrivatePathsOmitted": true,
+    "startupOutputRedacted": true,
+    "productionServiceModeForced": true
+  }
+}

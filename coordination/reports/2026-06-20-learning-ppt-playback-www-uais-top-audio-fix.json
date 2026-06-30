@@ -1,0 +1,129 @@
+{
+  "target": "learning-ppt-playback-production-domain-audio-fix",
+  "status": "passed",
+  "responsibleSession": "S22",
+  "generatedAt": "2026-06-20T11:01:47+08:00",
+  "domain": "www.uais.top",
+  "courseId": "elementary-math-research",
+  "audioManifestId": "audio-manifest-elementary-math-research-natural-number-ordinal-theory-ppt1",
+  "problem": {
+    "status": "resolved",
+    "summary": "The deployed learning playback manifest was reachable and advertised 19 Kang Xia slide WAV URLs, but the first-slide audio API returned HTTP 404 because the route fell back to local .tmp narration storage that is intentionally excluded from Vercel deployment."
+  },
+  "implementation": {
+    "publishedAssets": {
+      "status": "added",
+      "directory": "public/learning/ppt-playback/audio/audio-manifest-elementary-math-research-natural-number-ordinal-theory-ppt1",
+      "wavCount": 19,
+      "totalSizeApprox": "13M",
+      "source": "local generated Kang Xia WAV assets",
+      "privatePathsOmitted": true
+    },
+    "apiFallback": {
+      "status": "added",
+      "route": "/api/learning/ppt-playback/audio/<manifest-id>/<audio-id>",
+      "behavior": "For already-published, catalog-whitelisted audio ids, the route falls back from local narration storage to the public static WAV asset path.",
+      "unpublishedAudioPolicy": "still rejected by published audio catalog validation"
+    },
+    "smokeMimeHardening": {
+      "status": "added",
+      "behavior": "The learning playback deployment smoke now accepts WAV MIME variants audio/wav, audio/wave, and audio/x-wav while still requiring RIFF/WAVE bytes and a non-trivial content length."
+    }
+  },
+  "deployment": {
+    "command": "npx vercel deploy --prod -y --force --no-wait",
+    "status": "ready",
+    "target": "production",
+    "wwwAliasPresent": true,
+    "deploymentIdRedacted": true,
+    "deploymentUrlRedacted": true,
+    "uploadedBytesApprox": "13.1MB"
+  },
+  "liveVerification": {
+    "apiAudioFollowRedirect": {
+      "url": "https://www.uais.top/api/learning/ppt-playback/audio/<manifest-id>/<audio-id>",
+      "status": "passed",
+      "httpChain": [
+        307,
+        200
+      ],
+      "finalContentType": "audio/wave",
+      "contentLength": 745004,
+      "wavHeader": "RIFF/WAVE",
+      "responseBodyOmitted": true
+    },
+    "learningPlaybackDeploymentSmoke": {
+      "report": "coordination/reports/2026-06-20-learning-ppt-playback-deployment-smoke-www-uais-top-live.json",
+      "status": "passed",
+      "httpStatus": {
+        "learningPage": 200,
+        "playbackManifest": 200,
+        "firstSlideAudio": 200
+      },
+      "results": {
+        "learningPageHttp200": "passed",
+        "playbackManifestKangXiaVoice": "passed",
+        "playbackManifestSlideCount": "passed",
+        "playbackManifestStudentSafeRedaction": "passed",
+        "firstSlideAudioWavHeaders": "passed"
+      },
+      "playback": {
+        "teacherName": "康霞博士",
+        "voiceLabel": "康霞博士克隆声音",
+        "slideCount": 19,
+        "firstSlideTitle": "自然数的序数理论",
+        "lastSlideTitle": "作业布置"
+      },
+      "audio": {
+        "contentType": "audio/wave",
+        "contentLength": 745004,
+        "wavHeader": "RIFF/WAVE"
+      }
+    }
+  },
+  "qualityChecks": {
+    "learningPlaybackApiTest": {
+      "command": "npm run test -- tests/learning-ppt-playback-api.test.ts",
+      "status": "passed",
+      "testFiles": 1,
+      "tests": 5
+    },
+    "learningPlaybackSmokeMimeVariantTest": {
+      "command": "npm run test -- tests/learning-ppt-playback-deployment-smoke.test.ts -t \"MIME type variants\"",
+      "status": "passed",
+      "testFiles": 1,
+      "tests": 1
+    },
+    "fullVitest": {
+      "command": "npm run test",
+      "status": "passed",
+      "testFiles": 42,
+      "tests": 556
+    },
+    "lint": {
+      "command": "npm run lint",
+      "status": "passed"
+    },
+    "build": {
+      "command": "npm run build",
+      "status": "passed"
+    }
+  },
+  "goalStatusImpact": {
+    "enterpriseGoalComplete": false,
+    "learningPptPlaybackProductionDomainSmoke": "passed",
+    "remainingReasons": [
+      "Production Vercel env/auth/storage release-run chain is still not complete.",
+      "Teacher workflow browser/UI production smoke is not yet proven against the final production env/auth/storage chain.",
+      "Manual PowerPoint/WPS playback acceptance is still not complete."
+    ]
+  },
+  "safety": {
+    "envLocalRead": false,
+    "realSecretsRead": false,
+    "tokensPrinted": false,
+    "deploymentIdsOmitted": true,
+    "deploymentUrlsRedactedWhereProjectSpecific": true,
+    "responseBodiesOmitted": true
+  }
+}

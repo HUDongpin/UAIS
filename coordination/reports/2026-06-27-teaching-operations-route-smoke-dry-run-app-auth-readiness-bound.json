@@ -1,0 +1,399 @@
+{
+  "target": "teaching-operations-route-smoke",
+  "mode": "dry-run",
+  "environment": "production",
+  "network": "disabled",
+  "status": "ready",
+  "responsibleSessions": [
+    "S12",
+    "S22"
+  ],
+  "releaseRunId": "uais-enterprise-app-auth-route-binding-2026-06-27",
+  "route": "/api/teaching/operations",
+  "auditRoute": "/api/teaching/operations/audit",
+  "inviteJoinRoute": "/api/teaching/invite-codes/{code}/join",
+  "collaborationInviteDeliveryCallbackRoute": "/api/teaching/operations/collaboration-invite-deliveries",
+  "rollbackRoute": "/api/teaching/operations/records/{recordId}/rollback",
+  "deploymentFingerprint": {
+    "status": "present",
+    "value": "sha256:707a068b1d128736"
+  },
+  "deploymentOrigin": {
+    "status": "present",
+    "originClass": "remote-https",
+    "valueRedacted": true
+  },
+  "deploymentDomainReachabilityEvidence": {
+    "target": "deployment-domain-reachability",
+    "releaseRunIdStatus": "matched",
+    "deploymentFingerprintStatus": "matched",
+    "valueRedacted": true,
+    "status": "matched"
+  },
+  "externalStorageFingerprint": {
+    "status": "present",
+    "value": "sha256:fd49c58278c49328"
+  },
+  "storageServiceFingerprint": {
+    "status": "present",
+    "value": "sha256:fd49c58278c49328",
+    "source": "origin",
+    "valueRedacted": true
+  },
+  "teachingOperationsSchema": {
+    "schemaVersion": "uais-teaching-operations-v1",
+    "backupSchemaVersion": "uais-teaching-operations-backup-v1",
+    "supportedSchemaVersions": [
+      "uais-teaching-operations-v1"
+    ],
+    "migrationPolicy": "explicit-versioned-schema-normalization",
+    "unsupportedSchemaVersionPolicy": "fail-closed",
+    "responsibleSession": "S12"
+  },
+  "vercelProductionDeploymentEvidence": {
+    "target": "vercel-production-deployment",
+    "deploymentObservationStatus": "observed",
+    "releaseRunIdStatus": "matched",
+    "valueRedacted": true,
+    "status": "matched"
+  },
+  "teacherAuthProviderReadinessEvidence": {
+    "target": "teacher-auth-provider-readiness",
+    "authProviderMode": "trusted-cookie-issuer",
+    "releaseRunIdStatus": "matched",
+    "valueRedacted": true,
+    "status": "matched"
+  },
+  "appAuthProviderReadinessEvidence": {
+    "target": "app-auth-provider-readiness",
+    "appAuthProviderMode": "trusted-account-provider",
+    "releaseRunIdStatus": "matched",
+    "valueRedacted": true,
+    "status": "matched"
+  },
+  "externalStorageServiceReadinessEvidence": {
+    "target": "external-storage-service-readiness",
+    "valueRedacted": true,
+    "releaseRunIdStatus": "matched",
+    "status": "matched",
+    "productionDatabaseAdapterStatus": "ready",
+    "productionDatabaseAdapters": {
+      "teachingOperations": {
+        "status": "ready",
+        "providerClass": "managed-database",
+        "migrationStatus": "up-to-date",
+        "backupPolicy": "point-in-time-restore",
+        "concurrencyControl": "transactional",
+        "valueRedacted": true
+      },
+      "teachingCourseManagement": {
+        "status": "ready",
+        "providerClass": "managed-database",
+        "migrationStatus": "up-to-date",
+        "backupPolicy": "point-in-time-restore",
+        "concurrencyControl": "transactional",
+        "valueRedacted": true
+      },
+      "teachingCourseAssets": {
+        "status": "ready",
+        "providerClass": "managed-database",
+        "migrationStatus": "up-to-date",
+        "backupPolicy": "point-in-time-restore",
+        "concurrencyControl": "transactional",
+        "valueRedacted": true
+      }
+    }
+  },
+  "teachingOperationsBackend": "external",
+  "teachingCourseManagementBackend": "external",
+  "teacherId": "teacher-kang",
+  "requiredEnv": [
+    {
+      "name": "UAIS_DEPLOYMENT_BASE_URL",
+      "status": "present"
+    },
+    {
+      "name": "UAIS_TEACHING_OPERATIONS_BACKEND",
+      "status": "present",
+      "requiredValue": "external"
+    },
+    {
+      "name": "UAIS_TEACHING_COURSE_MANAGEMENT_BACKEND",
+      "status": "present",
+      "requiredValue": "external"
+    },
+    {
+      "name": "UAIS_EXTERNAL_STORAGE_BASE_URL",
+      "status": "present",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_EXTERNAL_STORAGE_ACCESS_TOKEN",
+      "status": "present",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_COLLABORATION_INVITE_EMAIL_PROVIDER",
+      "status": "present",
+      "requiredValue": "external"
+    },
+    {
+      "name": "UAIS_COLLABORATION_INVITE_EMAIL_PROVIDER_URL",
+      "status": "present",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_COLLABORATION_INVITE_EMAIL_PROVIDER_TOKEN",
+      "status": "present",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_COLLABORATION_INVITE_EMAIL_CALLBACK_TOKEN",
+      "status": "present",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_STUDENT_ROSTER_SYNC_PROVIDER",
+      "status": "present",
+      "requiredValue": "external"
+    },
+    {
+      "name": "UAIS_STUDENT_ROSTER_SYNC_PROVIDER_URL",
+      "status": "present",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_STUDENT_ROSTER_SYNC_PROVIDER_TOKEN",
+      "status": "present",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_KNOWLEDGE_INDEX_SYNC_PROVIDER",
+      "status": "present",
+      "requiredValue": "external"
+    },
+    {
+      "name": "UAIS_KNOWLEDGE_INDEX_SYNC_PROVIDER_URL",
+      "status": "present",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_KNOWLEDGE_INDEX_SYNC_PROVIDER_TOKEN",
+      "status": "present",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_GRADEBOOK_RELEASE_PROVIDER",
+      "status": "present",
+      "requiredValue": "external"
+    },
+    {
+      "name": "UAIS_GRADEBOOK_RELEASE_PROVIDER_URL",
+      "status": "present",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_GRADEBOOK_RELEASE_PROVIDER_TOKEN",
+      "status": "present",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_COURSE_CONTENT_PUBLISH_PROVIDER",
+      "status": "present",
+      "requiredValue": "external"
+    },
+    {
+      "name": "UAIS_COURSE_CONTENT_PUBLISH_PROVIDER_URL",
+      "status": "present",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_COURSE_CONTENT_PUBLISH_PROVIDER_TOKEN",
+      "status": "present",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_COURSE_EXPORT_PROVIDER",
+      "status": "present",
+      "requiredValue": "external"
+    },
+    {
+      "name": "UAIS_COURSE_EXPORT_PROVIDER_URL",
+      "status": "present",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_COURSE_EXPORT_PROVIDER_TOKEN",
+      "status": "present",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_GRADING_FEEDBACK_PROVIDER",
+      "status": "present",
+      "requiredValue": "external"
+    },
+    {
+      "name": "UAIS_GRADING_FEEDBACK_PROVIDER_URL",
+      "status": "present",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_GRADING_FEEDBACK_PROVIDER_TOKEN",
+      "status": "present",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_TEACHING_OPERATIONS_SMOKE_COOKIE",
+      "status": "present",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_TEACHING_OPERATIONS_SMOKE_STUDENT_COOKIE",
+      "status": "present",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_TEACHING_OPERATIONS_SMOKE_TEACHER_ID",
+      "status": "present"
+    },
+    {
+      "name": "UAIS_TEACHING_OPERATIONS_SMOKE_COURSE_ID",
+      "status": "present"
+    },
+    {
+      "name": "UAIS_TEACHING_OPERATIONS_SMOKE_CLASS_ID",
+      "status": "present"
+    }
+  ],
+  "proves": [
+    "unauthenticated-post-denied",
+    "signed-teacher-cookie-required",
+    "signed-student-post-denied",
+    "signed-teacher-course-scope-denied",
+    "course-ownership-bound-operation-persisted",
+    "durable-external-persistence-returned",
+    "domain-persistence-summary-returned",
+    "operations-schema-migration-policy-returned",
+    "append-ledger-sequence-returned",
+    "append-ledger-sequence-readback-returned",
+    "audit-trace-returned",
+    "audit-auth-session-returned",
+    "audit-request-source-provenance-returned",
+    "unauthenticated-response-trace-header-returned",
+    "signed-student-response-trace-header-returned",
+    "unauthenticated-audit-readback-denied",
+    "unauthenticated-audit-readback-trace-header-returned",
+    "unauthenticated-alert-notification-enqueue-denied",
+    "unauthenticated-alert-notification-trace-header-returned",
+    "unauthenticated-alert-notification-readback-denied",
+    "unauthenticated-alert-notification-readback-trace-header-returned",
+    "authorized-response-trace-header-returned",
+    "audit-readback-returned",
+    "audit-auth-session-readback-returned",
+    "audit-readback-response-trace-header-returned",
+    "domain-projection-readback-returned",
+    "external-domain-projection-readback-returned",
+    "course-settings-domain-object-returned",
+    "course-settings-patch-readback-returned",
+    "student-preview-session-domain-object-returned",
+    "student-preview-session-audit-source-returned",
+    "student-roster-domain-object-returned",
+    "student-roster-provider-sync-returned",
+    "student-group-suggestion-domain-object-returned",
+    "student-group-suggestion-audit-source-returned",
+    "knowledge-index-domain-object-returned",
+    "knowledge-index-provider-sync-returned",
+    "resource-review-item-domain-object-returned",
+    "resource-review-item-audit-source-returned",
+    "course-content-domain-object-returned",
+    "course-content-provider-publish-returned",
+    "course-unit-draft-domain-object-returned",
+    "course-unit-draft-audit-source-returned",
+    "dashboard-state-domain-object-returned",
+    "dashboard-state-audit-source-returned",
+    "dashboard-snapshot-domain-object-returned",
+    "dashboard-snapshot-audit-source-returned",
+    "quiz-assessment-domain-object-returned",
+    "quiz-item-review-domain-object-returned",
+    "quiz-item-review-audit-source-returned",
+    "agent-settings-domain-object-returned",
+    "agent-settings-audit-source-returned",
+    "agent-permission-preflight-domain-object-returned",
+    "agent-permission-preflight-audit-source-returned",
+    "admin-settings-domain-object-returned",
+    "admin-settings-audit-source-returned",
+    "collaboration-invite-notification-domain-object-returned",
+    "collaboration-invite-email-delivery-returned",
+    "collaboration-invite-email-delivery-audit-source-returned",
+    "unauthenticated-collaboration-invite-email-callback-denied",
+    "unauthenticated-collaboration-invite-email-callback-trace-header-returned",
+    "collaboration-invite-email-bounce-callback-returned",
+    "collaboration-invite-email-callback-audit-source-returned",
+    "course-export-manifest-domain-object-returned",
+    "course-export-provider-returned",
+    "course-export-manifest-audit-source-returned",
+    "unauthenticated-export-manifest-download-denied",
+    "unauthenticated-export-manifest-download-trace-header-returned",
+    "export-manifest-download-readback-returned",
+    "export-redaction-validation-domain-object-returned",
+    "export-redaction-validation-audit-source-returned",
+    "grading-queue-domain-object-returned",
+    "gradebook-update-domain-object-returned",
+    "grading-feedback-draft-domain-object-returned",
+    "grading-feedback-provider-returned",
+    "idempotent-retry-returned",
+    "idempotent-retry-append-sequence-stable-returned",
+    "unauthenticated-rollback-denied",
+    "unauthenticated-rollback-trace-header-returned",
+    "rollback-record-persisted",
+    "rollback-response-trace-header-returned",
+    "rollback-trace-closure-returned",
+    "rollback-readback-returned",
+    "rollback-readback-response-trace-header-returned",
+    "unauthenticated-alert-summary-readback-denied",
+    "unauthenticated-alert-summary-readback-trace-header-returned",
+    "alert-summary-readback-returned",
+    "alert-notification-queued-returned",
+    "alert-notification-readback-returned",
+    "invite-code-draft-domain-object-returned",
+    "invite-code-draft-audit-source-returned",
+    "invite-publish-class-join-entry-returned",
+    "invite-code-publish-audit-source-returned",
+    "student-invite-join-returned",
+    "unauthenticated-gradebook-release-denied",
+    "unauthenticated-gradebook-release-trace-header-returned",
+    "unauthenticated-gradebook-rollback-denied",
+    "unauthenticated-gradebook-rollback-trace-header-returned",
+    "signed-student-gradebook-release-denied",
+    "signed-student-gradebook-release-trace-header-returned",
+    "signed-student-gradebook-rollback-denied",
+    "signed-student-gradebook-rollback-trace-header-returned",
+    "gradebook-release-trace-closure-returned",
+    "gradebook-release-audit-source-returned",
+    "gradebook-release-external-storage-returned",
+    "gradebook-provider-release-returned",
+    "gradebook-rollback-trace-closure-returned",
+    "gradebook-rollback-audit-source-returned",
+    "gradebook-rollback-external-storage-returned",
+    "external-backup-created-returned",
+    "unauthenticated-backup-restore-denied",
+    "unauthenticated-backup-restore-trace-header-returned",
+    "direct-backup-restore-disabled-returned",
+    "direct-backup-restore-trace-closure-returned",
+    "external-restore-drill-verified-returned",
+    "response-values-redacted",
+    "release-run-id-bound",
+    "same-vercel-production-deployment-bound",
+    "same-teacher-auth-provider-readiness-bound",
+    "same-app-auth-provider-readiness-bound",
+    "same-external-storage-service-readiness-bound"
+  ],
+  "blockedReasons": [],
+  "safety": {
+    "valuesRedacted": true,
+    "cookieValuesOmitted": true,
+    "responseBodiesOmitted": true,
+    "liveRequiresApproval": true,
+    "remoteMutationRequiresApproval": true
+  }
+}

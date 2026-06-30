@@ -1,0 +1,67 @@
+{
+  "target": "owner-checklist-deployed-smoke-detail-routing",
+  "date": "2026-06-19",
+  "responsibleSession": "S22",
+  "status": "hardened",
+  "objective": "Keep detailed deployed teacher workflow, browser, learning PPT playback, and protected route smoke blockers attached to the Vercel env/deploy/smoke owner decision instead of collapsing them into the generic production release-run decision.",
+  "changedFiles": [
+    "scripts/production-owner-decision-checklist.mjs",
+    "tests/production-owner-decision-checklist.test.ts",
+    "coordination/reports/2026-06-19-production-owner-decision-checklist-current-auth-storage-launch-bound-readiness.json"
+  ],
+  "evidence": {
+    "redTest": {
+      "command": "npm run test -- tests/production-owner-decision-checklist.test.ts -t \"detailed deployed smoke blockers\"",
+      "statusBeforeImplementation": "failed",
+      "failureMode": "vercel-env-deploy-and-smoke-chain omitted detailed deployed-smoke blockers while production-release-run retained them"
+    },
+    "greenTest": {
+      "command": "npm run test -- tests/production-owner-decision-checklist.test.ts -t \"detailed deployed smoke blockers\"",
+      "statusAfterImplementation": "passed"
+    },
+    "focusedSuite": {
+      "command": "npm run test -- tests/production-owner-decision-checklist.test.ts",
+      "result": "1 file / 11 tests passed"
+    },
+    "fullSuite": {
+      "command": "npm run test",
+      "result": "37 files / 493 tests passed"
+    },
+    "lint": {
+      "command": "npm run lint",
+      "result": "passed"
+    },
+    "build": {
+      "command": "npm run build",
+      "result": "passed"
+    }
+  },
+  "currentOwnerChecklist": {
+    "path": "coordination/reports/2026-06-19-production-owner-decision-checklist-current-auth-storage-launch-bound-readiness.json",
+    "status": "owner-decisions-required",
+    "releaseGateStatus": "blocked",
+    "vercelChainBlockedReasons": [
+      "vercel-env-not-applied",
+      "vercel-production-deployment-not-proven",
+      "deployed-teacher-workflow-page-not-live-passed",
+      "deployment-route-smoke-not-live-passed"
+    ]
+  },
+  "remainingProductionBlockers": [
+    "owner-approved Vercel team/project/link",
+    "Vercel env apply",
+    "production trusted teacher-auth readiness",
+    "external storage container build and remote service readiness",
+    "Vercel production deployment",
+    "deployed teacher workflow, browser, learning PPT, route, and storage smokes",
+    "manual PowerPoint/WPS playback acceptance"
+  ],
+  "safety": {
+    "valuesRedacted": true,
+    "secretsOmitted": true,
+    "deploymentUrlsOmitted": true,
+    "localPrivatePathsOmitted": true,
+    "productionMutationPerformed": false,
+    "vercelMutationPerformed": false
+  }
+}

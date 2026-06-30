@@ -1,0 +1,113 @@
+{
+  "target": "production-owner-decision-checklist-auth-storage-readiness-bridge",
+  "status": "bridged",
+  "responsibleSession": "S22",
+  "scope": "teacher-auth-and-external-storage-owner-checklist",
+  "summary": {
+    "change": "The production owner decision checklist now summarizes both local trusted teacher auth route-chain proof and external storage container build readiness evidence.",
+    "releaseSemantics": "Local auth route-chain proof and container harness readiness are supporting evidence only. They do not satisfy production auth readiness, Vercel env binding, live route smoke, remote external storage readiness, or production release eligibility.",
+    "outputPolicy": "Only allowlisted status fields, known route/cookie names, known blocked reasons, and boolean safety flags are emitted."
+  },
+  "currentEvidence": {
+    "ownerChecklistReport": "coordination/reports/2026-06-19-production-owner-decision-checklist-current-auth-storage-container.json",
+    "ownerChecklistStatus": "owner-decisions-required",
+    "releaseGateStatus": "blocked",
+    "localProductionDiagnostic": "current-passed-not-release-eligible",
+    "teacherAuthDecision": {
+      "status": "owner-decision-needed",
+      "blockedReasons": ["teacher-auth-provider-readiness-not-live-ready"],
+      "trustedRouteChainSummary": {
+        "evidenceStatus": "proved-locally",
+        "authProvider": "trusted-cookie-issuer",
+        "routeChain": [
+          "/api/ai/teacher-auth/issue",
+          "/api/ai/session"
+        ],
+        "sessionCookiePair": [
+          "uais_teacher_auth_claims",
+          "uais_teacher_auth_signature"
+        ],
+        "downstreamAiSession": "scoped-teacher-ai-session-issued",
+        "workflowAction": "ppt-narration-submit",
+        "localTrustedCookieRouteWiring": "proved",
+        "productionTeacherAuthReadiness": "still-blocked-without-owner-approved-vercel-env-and-live-route-smoke",
+        "releaseGateEligible": false
+      }
+    },
+    "externalStorageDecision": {
+      "status": "owner-decision-needed",
+      "blockedReasons": [
+        "external-storage-service-readiness-not-live-ready",
+        "external-storage-smoke-not-live-passed"
+      ],
+      "containerBuildReadiness": {
+        "evidenceStatus": "harness-hardened",
+        "harness": "ready-for-approved-build-attempt",
+        "currentStatus": "blocked",
+        "dockerDaemon": "unavailable",
+        "buildInvoked": false,
+        "localImageBuild": "not-proven-docker-daemon-unavailable",
+        "releaseGateEligible": false
+      }
+    }
+  },
+  "checks": [
+    {
+      "command": "npm run test -- tests/production-owner-decision-checklist.test.ts -t \"summarizes local trusted teacher auth route-chain proof\"",
+      "status": "passed",
+      "files": 1,
+      "tests": 1
+    },
+    {
+      "command": "npm run test -- tests/production-owner-decision-checklist.test.ts",
+      "status": "passed",
+      "files": 1,
+      "tests": 9
+    },
+    {
+      "command": "node scripts/production-owner-decision-checklist.mjs --release-gate <redacted> --vercel-project-readiness <redacted> --local-production-e2e <redacted> --external-storage-container-build-readiness <redacted> --trusted-teacher-auth-route-chain <redacted>",
+      "status": "passed",
+      "report": "coordination/reports/2026-06-19-production-owner-decision-checklist-current-auth-storage-container.json"
+    },
+    {
+      "command": "node --check scripts/production-owner-decision-checklist.mjs",
+      "status": "passed"
+    },
+    {
+      "command": "report-redaction-scan",
+      "status": "passed",
+      "report": "coordination/reports/2026-06-19-production-owner-decision-checklist-current-auth-storage-container.json"
+    },
+    {
+      "command": "npm run test -- tests/production-owner-decision-checklist.test.ts tests/ai-api-routes.test.ts tests/teacher-auth-provider-readiness.test.ts tests/external-storage-container-build-readiness.test.ts",
+      "status": "passed",
+      "files": 4,
+      "tests": 94
+    },
+    {
+      "command": "npm run lint",
+      "status": "passed"
+    },
+    {
+      "command": "npm run test",
+      "status": "passed",
+      "files": 35,
+      "tests": 478
+    }
+  ],
+  "remainingBlockers": [
+    "Production teacher auth still requires owner-approved Vercel env apply evidence and live production route smoke.",
+    "External storage still requires a real image build or approved build runner, remote HTTPS service readiness, Vercel env binding, and production storage smoke.",
+    "Production release still requires Vercel project/link/deploy evidence and human PowerPoint/WPS playback acceptance."
+  ],
+  "safety": {
+    "secretsRedacted": true,
+    "cookieValuesOmitted": true,
+    "sessionIdsOmitted": true,
+    "imageTagsOmitted": true,
+    "evidencePathsOmittedFromChecklist": true,
+    "localPrivatePathsOmitted": true,
+    "productionMutationPerformed": false,
+    "vercelMutationPerformed": false
+  }
+}

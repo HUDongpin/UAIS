@@ -1,0 +1,436 @@
+{
+  "target": "ppt-narration-openxml-package-integrity",
+  "status": "passed",
+  "checkedAt": "2026-06-21T15:14:11.783Z",
+  "responsibleSession": "S24",
+  "packageId": "kangxia-natural-number-ordinal-theory-v1",
+  "sourceDeckTitle": "初等数学研究+PPT1+自然数的序数理论.pptx",
+  "expectedSlideCount": 19,
+  "packageArtifactFingerprintStatus": "matched",
+  "artifacts": {
+    "narratedPptx": {
+      "status": "present",
+      "fileName": "audio-manifest-elementary-math-research-natural-number-ordinal-theory-ppt1-kangxia-narrated.pptx",
+      "sizeBytes": 36042033,
+      "fingerprint": "sha256:6b92d1bdde6c2904",
+      "fullFingerprintStatus": "matched-package-artifact",
+      "valueRedacted": true
+    },
+    "exportZip": {
+      "status": "present",
+      "fileName": "audio-manifest-elementary-math-research-natural-number-ordinal-theory-ppt1-ppt-narration.zip",
+      "sizeBytes": 13702621,
+      "fingerprint": "sha256:223a1fca0b779f1e",
+      "fullFingerprintStatus": "computed-and-redacted",
+      "valueRedacted": true
+    },
+    "manifest": {
+      "status": "present",
+      "fileName": "manifest.json",
+      "sizeBytes": 7888,
+      "fingerprint": "sha256:59ad6da406ed6023",
+      "fullFingerprintStatus": "computed-and-redacted",
+      "valueRedacted": true
+    },
+    "pdfRender": {
+      "status": "present",
+      "fileName": "audio-manifest-elementary-math-research-natural-number-ordinal-theory-ppt1-kangxia-narrated.pdf",
+      "sizeBytes": 3600027,
+      "fingerprint": "sha256:332557251d88e7fb",
+      "fullFingerprintStatus": "computed-and-redacted",
+      "valueRedacted": true
+    },
+    "contactSheet": {
+      "status": "present",
+      "fileName": "kangxia-narrated-contact-sheet.jpg",
+      "sizeBytes": 173712,
+      "fingerprint": "sha256:fcdcd20cc4d95f06",
+      "fullFingerprintStatus": "computed-and-redacted",
+      "valueRedacted": true
+    }
+  },
+  "counts": {
+    "manifestAssets": 19,
+    "pptxSlideXmls": 19,
+    "pptxSlideRelationshipFiles": 19,
+    "pptxEmbeddedNarrationWavs": 19,
+    "pptxValidEmbeddedNarrationWavs": 19,
+    "pptxNonEmptyEmbeddedNarrationWavs": 19,
+    "exportZipWavs": 19,
+    "renderedPageImages": 3
+  },
+  "slideAudioRelations": [
+    {
+      "slideId": "slide-01",
+      "relationshipFile": "slide1.xml.rels",
+      "expectedTarget": "../media/kangxia_narration_slide_01.wav",
+      "audioRelationship": "present",
+      "targetStatus": "matched"
+    },
+    {
+      "slideId": "slide-02",
+      "relationshipFile": "slide2.xml.rels",
+      "expectedTarget": "../media/kangxia_narration_slide_02.wav",
+      "audioRelationship": "present",
+      "targetStatus": "matched"
+    },
+    {
+      "slideId": "slide-03",
+      "relationshipFile": "slide3.xml.rels",
+      "expectedTarget": "../media/kangxia_narration_slide_03.wav",
+      "audioRelationship": "present",
+      "targetStatus": "matched"
+    },
+    {
+      "slideId": "slide-04",
+      "relationshipFile": "slide4.xml.rels",
+      "expectedTarget": "../media/kangxia_narration_slide_04.wav",
+      "audioRelationship": "present",
+      "targetStatus": "matched"
+    },
+    {
+      "slideId": "slide-05",
+      "relationshipFile": "slide5.xml.rels",
+      "expectedTarget": "../media/kangxia_narration_slide_05.wav",
+      "audioRelationship": "present",
+      "targetStatus": "matched"
+    },
+    {
+      "slideId": "slide-06",
+      "relationshipFile": "slide6.xml.rels",
+      "expectedTarget": "../media/kangxia_narration_slide_06.wav",
+      "audioRelationship": "present",
+      "targetStatus": "matched"
+    },
+    {
+      "slideId": "slide-07",
+      "relationshipFile": "slide7.xml.rels",
+      "expectedTarget": "../media/kangxia_narration_slide_07.wav",
+      "audioRelationship": "present",
+      "targetStatus": "matched"
+    },
+    {
+      "slideId": "slide-08",
+      "relationshipFile": "slide8.xml.rels",
+      "expectedTarget": "../media/kangxia_narration_slide_08.wav",
+      "audioRelationship": "present",
+      "targetStatus": "matched"
+    },
+    {
+      "slideId": "slide-09",
+      "relationshipFile": "slide9.xml.rels",
+      "expectedTarget": "../media/kangxia_narration_slide_09.wav",
+      "audioRelationship": "present",
+      "targetStatus": "matched"
+    },
+    {
+      "slideId": "slide-10",
+      "relationshipFile": "slide10.xml.rels",
+      "expectedTarget": "../media/kangxia_narration_slide_10.wav",
+      "audioRelationship": "present",
+      "targetStatus": "matched"
+    },
+    {
+      "slideId": "slide-11",
+      "relationshipFile": "slide11.xml.rels",
+      "expectedTarget": "../media/kangxia_narration_slide_11.wav",
+      "audioRelationship": "present",
+      "targetStatus": "matched"
+    },
+    {
+      "slideId": "slide-12",
+      "relationshipFile": "slide12.xml.rels",
+      "expectedTarget": "../media/kangxia_narration_slide_12.wav",
+      "audioRelationship": "present",
+      "targetStatus": "matched"
+    },
+    {
+      "slideId": "slide-13",
+      "relationshipFile": "slide13.xml.rels",
+      "expectedTarget": "../media/kangxia_narration_slide_13.wav",
+      "audioRelationship": "present",
+      "targetStatus": "matched"
+    },
+    {
+      "slideId": "slide-14",
+      "relationshipFile": "slide14.xml.rels",
+      "expectedTarget": "../media/kangxia_narration_slide_14.wav",
+      "audioRelationship": "present",
+      "targetStatus": "matched"
+    },
+    {
+      "slideId": "slide-15",
+      "relationshipFile": "slide15.xml.rels",
+      "expectedTarget": "../media/kangxia_narration_slide_15.wav",
+      "audioRelationship": "present",
+      "targetStatus": "matched"
+    },
+    {
+      "slideId": "slide-16",
+      "relationshipFile": "slide16.xml.rels",
+      "expectedTarget": "../media/kangxia_narration_slide_16.wav",
+      "audioRelationship": "present",
+      "targetStatus": "matched"
+    },
+    {
+      "slideId": "slide-17",
+      "relationshipFile": "slide17.xml.rels",
+      "expectedTarget": "../media/kangxia_narration_slide_17.wav",
+      "audioRelationship": "present",
+      "targetStatus": "matched"
+    },
+    {
+      "slideId": "slide-18",
+      "relationshipFile": "slide18.xml.rels",
+      "expectedTarget": "../media/kangxia_narration_slide_18.wav",
+      "audioRelationship": "present",
+      "targetStatus": "matched"
+    },
+    {
+      "slideId": "slide-19",
+      "relationshipFile": "slide19.xml.rels",
+      "expectedTarget": "../media/kangxia_narration_slide_19.wav",
+      "audioRelationship": "present",
+      "targetStatus": "matched"
+    }
+  ],
+  "embeddedNarrationWavs": [
+    {
+      "slideId": "slide-01",
+      "fileName": "kangxia_narration_slide_01.wav",
+      "status": "valid",
+      "container": "RIFF/WAVE",
+      "audioFormat": "pcm",
+      "channels": 1,
+      "sampleRate": 24000,
+      "bitsPerSample": 16,
+      "dataBytes": 744960,
+      "durationSeconds": 15.52
+    },
+    {
+      "slideId": "slide-02",
+      "fileName": "kangxia_narration_slide_02.wav",
+      "status": "valid",
+      "container": "RIFF/WAVE",
+      "audioFormat": "pcm",
+      "channels": 1,
+      "sampleRate": 24000,
+      "bitsPerSample": 16,
+      "dataBytes": 698880,
+      "durationSeconds": 14.56
+    },
+    {
+      "slideId": "slide-03",
+      "fileName": "kangxia_narration_slide_03.wav",
+      "status": "valid",
+      "container": "RIFF/WAVE",
+      "audioFormat": "pcm",
+      "channels": 1,
+      "sampleRate": 24000,
+      "bitsPerSample": 16,
+      "dataBytes": 672000,
+      "durationSeconds": 14
+    },
+    {
+      "slideId": "slide-04",
+      "fileName": "kangxia_narration_slide_04.wav",
+      "status": "valid",
+      "container": "RIFF/WAVE",
+      "audioFormat": "pcm",
+      "channels": 1,
+      "sampleRate": 24000,
+      "bitsPerSample": 16,
+      "dataBytes": 672000,
+      "durationSeconds": 14
+    },
+    {
+      "slideId": "slide-05",
+      "fileName": "kangxia_narration_slide_05.wav",
+      "status": "valid",
+      "container": "RIFF/WAVE",
+      "audioFormat": "pcm",
+      "channels": 1,
+      "sampleRate": 24000,
+      "bitsPerSample": 16,
+      "dataBytes": 737280,
+      "durationSeconds": 15.36
+    },
+    {
+      "slideId": "slide-06",
+      "fileName": "kangxia_narration_slide_06.wav",
+      "status": "valid",
+      "container": "RIFF/WAVE",
+      "audioFormat": "pcm",
+      "channels": 1,
+      "sampleRate": 24000,
+      "bitsPerSample": 16,
+      "dataBytes": 729600,
+      "durationSeconds": 15.2
+    },
+    {
+      "slideId": "slide-07",
+      "fileName": "kangxia_narration_slide_07.wav",
+      "status": "valid",
+      "container": "RIFF/WAVE",
+      "audioFormat": "pcm",
+      "channels": 1,
+      "sampleRate": 24000,
+      "bitsPerSample": 16,
+      "dataBytes": 721920,
+      "durationSeconds": 15.04
+    },
+    {
+      "slideId": "slide-08",
+      "fileName": "kangxia_narration_slide_08.wav",
+      "status": "valid",
+      "container": "RIFF/WAVE",
+      "audioFormat": "pcm",
+      "channels": 1,
+      "sampleRate": 24000,
+      "bitsPerSample": 16,
+      "dataBytes": 591360,
+      "durationSeconds": 12.32
+    },
+    {
+      "slideId": "slide-09",
+      "fileName": "kangxia_narration_slide_09.wav",
+      "status": "valid",
+      "container": "RIFF/WAVE",
+      "audioFormat": "pcm",
+      "channels": 1,
+      "sampleRate": 24000,
+      "bitsPerSample": 16,
+      "dataBytes": 698880,
+      "durationSeconds": 14.56
+    },
+    {
+      "slideId": "slide-10",
+      "fileName": "kangxia_narration_slide_10.wav",
+      "status": "valid",
+      "container": "RIFF/WAVE",
+      "audioFormat": "pcm",
+      "channels": 1,
+      "sampleRate": 24000,
+      "bitsPerSample": 16,
+      "dataBytes": 733440,
+      "durationSeconds": 15.28
+    },
+    {
+      "slideId": "slide-11",
+      "fileName": "kangxia_narration_slide_11.wav",
+      "status": "valid",
+      "container": "RIFF/WAVE",
+      "audioFormat": "pcm",
+      "channels": 1,
+      "sampleRate": 24000,
+      "bitsPerSample": 16,
+      "dataBytes": 852480,
+      "durationSeconds": 17.76
+    },
+    {
+      "slideId": "slide-12",
+      "fileName": "kangxia_narration_slide_12.wav",
+      "status": "valid",
+      "container": "RIFF/WAVE",
+      "audioFormat": "pcm",
+      "channels": 1,
+      "sampleRate": 24000,
+      "bitsPerSample": 16,
+      "dataBytes": 691200,
+      "durationSeconds": 14.4
+    },
+    {
+      "slideId": "slide-13",
+      "fileName": "kangxia_narration_slide_13.wav",
+      "status": "valid",
+      "container": "RIFF/WAVE",
+      "audioFormat": "pcm",
+      "channels": 1,
+      "sampleRate": 24000,
+      "bitsPerSample": 16,
+      "dataBytes": 721920,
+      "durationSeconds": 15.04
+    },
+    {
+      "slideId": "slide-14",
+      "fileName": "kangxia_narration_slide_14.wav",
+      "status": "valid",
+      "container": "RIFF/WAVE",
+      "audioFormat": "pcm",
+      "channels": 1,
+      "sampleRate": 24000,
+      "bitsPerSample": 16,
+      "dataBytes": 691200,
+      "durationSeconds": 14.4
+    },
+    {
+      "slideId": "slide-15",
+      "fileName": "kangxia_narration_slide_15.wav",
+      "status": "valid",
+      "container": "RIFF/WAVE",
+      "audioFormat": "pcm",
+      "channels": 1,
+      "sampleRate": 24000,
+      "bitsPerSample": 16,
+      "dataBytes": 752640,
+      "durationSeconds": 15.68
+    },
+    {
+      "slideId": "slide-16",
+      "fileName": "kangxia_narration_slide_16.wav",
+      "status": "valid",
+      "container": "RIFF/WAVE",
+      "audioFormat": "pcm",
+      "channels": 1,
+      "sampleRate": 24000,
+      "bitsPerSample": 16,
+      "dataBytes": 744960,
+      "durationSeconds": 15.52
+    },
+    {
+      "slideId": "slide-17",
+      "fileName": "kangxia_narration_slide_17.wav",
+      "status": "valid",
+      "container": "RIFF/WAVE",
+      "audioFormat": "pcm",
+      "channels": 1,
+      "sampleRate": 24000,
+      "bitsPerSample": 16,
+      "dataBytes": 683520,
+      "durationSeconds": 14.24
+    },
+    {
+      "slideId": "slide-18",
+      "fileName": "kangxia_narration_slide_18.wav",
+      "status": "valid",
+      "container": "RIFF/WAVE",
+      "audioFormat": "pcm",
+      "channels": 1,
+      "sampleRate": 24000,
+      "bitsPerSample": 16,
+      "dataBytes": 798720,
+      "durationSeconds": 16.64
+    },
+    {
+      "slideId": "slide-19",
+      "fileName": "kangxia_narration_slide_19.wav",
+      "status": "valid",
+      "container": "RIFF/WAVE",
+      "audioFormat": "pcm",
+      "channels": 1,
+      "sampleRate": 24000,
+      "bitsPerSample": 16,
+      "dataBytes": 752640,
+      "durationSeconds": 15.68
+    }
+  ],
+  "blockedReasons": [],
+  "manualAcceptanceStatus": "not-a-human-playback-record",
+  "safety": {
+    "secretsIncluded": false,
+    "rawAudioOmitted": true,
+    "localPrivatePathsOmitted": true,
+    "fullArtifactFingerprintsOmitted": true,
+    "machineIntegrityNotFinalManualAcceptance": true
+  }
+}

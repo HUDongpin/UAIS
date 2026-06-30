@@ -1,0 +1,133 @@
+{
+  "target": "teacher-auth-provider-readiness-session-route-strictness",
+  "date": "2026-06-21",
+  "status": "blocked-production-session-route-not-proven",
+  "responsibleSessions": ["S12", "S19", "S22"],
+  "scope": {
+    "goalItem": "production trusted teacher auth/session provider",
+    "changeType": "release-readiness-contract-hardening",
+    "productionCompletionStatus": "not-complete",
+    "reason": "Production readiness now requires deployed issuer route proof and deployed issued teacher AI session route proof."
+  },
+  "codeChange": {
+    "file": "scripts/teacher-auth-provider-readiness.mjs",
+    "summary": "Tightened trusted-cookie production readiness so route-smoke evidence must prove the issued teacher AI session route, not only the teacher-auth issuer route.",
+    "acceptedRouteSmokeTargets": [
+      "teacher-auth-issuer-route-smoke",
+      "deployment-route-smoke"
+    ],
+    "newRequiredProof": {
+      "routeId": "s22-teacher-ai-session-route",
+      "route": "/api/ai/session",
+      "auth": "issued-teacher-auth-cookie",
+      "requiredResponseShape": [
+        "accessSession",
+        "accessPlan",
+        "authProviderContract",
+        "s12TeacherAiSessionBoundary"
+      ]
+    }
+  },
+  "redGreenEvidence": {
+    "red": {
+      "command": "npm run test -- tests/teacher-auth-provider-readiness.test.ts",
+      "status": "failed-as-expected",
+      "failure": "Readiness exited 0 even when deployed issued teacher AI session route evidence failed."
+    },
+    "green": {
+      "command": "npm run test -- tests/teacher-auth-provider-readiness.test.ts",
+      "status": "passed",
+      "testFiles": 1,
+      "tests": 18
+    }
+  },
+  "currentProductionRebind": {
+    "command": "node scripts/teacher-auth-provider-readiness.mjs --live --approved --environment production --provider trusted-cookie-issuer --release-run-id <redacted-release-run-id> --vercel-env-sync <teacher-auth-env-evidence> --trusted-teacher-auth-route-chain <route-chain-evidence> --route-smoke <www-uais-top-protected-route-smoke>",
+    "status": "blocked",
+    "releaseRunId": "uais-release-2026-06-20-teacher-auth-scope",
+    "authProviderMode": "trusted-cookie-issuer",
+    "blockedReasons": ["trusted-teacher-auth-route-smoke-not-proven"],
+    "vercelEnvSyncEvidence": {
+      "target": "vercel-env-sync",
+      "deploymentScope": "teacher-auth",
+      "status": "matched",
+      "applyPreflight": "proved",
+      "releaseRunIdStatus": "matched",
+      "valueRedacted": true
+    },
+    "trustedTeacherAuthRouteChainEvidence": {
+      "target": "trusted-teacher-auth-route-chain-contract",
+      "status": "proved",
+      "authProvider": "trusted-cookie-issuer",
+      "routeChain": "proved",
+      "issuerProofValidation": "proved",
+      "issuerCookieHardening": "proved",
+      "sessionCookiePair": "proved",
+      "downstreamAiSession": "proved",
+      "workflowAction": "proved",
+      "redactionSafety": "proved",
+      "valueRedacted": true
+    },
+    "trustedTeacherAuthRouteSmokeEvidence": {
+      "target": "deployment-route-smoke",
+      "status": "not-proven",
+      "releaseRunIdStatus": "matched",
+      "deploymentBinding": "proved",
+      "teacherAuthIssuerRoute": "proved",
+      "issuedTeacherAiSessionRoute": "missing",
+      "responseHeaders": "proved",
+      "responseShape": "proved",
+      "valueRedacted": true
+    },
+    "interpretation": "Teacher-auth cookie issuance is proved on www.uais.top, but production auth/session provider readiness is not complete because the deployed issued teacher AI session route returned non-ready evidence in the protected route smoke."
+  },
+  "localEnvironmentObservation": {
+    "UAIS_TEACHER_AUTH_PROVIDER": "missing",
+    "UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET": "missing",
+    "UAIS_TEACHER_AUTH_ISSUER_SECRET": "missing",
+    "valuesRedacted": true
+  },
+  "checksRun": [
+    {
+      "command": "npm run test -- tests/teacher-auth-provider-readiness.test.ts",
+      "status": "passed",
+      "testFiles": 1,
+      "tests": 18
+    },
+    {
+      "command": "npm run test -- tests/teacher-auth-provider-readiness.test.ts tests/ai-api-routes.test.ts tests/trusted-teacher-auth-route-chain-contract.test.ts tests/production-release-gate.test.ts",
+      "status": "passed",
+      "testFiles": 4,
+      "tests": 253
+    },
+    {
+      "command": "npm run test",
+      "status": "passed",
+      "testFiles": 44,
+      "tests": 607
+    },
+    {
+      "command": "npm run lint",
+      "status": "passed"
+    },
+    {
+      "command": "npm run build",
+      "status": "passed"
+    }
+  ],
+  "remainingBlockers": [
+    "The deployed protected route smoke for www.uais.top still does not prove /api/ai/session with issued teacher-auth cookies.",
+    "The local shell does not have teacher-auth runtime env variables, so fresh production auth/session live evidence cannot be minted from this shell without approved runtime injection.",
+    "Production external storage and teacher ownership data must be present for /api/ai/session and the downstream teacher workflow route to pass end to end.",
+    "A new production deployment is still needed for the latest local external-storage health-contract fix."
+  ],
+  "safety": {
+    "secretsRedacted": true,
+    "cookieValuesOmitted": true,
+    "sessionIdsOmitted": true,
+    "providerValuesOmitted": true,
+    "localPrivatePathsOmitted": true,
+    "productionMutationPerformed": false,
+    "goalMarkedComplete": false
+  }
+}

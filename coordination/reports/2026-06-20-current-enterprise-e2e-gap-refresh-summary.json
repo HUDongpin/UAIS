@@ -1,0 +1,106 @@
+{
+  "target": "current-enterprise-e2e-gap-refresh",
+  "status": "blocked-but-narrowed",
+  "checkedAt": "2026-06-20T18:50:05+08:00",
+  "responsibleSession": "S22",
+  "goalStatus": "active-not-complete",
+  "freshEvidence": [
+    {
+      "file": "coordination/reports/2026-06-20-vercel-project-readiness-current-refresh.json",
+      "status": "ready",
+      "scope": "Vercel CLI/auth/project-link/upload-hygiene readiness"
+    },
+    {
+      "file": "coordination/reports/2026-06-20-teacher-workflow-ui-smoke-current-refresh.json",
+      "status": "accepted",
+      "scope": "website-level teacher workflow UI feature anchors"
+    },
+    {
+      "file": "coordination/reports/2026-06-20-ppt-narration-openxml-package-integrity-current.json",
+      "status": "passed",
+      "scope": "narrated PPTX package has 19 slides, 19 slide relationship files, 19 embedded WAV files, 19 ZIP WAV files, and 19 rendered page images"
+    },
+    {
+      "file": "coordination/reports/2026-06-20-kangxia-ppt-manual-playback-acceptance-gate-current-refresh.json",
+      "status": "blocked",
+      "scope": "manual PPT/WPS acceptance gate now binds current deployment fingerprint but still lacks human playback record"
+    },
+    {
+      "file": "coordination/reports/2026-06-20-production-e2e-release-gate-current-www-uais-top-refresh-2.json",
+      "status": "blocked",
+      "scope": "aggregate production E2E release gate refreshed with current evidence"
+    }
+  ],
+  "satisfiedRequirements": [
+    "website-teacher-workflow-ui",
+    "vercel-project-readiness",
+    "trusted-teacher-auth-route-chain",
+    "external-storage-production-launch-contract",
+    "external-storage-container-build-readiness"
+  ],
+  "remainingBlockers": [
+    "deployed-teacher-workflow-page-vercel-deployment-binding-not-proven",
+    "teacher-workflow-browser-smoke-api-interception-not-proven",
+    "deployed-learning-ppt-playback-vercel-deployment-binding-not-proven",
+    "vercel-env-not-applied",
+    "teacher-auth-provider-readiness-not-live-ready",
+    "external-storage-service-readiness-not-live-ready",
+    "vercel-production-deployment-not-production",
+    "deployment-route-smoke-not-live-passed",
+    "external-storage-smoke-not-production",
+    "manual-ppt-playback-not-accepted"
+  ],
+  "envFindings": {
+    "vercelRemoteEnvCounts": {
+      "production": 0,
+      "preview": 0
+    },
+    "localEnvNameInventory": {
+      "presentProviderNamesOnly": [
+        "DASHSCOPE_API_KEY",
+        "DASHSCOPE_BASE_URL",
+        "DEEPSEEK_API_KEY",
+        "DEEPSEEK_BASE_URL",
+        "DEEPSEEK_MODEL",
+        "QWEN_IMAGE_MODEL",
+        "QWEN_MULTIMODAL_MODEL",
+        "QWEN_TTS_MODEL",
+        "UAIS_LIVE_AI_APPROVAL_TOKEN",
+        "UAIS_LRS_ENDPOINT",
+        "UAIS_LRS_PASSWORD",
+        "UAIS_LRS_USERNAME",
+        "UAIS_LRS_XAPI_VERSION"
+      ],
+      "missingProductionCriticalNames": [
+        "UAIS_AI_ACCESS_SIGNING_SECRET",
+        "UAIS_TEACHER_AUTH_PROVIDER",
+        "UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET",
+        "UAIS_TEACHER_AUTH_ISSUER_SECRET",
+        "UAIS_TEACHER_AI_OWNERSHIP_BACKEND",
+        "UAIS_VOICE_LIFECYCLE_AUDIT_BACKEND",
+        "UAIS_EXTERNAL_STORAGE_BASE_URL",
+        "UAIS_EXTERNAL_STORAGE_ACCESS_TOKEN"
+      ],
+      "valuesRedacted": true
+    }
+  },
+  "pptPackageIntegrity": {
+    "packageId": "kangxia-natural-number-ordinal-theory-v1",
+    "expectedSlideCount": 19,
+    "machineIntegrityStatus": "passed",
+    "manualAcceptanceStatus": "pending-human-playback"
+  },
+  "nextActions": [
+    "S19: provide or create owner-approved production env source for internal auth/session/storage variables and apply to Vercel production+preview with release-run id.",
+    "S22/S12: after env sync, run production teacher-auth provider readiness and protected route smoke.",
+    "S22/S12/S24: provision a remote HTTPS external durable storage service, bind Vercel env to its URL/token, then rerun production service readiness and storage smoke.",
+    "S24/owner: open the narrated PPTX in Microsoft PowerPoint and WPS Presentation, play all 19 slides, and record accepted-after-human-playback evidence.",
+    "S22: rerun production deployment evidence and aggregate release gate only after env sync, remote storage, route smoke, and manual PPT evidence exist."
+  ],
+  "redaction": {
+    "secretsIncluded": false,
+    "rawEnvValuesIncluded": false,
+    "localPrivatePathsIncluded": false,
+    "rawAudioIncluded": false
+  }
+}

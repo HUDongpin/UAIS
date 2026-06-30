@@ -1,0 +1,108 @@
+{
+  "target": "release-gate-trusted-auth-route-chain-integration",
+  "status": "integrated",
+  "responsibleSessions": ["S11", "S22"],
+  "scope": "production-e2e-release-gate-trusted-teacher-auth-route-chain",
+  "summary": {
+    "change": "The production E2E release gate now accepts trusted teacher auth route-chain evidence and emits a dedicated requirement for it.",
+    "releaseSemantics": "A proved local trusted route-chain can now be represented as satisfied in the final release gate, while production teacher-auth readiness still requires Vercel env binding and live deployed route smoke.",
+    "legacyInputBehavior": "When route-chain evidence is absent, the requirement is marked waiting-for-trusted-route-chain-evidence so older partial snapshots can still explain other blockers; the production orchestrator now supplies the route-chain evidence in the official final gate command."
+  },
+  "artifacts": {
+    "releaseGateScript": "scripts/production-e2e-release-gate.mjs",
+    "releaseGateTest": "tests/production-release-gate.test.ts",
+    "orchestratorScript": "scripts/production-e2e-orchestrator.mjs",
+    "orchestratorTest": "tests/production-e2e-orchestrator.test.ts",
+    "currentReleaseGate": "coordination/reports/2026-06-19-production-e2e-release-gate-current-auth-route-chain.json",
+    "currentOwnerChecklist": "coordination/reports/2026-06-19-production-owner-decision-checklist-current-auth-route-chain.json"
+  },
+  "currentEvidence": {
+    "releaseGate": {
+      "status": "blocked",
+      "trustedTeacherAuthRouteChain": "satisfied",
+      "trustedTeacherAuthEvidenceStatus": "proved-locally",
+      "remainingBlockedReasons": [
+        "deployed-teacher-workflow-page-not-live-passed",
+        "vercel-team-scope-missing",
+        "vercel-env-not-applied",
+        "teacher-auth-provider-readiness-not-live-ready",
+        "external-storage-service-readiness-not-live-ready",
+        "vercel-production-deployment-not-proven",
+        "deployment-route-smoke-not-live-passed",
+        "external-storage-smoke-not-live-passed",
+        "manual-ppt-playback-not-accepted"
+      ]
+    }
+  },
+  "checks": [
+    {
+      "command": "npm run test -- tests/production-release-gate.test.ts -t \"trusted teacher auth route-chain\"",
+      "status": "passed",
+      "files": 1,
+      "tests": 1
+    },
+    {
+      "command": "npm run test -- tests/production-e2e-orchestrator.test.ts -t \"redacted dry-run plan\"",
+      "status": "passed",
+      "files": 1,
+      "tests": 1
+    },
+    {
+      "command": "npm run test -- tests/production-release-gate.test.ts",
+      "status": "passed",
+      "files": 1,
+      "tests": 136
+    },
+    {
+      "command": "node scripts/production-e2e-release-gate.mjs --trusted-teacher-auth-route-chain <redacted> ...",
+      "status": "passed",
+      "report": "coordination/reports/2026-06-19-production-e2e-release-gate-current-auth-route-chain.json"
+    },
+    {
+      "command": "node scripts/production-owner-decision-checklist.mjs --release-gate <redacted> --trusted-teacher-auth-route-chain <redacted> ...",
+      "status": "passed",
+      "report": "coordination/reports/2026-06-19-production-owner-decision-checklist-current-auth-route-chain.json"
+    },
+    {
+      "command": "node --check scripts/production-e2e-release-gate.mjs",
+      "status": "passed"
+    },
+    {
+      "command": "node --check scripts/production-e2e-orchestrator.mjs",
+      "status": "passed"
+    },
+    {
+      "command": "npm run test -- tests/production-release-gate.test.ts tests/production-e2e-orchestrator.test.ts tests/production-owner-decision-checklist.test.ts tests/trusted-teacher-auth-route-chain-contract.test.ts",
+      "status": "passed",
+      "files": 4,
+      "tests": 150
+    },
+    {
+      "command": "npm run lint",
+      "status": "passed"
+    },
+    {
+      "command": "npm run test",
+      "status": "passed",
+      "files": 36,
+      "tests": 482
+    },
+    {
+      "command": "npm run build",
+      "status": "passed"
+    }
+  ],
+  "remainingBlockers": [
+    "Production teacher auth still requires owner-approved Vercel env apply evidence and live deployed route smoke.",
+    "Production release remains blocked by Vercel project/team/link/env/deploy, remote durable storage, deployed smokes, and human PPT/WPS/PowerPoint acceptance."
+  ],
+  "safety": {
+    "secretsRedacted": true,
+    "cookieValuesOmitted": true,
+    "sessionIdsOmitted": true,
+    "evidencePathsOmittedFromChecklist": true,
+    "localPrivatePathsOmitted": true,
+    "productionMutationPerformed": false,
+    "vercelMutationPerformed": false
+  }
+}

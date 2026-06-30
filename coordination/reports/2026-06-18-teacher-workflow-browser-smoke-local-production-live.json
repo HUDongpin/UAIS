@@ -1,0 +1,83 @@
+{
+  "target": "teacher-workflow-browser-smoke",
+  "mode": "live",
+  "environment": "local-production",
+  "network": "enabled",
+  "status": "passed",
+  "responsibleSession": "S22",
+  "route": "/teaching",
+  "deploymentFingerprint": {
+    "status": "present",
+    "value": "sha256:2e3785a7881d6173"
+  },
+  "deploymentOrigin": {
+    "status": "present",
+    "originClass": "local-loopback",
+    "valueRedacted": true
+  },
+  "browserInteractions": [
+    "open-teaching-page",
+    "hydrate-teacher-workflow",
+    "select-voice-sample-file",
+    "refresh-server-workflow",
+    "submit-voice-sample-with-signed-session",
+    "run-voice-clone-preflight",
+    "save-voice-ref",
+    "submit-ppt-narration",
+    "verify-per-slide-wav-download-links"
+  ],
+  "apiInterceptionPolicy": {
+    "workflowApis": "fixture-only",
+    "remoteMutations": "blocked",
+    "responseBodiesOmitted": true
+  },
+  "runtimeSetup": {
+    "packageName": "playwright",
+    "moduleResolution": "node-require-resolution",
+    "moduleStatus": "present",
+    "npxStatus": "present",
+    "packageInstallCommand": "npm install --save-dev playwright",
+    "browserInstallCommand": "npx playwright install chromium",
+    "liveCommand": "node scripts/teacher-workflow-browser-smoke.mjs --live --approved --environment production --base-url <deployment-url> --env-file <env-file> --vercel-production-deployment <vercel-production-deployment-evidence>",
+    "transientRuntimeCommand": "npx --yes --package playwright --call 'NODE_PATH=\"$(dirname \"$(dirname \"$(command -v playwright)\")\")\" node scripts/teacher-workflow-browser-smoke.mjs --live --approved --environment production --base-url <deployment-url> --env-file <env-file> --vercel-production-deployment <vercel-production-deployment-evidence>'"
+  },
+  "prerequisites": [
+    {
+      "id": "s22-deployment-base-url",
+      "responsibleSession": "S22",
+      "requiredEnv": "UAIS_DEPLOYMENT_BASE_URL",
+      "status": "present"
+    },
+    {
+      "id": "s22-browser-automation-runtime",
+      "responsibleSession": "S22",
+      "runtime": "playwright",
+      "status": "present"
+    }
+  ],
+  "blockedReasons": [],
+  "safety": {
+    "valuesRedacted": true,
+    "deploymentUrlOmitted": true,
+    "responseBodiesOmitted": true,
+    "screenshotsOmitted": true,
+    "audioPayloadOmitted": true,
+    "liveRequiresApproval": true
+  },
+  "renderedPageFingerprint": {
+    "status": "present",
+    "value": "sha256:e085771bcb488076"
+  },
+  "results": {
+    "openTeachingPage": "passed",
+    "browserHydration": "passed",
+    "voiceSampleFileSelection": "passed",
+    "serverWorkflowRefresh": "passed",
+    "signedSessionBootstrap": "passed",
+    "voiceSampleSubmit": "passed",
+    "voiceClonePreflight": "passed",
+    "voiceCloneStatus": "passed",
+    "pptNarrationSubmit": "passed",
+    "perSlideWavDownloadLinks": "passed"
+  }
+}

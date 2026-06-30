@@ -1,0 +1,89 @@
+{
+  "generatedAt": "2026-06-27T23:48:01+08:00",
+  "status": "passed-local",
+  "scope": "ai-teacher-auth-session-cookie-safe-id-boundary",
+  "ownerSession": "S12/S22",
+  "summary": "AI teacher-auth signed-cookie parsing now rejects validly signed teacher auth cookies when actorId or sessionId contains unsafe identifier characters. This keeps unsafe teacher identity strings out of teacher AI session issuance, ownership lookup, helper routes, external storage keys, and AI access session claims.",
+  "localBehaviorProof": [
+    {
+      "case": "unsafe-signed-teacher-auth-actor-id",
+      "expected": "/api/ai/session returns HTTP 401 with authenticated-session-required before teacher AI ownership lookup.",
+      "test": "tests/ai-api-routes.test.ts > rejects unsafe signed teacher auth actor ids before ownership lookup"
+    },
+    {
+      "case": "unsafe-signed-teacher-auth-session-id",
+      "expected": "/api/ai/session returns HTTP 401 with authenticated-session-required before teacher AI ownership lookup.",
+      "test": "tests/ai-api-routes.test.ts > rejects unsafe signed teacher auth session ids before ownership lookup"
+    },
+    {
+      "case": "oidc-compatible-teacher-id",
+      "expected": "Existing OIDC teacher ids using email-style @ identifiers still parse and issue teacher auth cookies.",
+      "test": "tests/ai-api-routes.test.ts > issues a teacher auth session cookie from a verified OIDC JWKS bearer token"
+    }
+  ],
+  "redGreenEvidence": {
+    "red": [
+      {
+        "command": "./node_modules/.bin/vitest run tests/ai-api-routes.test.ts -t \"rejects unsafe signed teacher auth actor ids before ownership lookup\"",
+        "result": "failed before implementation with HTTP 200 instead of HTTP 401"
+      },
+      {
+        "command": "./node_modules/.bin/vitest run tests/ai-api-routes.test.ts -t \"rejects unsafe signed teacher auth session ids before ownership lookup\"",
+        "result": "failed before session-id implementation with HTTP 200 instead of HTTP 401"
+      }
+    ],
+    "green": [
+      {
+        "command": "./node_modules/.bin/vitest run tests/ai-api-routes.test.ts -t \"rejects unsafe signed teacher auth actor ids before ownership lookup|rejects unsafe signed teacher auth session ids before ownership lookup\"",
+        "result": "passed, 2 tests"
+      },
+      {
+        "command": "./node_modules/.bin/vitest run tests/ai-api-routes.test.ts",
+        "result": "passed, 125 tests"
+      },
+      {
+        "command": "./node_modules/.bin/vitest run tests/ai-access-control.test.ts tests/trusted-teacher-auth-route-chain-contract.test.ts tests/teacher-auth-issuer-proof.test.ts",
+        "result": "passed, 26 tests"
+      },
+      {
+        "command": "./node_modules/.bin/vitest run tests/ai-env-and-smoke.test.ts -t \"derives the teacher AI session request resource from the issued teacher ownership route|derives the teacher AI session resource from a complete ownership chain when partial records come first\"",
+        "result": "passed, 2 tests after rerun with loopback permission"
+      },
+      {
+        "command": "./node_modules/.bin/vitest run tests/production-release-gate.test.ts -t \"signed teacher-cookie helper route direct-call|teacher AI session\"",
+        "result": "passed, 2 tests"
+      },
+      {
+        "command": "./node_modules/.bin/vitest run tests/lrs-live-write-read-smoke-cli.test.ts",
+        "result": "passed, 2 tests after the CLI script was present"
+      },
+      {
+        "command": "./node_modules/.bin/vitest run",
+        "result": "passed, 69 files and 1343 tests"
+      },
+      {
+        "command": "npm run lint",
+        "result": "passed"
+      },
+      {
+        "command": "npm run build",
+        "result": "passed"
+      }
+    ]
+  },
+  "notes": [
+    "The focused ai-env-and-smoke tests require a local 127.0.0.1 listener; the first sandboxed run failed with listen EPERM and passed when rerun with loopback permission.",
+    "One full-suite rerun observed a transient missing LRS CLI module while the untracked script became visible; the LRS CLI test and final full suite both passed afterward.",
+    "The safe-id boundary permits email-style OIDC teacher ids containing @ while still rejecting path-like or whitespace-bearing identity strings."
+  ],
+  "securityAndPrivacy": {
+    "secretsInspected": false,
+    "liveProviderCalled": false,
+    "productionMutation": false,
+    "credentialOutput": "none"
+  },
+  "remainingRisk": [
+    "This is local backend/API contract hardening only; it does not provide same-run owner-approved production deployment, environment, storage, browser smoke, or live provider evidence.",
+    "The aggregate enterprise gate remains blocked until the current production release run supplies all required production artifacts."
+  ]
+}

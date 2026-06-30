@@ -1,0 +1,84 @@
+{
+  "generatedAt": "2026-06-27T23:56:53+08:00",
+  "status": "passed-local",
+  "scope": "ai-access-signed-session-claims-safe-id-boundary",
+  "ownerSession": "S12/S22",
+  "summary": "Signed AI access session claims now reject unsafe actor and scope identifiers before authorization. This prevents validly signed direct-call AI credentials from carrying path-like identity or resource-scope strings into contract/live AI routes.",
+  "localBehaviorProof": [
+    {
+      "case": "unsafe-signed-ai-access-actor-id",
+      "expected": "authorizeUaisAiAccess returns signed-session-invalid before authorizing the signed session.",
+      "test": "tests/ai-access-control.test.ts > rejects signed session claims with unsafe actor ids before authorization"
+    },
+    {
+      "case": "unsafe-signed-ai-access-scope-id",
+      "expected": "authorizeUaisAiAccess returns signed-session-invalid before trusting unsafe signed scope ids.",
+      "test": "tests/ai-access-control.test.ts > rejects signed session claims with unsafe scope ids before authorization"
+    },
+    {
+      "case": "existing-signed-ai-access-routes",
+      "expected": "Existing signed teacher/admin AI access, teacher-auth helper route, OIDC-compatible teacher ids, and production gate helper-route contracts continue to pass.",
+      "tests": [
+        "tests/ai-access-control.test.ts",
+        "tests/ai-api-routes.test.ts",
+        "tests/production-release-gate.test.ts -t signed teacher-cookie helper route direct-call|teacher AI session"
+      ]
+    }
+  ],
+  "redGreenEvidence": {
+    "red": [
+      {
+        "command": "./node_modules/.bin/vitest run tests/ai-access-control.test.ts -t \"rejects signed session claims with unsafe actor ids before authorization\"",
+        "result": "failed before implementation because the unsafe signed actor id returned authorized"
+      },
+      {
+        "command": "./node_modules/.bin/vitest run tests/ai-access-control.test.ts -t \"rejects signed session claims with unsafe scope ids before authorization\"",
+        "result": "failed before scope implementation because the unsafe signed scope id returned authorized"
+      }
+    ],
+    "green": [
+      {
+        "command": "./node_modules/.bin/vitest run tests/ai-access-control.test.ts -t \"rejects signed session claims with unsafe actor ids before authorization|rejects signed session claims with unsafe scope ids before authorization\"",
+        "result": "passed, 2 tests"
+      },
+      {
+        "command": "./node_modules/.bin/vitest run tests/ai-access-control.test.ts",
+        "result": "passed, 23 tests"
+      },
+      {
+        "command": "./node_modules/.bin/vitest run tests/ai-api-routes.test.ts",
+        "result": "passed, 125 tests"
+      },
+      {
+        "command": "./node_modules/.bin/vitest run tests/production-release-gate.test.ts -t \"signed teacher-cookie helper route direct-call|teacher AI session\"",
+        "result": "passed, 2 tests"
+      },
+      {
+        "command": "./node_modules/.bin/vitest run",
+        "result": "passed, 69 files and 1345 tests"
+      },
+      {
+        "command": "npm run lint",
+        "result": "passed"
+      },
+      {
+        "command": "npm run build",
+        "result": "passed"
+      }
+    ]
+  },
+  "securityAndPrivacy": {
+    "secretsInspected": false,
+    "liveProviderCalled": false,
+    "productionMutation": false,
+    "credentialOutput": "none"
+  },
+  "notes": [
+    "The safe-id boundary allows email-style OIDC teacher identifiers through @ while rejecting path-like identity and scope strings.",
+    "This closes another local API direct-call contract gap; production live generation and deployment evidence are still required separately."
+  ],
+  "remainingRisk": [
+    "This is local backend/API contract hardening only and does not provide same-run owner-approved production browser smoke, live provider, deployment, environment, or external-storage evidence.",
+    "The aggregate enterprise gate remains blocked until the current production release run supplies all required production artifacts."
+  ]
+}

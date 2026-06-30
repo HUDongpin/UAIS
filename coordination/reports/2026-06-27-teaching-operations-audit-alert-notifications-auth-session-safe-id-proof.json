@@ -1,0 +1,74 @@
+{
+  "generatedAt": "2026-06-27T19:55:46+08:00",
+  "responsibleSession": "S12/S22",
+  "scope": "ordinary-teaching-operation-audit-alert-notifications-signed-session-safe-identity",
+  "status": "passed",
+  "summary": "The ordinary /api/teaching/operations/audit/alerts/notifications POST and GET routes now reject signed teacher cookies whose actorId or sessionId is not a safe server identity before ownership checks or external notification enqueue/readback can run.",
+  "filesChanged": [
+    "src/app/api/teaching/operations/audit/alerts/notifications/route.ts",
+    "tests/teaching-operation-backend.test.ts"
+  ],
+  "redGreenEvidence": [
+    {
+      "phase": "red",
+      "command": "./node_modules/.bin/vitest run tests/teaching-operation-backend.test.ts -t \"unsafe signed audit alert notification\"",
+      "expectedFailure": true,
+      "observed": "Both unsafe signed audit alert notification identity regressions failed with HTTP 200 instead of the expected HTTP 401, proving POST and GET accepted validly signed unsafe identity fields into ownership and external notification handling."
+    },
+    {
+      "phase": "green",
+      "command": "./node_modules/.bin/vitest run tests/teaching-operation-backend.test.ts -t \"unsafe signed audit alert notification\"",
+      "exitCode": 0,
+      "observed": "2 passed, 170 skipped."
+    }
+  ],
+  "behaviorHardened": [
+    "Signed audit-alert notification cookies whose actorId fails the safe-id boundary now resolve as unauthenticated and return HTTP 401 with authenticated-session-required for both POST and GET.",
+    "Signed audit-alert notification cookies whose sessionId fails the safe-id boundary now resolve as unauthenticated and return HTTP 401 with authenticated-session-required for both POST and GET.",
+    "Unsafe signed identities are rejected before course ownership checks, external notification enqueue calls, external notification readback calls, or notification response construction.",
+    "The denial responses preserve trace id and redaction without echoing unsafe local-path or secret-like identity values."
+  ],
+  "verification": [
+    {
+      "command": "./node_modules/.bin/vitest run tests/teaching-operation-backend.test.ts -t \"unsafe signed audit alert notification\"",
+      "exitCode": 0,
+      "observed": "2 passed, 170 skipped."
+    },
+    {
+      "command": "./node_modules/.bin/vitest run tests/teaching-operation-backend.test.ts -t \"unsafe signed audit alert notification|rejects signed-student audit alert notification access|blocks production teaching operation audit alert notification access|queues external teaching operation audit alert notifications|reads external teaching operation audit alert notification outbox|filters cross-teacher external teaching operation audit alert notifications\"",
+      "exitCode": 0,
+      "observed": "7 passed, 165 skipped."
+    },
+    {
+      "command": "./node_modules/.bin/vitest run tests/teaching-operation-backend.test.ts",
+      "exitCode": 0,
+      "observed": "172 passed."
+    },
+    {
+      "command": "npm run lint",
+      "exitCode": 0,
+      "observed": "ESLint passed."
+    },
+    {
+      "command": "npm run test",
+      "exitCode": 0,
+      "observed": "66 files passed, 1312 tests passed. Existing jsdom navigation warnings remained non-fatal."
+    },
+    {
+      "command": "npm run build",
+      "exitCode": 0,
+      "observed": "Next.js production build completed."
+    },
+    {
+      "command": "git diff --check",
+      "exitCode": 0,
+      "observed": "No whitespace errors reported."
+    }
+  ],
+  "boundary": "This is local backend/API auth-boundary hardening for the teaching operation audit alert notification POST and GET routes. It does not replace fresh same-run live production ordinary teaching route/browser smoke artifacts and does not clear the aggregate enterprise gate.",
+  "redaction": {
+    "secrets": "omitted",
+    "localFiles": "omitted",
+    "assets": "ids-only"
+  }
+}

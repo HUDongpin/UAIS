@@ -1,0 +1,67 @@
+{
+  "target": "vercel-env-sync-current-local-env-dry-run-summary",
+  "date": "2026-06-21",
+  "status": "blocked",
+  "responsibleSession": "S19",
+  "source": ".env.local",
+  "releaseRunId": "uais-release-2026-06-21-current-local-env-inventory",
+  "projectReadinessEvidenceStatus": "ready",
+  "presentHighLevel": [
+    "UAIS_LIVE_AI_APPROVAL_TOKEN",
+    "DEEPSEEK_API_KEY",
+    "DEEPSEEK_BASE_URL",
+    "DEEPSEEK_MODEL",
+    "DASHSCOPE_API_KEY",
+    "DASHSCOPE_BASE_URL",
+    "QWEN_MULTIMODAL_MODEL",
+    "QWEN_IMAGE_MODEL",
+    "QWEN_TTS_MODEL"
+  ],
+  "missingProductionChainVariables": [
+    "UAIS_AI_ACCESS_SIGNING_SECRET",
+    "UAIS_TEACHER_AUTH_PROVIDER",
+    "UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET",
+    "UAIS_TEACHER_AUTH_ISSUER_SECRET",
+    "UAIS_TEACHER_AUTH_OIDC_ISSUER",
+    "UAIS_TEACHER_AUTH_OIDC_AUDIENCE",
+    "UAIS_TEACHER_AUTH_OIDC_JWKS_URL",
+    "UAIS_TEACHER_AUTH_OIDC_TEACHER_ID_CLAIM",
+    "UAIS_TEACHER_AI_OWNERSHIP_BACKEND",
+    "UAIS_VOICE_LIFECYCLE_AUDIT_BACKEND",
+    "UAIS_EXTERNAL_STORAGE_BASE_URL",
+    "UAIS_EXTERNAL_STORAGE_ACCESS_TOKEN",
+    "UAIS_EXTERNAL_STORAGE_SERVICE_MODE",
+    "UAIS_EXTERNAL_STORAGE_SERVICE_DATA_DIR"
+  ],
+  "missingRequiredForTrustedCookieProductionPath": [
+    "UAIS_AI_ACCESS_SIGNING_SECRET",
+    "UAIS_TEACHER_AUTH_PROVIDER",
+    "UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET",
+    "UAIS_TEACHER_AUTH_ISSUER_SECRET",
+    "UAIS_TEACHER_AI_OWNERSHIP_BACKEND",
+    "UAIS_VOICE_LIFECYCLE_AUDIT_BACKEND",
+    "UAIS_EXTERNAL_STORAGE_BASE_URL",
+    "UAIS_EXTERNAL_STORAGE_ACCESS_TOKEN"
+  ],
+  "deploymentAuthObservation": {
+    "VERCEL_TOKEN": "missing",
+    "VERCEL_AUTH_TOKEN": "missing",
+    "cliAuthJson": "present-but-oidc-blocked",
+    "valuesRedacted": true
+  },
+  "blockedReasons": [
+    "vercel-env-apply-auth-provider-not-proven",
+    "vercel-env-apply-required-auth-env-missing",
+    "vercel-env-apply-secret-strength-not-sufficient",
+    "vercel-env-apply-external-storage-not-remote-https",
+    "vercel-env-apply-external-storage-fingerprint-not-proven",
+    "vercel-cli-auth-oidc-discovery-not-proven"
+  ],
+  "safety": {
+    "valuesRedacted": true,
+    "secretValuesOmitted": true,
+    "localPrivatePathsOmitted": true,
+    "deploymentMutationPerformed": false,
+    "goalMarkedComplete": false
+  }
+}

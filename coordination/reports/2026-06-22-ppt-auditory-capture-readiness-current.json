@@ -1,0 +1,66 @@
+{
+  "target": "ppt-auditory-capture-readiness",
+  "checkedAt": "2026-06-21T17:08:27.564Z",
+  "status": "blocked",
+  "loopbackCaptureStatus": "missing",
+  "loopbackInstallStatus": "malformed-install-detected",
+  "manualAcceptanceStatus": "not-accepted",
+  "avfoundationAudioDevices": [
+    {
+      "index": 0,
+      "name": "HIK 2K Camera-Audio",
+      "category": "microphone"
+    },
+    {
+      "index": 1,
+      "name": "WeMeet Audio Device",
+      "category": "meeting-virtual-audio"
+    }
+  ],
+  "systemAudioDevices": [
+    {
+      "name": "LV273HUPR",
+      "direction": "output",
+      "category": "unknown"
+    },
+    {
+      "name": "HIK 2K Camera-Audio",
+      "direction": "input",
+      "category": "microphone"
+    },
+    {
+      "name": "Mac mini Speakers",
+      "direction": "output",
+      "category": "speaker-output"
+    },
+    {
+      "name": "WeMeet Audio Device",
+      "direction": "input-output",
+      "category": "meeting-virtual-audio"
+    }
+  ],
+  "loopbackInstallFindings": [
+    "blackhole-hal-contents-at-plugin-root",
+    "blackhole-executable-has-txt-extension"
+  ],
+  "loopbackCaptureDevices": [],
+  "blockedReasons": [
+    "system-output-loopback-capture-not-available",
+    "malformed-loopback-driver-install-detected",
+    "microphone-capture-not-accepted-for-manual-playback",
+    "human-auditory-playback-record-still-required"
+  ],
+  "remediation": {
+    "requiresOwnerOrSystemAdminAction": true,
+    "systemSettingsChangedByThisScript": false,
+    "summary": "A BlackHole-like HAL bundle is present in an abnormal layout but is not exposed as an AVFoundation audio input. Repair should be done as an explicit system-admin action, then the Mac should be rebooted or CoreAudio restarted before rerunning this readiness check."
+  },
+  "note": "No dedicated system-output loopback capture device is visible. Microphone or meeting virtual audio capture is intentionally not accepted as final manual playback evidence.",
+  "safety": {
+    "rawAudioCaptured": false,
+    "rawAudioOmitted": true,
+    "microphoneCaptureAvoided": true,
+    "systemSettingsChanged": false,
+    "manualAcceptanceNotFaked": true
+  }
+}

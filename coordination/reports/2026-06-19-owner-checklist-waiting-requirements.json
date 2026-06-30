@@ -1,0 +1,41 @@
+{
+  "target": "owner-checklist-waiting-requirements",
+  "status": "waiting-for-production-evidence",
+  "source": "coordination/reports/2026-06-19-production-owner-decision-checklist.json",
+  "requirementCount": 5,
+  "releaseGateWaitingRequirements": [
+    {
+      "id": "teacher-workflow-browser-smoke",
+      "evidenceStatus": "waiting-for-deployed-page",
+      "blockedReason": "deployed-teacher-workflow-page-not-live-passed",
+      "upstreamRequirement": "deployed-teacher-workflow-page"
+    },
+    {
+      "id": "deployed-learning-ppt-playback",
+      "evidenceStatus": "waiting-for-production-deployment",
+      "blockedReason": "vercel-production-deployment-not-proven",
+      "upstreamRequirement": "vercel-production-deployment"
+    },
+    {
+      "id": "teacher-auth-provider-consistency",
+      "evidenceStatus": "waiting-for-auth-provider-evidence",
+      "blockedReason": "teacher-auth-provider-readiness-missing"
+    },
+    {
+      "id": "external-storage-service-consistency",
+      "evidenceStatus": "waiting-for-production-storage-evidence",
+      "blockedReason": "external-storage-service-readiness-missing"
+    },
+    {
+      "id": "production-release-run-consistency",
+      "evidenceStatus": "waiting-for-production-evidence",
+      "blockedReason": "vercel-production-deployment-not-proven"
+    }
+  ],
+  "safety": {
+    "valuesRedacted": true,
+    "evidencePathsOmitted": true,
+    "deploymentUrlsOmitted": true,
+    "tokensOmitted": true
+  }
+}

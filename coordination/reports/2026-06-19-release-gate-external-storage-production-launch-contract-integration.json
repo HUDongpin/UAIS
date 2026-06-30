@@ -1,0 +1,90 @@
+{
+  "target": "release-gate-external-storage-production-launch-contract-integration",
+  "date": "2026-06-19",
+  "responsibleSession": "S22",
+  "status": "integrated",
+  "scope": {
+    "releaseGate": "scripts/production-e2e-release-gate.mjs now consumes external storage production launch contract evidence before container build and service readiness evidence.",
+    "orchestrator": "scripts/production-e2e-orchestrator.mjs now passes external-storage-production-launch-contract evidence into the final production release gate.",
+    "tests": [
+      "tests/production-release-gate.test.ts",
+      "tests/production-e2e-orchestrator.test.ts"
+    ]
+  },
+  "currentEvidence": {
+    "productionLaunchContract": "coordination/reports/2026-06-19-external-storage-production-launch-contract.json",
+    "releaseGate": "coordination/reports/2026-06-19-production-e2e-release-gate-current-auth-storage-launch-container-readiness.json",
+    "ownerChecklist": "coordination/reports/2026-06-19-production-owner-decision-checklist-current-auth-storage-launch-container-readiness.json",
+    "orchestrationPlan": "coordination/reports/2026-06-19-production-e2e-orchestration-plan-current-auth-storage-launch-container-readiness.json"
+  },
+  "currentReleaseGateStatus": {
+    "status": "blocked",
+    "requirements": 18,
+    "productionLaunchContract": "satisfied-dry-run-ready",
+    "remainingStorageBlockers": [
+      "external-storage-container-build-readiness-not-ready",
+      "external-storage-service-readiness-not-live-ready",
+      "external-storage-smoke-not-live-passed"
+    ]
+  },
+  "verification": {
+    "redGreen": [
+      {
+        "command": "npm run test -- tests/production-release-gate.test.ts -t \"external storage production launch\"",
+        "redStatus": "failed-before-implementation",
+        "greenStatus": "passed-after-implementation"
+      },
+      {
+        "command": "npm run test -- tests/production-e2e-orchestrator.test.ts",
+        "redStatus": "failed-after-expectation-update",
+        "greenStatus": "passed-after-implementation"
+      }
+    ],
+    "nodeCheck": [
+      {
+        "command": "node --check scripts/production-e2e-release-gate.mjs",
+        "status": "passed"
+      },
+      {
+        "command": "node --check scripts/production-e2e-orchestrator.mjs",
+        "status": "passed"
+      }
+    ],
+    "focusedTests": {
+      "command": "npm run test -- tests/production-release-gate.test.ts tests/production-e2e-orchestrator.test.ts tests/external-storage-service-production-launcher.test.ts tests/production-owner-decision-checklist.test.ts",
+      "status": "passed",
+      "filesPassed": 4,
+      "testsPassed": 154
+    },
+    "lint": {
+      "command": "npm run lint",
+      "status": "passed"
+    },
+    "fullTest": {
+      "command": "npm run test",
+      "status": "passed",
+      "filesPassed": 36,
+      "testsPassed": 486
+    },
+    "build": {
+      "command": "npm run build",
+      "status": "passed"
+    },
+    "reportParseAndRedactionScan": {
+      "status": "passed",
+      "redactionMatches": 0
+    }
+  },
+  "remainingGoalBlockers": [
+    "Production trusted teacher auth/session provider still needs owner-approved Vercel env and live route smoke.",
+    "External durable storage still needs an approved container build, real remote service readiness, Vercel env binding, and live storage smoke.",
+    "Production deployment chain still needs live Vercel deployment evidence.",
+    "PowerPoint and WPS manual playback acceptance is still pending."
+  ],
+  "safety": {
+    "secretsRedacted": true,
+    "dataDirOmitted": true,
+    "localPrivatePathsOmitted": true,
+    "productionMutationPerformed": false
+  }
+}

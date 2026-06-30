@@ -1,0 +1,68 @@
+{
+  "generatedAt": "2026-06-27T18:23:00+08:00",
+  "responsibleSession": "S05/S22",
+  "scope": "ordinary-teaching-class-create-readback-course-match",
+  "status": "passed",
+  "summary": "The main /teaching class creation flow now rejects a server readback when the saved class belongs to a different course than the course where the teacher clicked New class.",
+  "filesChanged": [
+    "src/components/pages/teaching-page.tsx",
+    "tests/teaching-page.test.tsx"
+  ],
+  "redGreenEvidence": [
+    {
+      "phase": "red",
+      "command": "npx vitest run tests/teaching-page.test.tsx --reporter=dot -t \"saved class belongs to another course\"",
+      "expectedFailure": true,
+      "observed": "Failed because the UI accepted a class readback under another course and did not render the mismatch alert."
+    },
+    {
+      "phase": "green",
+      "command": "npx vitest run tests/teaching-page.test.tsx --reporter=dot -t \"saved class belongs to another course\"",
+      "exitCode": 0,
+      "observed": "1 passed, 77 skipped."
+    }
+  ],
+  "behaviorHardened": [
+    "Class creation now rejects POST responses whose classItem.courseId does not match the requested course id.",
+    "Class creation now searches readback classes under the requested course id instead of trusting the response course id to choose the readback bucket.",
+    "Cross-course readback mismatches keep the New class dialog open and show the class-create readback mismatch alert instead of displaying the class as saved."
+  ],
+  "verification": [
+    {
+      "command": "npx vitest run tests/teaching-page.test.tsx --reporter=dot -t \"persists a class for a backend-created course\"",
+      "exitCode": 0,
+      "observed": "1 passed, 77 skipped."
+    },
+    {
+      "command": "npx vitest run tests/teaching-page.test.tsx --reporter=dot -t \"saved class name does not match\"",
+      "exitCode": 0,
+      "observed": "1 passed, 77 skipped."
+    },
+    {
+      "command": "npx vitest run tests/teaching-page.test.tsx --reporter=dot",
+      "exitCode": 0,
+      "observed": "78 passed. Existing jsdom navigation warnings remained non-fatal."
+    },
+    {
+      "command": "npm run lint",
+      "exitCode": 0,
+      "observed": "ESLint passed."
+    },
+    {
+      "command": "npm run test",
+      "exitCode": 0,
+      "observed": "66 files passed, 1283 tests passed. Existing jsdom navigation warnings remained non-fatal."
+    },
+    {
+      "command": "npm run build",
+      "exitCode": 0,
+      "observed": "Next.js production build completed."
+    }
+  ],
+  "boundary": "This is local frontend error-closure hardening for main /teaching class creation. It does not replace fresh same-run live production ordinary teaching route/browser smoke artifacts or the aggregate enterprise gate.",
+  "redaction": {
+    "secrets": "omitted",
+    "localFiles": "omitted",
+    "assets": "ids-only"
+  }
+}

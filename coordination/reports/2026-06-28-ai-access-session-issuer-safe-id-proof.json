@@ -1,0 +1,90 @@
+{
+  "reportId": "2026-06-28-ai-access-session-issuer-safe-id-proof",
+  "generatedAt": "2026-06-28T00:38:50+08:00",
+  "sessionId": "S22",
+  "workstream": "Production reliability and release engineering",
+  "status": "local-contract-hardened",
+  "objective": "Harden trusted AI access session issuance so unsafe actor and scope identifiers are rejected before any signed AI access headers are created.",
+  "changedFiles": [
+    "src/lib/server/ai-access-control.ts",
+    "tests/ai-access-control.test.ts"
+  ],
+  "codeReferences": [
+    {
+      "file": "src/lib/server/ai-access-control.ts",
+      "line": 270,
+      "summary": "Trusted-session issuance now validates the trimmed actor id with the shared safe-id guard before signing claims."
+    },
+    {
+      "file": "src/lib/server/ai-access-control.ts",
+      "line": 569,
+      "summary": "Scope normalization now rejects unsafe scope ids before compacted claims can be signed."
+    },
+    {
+      "file": "tests/ai-access-control.test.ts",
+      "line": 151,
+      "summary": "Regression proves unsafe trusted actor ids are rejected during issuance."
+    },
+    {
+      "file": "tests/ai-access-control.test.ts",
+      "line": 164,
+      "summary": "Regression proves unsafe trusted scope ids are rejected during issuance."
+    }
+  ],
+  "redGreenEvidence": [
+    {
+      "phase": "red",
+      "command": "./node_modules/.bin/vitest run tests/ai-access-control.test.ts -t \"trusted-session issuance\"",
+      "result": "failed-before-fix",
+      "observedFailure": "The unsafe actor-id and unsafe scope-id issuance tests both failed because createUaisAiAccessSessionForTrustedActor did not throw before signing."
+    },
+    {
+      "phase": "green",
+      "command": "./node_modules/.bin/vitest run tests/ai-access-control.test.ts -t \"trusted-session issuance\"",
+      "result": "passed",
+      "observedPass": "3 focused tests passed, including the pre-existing missing-secret assertion and the two new unsafe-id issuance assertions."
+    }
+  ],
+  "verification": [
+    {
+      "command": "./node_modules/.bin/vitest run tests/ai-access-control.test.ts",
+      "result": "passed",
+      "summary": "28 tests passed."
+    },
+    {
+      "command": "./node_modules/.bin/vitest run tests/ai-api-routes.test.ts",
+      "result": "passed",
+      "summary": "125 tests passed."
+    },
+    {
+      "command": "./node_modules/.bin/vitest run tests/production-release-gate.test.ts -t \"direct-call\"",
+      "result": "passed",
+      "summary": "4 focused production release-gate direct-call tests passed."
+    },
+    {
+      "command": "./node_modules/.bin/vitest run",
+      "result": "passed",
+      "summary": "69 files passed, 1351 tests passed."
+    },
+    {
+      "command": "npm run lint",
+      "result": "passed",
+      "summary": "ESLint completed with exit code 0."
+    },
+    {
+      "command": "npm run build",
+      "result": "passed",
+      "summary": "Next.js production build completed with exit code 0."
+    }
+  ],
+  "securityPosture": {
+    "issuerBoundary": "Trusted AI access session issuance now fails before producing signed headers when actor or scope identifiers are unsafe.",
+    "parserBoundary": "Existing signed-session parsing still rejects unsafe actor and scope identifiers if a malformed signed claim is received.",
+    "requestResourceBoundary": "Existing signed-session resource validation still rejects unsafe request resource identifiers before scope authorization.",
+    "redaction": "The new errors are generic and do not echo path-like identifiers or signing secrets."
+  },
+  "aggregateEnterpriseGateImpact": {
+    "cleared": false,
+    "summary": "This narrows the AI direct-call contract risk by moving unsafe-id rejection earlier in the signed-session lifecycle. The full enterprise gate still requires same-run owner-approved production evidence for env placement, deployment, storage, ordinary teaching route/browser smokes, app-auth readiness, browser workflow smoke, and live provider generation."
+  }
+}

@@ -1,0 +1,74 @@
+{
+  "target": "route-smoke-diagnostic",
+  "mode": "live",
+  "environment": "production",
+  "checkedAt": "2026-06-21T14:24:05.423Z",
+  "status": "diagnostic-found-route-gap",
+  "teacherId": "teacher-kang",
+  "issuer": {
+    "httpStatus": 200,
+    "cookiePairIssued": true
+  },
+  "ownership": {
+    "httpStatus": 200,
+    "teacherId": "teacher-kang",
+    "counts": {
+      "courseIds": 2,
+      "sampleAssets": 2,
+      "pptAssets": 2,
+      "clonedVoiceRefs": 3,
+      "audioManifests": 2
+    },
+    "firstIds": {
+      "courseId": "elementary-math-research",
+      "sampleAssetId": "teacher-kang-10s-sample",
+      "pptAssetId": "kang-xia-ppt-19",
+      "voiceRefId": "qwen-voice-ref-teacher-kang-teacher-kang-10s-sample",
+      "audioManifestId": "audio-manifest-kang-xia-ppt-19"
+    }
+  },
+  "derivedResource": {
+    "teacherId": "teacher-kang",
+    "courseId": "elementary-math-research",
+    "sampleAssetId": "teacher-kang-10s-sample",
+    "pptAssetId": "kang-xia-ppt-19",
+    "voiceRefId": "qwen-voice-ref-teacher-kang-teacher-kang-10s-sample",
+    "audioManifestId": "audio-manifest-kang-xia-ppt-19"
+  },
+  "aiSession": {
+    "httpStatus": 403,
+    "reasonCode": "teacher-ownership-required",
+    "progressStatus": "ownership-required",
+    "hasAccessSession": false
+  },
+  "workflow": {
+    "httpStatus": 200,
+    "status": "ready-for-downloads",
+    "nextAction": "review-and-download-ppt-narration",
+    "steps": [
+      {
+        "id": "voice-sample",
+        "status": "ready"
+      },
+      {
+        "id": "voice-clone",
+        "status": "ready"
+      },
+      {
+        "id": "ppt-material",
+        "status": "ready"
+      },
+      {
+        "id": "ppt-narration",
+        "status": "ready"
+      }
+    ],
+    "downloadsPresent": true
+  },
+  "safety": {
+    "secretsOmitted": true,
+    "cookiesOmitted": true,
+    "headerValuesOmitted": true,
+    "responseBodiesOmitted": "summarized-only"
+  }
+}

@@ -1,0 +1,65 @@
+{
+  "target": "local-production-session-env-readiness",
+  "status": "ready-locally",
+  "generatedAt": "2026-06-21T11:42:55.959Z",
+  "responsibleSessions": [
+    "S19",
+    "S22"
+  ],
+  "envFile": ".env.local",
+  "valuesRedacted": true,
+  "secretsOmitted": true,
+  "changes": [
+    {
+      "name": "UAIS_AI_ACCESS_SIGNING_SECRET",
+      "action": "added",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_TEACHER_AUTH_PROVIDER",
+      "action": "added",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET",
+      "action": "added",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_TEACHER_AUTH_ISSUER_SECRET",
+      "action": "added",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_DEPLOYMENT_BASE_URL",
+      "action": "added",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_EXTERNAL_STORAGE_ACCESS_TOKEN",
+      "action": "added",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_EXTERNAL_STORAGE_SERVICE_MODE",
+      "action": "added",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_EXTERNAL_STORAGE_SERVICE_DATA_DIR",
+      "action": "added",
+      "valueRedacted": true
+    }
+  ],
+  "present": {
+    "UAIS_AI_ACCESS_SIGNING_SECRET": "present",
+    "UAIS_TEACHER_AUTH_PROVIDER": "present",
+    "UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET": "present",
+    "UAIS_TEACHER_AUTH_ISSUER_SECRET": "present",
+    "UAIS_DEPLOYMENT_BASE_URL": "present",
+    "UAIS_EXTERNAL_STORAGE_ACCESS_TOKEN": "present",
+    "UAIS_EXTERNAL_STORAGE_SERVICE_MODE": "present",
+    "UAIS_EXTERNAL_STORAGE_SERVICE_DATA_DIR": "present"
+  },
+  "note": "Local server-only readiness only. This does not prove Vercel production env sync."
+}

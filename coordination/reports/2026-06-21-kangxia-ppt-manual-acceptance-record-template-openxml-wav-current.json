@@ -1,0 +1,313 @@
+{
+  "recordType": "manual-ppt-playback-acceptance-template",
+  "packageId": "kangxia-natural-number-ordinal-theory-v1",
+  "sourceDeckTitle": "初等数学研究+PPT1+自然数的序数理论.pptx",
+  "releaseRunId": "uais-release-2026-06-21-signed-admin-production-api",
+  "deploymentFingerprint": "sha256:7c8e0f8c7195d5b9",
+  "deploymentObservedAt": "2026-06-21T14:08:20.104Z",
+  "artifactFingerprint": "sha256:6b92d1bdde6c2904c6e166ce21b17ac43d3178a8c084f7c1d10e16866eeb4ba1",
+  "status": "template-not-accepted",
+  "testedAt": "",
+  "tester": "",
+  "redaction": {
+    "doNotInclude": [
+      "provider API keys",
+      "approval tokens",
+      "private cloned voice IDs",
+      "source voice sample paths",
+      "local private paths",
+      "raw or base64 audio",
+      "cookie values"
+    ]
+  },
+  "instructions": [
+    "Open the narrated PPTX in each target application.",
+    "Fill tester, testedAt, and application versions during the manual playback session.",
+    "Keep packageId, releaseRunId, deploymentFingerprint, deploymentObservedAt, artifactFingerprint, slideId, and audioId unchanged.",
+    "For each slide, set audioPlays to true only after hearing that slide narration in the target application.",
+    "For each slide, set heardTargetVoice to true only after confirming the narration uses the target cloned voice.",
+    "Keep audioPlays or heardTargetVoice false for any slide that is not heard, cuts off, uses the wrong voice, or cannot be triggered.",
+    "Change status to accepted-after-human-playback only after human playback passes in both target applications.",
+    "Run scripts/ppt-manual-playback-acceptance.mjs with this record to produce final acceptance evidence."
+  ],
+  "applications": [
+    {
+      "name": "Microsoft PowerPoint",
+      "version": "",
+      "slideResults": [
+        {
+          "slideNumber": 1,
+          "slideId": "slide-01",
+          "audioId": "tts_natural-number-ordinal-theory-ppt1_slide-01",
+          "audioPlays": false,
+          "heardTargetVoice": false
+        },
+        {
+          "slideNumber": 2,
+          "slideId": "slide-02",
+          "audioId": "tts_natural-number-ordinal-theory-ppt1_slide-02",
+          "audioPlays": false,
+          "heardTargetVoice": false
+        },
+        {
+          "slideNumber": 3,
+          "slideId": "slide-03",
+          "audioId": "tts_natural-number-ordinal-theory-ppt1_slide-03",
+          "audioPlays": false,
+          "heardTargetVoice": false
+        },
+        {
+          "slideNumber": 4,
+          "slideId": "slide-04",
+          "audioId": "tts_natural-number-ordinal-theory-ppt1_slide-04",
+          "audioPlays": false,
+          "heardTargetVoice": false
+        },
+        {
+          "slideNumber": 5,
+          "slideId": "slide-05",
+          "audioId": "tts_natural-number-ordinal-theory-ppt1_slide-05",
+          "audioPlays": false,
+          "heardTargetVoice": false
+        },
+        {
+          "slideNumber": 6,
+          "slideId": "slide-06",
+          "audioId": "tts_natural-number-ordinal-theory-ppt1_slide-06",
+          "audioPlays": false,
+          "heardTargetVoice": false
+        },
+        {
+          "slideNumber": 7,
+          "slideId": "slide-07",
+          "audioId": "tts_natural-number-ordinal-theory-ppt1_slide-07",
+          "audioPlays": false,
+          "heardTargetVoice": false
+        },
+        {
+          "slideNumber": 8,
+          "slideId": "slide-08",
+          "audioId": "tts_natural-number-ordinal-theory-ppt1_slide-08",
+          "audioPlays": false,
+          "heardTargetVoice": false
+        },
+        {
+          "slideNumber": 9,
+          "slideId": "slide-09",
+          "audioId": "tts_natural-number-ordinal-theory-ppt1_slide-09",
+          "audioPlays": false,
+          "heardTargetVoice": false
+        },
+        {
+          "slideNumber": 10,
+          "slideId": "slide-10",
+          "audioId": "tts_natural-number-ordinal-theory-ppt1_slide-10",
+          "audioPlays": false,
+          "heardTargetVoice": false
+        },
+        {
+          "slideNumber": 11,
+          "slideId": "slide-11",
+          "audioId": "tts_natural-number-ordinal-theory-ppt1_slide-11",
+          "audioPlays": false,
+          "heardTargetVoice": false
+        },
+        {
+          "slideNumber": 12,
+          "slideId": "slide-12",
+          "audioId": "tts_natural-number-ordinal-theory-ppt1_slide-12",
+          "audioPlays": false,
+          "heardTargetVoice": false
+        },
+        {
+          "slideNumber": 13,
+          "slideId": "slide-13",
+          "audioId": "tts_natural-number-ordinal-theory-ppt1_slide-13",
+          "audioPlays": false,
+          "heardTargetVoice": false
+        },
+        {
+          "slideNumber": 14,
+          "slideId": "slide-14",
+          "audioId": "tts_natural-number-ordinal-theory-ppt1_slide-14",
+          "audioPlays": false,
+          "heardTargetVoice": false
+        },
+        {
+          "slideNumber": 15,
+          "slideId": "slide-15",
+          "audioId": "tts_natural-number-ordinal-theory-ppt1_slide-15",
+          "audioPlays": false,
+          "heardTargetVoice": false
+        },
+        {
+          "slideNumber": 16,
+          "slideId": "slide-16",
+          "audioId": "tts_natural-number-ordinal-theory-ppt1_slide-16",
+          "audioPlays": false,
+          "heardTargetVoice": false
+        },
+        {
+          "slideNumber": 17,
+          "slideId": "slide-17",
+          "audioId": "tts_natural-number-ordinal-theory-ppt1_slide-17",
+          "audioPlays": false,
+          "heardTargetVoice": false
+        },
+        {
+          "slideNumber": 18,
+          "slideId": "slide-18",
+          "audioId": "tts_natural-number-ordinal-theory-ppt1_slide-18",
+          "audioPlays": false,
+          "heardTargetVoice": false
+        },
+        {
+          "slideNumber": 19,
+          "slideId": "slide-19",
+          "audioId": "tts_natural-number-ordinal-theory-ppt1_slide-19",
+          "audioPlays": false,
+          "heardTargetVoice": false
+        }
+      ]
+    },
+    {
+      "name": "WPS Presentation",
+      "version": "",
+      "slideResults": [
+        {
+          "slideNumber": 1,
+          "slideId": "slide-01",
+          "audioId": "tts_natural-number-ordinal-theory-ppt1_slide-01",
+          "audioPlays": false,
+          "heardTargetVoice": false
+        },
+        {
+          "slideNumber": 2,
+          "slideId": "slide-02",
+          "audioId": "tts_natural-number-ordinal-theory-ppt1_slide-02",
+          "audioPlays": false,
+          "heardTargetVoice": false
+        },
+        {
+          "slideNumber": 3,
+          "slideId": "slide-03",
+          "audioId": "tts_natural-number-ordinal-theory-ppt1_slide-03",
+          "audioPlays": false,
+          "heardTargetVoice": false
+        },
+        {
+          "slideNumber": 4,
+          "slideId": "slide-04",
+          "audioId": "tts_natural-number-ordinal-theory-ppt1_slide-04",
+          "audioPlays": false,
+          "heardTargetVoice": false
+        },
+        {
+          "slideNumber": 5,
+          "slideId": "slide-05",
+          "audioId": "tts_natural-number-ordinal-theory-ppt1_slide-05",
+          "audioPlays": false,
+          "heardTargetVoice": false
+        },
+        {
+          "slideNumber": 6,
+          "slideId": "slide-06",
+          "audioId": "tts_natural-number-ordinal-theory-ppt1_slide-06",
+          "audioPlays": false,
+          "heardTargetVoice": false
+        },
+        {
+          "slideNumber": 7,
+          "slideId": "slide-07",
+          "audioId": "tts_natural-number-ordinal-theory-ppt1_slide-07",
+          "audioPlays": false,
+          "heardTargetVoice": false
+        },
+        {
+          "slideNumber": 8,
+          "slideId": "slide-08",
+          "audioId": "tts_natural-number-ordinal-theory-ppt1_slide-08",
+          "audioPlays": false,
+          "heardTargetVoice": false
+        },
+        {
+          "slideNumber": 9,
+          "slideId": "slide-09",
+          "audioId": "tts_natural-number-ordinal-theory-ppt1_slide-09",
+          "audioPlays": false,
+          "heardTargetVoice": false
+        },
+        {
+          "slideNumber": 10,
+          "slideId": "slide-10",
+          "audioId": "tts_natural-number-ordinal-theory-ppt1_slide-10",
+          "audioPlays": false,
+          "heardTargetVoice": false
+        },
+        {
+          "slideNumber": 11,
+          "slideId": "slide-11",
+          "audioId": "tts_natural-number-ordinal-theory-ppt1_slide-11",
+          "audioPlays": false,
+          "heardTargetVoice": false
+        },
+        {
+          "slideNumber": 12,
+          "slideId": "slide-12",
+          "audioId": "tts_natural-number-ordinal-theory-ppt1_slide-12",
+          "audioPlays": false,
+          "heardTargetVoice": false
+        },
+        {
+          "slideNumber": 13,
+          "slideId": "slide-13",
+          "audioId": "tts_natural-number-ordinal-theory-ppt1_slide-13",
+          "audioPlays": false,
+          "heardTargetVoice": false
+        },
+        {
+          "slideNumber": 14,
+          "slideId": "slide-14",
+          "audioId": "tts_natural-number-ordinal-theory-ppt1_slide-14",
+          "audioPlays": false,
+          "heardTargetVoice": false
+        },
+        {
+          "slideNumber": 15,
+          "slideId": "slide-15",
+          "audioId": "tts_natural-number-ordinal-theory-ppt1_slide-15",
+          "audioPlays": false,
+          "heardTargetVoice": false
+        },
+        {
+          "slideNumber": 16,
+          "slideId": "slide-16",
+          "audioId": "tts_natural-number-ordinal-theory-ppt1_slide-16",
+          "audioPlays": false,
+          "heardTargetVoice": false
+        },
+        {
+          "slideNumber": 17,
+          "slideId": "slide-17",
+          "audioId": "tts_natural-number-ordinal-theory-ppt1_slide-17",
+          "audioPlays": false,
+          "heardTargetVoice": false
+        },
+        {
+          "slideNumber": 18,
+          "slideId": "slide-18",
+          "audioId": "tts_natural-number-ordinal-theory-ppt1_slide-18",
+          "audioPlays": false,
+          "heardTargetVoice": false
+        },
+        {
+          "slideNumber": 19,
+          "slideId": "slide-19",
+          "audioId": "tts_natural-number-ordinal-theory-ppt1_slide-19",
+          "audioPlays": false,
+          "heardTargetVoice": false
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "target": "docker-daemon-restart-readiness",
+  "mode": "live-local",
+  "checkedAt": "2026-06-21T14:32:42.712Z",
+  "status": "blocked",
+  "dockerClient": "present",
+  "daemonReachability": "not-running",
+  "socket": {
+    "pathRedacted": true,
+    "status": "present"
+  },
+  "dockerDesktopProcesses": "present",
+  "commandOutputRedacted": true,
+  "blockedReasons": [
+    "docker-daemon-not-running-after-desktop-restart"
+  ]
+}

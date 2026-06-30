@@ -1,0 +1,75 @@
+{
+  "target": "teacher-ownership-redacted-chain-diagnostic",
+  "mode": "live",
+  "environment": "production",
+  "generatedAt": "2026-06-21T16:07:56.510Z",
+  "baseUrlClass": "www-uais-top",
+  "teacherId": "teacher-kang",
+  "valuesRedacted": true,
+  "issue": {
+    "httpStatus": 200,
+    "ok": true,
+    "setCookieCount": 2
+  },
+  "ownership": {
+    "httpStatus": 200,
+    "ok": true,
+    "counts": {
+      "courseIds": 2,
+      "sampleAssets": 2,
+      "pptAssets": 2,
+      "clonedVoiceRefs": 3,
+      "audioManifests": 2
+    },
+    "ids": {
+      "courseIds": [
+        "elementary-math-research",
+        "research-methods"
+      ],
+      "sampleAssetIds": [
+        "teacher-kang-10s-sample",
+        "asset-voice-10s"
+      ],
+      "pptAssetIds": [
+        "kang-xia-ppt-19",
+        "research-methods-unit-3"
+      ],
+      "voiceRefIds": [
+        "qwen-voice-ref-teacher-kang-teacher-kang-10s-sample",
+        "qwen-voice-ref-teacher-kang-10s-sample",
+        "qwen-voice-ref-teacher-kang-asset-voice-10s"
+      ],
+      "audioManifestIds": [
+        "audio-manifest-kang-xia-ppt-19",
+        "audio-manifest-research-methods-unit-3"
+      ]
+    },
+    "chains": [
+      {
+        "audioManifestId": "audio-manifest-kang-xia-ppt-19",
+        "courseId": "elementary-math-research",
+        "pptAssetId": "kang-xia-ppt-19",
+        "voiceRefId": "qwen-voice-ref-teacher-kang-teacher-kang-10s-sample",
+        "hasPpt": true,
+        "hasVoiceRef": true,
+        "hasSample": true,
+        "complete": true
+      },
+      {
+        "audioManifestId": "audio-manifest-research-methods-unit-3",
+        "courseId": "research-methods",
+        "pptAssetId": "research-methods-unit-3",
+        "voiceRefId": "qwen-voice-ref-teacher-kang-asset-voice-10s",
+        "hasPpt": true,
+        "hasVoiceRef": true,
+        "hasSample": true,
+        "complete": true
+      }
+    ]
+  },
+  "redaction": {
+    "secrets": "omitted",
+    "cookies": "omitted",
+    "assets": "ids-only"
+  }
+}

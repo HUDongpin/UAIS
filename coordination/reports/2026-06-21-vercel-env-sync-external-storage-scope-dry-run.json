@@ -1,0 +1,177 @@
+{
+  "target": "vercel-env-sync",
+  "mode": "dry-run",
+  "project": "uais",
+  "responsibleSession": "S19",
+  "deploymentScope": "external-storage",
+  "releaseRunId": "uais-release-2026-06-21-external-storage-scope",
+  "authProviderMode": "trusted-cookie-issuer",
+  "externalStorageEndpoint": {
+    "status": "present",
+    "endpointClass": "remote-https",
+    "valueRedacted": true
+  },
+  "externalStorageServiceFingerprint": {
+    "status": "present",
+    "value": "sha256:7c8e0f8c7195d5b9",
+    "source": "origin",
+    "valueRedacted": true
+  },
+  "secretStrength": {
+    "minimumLength": 32,
+    "valuesRedacted": true,
+    "checks": [
+      {
+        "name": "UAIS_EXTERNAL_STORAGE_ACCESS_TOKEN",
+        "status": "sufficient",
+        "valueRedacted": true
+      }
+    ]
+  },
+  "projectReadinessEvidenceStatus": "ready",
+  "targets": [
+    "production",
+    "preview"
+  ],
+  "entries": [
+    {
+      "name": "UAIS_TEACHER_AI_OWNERSHIP_BACKEND",
+      "provider": "uais",
+      "roles": [],
+      "valueType": "storage-backend",
+      "status": "present",
+      "requiredForSelectedAuthProvider": false,
+      "serverOnly": true,
+      "actions": [
+        "set-production",
+        "set-preview"
+      ]
+    },
+    {
+      "name": "UAIS_VOICE_LIFECYCLE_AUDIT_BACKEND",
+      "provider": "uais",
+      "roles": [],
+      "valueType": "storage-backend",
+      "status": "present",
+      "requiredForSelectedAuthProvider": false,
+      "serverOnly": true,
+      "actions": [
+        "set-production",
+        "set-preview"
+      ]
+    },
+    {
+      "name": "UAIS_EXTERNAL_STORAGE_BASE_URL",
+      "provider": "uais",
+      "roles": [],
+      "valueType": "base-url",
+      "status": "present",
+      "requiredForSelectedAuthProvider": false,
+      "serverOnly": true,
+      "actions": [
+        "set-production",
+        "set-preview"
+      ]
+    },
+    {
+      "name": "UAIS_EXTERNAL_STORAGE_ACCESS_TOKEN",
+      "provider": "uais",
+      "roles": [],
+      "valueType": "secret",
+      "status": "present",
+      "requiredForSelectedAuthProvider": false,
+      "serverOnly": true,
+      "actions": [
+        "set-production",
+        "set-preview"
+      ]
+    },
+    {
+      "name": "UAIS_EXTERNAL_STORAGE_SERVICE_MODE",
+      "provider": "uais",
+      "roles": [],
+      "valueType": "service-mode",
+      "status": "present",
+      "requiredForSelectedAuthProvider": false,
+      "serverOnly": true,
+      "actions": [
+        "set-production",
+        "set-preview"
+      ]
+    },
+    {
+      "name": "UAIS_EXTERNAL_STORAGE_SERVICE_DATA_DIR",
+      "provider": "uais",
+      "roles": [],
+      "valueType": "storage-path",
+      "status": "present",
+      "requiredForSelectedAuthProvider": false,
+      "serverOnly": true,
+      "actions": [
+        "set-production",
+        "set-preview"
+      ]
+    }
+  ],
+  "localOnlyEntries": [
+    {
+      "name": "UAIS_TEACHER_AUTH_OIDC_SMOKE_BEARER_TOKEN",
+      "provider": "uais",
+      "reason": "approved-live-route-smoke-only",
+      "status": "missing",
+      "localOnly": true,
+      "deploymentAction": "ignored"
+    },
+    {
+      "name": "UAIS_TEACHER_AUTH_OIDC_SMOKE_TEACHER_ID",
+      "provider": "uais",
+      "reason": "approved-live-route-smoke-only",
+      "status": "missing",
+      "localOnly": true,
+      "deploymentAction": "ignored"
+    }
+  ],
+  "safety": {
+    "valuesRedacted": true,
+    "applyRequiresApproval": true,
+    "applyRequiresLinkedProject": true,
+    "applyRequiresProjectReadiness": true,
+    "localOnlySmokeEnvNotSynced": true
+  },
+  "localSourceSummary": {
+    "status": "ready",
+    "valuesRedacted": true,
+    "deploymentScope": "external-storage",
+    "deploymentEntries": {
+      "total": 6,
+      "present": 6,
+      "missing": 0,
+      "missingNames": []
+    },
+    "selectedAuthProvider": {
+      "mode": "trusted-cookie-issuer",
+      "requiredPresent": 0,
+      "requiredMissing": 0,
+      "missingRequiredNames": []
+    },
+    "productionSecretStrength": {
+      "minimumLength": 32,
+      "sufficient": 1,
+      "weak": 0,
+      "missing": 0,
+      "weakNames": [],
+      "missingNames": []
+    },
+    "externalStorage": {
+      "endpointClass": "remote-https",
+      "fingerprintStatus": "present"
+    },
+    "localOnlyEntries": {
+      "total": 2,
+      "present": 0,
+      "ignored": 2
+    }
+  },
+  "status": "ready",
+  "blockedReasons": []
+}

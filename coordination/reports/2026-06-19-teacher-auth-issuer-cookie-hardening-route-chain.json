@@ -1,0 +1,71 @@
+{
+  "target": "teacher-auth-issuer-cookie-hardening-route-chain",
+  "status": "completed",
+  "date": "2026-06-19",
+  "responsibleSession": "S22",
+  "objective": "Strengthen trusted-cookie teacher auth route-chain evidence so reusable production-readiness gates require issuer-route cookie hardening proof.",
+  "changes": [
+    {
+      "file": "scripts/trusted-teacher-auth-route-chain-contract.mjs",
+      "summary": "Route-chain evidence now includes issuerCookieHardening with HttpOnly, SameSite=Lax, production Secure expectation, Path=/, bounded Max-Age, High priority, and redacted values."
+    },
+    {
+      "file": "scripts/teacher-auth-provider-readiness.mjs",
+      "summary": "Trusted-cookie provider readiness now rejects trusted route-chain evidence unless issuerCookieHardening is proved."
+    },
+    {
+      "file": "scripts/production-e2e-release-gate.mjs",
+      "summary": "The aggregate release gate now requires issuerCookieHardening both on trusted route-chain evidence and on teacher-auth-provider readiness route-chain binding."
+    },
+    {
+      "file": "scripts/production-owner-decision-checklist.mjs",
+      "summary": "The owner checklist now surfaces issuerCookieHardening in the trusted route-chain summary."
+    }
+  ],
+  "evidence": {
+    "trustedTeacherAuthRouteChain": "coordination/reports/2026-06-19-trusted-teacher-auth-route-chain-contract.json",
+    "teacherAuthProviderReadiness": "coordination/reports/2026-06-19-teacher-auth-provider-readiness-current-route-chain-bound.json",
+    "releaseGate": "coordination/reports/2026-06-19-production-e2e-release-gate-current-linked-vercel-preflight-docker-storage.json",
+    "ownerChecklist": "coordination/reports/2026-06-19-production-owner-decision-checklist-current-linked-vercel-preflight-docker-storage.json",
+    "issuerCookieHardening": "proved"
+  },
+  "verification": {
+    "redTests": [
+      "npm run test -- tests/trusted-teacher-auth-route-chain-contract.test.ts tests/teacher-auth-provider-readiness.test.ts -t \"issuer cookie hardening|redacted local route-chain proof|redacted signed session round trip\" failed before implementation because issuerCookieHardening was absent.",
+      "npm run test -- tests/production-release-gate.test.ts -t \"trusted route-chain\" failed before implementation because stale route-chain evidence was accepted.",
+      "npm run test -- tests/production-owner-decision-checklist.test.ts -t \"local trusted teacher auth route-chain\" failed before implementation because the owner checklist summary omitted issuerCookieHardening."
+    ],
+    "commandsPassed": [
+      "node --check scripts/trusted-teacher-auth-route-chain-contract.mjs",
+      "node --check scripts/teacher-auth-provider-readiness.mjs",
+      "node --check scripts/production-e2e-release-gate.mjs",
+      "node --check scripts/production-owner-decision-checklist.mjs",
+      "npm run test -- tests/trusted-teacher-auth-route-chain-contract.test.ts tests/teacher-auth-provider-readiness.test.ts tests/production-release-gate.test.ts tests/production-owner-decision-checklist.test.ts tests/ai-api-routes.test.ts",
+      "npm run test",
+      "npm run lint",
+      "npm run build"
+    ],
+    "fullVitest": {
+      "testFilesPassed": 39,
+      "testsPassed": 538
+    },
+    "redactionScan": {
+      "status": "passed",
+      "matchedLeakPatterns": 0
+    }
+  },
+  "remainingBlockers": [
+    "owner-approved production teacher-auth env values are not applied to Vercel",
+    "teacher-auth provider live production readiness remains blocked",
+    "Vercel production deployment and deployed route smoke are not proven",
+    "remote HTTPS external storage and manual PPT playback acceptance remain incomplete"
+  ],
+  "safety": {
+    "valuesRedacted": true,
+    "secretsOmitted": true,
+    "cookieValuesOmitted": true,
+    "sessionIdsOmitted": true,
+    "localPrivatePathsOmitted": true,
+    "productionMutationPerformed": false
+  }
+}

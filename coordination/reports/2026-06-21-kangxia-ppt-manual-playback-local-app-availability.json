@@ -1,0 +1,55 @@
+{
+  "target": "ppt-manual-playback-local-app-availability",
+  "date": "2026-06-21",
+  "status": "ready-for-human-playback-but-not-accepted",
+  "responsibleSession": "S24",
+  "packageId": "kangxia-natural-number-ordinal-theory-v1",
+  "sourceDeckTitle": "初等数学研究+PPT1+自然数的序数理论.pptx",
+  "expectedSlideCount": 19,
+  "narratedPptx": {
+    "relativePath": ".tmp/uais-ai-assets/ppt-narration-pptx/audio-manifest-elementary-math-research-natural-number-ordinal-theory-ppt1-kangxia-narrated.pptx",
+    "exists": true,
+    "sizeMiB": 34.37
+  },
+  "localApplications": [
+    {
+      "name": "Microsoft PowerPoint",
+      "bundlePath": "/Applications/Microsoft PowerPoint.app",
+      "installed": true,
+      "version": "16.110"
+    },
+    {
+      "name": "WPS Presentation",
+      "bundlePath": "/Applications/wpsoffice.app",
+      "installed": true,
+      "version": "7.2.2"
+    }
+  ],
+  "machineEvidence": {
+    "manualAcceptanceGate": "coordination/reports/2026-06-20-kangxia-ppt-manual-playback-acceptance-gate-current-refresh.json",
+    "manualAcceptanceTemplate": "coordination/reports/2026-06-20-kangxia-ppt-manual-acceptance-record-template-current-refresh.json",
+    "manualAcceptanceChecklist": "coordination/reports/2026-06-20-kangxia-ppt-manual-playback-acceptance-checklist-current-refresh.md",
+    "openXmlIntegrity": "coordination/reports/2026-06-21-ppt-narration-openxml-package-integrity-current.json",
+    "machinePreflightStatus": "passed"
+  },
+  "manualAcceptanceStatus": {
+    "accepted": false,
+    "reason": "No human auditory playback confirmation has been recorded for all 19 slides in both Microsoft PowerPoint and WPS Presentation, and the current production deployment is not yet a successful deployed release for binding final acceptance.",
+    "manualRecordEvidenceStatus": "missing",
+    "requiredApplications": ["Microsoft PowerPoint", "WPS Presentation"],
+    "requiredPerApplicationSlideChecks": 19
+  },
+  "nextHumanStep": {
+    "openArtifact": ".tmp/uais-ai-assets/ppt-narration-pptx/audio-manifest-elementary-math-research-natural-number-ordinal-theory-ppt1-kangxia-narrated.pptx",
+    "recordTemplate": "coordination/reports/2026-06-20-kangxia-ppt-manual-acceptance-record-template-current-refresh.json",
+    "finalEvidenceCommand": "node scripts/ppt-manual-playback-acceptance.mjs --package-json coordination/reports/2026-06-16-kangxia-natural-number-ordinal-narration-package.json --preflight-report coordination/reports/2026-06-17-kangxia-ppt-desktop-playback-preflight.md --manual-record <completed-record> --vercel-production-deployment <deployed-production-evidence>"
+  },
+  "safety": {
+    "secretsRedacted": true,
+    "rawAudioOmitted": true,
+    "providerValuesOmitted": true,
+    "localPrivateSourcePathsOmitted": true,
+    "manualAcceptanceNotFaked": true,
+    "goalMarkedComplete": false
+  }
+}

@@ -1,0 +1,127 @@
+{
+  "reportDate": "2026-06-21",
+  "sessionId": "S22",
+  "workstream": "Production reliability and release engineering",
+  "target": "www-uais-top-domain-public-smoke-refresh",
+  "status": "partial-pass",
+  "domain": {
+    "www": {
+      "host": "www.uais.top",
+      "dns": {
+        "a": "76.76.21.21",
+        "soa": "ns1.vercel-dns.com",
+        "authoritativeNs": [
+          "ns1.vercel-dns.com",
+          "ns2.vercel-dns.com"
+        ],
+        "status": "vercel-dns-connected"
+      },
+      "https": {
+        "root": {
+          "status": 307,
+          "location": "/courses",
+          "server": "Vercel"
+        },
+        "teaching": {
+          "status": 200,
+          "server": "Vercel"
+        },
+        "learningPlaybackManifest": {
+          "status": 200
+        },
+        "firstSlideAudio": {
+          "status": 200,
+          "contentType": "audio/wav",
+          "contentLength": 745004
+        }
+      }
+    },
+    "apex": {
+      "host": "uais.top",
+      "https": {
+        "status": "certificate-name-mismatch",
+        "note": "The owner-requested target is www.uais.top; apex HTTPS remains separate."
+      }
+    }
+  },
+  "productionSmoke": {
+    "releaseRunId": "uais-www-domain-prod-chain-20260620",
+    "vercelProductionDeploymentEvidence": "coordination/reports/2026-06-20-vercel-production-deployment-observation-www-uais-top-live.json",
+    "teacherWorkflowPage": {
+      "command": "node scripts/teacher-workflow-deployment-smoke.mjs --live --approved --environment production --base-url https://www.uais.top --release-run-id uais-www-domain-prod-chain-20260620 --vercel-production-deployment <evidence>",
+      "status": "passed",
+      "productionReleaseEligible": true,
+      "httpStatus": 200,
+      "deploymentEvidenceBindingStatus": "proved",
+      "anchors": {
+        "teacherWorkflowTitle": "present",
+        "voiceSampleUpload": "present",
+        "voiceSampleSelect": "present",
+        "uploadedSampleAudioPayload": "present",
+        "voiceSampleDurationGate": "present",
+        "selectedSampleIdentity": "present",
+        "preflight": "present",
+        "pptNarrationGenerate": "present",
+        "perSlideWavDownloads": "present",
+        "signedSessionBootstrap": "present",
+        "workflowSessionActions": "present",
+        "serverWorkflowStatus": "present",
+        "serverWorkflowProgress": "present"
+      }
+    },
+    "learningPptPlayback": {
+      "command": "node scripts/learning-ppt-playback-deployment-smoke.mjs --live --approved --environment production --base-url https://www.uais.top --release-run-id uais-www-domain-prod-chain-20260620 --vercel-production-deployment <evidence>",
+      "status": "passed",
+      "httpStatus": {
+        "learningPage": 200,
+        "playbackManifest": 200,
+        "firstSlideAudio": 200
+      },
+      "results": {
+        "learningPageHttp200": "passed",
+        "playbackManifestKangXiaVoice": "passed",
+        "playbackManifestSlideCount": "passed",
+        "playbackManifestStudentSafeRedaction": "passed",
+        "firstSlideAudioWavHeaders": "passed"
+      },
+      "audio": {
+        "contentType": "audio/wav",
+        "contentLength": 745004,
+        "wavHeader": "RIFF/WAVE"
+      }
+    }
+  },
+  "currentAuthAndEnvState": {
+    "gitRemoteOrigin": "missing",
+    "vercelProjectLink": {
+      "status": "present",
+      "projectName": "uais",
+      "idsRedactedInSummary": true
+    },
+    "vercelToken": "missing",
+    "vercelCliWhoami": {
+      "status": "failed",
+      "failureClass": "vercel-oidc-discovery-network-failure",
+      "safeErrorSummary": "request to vercel well-known openid configuration failed before TLS connection established"
+    },
+    "localRouteSmokeEnv": {
+      "UAIS_AI_ACCESS_SIGNING_SECRET": "missing",
+      "UAIS_TEACHER_AUTH_PROVIDER": "missing",
+      "UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET": "missing",
+      "UAIS_TEACHER_AUTH_ISSUER_SECRET": "missing",
+      "UAIS_TEACHER_AUTH_ROUTE_SMOKE_TEACHER_ID": "missing"
+    }
+  },
+  "remainingGoalGaps": [
+    "The public www.uais.top page and learning playback smoke pass, but the current local worktree changes are not newly deployed.",
+    "Production protected route smoke cannot be freshly rerun from this shell because local signing/auth env variables are absent and Vercel env write remains blocked.",
+    "Remote Vercel env inventory still has prior evidence showing production/preview env variables missing.",
+    "Remote HTTPS external durable storage and PPT/WPS/PowerPoint manual playback acceptance remain incomplete."
+  ],
+  "redaction": {
+    "secrets": "omitted",
+    "cookies": "omitted",
+    "deploymentValues": "redacted-or-fingerprinted",
+    "responseBodies": "summarized"
+  }
+}

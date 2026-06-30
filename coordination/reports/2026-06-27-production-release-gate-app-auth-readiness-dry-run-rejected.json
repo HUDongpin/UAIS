@@ -1,0 +1,263 @@
+{
+  "target": "uais-production-e2e-release-gate",
+  "status": "blocked",
+  "responsibleSession": "S22",
+  "requirements": [
+    {
+      "id": "website-teacher-workflow-ui",
+      "status": "blocked",
+      "evidenceStatus": "missing",
+      "blockedReason": "teacher-workflow-ui-evidence-missing"
+    },
+    {
+      "id": "deployed-teacher-workflow-page",
+      "status": "blocked",
+      "evidenceStatus": "missing",
+      "blockedReason": "deployed-teacher-workflow-page-not-live-passed"
+    },
+    {
+      "id": "teacher-workflow-browser-smoke",
+      "status": "blocked",
+      "evidenceStatus": "waiting-for-deployed-page",
+      "blockedReason": "deployed-teacher-workflow-page-not-live-passed",
+      "upstreamRequirement": "deployed-teacher-workflow-page"
+    },
+    {
+      "id": "teacher-workflow-live-generation-smoke",
+      "status": "blocked",
+      "evidenceStatus": "waiting-for-browser-smoke",
+      "blockedReason": "teacher-workflow-browser-smoke-not-live-passed",
+      "upstreamBrowserSmoke": {
+        "workflowApis": "missing",
+        "remoteMutations": "missing",
+        "responseBodiesOmitted": false
+      }
+    },
+    {
+      "id": "deployed-learning-ppt-playback",
+      "status": "blocked",
+      "evidenceStatus": "waiting-for-production-deployment",
+      "blockedReason": "vercel-production-deployment-not-proven",
+      "upstreamRequirement": "vercel-production-deployment"
+    },
+    {
+      "id": "vercel-project-readiness",
+      "status": "blocked",
+      "evidenceStatus": "missing",
+      "blockedReason": "vercel-project-readiness-evidence-missing"
+    },
+    {
+      "id": "vercel-env-placement",
+      "status": "blocked",
+      "evidenceStatus": "missing",
+      "blockedReason": "vercel-env-evidence-missing",
+      "remoteEnvInventory": "missing"
+    },
+    {
+      "id": "app-auth-provider-readiness",
+      "status": "blocked",
+      "evidenceStatus": "dry-run-blocked",
+      "blockedReason": "app-auth-provider-readiness-not-live-ready",
+      "evidenceEnvironment": "production",
+      "appAuthProviderMode": "trusted-account-provider",
+      "endpointSecurity": "remote-https",
+      "appSessionCookieContract": {
+        "signingSecretStrength": "sufficient",
+        "httpOnly": "required",
+        "sameSite": "lax",
+        "secureInProduction": true,
+        "maxAgeBounded": true,
+        "cookiePair": "proved",
+        "valueRedacted": true
+      },
+      "trustedAccountProviderContract": {
+        "providerKind": "trusted-account-provider",
+        "endpoint": "configured",
+        "bearerCredential": "configured",
+        "accessTokenStrength": "sufficient",
+        "requestMethod": "POST",
+        "responseUserShape": "proved",
+        "valueRedacted": true
+      },
+      "vercelEnvSyncEvidence": {
+        "target": "missing",
+        "status": "missing",
+        "valueRedacted": true,
+        "applyPreflight": "missing",
+        "releaseRunIdStatus": "missing",
+        "requiredAppAuthEnvStatus": "missing"
+      },
+      "redactionSafety": {
+        "valuesRedacted": "proved",
+        "secretsOmitted": "proved",
+        "passwordsOmitted": "proved",
+        "providerUrlsOmitted": "proved",
+        "responseBodiesOmitted": "proved",
+        "localPrivatePathsOmitted": "proved",
+        "liveRequiresApproval": "proved",
+        "cookieValuesOmitted": "proved",
+        "providerNetworkCallPerformed": "missing"
+      }
+    },
+    {
+      "id": "trusted-teacher-auth-route-chain",
+      "status": "blocked",
+      "evidenceStatus": "waiting-for-trusted-route-chain-evidence",
+      "blockedReason": "trusted-teacher-auth-route-chain-missing"
+    },
+    {
+      "id": "teacher-auth-provider-readiness",
+      "status": "blocked",
+      "evidenceStatus": "missing",
+      "blockedReason": "teacher-auth-provider-readiness-missing"
+    },
+    {
+      "id": "external-storage-production-launch-contract",
+      "status": "blocked",
+      "evidenceStatus": "waiting-for-external-storage-production-launch-contract",
+      "blockedReason": "external-storage-production-launch-contract-missing"
+    },
+    {
+      "id": "external-storage-container-build-readiness",
+      "status": "blocked",
+      "evidenceStatus": "waiting-for-external-storage-container-build-readiness",
+      "blockedReason": "external-storage-container-build-readiness-missing"
+    },
+    {
+      "id": "external-storage-service-readiness",
+      "status": "blocked",
+      "evidenceStatus": "missing",
+      "blockedReason": "external-storage-service-readiness-missing"
+    },
+    {
+      "id": "vercel-production-deployment",
+      "status": "blocked",
+      "evidenceStatus": "missing",
+      "blockedReason": "vercel-production-deployment-not-proven"
+    },
+    {
+      "id": "deployment-route-smoke",
+      "status": "blocked",
+      "evidenceStatus": "missing",
+      "blockedReason": "deployment-route-smoke-evidence-missing"
+    },
+    {
+      "id": "teacher-auth-provider-consistency",
+      "status": "blocked",
+      "evidenceStatus": "waiting-for-auth-provider-evidence",
+      "blockedReason": "teacher-auth-provider-readiness-missing",
+      "authProviderModes": {
+        "vercelEnvSync": "missing",
+        "teacherAuthProviderReadiness": "missing",
+        "routeSmoke": "missing",
+        "match": "waiting"
+      }
+    },
+    {
+      "id": "teaching-operations-route-smoke",
+      "status": "blocked",
+      "evidenceStatus": "missing",
+      "blockedReason": "teaching-operations-route-smoke-evidence-missing"
+    },
+    {
+      "id": "teaching-operation-detail-browser-smoke",
+      "status": "blocked",
+      "evidenceStatus": "missing",
+      "blockedReason": "teaching-operation-detail-browser-smoke-not-live-passed"
+    },
+    {
+      "id": "teaching-course-management-route-smoke",
+      "status": "blocked",
+      "evidenceStatus": "missing",
+      "blockedReason": "teaching-course-management-route-smoke-evidence-missing"
+    },
+    {
+      "id": "external-durable-storage-smoke",
+      "status": "blocked",
+      "evidenceStatus": "missing",
+      "blockedReason": "external-storage-smoke-evidence-missing"
+    },
+    {
+      "id": "external-storage-service-consistency",
+      "status": "blocked",
+      "evidenceStatus": "waiting-for-production-storage-evidence",
+      "blockedReason": "external-storage-service-readiness-missing",
+      "storageServiceFingerprints": {
+        "readiness": "waiting",
+        "smoke": "waiting",
+        "match": "waiting"
+      }
+    },
+    {
+      "id": "ppt-manual-playback-acceptance",
+      "status": "blocked",
+      "evidenceStatus": "missing",
+      "blockedReason": "ppt-manual-acceptance-evidence-missing"
+    },
+    {
+      "id": "production-release-run-consistency",
+      "status": "blocked",
+      "evidenceStatus": "waiting-for-production-evidence",
+      "blockedReason": "vercel-production-deployment-not-proven",
+      "releaseRunIds": {
+        "vercelEnvSync": "waiting",
+        "vercelProductionDeployment": "waiting",
+        "deployedTeacherWorkflowUi": "waiting",
+        "teacherWorkflowBrowserUi": "waiting",
+        "teacherWorkflowLiveGeneration": "waiting",
+        "learningPptPlayback": "waiting",
+        "appAuthProviderReadiness": "waiting",
+        "teacherAuthProviderReadiness": "waiting",
+        "externalStorageContainerBuildReadiness": "waiting",
+        "externalStorageServiceReadiness": "waiting",
+        "routeSmoke": "waiting",
+        "externalStorageSmoke": "waiting",
+        "pptAcceptance": "waiting",
+        "match": "waiting"
+      }
+    }
+  ],
+  "blockedReasons": [
+    "teacher-workflow-ui-evidence-missing",
+    "deployed-teacher-workflow-page-not-live-passed",
+    "vercel-project-readiness-evidence-missing",
+    "vercel-env-evidence-missing",
+    "app-auth-provider-readiness-not-live-ready",
+    "teacher-auth-provider-readiness-missing",
+    "external-storage-service-readiness-missing",
+    "vercel-production-deployment-not-proven",
+    "deployment-route-smoke-evidence-missing",
+    "teaching-operations-route-smoke-evidence-missing",
+    "teaching-operation-detail-browser-smoke-not-live-passed",
+    "teaching-course-management-route-smoke-evidence-missing",
+    "external-storage-smoke-evidence-missing",
+    "ppt-manual-acceptance-evidence-missing"
+  ],
+  "blockedRequirementCount": 23,
+  "blockedRequirementReasons": [
+    "teacher-workflow-ui-evidence-missing",
+    "deployed-teacher-workflow-page-not-live-passed",
+    "teacher-workflow-browser-smoke-not-live-passed",
+    "vercel-production-deployment-not-proven",
+    "vercel-project-readiness-evidence-missing",
+    "vercel-env-evidence-missing",
+    "app-auth-provider-readiness-not-live-ready",
+    "trusted-teacher-auth-route-chain-missing",
+    "teacher-auth-provider-readiness-missing",
+    "external-storage-production-launch-contract-missing",
+    "external-storage-container-build-readiness-missing",
+    "external-storage-service-readiness-missing",
+    "deployment-route-smoke-evidence-missing",
+    "teaching-operations-route-smoke-evidence-missing",
+    "teaching-operation-detail-browser-smoke-not-live-passed",
+    "teaching-course-management-route-smoke-evidence-missing",
+    "external-storage-smoke-evidence-missing",
+    "ppt-manual-acceptance-evidence-missing"
+  ],
+  "safety": {
+    "secretsRedacted": true,
+    "evidenceValuesRedacted": true,
+    "responseBodiesOmitted": true,
+    "localPrivatePathsOmitted": true
+  }
+}

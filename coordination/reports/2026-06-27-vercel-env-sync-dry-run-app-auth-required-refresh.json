@@ -1,0 +1,1073 @@
+{
+  "target": "vercel-env-sync",
+  "mode": "dry-run",
+  "project": "uais",
+  "responsibleSession": "S19",
+  "releaseRunId": "enterprise-current-20260627-app-auth-gate-refresh",
+  "authProviderMode": "missing",
+  "appAuthProviderMode": "missing",
+  "externalStorageEndpoint": {
+    "status": "missing",
+    "endpointClass": "missing",
+    "valueRedacted": true
+  },
+  "externalStorageServiceFingerprint": {
+    "status": "missing",
+    "source": "origin",
+    "valueRedacted": true
+  },
+  "externalStorageDatabaseAdapterProof": {
+    "status": "blocked",
+    "providerClass": "missing",
+    "migrationStatus": "missing",
+    "backupPolicy": "missing",
+    "concurrencyControl": "missing",
+    "valuesRedacted": true
+  },
+  "secretStrength": {
+    "minimumLength": 32,
+    "valuesRedacted": true,
+    "checks": [
+      {
+        "name": "UAIS_LIVE_AI_APPROVAL_TOKEN",
+        "status": "missing",
+        "valueRedacted": true
+      },
+      {
+        "name": "UAIS_AI_ACCESS_SIGNING_SECRET",
+        "status": "missing",
+        "valueRedacted": true
+      },
+      {
+        "name": "UAIS_APP_SESSION_SIGNING_SECRET",
+        "status": "missing",
+        "valueRedacted": true
+      },
+      {
+        "name": "UAIS_APP_AUTH_PROVIDER_TOKEN",
+        "status": "missing",
+        "valueRedacted": true
+      },
+      {
+        "name": "UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET",
+        "status": "missing",
+        "valueRedacted": true
+      },
+      {
+        "name": "UAIS_EXTERNAL_STORAGE_ACCESS_TOKEN",
+        "status": "missing",
+        "valueRedacted": true
+      },
+      {
+        "name": "UAIS_COLLABORATION_INVITE_EMAIL_PROVIDER_TOKEN",
+        "status": "missing",
+        "valueRedacted": true
+      },
+      {
+        "name": "UAIS_COLLABORATION_INVITE_EMAIL_CALLBACK_TOKEN",
+        "status": "missing",
+        "valueRedacted": true
+      },
+      {
+        "name": "UAIS_STUDENT_ROSTER_SYNC_PROVIDER_TOKEN",
+        "status": "missing",
+        "valueRedacted": true
+      },
+      {
+        "name": "UAIS_KNOWLEDGE_INDEX_SYNC_PROVIDER_TOKEN",
+        "status": "missing",
+        "valueRedacted": true
+      },
+      {
+        "name": "UAIS_GRADEBOOK_RELEASE_PROVIDER_TOKEN",
+        "status": "missing",
+        "valueRedacted": true
+      },
+      {
+        "name": "UAIS_COURSE_CONTENT_PUBLISH_PROVIDER_TOKEN",
+        "status": "missing",
+        "valueRedacted": true
+      },
+      {
+        "name": "UAIS_COURSE_EXPORT_PROVIDER_TOKEN",
+        "status": "missing",
+        "valueRedacted": true
+      },
+      {
+        "name": "UAIS_GRADING_FEEDBACK_PROVIDER_TOKEN",
+        "status": "missing",
+        "valueRedacted": true
+      }
+    ]
+  },
+  "projectReadinessEvidenceStatus": "not-required-for-dry-run",
+  "targets": [
+    "production",
+    "preview"
+  ],
+  "entries": [
+    {
+      "name": "UAIS_LIVE_AI_APPROVAL_TOKEN",
+      "provider": "uais",
+      "roles": [],
+      "valueType": "secret",
+      "status": "missing",
+      "requiredForSelectedAuthProvider": false,
+      "serverOnly": true,
+      "actions": [
+        "set-production",
+        "set-preview"
+      ]
+    },
+    {
+      "name": "UAIS_AI_ACCESS_SIGNING_SECRET",
+      "provider": "uais",
+      "roles": [],
+      "valueType": "secret",
+      "status": "missing",
+      "requiredForSelectedAuthProvider": false,
+      "serverOnly": true,
+      "actions": [
+        "set-production",
+        "set-preview"
+      ]
+    },
+    {
+      "name": "UAIS_APP_SESSION_SIGNING_SECRET",
+      "provider": "uais",
+      "roles": [
+        "app-auth"
+      ],
+      "valueType": "secret",
+      "status": "missing",
+      "requiredForSelectedAuthProvider": false,
+      "serverOnly": true,
+      "actions": [
+        "set-production",
+        "set-preview"
+      ]
+    },
+    {
+      "name": "UAIS_APP_AUTH_PROVIDER",
+      "provider": "uais",
+      "roles": [
+        "app-auth"
+      ],
+      "valueType": "auth-provider",
+      "status": "missing",
+      "requiredForSelectedAuthProvider": false,
+      "serverOnly": true,
+      "actions": [
+        "set-production",
+        "set-preview"
+      ]
+    },
+    {
+      "name": "UAIS_APP_AUTH_PROVIDER_URL",
+      "provider": "uais",
+      "roles": [
+        "app-auth"
+      ],
+      "valueType": "base-url",
+      "status": "missing",
+      "requiredForSelectedAuthProvider": false,
+      "serverOnly": true,
+      "actions": [
+        "set-production",
+        "set-preview"
+      ]
+    },
+    {
+      "name": "UAIS_APP_AUTH_PROVIDER_TOKEN",
+      "provider": "uais",
+      "roles": [
+        "app-auth"
+      ],
+      "valueType": "secret",
+      "status": "missing",
+      "requiredForSelectedAuthProvider": false,
+      "serverOnly": true,
+      "actions": [
+        "set-production",
+        "set-preview"
+      ]
+    },
+    {
+      "name": "UAIS_TEACHER_AUTH_PROVIDER",
+      "provider": "uais",
+      "roles": [],
+      "valueType": "auth-provider",
+      "status": "missing",
+      "requiredForSelectedAuthProvider": true,
+      "serverOnly": true,
+      "actions": [
+        "set-production",
+        "set-preview"
+      ]
+    },
+    {
+      "name": "UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET",
+      "provider": "uais",
+      "roles": [],
+      "valueType": "secret",
+      "status": "missing",
+      "requiredForSelectedAuthProvider": true,
+      "serverOnly": true,
+      "actions": [
+        "set-production",
+        "set-preview"
+      ]
+    },
+    {
+      "name": "UAIS_TEACHER_AUTH_ISSUER_SECRET",
+      "provider": "uais",
+      "roles": [],
+      "valueType": "secret",
+      "status": "missing",
+      "requiredForSelectedAuthProvider": false,
+      "serverOnly": true,
+      "actions": [
+        "set-production",
+        "set-preview"
+      ]
+    },
+    {
+      "name": "UAIS_TEACHER_AUTH_OIDC_ISSUER",
+      "provider": "uais",
+      "roles": [],
+      "valueType": "base-url",
+      "status": "missing",
+      "requiredForSelectedAuthProvider": false,
+      "serverOnly": true,
+      "actions": [
+        "set-production",
+        "set-preview"
+      ]
+    },
+    {
+      "name": "UAIS_TEACHER_AUTH_OIDC_AUDIENCE",
+      "provider": "uais",
+      "roles": [],
+      "valueType": "auth-provider",
+      "status": "missing",
+      "requiredForSelectedAuthProvider": false,
+      "serverOnly": true,
+      "actions": [
+        "set-production",
+        "set-preview"
+      ]
+    },
+    {
+      "name": "UAIS_TEACHER_AUTH_OIDC_JWKS_URL",
+      "provider": "uais",
+      "roles": [],
+      "valueType": "base-url",
+      "status": "missing",
+      "requiredForSelectedAuthProvider": false,
+      "serverOnly": true,
+      "actions": [
+        "set-production",
+        "set-preview"
+      ]
+    },
+    {
+      "name": "UAIS_TEACHER_AUTH_OIDC_TEACHER_ID_CLAIM",
+      "provider": "uais",
+      "roles": [],
+      "valueType": "auth-provider",
+      "status": "missing",
+      "requiredForSelectedAuthProvider": false,
+      "serverOnly": true,
+      "actions": [
+        "set-production",
+        "set-preview"
+      ]
+    },
+    {
+      "name": "UAIS_TEACHER_AI_OWNERSHIP_BACKEND",
+      "provider": "uais",
+      "roles": [],
+      "valueType": "storage-backend",
+      "status": "missing",
+      "requiredForSelectedAuthProvider": false,
+      "serverOnly": true,
+      "actions": [
+        "set-production",
+        "set-preview"
+      ]
+    },
+    {
+      "name": "UAIS_VOICE_LIFECYCLE_AUDIT_BACKEND",
+      "provider": "uais",
+      "roles": [],
+      "valueType": "storage-backend",
+      "status": "missing",
+      "requiredForSelectedAuthProvider": false,
+      "serverOnly": true,
+      "actions": [
+        "set-production",
+        "set-preview"
+      ]
+    },
+    {
+      "name": "UAIS_TEACHING_OPERATIONS_BACKEND",
+      "provider": "uais",
+      "roles": [],
+      "valueType": "storage-backend",
+      "status": "missing",
+      "requiredForSelectedAuthProvider": false,
+      "serverOnly": true,
+      "actions": [
+        "set-production",
+        "set-preview"
+      ]
+    },
+    {
+      "name": "UAIS_TEACHING_COURSE_MANAGEMENT_BACKEND",
+      "provider": "uais",
+      "roles": [],
+      "valueType": "storage-backend",
+      "status": "missing",
+      "requiredForSelectedAuthProvider": false,
+      "serverOnly": true,
+      "actions": [
+        "set-production",
+        "set-preview"
+      ]
+    },
+    {
+      "name": "UAIS_TEACHING_COURSE_ASSETS_BACKEND",
+      "provider": "uais",
+      "roles": [],
+      "valueType": "storage-backend",
+      "status": "missing",
+      "requiredForSelectedAuthProvider": false,
+      "serverOnly": true,
+      "actions": [
+        "set-production",
+        "set-preview"
+      ]
+    },
+    {
+      "name": "UAIS_EXTERNAL_STORAGE_BASE_URL",
+      "provider": "uais",
+      "roles": [],
+      "valueType": "base-url",
+      "status": "missing",
+      "requiredForSelectedAuthProvider": false,
+      "serverOnly": true,
+      "actions": [
+        "set-production",
+        "set-preview"
+      ]
+    },
+    {
+      "name": "UAIS_EXTERNAL_STORAGE_ACCESS_TOKEN",
+      "provider": "uais",
+      "roles": [],
+      "valueType": "secret",
+      "status": "missing",
+      "requiredForSelectedAuthProvider": false,
+      "serverOnly": true,
+      "actions": [
+        "set-production",
+        "set-preview"
+      ]
+    },
+    {
+      "name": "UAIS_EXTERNAL_STORAGE_SERVICE_MODE",
+      "provider": "uais",
+      "roles": [],
+      "valueType": "service-mode",
+      "status": "missing",
+      "requiredForSelectedAuthProvider": false,
+      "serverOnly": true,
+      "actions": [
+        "set-production",
+        "set-preview"
+      ]
+    },
+    {
+      "name": "UAIS_EXTERNAL_STORAGE_SERVICE_DATA_DIR",
+      "provider": "uais",
+      "roles": [],
+      "valueType": "storage-path",
+      "status": "missing",
+      "requiredForSelectedAuthProvider": false,
+      "serverOnly": true,
+      "actions": [
+        "set-production",
+        "set-preview"
+      ]
+    },
+    {
+      "name": "UAIS_EXTERNAL_STORAGE_DATA_DIR",
+      "provider": "uais",
+      "roles": [],
+      "valueType": "storage-path",
+      "status": "missing",
+      "requiredForSelectedAuthProvider": false,
+      "serverOnly": true,
+      "actions": [
+        "set-production",
+        "set-preview"
+      ]
+    },
+    {
+      "name": "UAIS_EXTERNAL_STORAGE_DATABASE_ADAPTER_PROVIDER_CLASS",
+      "provider": "uais",
+      "roles": [],
+      "valueType": "database-adapter-proof",
+      "status": "missing",
+      "requiredForSelectedAuthProvider": false,
+      "serverOnly": true,
+      "actions": [
+        "set-production",
+        "set-preview"
+      ]
+    },
+    {
+      "name": "UAIS_EXTERNAL_STORAGE_DATABASE_ADAPTER_MIGRATION_STATUS",
+      "provider": "uais",
+      "roles": [],
+      "valueType": "database-adapter-proof",
+      "status": "missing",
+      "requiredForSelectedAuthProvider": false,
+      "serverOnly": true,
+      "actions": [
+        "set-production",
+        "set-preview"
+      ]
+    },
+    {
+      "name": "UAIS_EXTERNAL_STORAGE_DATABASE_ADAPTER_BACKUP_POLICY",
+      "provider": "uais",
+      "roles": [],
+      "valueType": "database-adapter-proof",
+      "status": "missing",
+      "requiredForSelectedAuthProvider": false,
+      "serverOnly": true,
+      "actions": [
+        "set-production",
+        "set-preview"
+      ]
+    },
+    {
+      "name": "UAIS_EXTERNAL_STORAGE_DATABASE_ADAPTER_CONCURRENCY_CONTROL",
+      "provider": "uais",
+      "roles": [],
+      "valueType": "database-adapter-proof",
+      "status": "missing",
+      "requiredForSelectedAuthProvider": false,
+      "serverOnly": true,
+      "actions": [
+        "set-production",
+        "set-preview"
+      ]
+    },
+    {
+      "name": "UAIS_COLLABORATION_INVITE_EMAIL_PROVIDER",
+      "provider": "uais",
+      "roles": [
+        "ordinary-teaching"
+      ],
+      "valueType": "auth-provider",
+      "status": "missing",
+      "requiredForSelectedAuthProvider": false,
+      "serverOnly": true,
+      "actions": [
+        "set-production",
+        "set-preview"
+      ]
+    },
+    {
+      "name": "UAIS_COLLABORATION_INVITE_EMAIL_PROVIDER_URL",
+      "provider": "uais",
+      "roles": [
+        "ordinary-teaching"
+      ],
+      "valueType": "base-url",
+      "status": "missing",
+      "requiredForSelectedAuthProvider": false,
+      "serverOnly": true,
+      "actions": [
+        "set-production",
+        "set-preview"
+      ]
+    },
+    {
+      "name": "UAIS_COLLABORATION_INVITE_EMAIL_PROVIDER_TOKEN",
+      "provider": "uais",
+      "roles": [
+        "ordinary-teaching"
+      ],
+      "valueType": "secret",
+      "status": "missing",
+      "requiredForSelectedAuthProvider": false,
+      "serverOnly": true,
+      "actions": [
+        "set-production",
+        "set-preview"
+      ]
+    },
+    {
+      "name": "UAIS_COLLABORATION_INVITE_EMAIL_CALLBACK_TOKEN",
+      "provider": "uais",
+      "roles": [
+        "ordinary-teaching"
+      ],
+      "valueType": "secret",
+      "status": "missing",
+      "requiredForSelectedAuthProvider": false,
+      "serverOnly": true,
+      "actions": [
+        "set-production",
+        "set-preview"
+      ]
+    },
+    {
+      "name": "UAIS_STUDENT_ROSTER_SYNC_PROVIDER",
+      "provider": "uais",
+      "roles": [
+        "ordinary-teaching"
+      ],
+      "valueType": "auth-provider",
+      "status": "missing",
+      "requiredForSelectedAuthProvider": false,
+      "serverOnly": true,
+      "actions": [
+        "set-production",
+        "set-preview"
+      ]
+    },
+    {
+      "name": "UAIS_STUDENT_ROSTER_SYNC_PROVIDER_URL",
+      "provider": "uais",
+      "roles": [
+        "ordinary-teaching"
+      ],
+      "valueType": "base-url",
+      "status": "missing",
+      "requiredForSelectedAuthProvider": false,
+      "serverOnly": true,
+      "actions": [
+        "set-production",
+        "set-preview"
+      ]
+    },
+    {
+      "name": "UAIS_STUDENT_ROSTER_SYNC_PROVIDER_TOKEN",
+      "provider": "uais",
+      "roles": [
+        "ordinary-teaching"
+      ],
+      "valueType": "secret",
+      "status": "missing",
+      "requiredForSelectedAuthProvider": false,
+      "serverOnly": true,
+      "actions": [
+        "set-production",
+        "set-preview"
+      ]
+    },
+    {
+      "name": "UAIS_KNOWLEDGE_INDEX_SYNC_PROVIDER",
+      "provider": "uais",
+      "roles": [
+        "ordinary-teaching"
+      ],
+      "valueType": "auth-provider",
+      "status": "missing",
+      "requiredForSelectedAuthProvider": false,
+      "serverOnly": true,
+      "actions": [
+        "set-production",
+        "set-preview"
+      ]
+    },
+    {
+      "name": "UAIS_KNOWLEDGE_INDEX_SYNC_PROVIDER_URL",
+      "provider": "uais",
+      "roles": [
+        "ordinary-teaching"
+      ],
+      "valueType": "base-url",
+      "status": "missing",
+      "requiredForSelectedAuthProvider": false,
+      "serverOnly": true,
+      "actions": [
+        "set-production",
+        "set-preview"
+      ]
+    },
+    {
+      "name": "UAIS_KNOWLEDGE_INDEX_SYNC_PROVIDER_TOKEN",
+      "provider": "uais",
+      "roles": [
+        "ordinary-teaching"
+      ],
+      "valueType": "secret",
+      "status": "missing",
+      "requiredForSelectedAuthProvider": false,
+      "serverOnly": true,
+      "actions": [
+        "set-production",
+        "set-preview"
+      ]
+    },
+    {
+      "name": "UAIS_GRADEBOOK_RELEASE_PROVIDER",
+      "provider": "uais",
+      "roles": [
+        "ordinary-teaching"
+      ],
+      "valueType": "auth-provider",
+      "status": "missing",
+      "requiredForSelectedAuthProvider": false,
+      "serverOnly": true,
+      "actions": [
+        "set-production",
+        "set-preview"
+      ]
+    },
+    {
+      "name": "UAIS_GRADEBOOK_RELEASE_PROVIDER_URL",
+      "provider": "uais",
+      "roles": [
+        "ordinary-teaching"
+      ],
+      "valueType": "base-url",
+      "status": "missing",
+      "requiredForSelectedAuthProvider": false,
+      "serverOnly": true,
+      "actions": [
+        "set-production",
+        "set-preview"
+      ]
+    },
+    {
+      "name": "UAIS_GRADEBOOK_RELEASE_PROVIDER_TOKEN",
+      "provider": "uais",
+      "roles": [
+        "ordinary-teaching"
+      ],
+      "valueType": "secret",
+      "status": "missing",
+      "requiredForSelectedAuthProvider": false,
+      "serverOnly": true,
+      "actions": [
+        "set-production",
+        "set-preview"
+      ]
+    },
+    {
+      "name": "UAIS_COURSE_CONTENT_PUBLISH_PROVIDER",
+      "provider": "uais",
+      "roles": [
+        "ordinary-teaching"
+      ],
+      "valueType": "auth-provider",
+      "status": "missing",
+      "requiredForSelectedAuthProvider": false,
+      "serverOnly": true,
+      "actions": [
+        "set-production",
+        "set-preview"
+      ]
+    },
+    {
+      "name": "UAIS_COURSE_CONTENT_PUBLISH_PROVIDER_URL",
+      "provider": "uais",
+      "roles": [
+        "ordinary-teaching"
+      ],
+      "valueType": "base-url",
+      "status": "missing",
+      "requiredForSelectedAuthProvider": false,
+      "serverOnly": true,
+      "actions": [
+        "set-production",
+        "set-preview"
+      ]
+    },
+    {
+      "name": "UAIS_COURSE_CONTENT_PUBLISH_PROVIDER_TOKEN",
+      "provider": "uais",
+      "roles": [
+        "ordinary-teaching"
+      ],
+      "valueType": "secret",
+      "status": "missing",
+      "requiredForSelectedAuthProvider": false,
+      "serverOnly": true,
+      "actions": [
+        "set-production",
+        "set-preview"
+      ]
+    },
+    {
+      "name": "UAIS_COURSE_EXPORT_PROVIDER",
+      "provider": "uais",
+      "roles": [
+        "ordinary-teaching"
+      ],
+      "valueType": "auth-provider",
+      "status": "missing",
+      "requiredForSelectedAuthProvider": false,
+      "serverOnly": true,
+      "actions": [
+        "set-production",
+        "set-preview"
+      ]
+    },
+    {
+      "name": "UAIS_COURSE_EXPORT_PROVIDER_URL",
+      "provider": "uais",
+      "roles": [
+        "ordinary-teaching"
+      ],
+      "valueType": "base-url",
+      "status": "missing",
+      "requiredForSelectedAuthProvider": false,
+      "serverOnly": true,
+      "actions": [
+        "set-production",
+        "set-preview"
+      ]
+    },
+    {
+      "name": "UAIS_COURSE_EXPORT_PROVIDER_TOKEN",
+      "provider": "uais",
+      "roles": [
+        "ordinary-teaching"
+      ],
+      "valueType": "secret",
+      "status": "missing",
+      "requiredForSelectedAuthProvider": false,
+      "serverOnly": true,
+      "actions": [
+        "set-production",
+        "set-preview"
+      ]
+    },
+    {
+      "name": "UAIS_GRADING_FEEDBACK_PROVIDER",
+      "provider": "uais",
+      "roles": [
+        "ordinary-teaching"
+      ],
+      "valueType": "auth-provider",
+      "status": "missing",
+      "requiredForSelectedAuthProvider": false,
+      "serverOnly": true,
+      "actions": [
+        "set-production",
+        "set-preview"
+      ]
+    },
+    {
+      "name": "UAIS_GRADING_FEEDBACK_PROVIDER_URL",
+      "provider": "uais",
+      "roles": [
+        "ordinary-teaching"
+      ],
+      "valueType": "base-url",
+      "status": "missing",
+      "requiredForSelectedAuthProvider": false,
+      "serverOnly": true,
+      "actions": [
+        "set-production",
+        "set-preview"
+      ]
+    },
+    {
+      "name": "UAIS_GRADING_FEEDBACK_PROVIDER_TOKEN",
+      "provider": "uais",
+      "roles": [
+        "ordinary-teaching"
+      ],
+      "valueType": "secret",
+      "status": "missing",
+      "requiredForSelectedAuthProvider": false,
+      "serverOnly": true,
+      "actions": [
+        "set-production",
+        "set-preview"
+      ]
+    },
+    {
+      "name": "DEEPSEEK_API_KEY",
+      "provider": "deepseek",
+      "roles": [
+        "text-reasoning"
+      ],
+      "valueType": "secret",
+      "status": "missing",
+      "requiredForSelectedAuthProvider": false,
+      "serverOnly": true,
+      "actions": [
+        "set-production",
+        "set-preview"
+      ]
+    },
+    {
+      "name": "DEEPSEEK_BASE_URL",
+      "provider": "deepseek",
+      "roles": [
+        "text-reasoning"
+      ],
+      "valueType": "base-url",
+      "status": "present",
+      "requiredForSelectedAuthProvider": false,
+      "serverOnly": true,
+      "actions": [
+        "set-production",
+        "set-preview"
+      ]
+    },
+    {
+      "name": "DEEPSEEK_MODEL",
+      "provider": "deepseek",
+      "roles": [
+        "text-reasoning"
+      ],
+      "valueType": "model",
+      "status": "present",
+      "requiredForSelectedAuthProvider": false,
+      "serverOnly": true,
+      "actions": [
+        "set-production",
+        "set-preview"
+      ]
+    },
+    {
+      "name": "DASHSCOPE_API_KEY",
+      "provider": "qwen",
+      "roles": [
+        "multimodal",
+        "image-generation",
+        "voice-clone",
+        "ppt-narration"
+      ],
+      "valueType": "secret",
+      "status": "missing",
+      "requiredForSelectedAuthProvider": false,
+      "serverOnly": true,
+      "actions": [
+        "set-production",
+        "set-preview"
+      ]
+    },
+    {
+      "name": "DASHSCOPE_BASE_URL",
+      "provider": "qwen",
+      "roles": [
+        "multimodal",
+        "image-generation",
+        "voice-clone",
+        "ppt-narration"
+      ],
+      "valueType": "base-url",
+      "status": "present",
+      "requiredForSelectedAuthProvider": false,
+      "serverOnly": true,
+      "actions": [
+        "set-production",
+        "set-preview"
+      ]
+    },
+    {
+      "name": "QWEN_MULTIMODAL_MODEL",
+      "provider": "qwen",
+      "roles": [
+        "multimodal"
+      ],
+      "valueType": "model",
+      "status": "present",
+      "requiredForSelectedAuthProvider": false,
+      "serverOnly": true,
+      "actions": [
+        "set-production",
+        "set-preview"
+      ]
+    },
+    {
+      "name": "QWEN_IMAGE_MODEL",
+      "provider": "qwen",
+      "roles": [
+        "image-generation"
+      ],
+      "valueType": "model",
+      "status": "present",
+      "requiredForSelectedAuthProvider": false,
+      "serverOnly": true,
+      "actions": [
+        "set-production",
+        "set-preview"
+      ]
+    },
+    {
+      "name": "QWEN_TTS_MODEL",
+      "provider": "qwen",
+      "roles": [
+        "voice-clone",
+        "ppt-narration"
+      ],
+      "valueType": "model",
+      "status": "present",
+      "requiredForSelectedAuthProvider": false,
+      "serverOnly": true,
+      "actions": [
+        "set-production",
+        "set-preview"
+      ]
+    }
+  ],
+  "localOnlyEntries": [
+    {
+      "name": "UAIS_TEACHER_AUTH_OIDC_SMOKE_BEARER_TOKEN",
+      "provider": "uais",
+      "reason": "approved-live-route-smoke-only",
+      "status": "missing",
+      "localOnly": true,
+      "deploymentAction": "ignored"
+    },
+    {
+      "name": "UAIS_TEACHER_AUTH_OIDC_SMOKE_TEACHER_ID",
+      "provider": "uais",
+      "reason": "approved-live-route-smoke-only",
+      "status": "missing",
+      "localOnly": true,
+      "deploymentAction": "ignored"
+    }
+  ],
+  "safety": {
+    "valuesRedacted": true,
+    "applyRequiresApproval": true,
+    "applyRequiresLinkedProject": true,
+    "applyRequiresProjectReadiness": true,
+    "localOnlySmokeEnvNotSynced": true
+  },
+  "localSourceSummary": {
+    "status": "blocked",
+    "valuesRedacted": true,
+    "deploymentEntries": {
+      "total": 57,
+      "present": 6,
+      "missing": 51,
+      "missingNames": [
+        "UAIS_LIVE_AI_APPROVAL_TOKEN",
+        "UAIS_AI_ACCESS_SIGNING_SECRET",
+        "UAIS_APP_SESSION_SIGNING_SECRET",
+        "UAIS_APP_AUTH_PROVIDER",
+        "UAIS_APP_AUTH_PROVIDER_URL",
+        "UAIS_APP_AUTH_PROVIDER_TOKEN",
+        "UAIS_TEACHER_AUTH_PROVIDER",
+        "UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET",
+        "UAIS_TEACHER_AUTH_ISSUER_SECRET",
+        "UAIS_TEACHER_AUTH_OIDC_ISSUER",
+        "UAIS_TEACHER_AUTH_OIDC_AUDIENCE",
+        "UAIS_TEACHER_AUTH_OIDC_JWKS_URL",
+        "UAIS_TEACHER_AUTH_OIDC_TEACHER_ID_CLAIM",
+        "UAIS_TEACHER_AI_OWNERSHIP_BACKEND",
+        "UAIS_VOICE_LIFECYCLE_AUDIT_BACKEND",
+        "UAIS_TEACHING_OPERATIONS_BACKEND",
+        "UAIS_TEACHING_COURSE_MANAGEMENT_BACKEND",
+        "UAIS_TEACHING_COURSE_ASSETS_BACKEND",
+        "UAIS_EXTERNAL_STORAGE_BASE_URL",
+        "UAIS_EXTERNAL_STORAGE_ACCESS_TOKEN",
+        "UAIS_EXTERNAL_STORAGE_SERVICE_MODE",
+        "UAIS_EXTERNAL_STORAGE_SERVICE_DATA_DIR",
+        "UAIS_EXTERNAL_STORAGE_DATA_DIR",
+        "UAIS_EXTERNAL_STORAGE_DATABASE_ADAPTER_PROVIDER_CLASS",
+        "UAIS_EXTERNAL_STORAGE_DATABASE_ADAPTER_MIGRATION_STATUS",
+        "UAIS_EXTERNAL_STORAGE_DATABASE_ADAPTER_BACKUP_POLICY",
+        "UAIS_EXTERNAL_STORAGE_DATABASE_ADAPTER_CONCURRENCY_CONTROL",
+        "UAIS_COLLABORATION_INVITE_EMAIL_PROVIDER",
+        "UAIS_COLLABORATION_INVITE_EMAIL_PROVIDER_URL",
+        "UAIS_COLLABORATION_INVITE_EMAIL_PROVIDER_TOKEN",
+        "UAIS_COLLABORATION_INVITE_EMAIL_CALLBACK_TOKEN",
+        "UAIS_STUDENT_ROSTER_SYNC_PROVIDER",
+        "UAIS_STUDENT_ROSTER_SYNC_PROVIDER_URL",
+        "UAIS_STUDENT_ROSTER_SYNC_PROVIDER_TOKEN",
+        "UAIS_KNOWLEDGE_INDEX_SYNC_PROVIDER",
+        "UAIS_KNOWLEDGE_INDEX_SYNC_PROVIDER_URL",
+        "UAIS_KNOWLEDGE_INDEX_SYNC_PROVIDER_TOKEN",
+        "UAIS_GRADEBOOK_RELEASE_PROVIDER",
+        "UAIS_GRADEBOOK_RELEASE_PROVIDER_URL",
+        "UAIS_GRADEBOOK_RELEASE_PROVIDER_TOKEN",
+        "UAIS_COURSE_CONTENT_PUBLISH_PROVIDER",
+        "UAIS_COURSE_CONTENT_PUBLISH_PROVIDER_URL",
+        "UAIS_COURSE_CONTENT_PUBLISH_PROVIDER_TOKEN",
+        "UAIS_COURSE_EXPORT_PROVIDER",
+        "UAIS_COURSE_EXPORT_PROVIDER_URL",
+        "UAIS_COURSE_EXPORT_PROVIDER_TOKEN",
+        "UAIS_GRADING_FEEDBACK_PROVIDER",
+        "UAIS_GRADING_FEEDBACK_PROVIDER_URL",
+        "UAIS_GRADING_FEEDBACK_PROVIDER_TOKEN",
+        "DEEPSEEK_API_KEY",
+        "DASHSCOPE_API_KEY"
+      ]
+    },
+    "selectedAuthProvider": {
+      "mode": "missing",
+      "requiredPresent": 0,
+      "requiredMissing": 2,
+      "missingRequiredNames": [
+        "UAIS_TEACHER_AUTH_PROVIDER",
+        "UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET"
+      ]
+    },
+    "productionSecretStrength": {
+      "minimumLength": 32,
+      "sufficient": 0,
+      "weak": 0,
+      "missing": 14,
+      "weakNames": [],
+      "missingNames": [
+        "UAIS_LIVE_AI_APPROVAL_TOKEN",
+        "UAIS_AI_ACCESS_SIGNING_SECRET",
+        "UAIS_APP_SESSION_SIGNING_SECRET",
+        "UAIS_APP_AUTH_PROVIDER_TOKEN",
+        "UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET",
+        "UAIS_EXTERNAL_STORAGE_ACCESS_TOKEN",
+        "UAIS_COLLABORATION_INVITE_EMAIL_PROVIDER_TOKEN",
+        "UAIS_COLLABORATION_INVITE_EMAIL_CALLBACK_TOKEN",
+        "UAIS_STUDENT_ROSTER_SYNC_PROVIDER_TOKEN",
+        "UAIS_KNOWLEDGE_INDEX_SYNC_PROVIDER_TOKEN",
+        "UAIS_GRADEBOOK_RELEASE_PROVIDER_TOKEN",
+        "UAIS_COURSE_CONTENT_PUBLISH_PROVIDER_TOKEN",
+        "UAIS_COURSE_EXPORT_PROVIDER_TOKEN",
+        "UAIS_GRADING_FEEDBACK_PROVIDER_TOKEN"
+      ]
+    },
+    "externalStorage": {
+      "endpointClass": "missing",
+      "fingerprintStatus": "missing"
+    },
+    "externalStorageDatabaseAdapterProof": {
+      "status": "blocked",
+      "providerClass": "missing",
+      "migrationStatus": "missing",
+      "backupPolicy": "missing",
+      "concurrencyControl": "missing",
+      "valuesRedacted": true
+    },
+    "localOnlyEntries": {
+      "total": 2,
+      "present": 0,
+      "ignored": 2
+    }
+  },
+  "status": "blocked",
+  "blockedReasons": [
+    "vercel-env-apply-auth-provider-not-proven",
+    "vercel-env-apply-required-auth-env-missing",
+    "vercel-env-apply-app-auth-provider-not-proven",
+    "vercel-env-apply-app-auth-provider-env-missing",
+    "vercel-env-apply-secret-strength-not-sufficient",
+    "vercel-env-apply-external-storage-not-remote-https",
+    "vercel-env-apply-external-storage-fingerprint-not-proven",
+    "vercel-env-apply-external-storage-database-adapter-proof-not-ready"
+  ]
+}

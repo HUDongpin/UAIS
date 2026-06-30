@@ -1,0 +1,83 @@
+{
+  "generatedAt": "2026-06-27T17:58:00+08:00",
+  "responsibleSession": "S22",
+  "scope": "ordinary-teaching-external-audit-readback-identity",
+  "status": "passed",
+  "summary": "External /api/teaching/operations/audit readback now validates the external envelope and normalizes operation records before returning them, preserving external storage policy while requiring a matching teacherId and valid operation/action identity. Malformed external audit responses fail closed with HTTP 502 and are not returned to the frontend.",
+  "filesChanged": [
+    "src/app/api/teaching/operations/audit/route.ts",
+    "src/lib/server/teaching-operations-store.ts",
+    "tests/teaching-operation-backend.test.ts"
+  ],
+  "redGreenEvidence": [
+    {
+      "phase": "red",
+      "command": "npx vitest run tests/teaching-operation-backend.test.ts --reporter=dot -t \"external teaching operation audit records omit operation action identity\"",
+      "expectedFailure": true,
+      "observed": "Failed because the audit route returned HTTP 200 for a malformed external record missing operation/action identity."
+    },
+    {
+      "phase": "green",
+      "command": "npx vitest run tests/teaching-operation-backend.test.ts --reporter=dot -t \"external teaching operation audit records omit operation action identity\"",
+      "exitCode": 0,
+      "observed": "1 passed, 151 skipped."
+    },
+    {
+      "phase": "red",
+      "command": "npx vitest run tests/teaching-operation-backend.test.ts --reporter=dot -t \"external teaching operation audit readback belongs to a different teacher\"",
+      "expectedFailure": true,
+      "observed": "Failed because the audit route returned HTTP 200 for an external readback envelope with teacherId teacher-lee while the signed teacher was teacher-kang."
+    },
+    {
+      "phase": "green",
+      "command": "npx vitest run tests/teaching-operation-backend.test.ts --reporter=dot -t \"external teaching operation audit readback belongs to a different teacher\"",
+      "exitCode": 0,
+      "observed": "1 passed, 151 skipped."
+    }
+  ],
+  "behaviorHardened": [
+    "External audit readback envelopes fail closed when a present teacherId does not match the signed teacher requested from external storage.",
+    "External audit records are normalized through backend teaching operation action definitions before readback responses are created.",
+    "Malformed external audit records that omit operation/action identity now fail closed with HTTP 502 and the message External teaching operation audit readback response is invalid.",
+    "Valid external audit records still pass and keep storagePolicy external-redacted-teaching-operation-append in the route response.",
+    "External audit events and domain projections are also normalized before course-ownership filtering."
+  ],
+  "verification": [
+    {
+      "command": "npx vitest run tests/teaching-operation-backend.test.ts --reporter=dot -t \"reads external teaching operation records and domain projections through signed audit readback\"",
+      "exitCode": 0,
+      "observed": "1 passed, 151 skipped."
+    },
+    {
+      "command": "npx vitest run tests/teaching-operation-backend.test.ts --reporter=dot",
+      "exitCode": 0,
+      "observed": "152 passed."
+    },
+    {
+      "command": "npm run lint",
+      "exitCode": 0,
+      "observed": "ESLint passed."
+    },
+    {
+      "command": "npm run test",
+      "exitCode": 0,
+      "observed": "66 files passed, 1280 tests passed. Existing jsdom navigation warnings remained non-fatal."
+    },
+    {
+      "command": "npm run build",
+      "exitCode": 0,
+      "observed": "Next.js production build completed."
+    },
+    {
+      "command": "git diff --check",
+      "exitCode": 0,
+      "observed": "No whitespace errors."
+    }
+  ],
+  "boundary": "This is local backend/API contract hardening only. It does not replace fresh same-run live production ordinary teaching route/browser smoke artifacts, external-storage readiness, Vercel env/deployment evidence, or provider mutation evidence required for enterprise completion.",
+  "redaction": {
+    "secrets": "omitted",
+    "localFiles": "omitted",
+    "assets": "ids-only"
+  }
+}

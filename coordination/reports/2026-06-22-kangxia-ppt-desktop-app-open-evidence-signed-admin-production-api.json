@@ -1,0 +1,74 @@
+{
+  "target": "kangxia-ppt-desktop-app-open-visual-evidence",
+  "date": "2026-06-22",
+  "observedAt": "2026-06-22T00:32:37+08:00",
+  "status": "visual-slideshow-ready-but-human-auditory-not-accepted",
+  "responsibleSessions": ["S22", "S24"],
+  "releaseRunId": "uais-release-2026-06-21-signed-admin-production-api",
+  "deploymentFingerprint": {
+    "status": "present",
+    "value": "sha256:7c8e0f8c7195d5b9"
+  },
+  "packageId": "kangxia-natural-number-ordinal-theory-v1",
+  "sourceDeckTitle": "初等数学研究+PPT1+自然数的序数理论.pptx",
+  "expectedSlideCount": 19,
+  "narratedPptx": {
+    "relativePath": ".tmp/uais-ai-assets/ppt-narration-pptx/audio-manifest-elementary-math-research-natural-number-ordinal-theory-ppt1-kangxia-narrated.pptx",
+    "exists": true,
+    "sizeMiB": 34.37,
+    "artifactFingerprint": "sha256:6b92d1bdde6c2904c6e166ce21b17ac43d3178a8c084f7c1d10e16866eeb4ba1"
+  },
+  "desktopApplicationEvidence": [
+    {
+      "name": "Microsoft PowerPoint",
+      "bundlePath": "/Applications/Microsoft PowerPoint.app",
+      "version": "16.110",
+      "openedTargetDeck": true,
+      "editorWindowTitle": "audio-manifest-elementary-math-research-natural-number-ordinal-theory-ppt1-kangxia-narrated",
+      "editorSlideCountVisible": "Slide 1 of 19",
+      "slideShowWindowOpened": true,
+      "slideShowWindowTitle": "PowerPoint Slide Show - [audio-manifest-elementary-math-research-natural-number-ordinal-theory-ppt1-kangxia-narrated]",
+      "slideOneAudioIconVisible": true,
+      "returnedToEditorAfterCheck": true,
+      "humanAuditoryPlaybackConfirmed": false
+    },
+    {
+      "name": "WPS Presentation",
+      "applicationName": "WPS Office",
+      "bundlePath": "/Applications/wpsoffice.app",
+      "version": "7.2.2",
+      "openedTargetDeck": true,
+      "editorWindowTitle": "audio-manifest-elementary-math-research-natural-number-ordinal-theory-ppt1-kangxia-narrated.pptx",
+      "editorSlideCountVisible": "Slide 1 / 19",
+      "slideShowWindowOpened": true,
+      "slideShowWindowTitle": "WPS Office full-screen slide show dialog",
+      "slideOneAudioIconVisible": true,
+      "returnedToEditorAfterCheck": true,
+      "humanAuditoryPlaybackConfirmed": false
+    }
+  ],
+  "manualAcceptanceStatus": {
+    "accepted": false,
+    "reason": "Computer Use verified that Microsoft PowerPoint and WPS Presentation can open the final narrated PPTX and enter slide-show mode with the slide-one audio icon visible. It did not provide an auditory channel, so this evidence cannot certify that the target cloned voice was heard on all 19 slides in both applications.",
+    "requiredApplications": ["Microsoft PowerPoint", "WPS Presentation"],
+    "requiredPerApplicationSlideChecks": 19,
+    "blockedReasons": [
+      "manual-PowerPoint-playback-not-recorded",
+      "manual-WPS-playback-not-recorded"
+    ]
+  },
+  "evidenceSources": [
+    "Computer Use get_app_state for Microsoft PowerPoint editor window",
+    "Computer Use click on PowerPoint Slide Show status control and resulting slide-show window",
+    "Computer Use get_app_state for WPS Office editor window",
+    "Computer Use click on WPS From Current Slide control and resulting slide-show window"
+  ],
+  "safety": {
+    "secretsRedacted": true,
+    "rawAudioOmitted": true,
+    "providerValuesOmitted": true,
+    "localPrivateSourcePathsOmitted": true,
+    "manualAcceptanceNotFaked": true,
+    "goalMarkedComplete": false
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "target": "external-storage-teacher-kang-ownership-read-after-restart",
+  "status": "passed",
+  "httpStatus": 200,
+  "teacherId": "teacher-kang",
+  "courseIdPresent": true,
+  "voiceRefPresent": true,
+  "audioManifestPresent": true,
+  "secretsRedacted": true,
+  "responseBodiesOmitted": true
+}

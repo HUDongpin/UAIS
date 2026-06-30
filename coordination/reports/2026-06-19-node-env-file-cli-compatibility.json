@@ -1,0 +1,129 @@
+{
+  "target": "node-env-file-cli-compatibility",
+  "generatedAt": "2026-06-19T02:12:04+08:00",
+  "sessionId": "S22",
+  "status": "verified",
+  "objective": "Prevent production E2E runbook commands from being broken by Node's own --env-file option parsing before UAIS scripts start.",
+  "diagnosis": {
+    "nodeVersion": "v24.15.0",
+    "observedIssue": "Bare node commands can treat --env-file as a Node runtime option before UAIS script argument parsing.",
+    "unsafeShape": "node scripts/<script>.mjs ... --env-file <env-file>",
+    "safeShape": "node -- scripts/<script>.mjs ... --env-file <env-file>",
+    "diagnosticEvidence": [
+      {
+        "commandShape": "node -e <probe> --env-file REDACTED_MISSING_FILE",
+        "exitStatus": 9,
+        "result": "Node handled --env-file before probe startup"
+      },
+      {
+        "commandShape": "node -e <probe> -- --env-file REDACTED_MISSING_FILE",
+        "exitStatus": 0,
+        "result": "Node passed --env-file through as a script argument"
+      },
+      {
+        "commandShape": "node -- scripts/teacher-workflow-deployment-smoke.mjs ... --env-file REDACTED_MISSING_FILE",
+        "exitStatus": 1,
+        "result": "UAIS script started and returned its own release-run-id guard before env loading"
+      }
+    ]
+  },
+  "changes": [
+    {
+      "file": "scripts/production-e2e-orchestrator.mjs",
+      "summary": "Production proof-chain commands now use node -- scripts/... so --env-file remains a UAIS script argument."
+    },
+    {
+      "file": "tests/production-e2e-orchestrator.test.ts",
+      "summary": "Regression coverage now requires every generated command containing --env-file to start with node -- scripts/."
+    },
+    {
+      "file": "coordination/reports/2026-06-17-production-e2e-orchestration-plan.json",
+      "summary": "Dry-run production orchestration plan regenerated with safe node -- command shapes."
+    }
+  ],
+  "targetedEvidence": {
+    "red": {
+      "observed": true,
+      "command": "npm run test -- tests/production-e2e-orchestrator.test.ts -t redacted dry-run plan",
+      "result": "failed before implementation because env-file commands did not start with node -- scripts/"
+    },
+    "green": {
+      "observed": true,
+      "command": "npm run test -- tests/production-e2e-orchestrator.test.ts",
+      "result": "passed: 1 file / 3 tests"
+    },
+    "planValidation": {
+      "file": "coordination/reports/2026-06-17-production-e2e-orchestration-plan.json",
+      "steps": 14,
+      "envFileCommands": 9,
+      "unsafeEnvFileCommands": 0
+    }
+  },
+  "checks": [
+    {
+      "command": "node --check scripts/production-e2e-orchestrator.mjs",
+      "status": "passed"
+    },
+    {
+      "command": "node -- scripts/production-e2e-orchestrator.mjs --help",
+      "status": "passed",
+      "summary": "usage begins with node -- scripts/production-e2e-orchestrator.mjs"
+    },
+    {
+      "command": "npm run test -- tests/production-e2e-orchestrator.test.ts",
+      "status": "passed",
+      "summary": "1 file / 3 tests"
+    },
+    {
+      "command": "npm run test",
+      "status": "passed",
+      "summary": "34 files / 449 tests"
+    },
+    {
+      "command": "npm run lint",
+      "status": "passed"
+    },
+    {
+      "command": "npm run build",
+      "status": "passed",
+      "summary": "Next.js 16.2.9 production build compiled successfully and generated 8 static pages"
+    },
+    {
+      "command": "JSON parse checks for this report and regenerated production orchestration plan",
+      "status": "passed"
+    },
+    {
+      "command": "production orchestration plan env-file command validation",
+      "status": "passed",
+      "summary": "14 steps, 9 commands containing --env-file, 0 unsafe env-file commands"
+    },
+    {
+      "command": "git diff --check plus direct trailing-whitespace scan over touched paths",
+      "status": "passed"
+    },
+    {
+      "command": "redaction scan over new compatibility report, regenerated orchestration plan, and S22 log",
+      "status": "passed",
+      "summary": "no raw env file path, deployment URL, bearer token, env assignment, private local path, or secret fixture value found; matches were limited to redaction/proof labels"
+    }
+  ],
+  "releaseImpact": {
+    "improved": [
+      "The owner-facing production E2E proof chain now gives commands that survive Node v24 --env-file option parsing.",
+      "Vercel env apply, teacher-auth readiness, external-storage readiness, deployment evidence, deployed UI smoke, browser smoke, route smoke, and storage smoke commands keep their intended script-level --env-file argument."
+    ],
+    "stillBlocked": [
+      "Owner-approved Vercel team/project/link and env apply remain incomplete.",
+      "Production trusted teacher auth/session provider readiness remains incomplete.",
+      "Real remote-HTTPS durable external storage service readiness and live smoke remain incomplete.",
+      "Production deployment evidence and deployed route/browser smokes remain incomplete.",
+      "Manual PowerPoint/WPS playback acceptance remains incomplete."
+    ]
+  },
+  "redaction": {
+    "secretsPrinted": false,
+    "envFilePathsPrinted": false,
+    "deploymentUrlsPrinted": false,
+    "commandArgumentsUsePlaceholders": true
+  }
+}

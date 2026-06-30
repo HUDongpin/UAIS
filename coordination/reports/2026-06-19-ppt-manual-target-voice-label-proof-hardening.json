@@ -1,0 +1,56 @@
+{
+  "target": "ppt-manual-target-voice-label-proof-hardening",
+  "status": "hardened",
+  "productionStatus": "not-live-production-evidence",
+  "responsibleSessions": ["S24", "S22"],
+  "objective": "Prevent manual PowerPoint/WPS PPT playback acceptance and the aggregate production release gate from accepting teacher-voice narration evidence when the package does not declare redacted target voice label proof.",
+  "changes": [
+    "Added packageTargetVoiceLabelStatus to the PPT manual playback acceptance output.",
+    "Blocked teacherVoice packages that omit teacherVoice.targetVoiceLabel with manual-record-target-voice-label-missing.",
+    "Required heardTargetVoice per slide whenever a teacherVoice object exists, even before a label is present.",
+    "Updated the production release gate so accepted Kang Xia manual PPT evidence must include packageTargetVoiceLabelStatus: present.",
+    "Updated the production owner-decision checklist so manual-ppt-target-voice-label-not-proven routes to S24 human QA instead of the generic release-run bucket.",
+    "Refreshed the current Kang Xia manual playback gate evidence; it remains blocked pending human PowerPoint/WPS playback."
+  ],
+  "redPhase": {
+    "command": "npm run test -- tests/ppt-playback-acceptance.test.ts tests/production-release-gate.test.ts -t \"target voice label\"",
+    "result": "failed-before-implementation",
+    "observedFailures": [
+      "PPT manual playback accepted a teacherVoice package without targetVoiceLabel.",
+      "Production release gate treated otherwise accepted PPT evidence without packageTargetVoiceLabelStatus as satisfied."
+    ]
+  },
+  "greenPhase": {
+    "focused": "npm run test -- tests/ppt-playback-acceptance.test.ts tests/production-release-gate.test.ts -t \"target voice label\" passed: 2 files / 2 tests.",
+    "targetedSuites": "npm run test -- tests/ppt-playback-acceptance.test.ts tests/production-release-gate.test.ts passed: 2 files / 162 tests.",
+    "ownerChecklistFocused": "npm run test -- tests/production-owner-decision-checklist.test.ts -t \"target-voice label\" passed: 1 file / 1 test.",
+    "ownerChecklistTargetedSuites": "npm run test -- tests/production-owner-decision-checklist.test.ts tests/production-release-gate.test.ts passed: 2 files / 160 tests.",
+    "fullTest": "npm run test passed: 37 files / 512 tests.",
+    "finalFullTest": "npm run test passed after checklist routing: 37 files / 513 tests.",
+    "lint": "npm run lint passed.",
+    "build": "npm run build passed."
+  },
+  "currentKangXiaGate": {
+    "path": "coordination/reports/2026-06-19-kangxia-ppt-manual-playback-acceptance-gate-current.json",
+    "status": "blocked",
+    "packageTargetVoiceLabelStatus": "present",
+    "manualAcceptanceStatus": "pending",
+    "blockedReasons": [
+      "manual-PowerPoint-playback-not-recorded",
+      "manual-WPS-playback-not-recorded"
+    ]
+  },
+  "remainingProductionBlockers": [
+    "No human Microsoft PowerPoint playback acceptance record exists.",
+    "No human WPS Presentation playback acceptance record exists.",
+    "No live production deployment evidence exists for binding the final manual record through Vercel production deployment evidence.",
+    "Trusted production teacher auth, external durable storage, and production deployed smokes remain unproven."
+  ],
+  "safety": {
+    "valuesRedacted": true,
+    "voiceRefValuesOmitted": true,
+    "localPrivatePathsOmitted": true,
+    "rawAudioOmitted": true,
+    "secretsOmitted": true
+  }
+}

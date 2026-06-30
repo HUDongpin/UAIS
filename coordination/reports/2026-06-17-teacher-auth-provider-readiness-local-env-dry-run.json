@@ -1,0 +1,56 @@
+{
+  "target": "teacher-auth-provider-readiness",
+  "mode": "dry-run",
+  "environment": "production",
+  "network": "disabled",
+  "status": "blocked",
+  "releaseRunId": "uais-release-pending-production",
+  "responsibleSession": "S22",
+  "authProviderMode": "missing",
+  "sessionCookieContract": {
+    "signingSecretStrength": "missing",
+    "httpOnly": "required",
+    "sameSite": "lax",
+    "secureInProduction": true,
+    "maxAgeBounded": true,
+    "cookiePair": [
+      {
+        "name": "uais_teacher_auth_claims",
+        "purpose": "signed-session-claims",
+        "httpOnly": true,
+        "sameSite": "Lax",
+        "secure": "required-in-production",
+        "path": "/",
+        "maxAge": "bounded-by-session-ttl",
+        "priority": "High",
+        "valueRedacted": true
+      },
+      {
+        "name": "uais_teacher_auth_signature",
+        "purpose": "hmac-sha256-signature",
+        "httpOnly": true,
+        "sameSite": "Lax",
+        "secure": "required-in-production",
+        "path": "/",
+        "maxAge": "bounded-by-session-ttl",
+        "priority": "High",
+        "valueRedacted": true
+      }
+    ],
+    "valueRedacted": true
+  },
+  "blockedReasons": [
+    "teacher-auth-provider-selector-not-proven",
+    "teacher-auth-session-signing-secret-not-sufficient",
+    "teacher-auth-provider-live-readiness-not-run"
+  ],
+  "safety": {
+    "valuesRedacted": true,
+    "secretsOmitted": true,
+    "providerUrlsOmitted": true,
+    "responseBodiesOmitted": true,
+    "localPrivatePathsOmitted": true,
+    "liveRequiresApproval": true,
+    "noCookieIssued": true
+  }
+}

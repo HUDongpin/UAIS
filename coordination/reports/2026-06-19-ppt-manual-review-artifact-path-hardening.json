@@ -1,0 +1,79 @@
+{
+  "target": "ppt-manual-review-artifact-path-hardening",
+  "status": "hardened",
+  "productionStatus": "not-live-production-evidence",
+  "responsibleSessions": ["S24", "S22"],
+  "objective": "Make the manual PowerPoint/WPS playback acceptance package directly actionable by carrying safe relative review artifact paths from the machine preflight report into the checklist and gate evidence, without treating machine evidence as final human acceptance.",
+  "changes": [
+    "Added a regression test proving the manual acceptance gate must expose safe relative review artifact paths and must omit absolute local/private source paths.",
+    "Updated scripts/ppt-manual-playback-acceptance.mjs to parse known preflight artifact rows into reviewArtifacts.",
+    "Added an Artifacts To Open section to the manual checklist when safe relative artifacts are present.",
+    "Refreshed the current Kang Xia manual playback checklist and gate evidence with the narrated PPTX, ZIP export, audio manifest, WAV folder, PDF render, and contact sheet relative paths.",
+    "Kept the current Kang Xia manual playback gate blocked pending actual human PowerPoint and WPS playback."
+  ],
+  "redPhase": {
+    "command": "npm run test -- tests/ppt-playback-acceptance.test.ts -t \"review artifact\"",
+    "result": "failed-before-implementation",
+    "observedFailure": "body.reviewArtifacts was undefined and the generated checklist did not include direct review artifact paths."
+  },
+  "greenPhase": {
+    "focused": "npm run test -- tests/ppt-playback-acceptance.test.ts -t \"review artifact\" passed: 1 file / 1 test.",
+    "targetedPpt": "npm run test -- tests/ppt-playback-acceptance.test.ts passed: 1 file / 19 tests.",
+    "releaseRelated": "npm run test -- tests/ppt-playback-acceptance.test.ts tests/production-release-gate.test.ts tests/production-owner-decision-checklist.test.ts passed: 3 files / 181 tests.",
+    "syntax": "node --check scripts/ppt-manual-playback-acceptance.mjs passed.",
+    "lint": "npm run lint passed."
+  },
+  "currentKangXiaGate": {
+    "path": "coordination/reports/2026-06-19-kangxia-ppt-manual-playback-acceptance-gate-current.json",
+    "status": "blocked",
+    "manualAcceptanceStatus": "pending",
+    "machinePreflightStatus": "passed",
+    "reviewArtifactCount": 6,
+    "blockedReasons": [
+      "manual-PowerPoint-playback-not-recorded",
+      "manual-WPS-playback-not-recorded"
+    ]
+  },
+  "currentChecklist": {
+    "path": "coordination/reports/2026-06-19-kangxia-ppt-manual-playback-acceptance-checklist-current.md",
+    "containsArtifactsToOpenSection": true,
+    "slideChecks": 19,
+    "requiredApplications": ["Microsoft PowerPoint", "WPS Presentation"]
+  },
+  "verifiedLocalReviewArtifacts": [
+    {
+      "kind": "narrated-pptx",
+      "relativePath": ".tmp/uais-ai-assets/ppt-narration-pptx/audio-manifest-elementary-math-research-natural-number-ordinal-theory-ppt1-kangxia-narrated.pptx",
+      "sizeBytes": 36042033
+    },
+    {
+      "kind": "zip-export",
+      "relativePath": ".tmp/uais-ai-assets/ppt-narration-exports/audio-manifest-elementary-math-research-natural-number-ordinal-theory-ppt1-ppt-narration.zip",
+      "sizeBytes": 13702621
+    },
+    {
+      "kind": "audio-manifest",
+      "relativePath": ".tmp/uais-ai-assets/ppt-narration/audio-manifest-elementary-math-research-natural-number-ordinal-theory-ppt1/manifest.json",
+      "sizeBytes": 7888
+    },
+    {
+      "kind": "render-contact-sheet",
+      "relativePath": ".tmp/uais-ai-assets/ppt-narration-pptx/render-check/kangxia-narrated-contact-sheet.jpg",
+      "sizeBytes": 173712
+    }
+  ],
+  "remainingBlockers": [
+    "Human Microsoft PowerPoint playback acceptance has not been performed.",
+    "Human WPS Presentation playback acceptance has not been performed.",
+    "Final manual acceptance must still be bound to live Vercel production deployment evidence before it can satisfy the production release gate.",
+    "Trusted production teacher auth, real remote external durable storage, and deployed smoke tests remain unproven."
+  ],
+  "safety": {
+    "valuesRedacted": true,
+    "absoluteLocalPathsOmitted": true,
+    "privateVoiceIdsOmitted": true,
+    "rawAudioOmitted": true,
+    "machinePreflightNotFinalAcceptance": true,
+    "secretValuesWritten": false
+  }
+}

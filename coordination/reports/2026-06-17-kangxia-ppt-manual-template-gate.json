@@ -1,0 +1,41 @@
+{
+  "target": "ppt-manual-playback-acceptance",
+  "mode": "record",
+  "status": "blocked",
+  "responsibleSession": "S24",
+  "deploymentEvidenceSource": "missing",
+  "deploymentObservationBindingStatus": "missing",
+  "packageId": "kangxia-natural-number-ordinal-theory-v1",
+  "sourceDeckTitle": "初等数学研究+PPT1+自然数的序数理论.pptx",
+  "packageArtifactFingerprintStatus": "present",
+  "expectedSlideCount": 19,
+  "machinePreflightStatus": "passed",
+  "manualAcceptanceStatus": "pending",
+  "manualRecordEvidenceStatus": "incomplete",
+  "manualRecordPackageIdentityStatus": "matched",
+  "manualRecordArtifactFingerprintStatus": "matched",
+  "manualRecordReleaseRunStatus": "not-required",
+  "manualRecordDeploymentFingerprintStatus": "not-required",
+  "manualRecordAfterDeploymentStatus": "not-required",
+  "manualRecordTimingStatus": "missing",
+  "manualRecordConfirmationStatus": "template-not-accepted",
+  "acceptedApplications": [],
+  "blockedReasons": [
+    "manual-record-metadata-incomplete",
+    "manual-PowerPoint-playback-not-recorded",
+    "manual-WPS-playback-not-recorded"
+  ],
+  "checklist": {
+    "slideChecks": 19,
+    "requiredApplications": [
+      "Microsoft PowerPoint",
+      "WPS Presentation"
+    ]
+  },
+  "safety": {
+    "secretsRedacted": true,
+    "localPrivatePathsOmitted": true,
+    "machinePreflightNotFinalAcceptance": true,
+    "rawAudioOmitted": true
+  }
+}

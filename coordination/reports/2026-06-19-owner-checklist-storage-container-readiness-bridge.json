@@ -1,0 +1,88 @@
+{
+  "target": "production-owner-decision-checklist-storage-container-readiness-bridge",
+  "status": "bridged",
+  "responsibleSession": "S22",
+  "scope": "external-storage-container-build-readiness-owner-checklist",
+  "summary": {
+    "change": "The production owner decision checklist now accepts external storage container build readiness evidence and summarizes it inside the external-storage production decision.",
+    "releaseSemantics": "Container harness readiness is treated as supporting evidence only. It does not satisfy production external storage readiness, remote service smoke, Vercel env binding, or release eligibility.",
+    "outputPolicy": "Only allowlisted status fields, known blocked reasons, and boolean safety flags are emitted."
+  },
+  "currentEvidence": {
+    "ownerChecklistReport": "coordination/reports/2026-06-19-production-owner-decision-checklist-current-storage-container.json",
+    "ownerChecklistStatus": "owner-decisions-required",
+    "localProductionDiagnostic": "current-passed-not-release-eligible",
+    "externalStorageDecision": "owner-decision-needed",
+    "containerBuildReadiness": {
+      "evidenceStatus": "harness-hardened",
+      "harness": "ready-for-approved-build-attempt",
+      "currentMode": "dry-run",
+      "currentStatus": "blocked",
+      "dockerClient": "present",
+      "dockerDaemon": "unavailable",
+      "buildInvoked": false,
+      "localImageBuild": "not-proven-docker-daemon-unavailable",
+      "releaseGateEligible": false,
+      "blockedReasons": ["docker-daemon-unavailable"]
+    }
+  },
+  "checks": [
+    {
+      "command": "npm run test -- tests/production-owner-decision-checklist.test.ts -t \"summarizes external storage container build readiness\"",
+      "status": "passed",
+      "files": 1,
+      "tests": 1
+    },
+    {
+      "command": "npm run test -- tests/production-owner-decision-checklist.test.ts",
+      "status": "passed",
+      "files": 1,
+      "tests": 8
+    },
+    {
+      "command": "node scripts/production-owner-decision-checklist.mjs --release-gate <redacted> --vercel-project-readiness <redacted> --local-production-e2e <redacted> --external-storage-container-build-readiness <redacted>",
+      "status": "passed",
+      "report": "coordination/reports/2026-06-19-production-owner-decision-checklist-current-storage-container.json"
+    },
+    {
+      "command": "node --check scripts/production-owner-decision-checklist.mjs",
+      "status": "passed"
+    },
+    {
+      "command": "report-redaction-scan",
+      "status": "passed",
+      "report": "coordination/reports/2026-06-19-production-owner-decision-checklist-current-storage-container.json"
+    },
+    {
+      "command": "npm run test -- tests/production-owner-decision-checklist.test.ts tests/external-storage-container-build-readiness.test.ts tests/external-storage-service-container.test.ts",
+      "status": "passed",
+      "files": 3,
+      "tests": 15
+    },
+    {
+      "command": "npm run lint",
+      "status": "passed"
+    },
+    {
+      "command": "npm run test",
+      "status": "passed",
+      "files": 35,
+      "tests": 477
+    }
+  ],
+  "remainingBlockers": [
+    "Docker daemon is unavailable on the current host, so no real local image build has been proven.",
+    "No owner-approved remote HTTPS external storage service endpoint has been provisioned.",
+    "No Vercel env apply evidence binds the external storage endpoint or service fingerprint.",
+    "No production external-storage smoke has passed against a remote service."
+  ],
+  "safety": {
+    "secretsRedacted": true,
+    "imageTagsOmitted": true,
+    "evidencePathsOmittedFromChecklist": true,
+    "dockerOutputOmitted": true,
+    "localPrivatePathsOmitted": true,
+    "productionMutationPerformed": false,
+    "vercelMutationPerformed": false
+  }
+}

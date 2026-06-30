@@ -1,0 +1,76 @@
+{
+  "generatedAt": "2026-06-27T18:43:54+08:00",
+  "responsibleSession": "S12/S22",
+  "scope": "ordinary-teaching-operation-signed-session-safe-identity",
+  "status": "passed",
+  "summary": "The ordinary /api/teaching/operations POST route now rejects signed teacher cookies whose actorId or sessionId is not a safe server identity before course ownership checks or operation writes run.",
+  "filesChanged": [
+    "src/app/api/teaching/operations/route.ts",
+    "tests/teaching-operation-backend.test.ts"
+  ],
+  "redGreenEvidence": [
+    {
+      "phase": "red",
+      "command": "npx vitest run tests/teaching-operation-backend.test.ts --reporter=dot -t \"unsafe signed teacher actor ids\"",
+      "expectedFailure": true,
+      "observed": "Failed with HTTP 400 because a validly signed but unsafe actorId reached later route/store validation instead of being rejected at the authenticated-session boundary."
+    },
+    {
+      "phase": "green",
+      "command": "npx vitest run tests/teaching-operation-backend.test.ts --reporter=dot -t \"unsafe signed teacher actor ids\"",
+      "exitCode": 0,
+      "observed": "1 passed, 154 skipped."
+    },
+    {
+      "phase": "red",
+      "command": "npx vitest run tests/teaching-operation-backend.test.ts --reporter=dot -t \"unsafe signed teacher session ids\"",
+      "expectedFailure": true,
+      "observed": "Failed with HTTP 400 because a validly signed but unsafe sessionId reached later route/store validation instead of being rejected at the authenticated-session boundary."
+    },
+    {
+      "phase": "green",
+      "command": "npx vitest run tests/teaching-operation-backend.test.ts --reporter=dot -t \"unsafe signed teacher actor ids|unsafe signed teacher session ids|persists authorized teacher operations\"",
+      "exitCode": 0,
+      "observed": "3 passed, 153 skipped."
+    }
+  ],
+  "behaviorHardened": [
+    "Signed teacher cookies whose actorId is not a safe teaching operation id now resolve as unauthenticated and return HTTP 401 with authenticated-session-required.",
+    "Signed teacher cookies whose sessionId is not a safe teaching operation id now resolve as unauthenticated and return HTTP 401 with authenticated-session-required.",
+    "Unsafe signed identity claims are rejected before course ownership checks, external storage adapters, local operation writes, audit event writes, or domain projection writes run.",
+    "The denial response preserves trace id and redaction without echoing unsafe local-path or secret-like identity values."
+  ],
+  "verification": [
+    {
+      "command": "npx vitest run tests/teaching-operation-backend.test.ts --reporter=dot -t \"unsafe signed teacher actor ids|unsafe signed teacher session ids|persists authorized teacher operations\"",
+      "exitCode": 0,
+      "observed": "3 passed, 153 skipped."
+    },
+    {
+      "command": "npx vitest run tests/teaching-operation-backend.test.ts --reporter=dot",
+      "exitCode": 0,
+      "observed": "156 passed."
+    },
+    {
+      "command": "npm run lint",
+      "exitCode": 0,
+      "observed": "ESLint passed."
+    },
+    {
+      "command": "npm run test",
+      "exitCode": 0,
+      "observed": "66 files passed, 1287 tests passed. Existing jsdom navigation warnings remained non-fatal."
+    },
+    {
+      "command": "npm run build",
+      "exitCode": 0,
+      "observed": "Next.js production build completed."
+    }
+  ],
+  "boundary": "This is local backend/API auth-boundary hardening for the ordinary teaching operation POST route. It does not replace fresh same-run live production ordinary teaching route/browser smoke artifacts or the aggregate enterprise gate.",
+  "redaction": {
+    "secrets": "omitted",
+    "localFiles": "omitted",
+    "assets": "ids-only"
+  }
+}

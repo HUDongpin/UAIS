@@ -1,0 +1,116 @@
+{
+  "reportDate": "2026-06-21",
+  "checkedAtUtc": "2026-06-21T11:31:04Z",
+  "sessionIds": ["S22"],
+  "target": "vercel-fallback-and-docker-recovery-recheck",
+  "environment": "local-control-plane-to-production",
+  "status": "blocked",
+  "summary": "Two alternate production-progress paths were checked. The Codex no-auth Vercel fallback endpoint is reachable but no longer returns preview/claim deployment URLs, and Docker Desktop remains unable to serve daemon requests after a restart attempt.",
+  "sanitizedPreviewPackage": {
+    "pathClass": "private-temp",
+    "sizeClass": "small",
+    "included": [
+      "package.json",
+      "package-lock.json",
+      "next.config.ts",
+      "tsconfig.json",
+      "postcss.config.mjs",
+      "eslint.config.mjs",
+      "vitest.config.mts",
+      "vercel.json",
+      ".vercelignore",
+      "src",
+      "public static svgs"
+    ],
+    "excluded": [
+      ".env",
+      ".env.*",
+      "All API Keys.docx",
+      "OpenMAIC-main.zip",
+      "coordination",
+      "output",
+      "node_modules",
+      ".git",
+      "public learning WAV assets"
+    ],
+    "secretFileScan": "passed",
+    "notes": [
+      "A full-repository upload was deliberately not attempted because the generic fallback script ignores .vercelignore and would include owner-local files unless a whitelist package is used.",
+      "The slim package excludes published WAV assets, so it is only suitable for checking build/deploy transport, not learning PPT audio acceptance."
+    ],
+    "valuesRedacted": true
+  },
+  "noAuthVercelFallback": {
+    "endpointClass": "https://codex-deploy-skills.vercel.sh/api/deploy",
+    "reachability": {
+      "method": "HEAD",
+      "httpStatus": 405,
+      "interpretation": "Endpoint exists; GET/HEAD is not the deploy method."
+    },
+    "postDiagnostic": {
+      "method": "POST",
+      "httpStatus": 200,
+      "contentType": "application/json",
+      "previewUrlReturned": false,
+      "claimUrlReturned": false,
+      "responseKind": "deprecated-cli-instructions",
+      "interpretation": "The fallback service no longer creates a claimable preview deployment. It now instructs callers to use Vercel CLI/token/dashboard deployment."
+    },
+    "scriptResult": {
+      "commandClass": "deploy-codex.sh sanitized package",
+      "status": "blocked",
+      "failureClass": "missing-preview-url-in-response"
+    }
+  },
+  "vercelCliOidcRecheck": {
+    "baseHost": "https://vercel.com",
+    "status": "blocked",
+    "failureClass": "LibreSSL SSL_connect SSL_ERROR_SYSCALL",
+    "http1Retry": "blocked",
+    "tls12Retry": "blocked",
+    "oidcDiscovery": "blocked",
+    "apiHostReachabilityPreviouslyConfirmed": true,
+    "interpretation": "The linked-project production deploy path remains blocked because the Vercel CLI must reach vercel.com OIDC discovery unless a valid classic VERCEL_TOKEN is supplied."
+  },
+  "dockerRecoveryAttempt": {
+    "socket": "present",
+    "clientVersionStatus": "present",
+    "serverVersionStatus": "blocked",
+    "dockerPs": {
+      "beforeRecovery": "EOF",
+      "afterOpenDockerApp": "EOF"
+    },
+    "dockerInfo": {
+      "status": "hung-at-server-section",
+      "interrupted": true
+    },
+    "desktopStatus": {
+      "status": "blocked",
+      "messageClass": "Could not retrieve status"
+    },
+    "desktopRestart": {
+      "status": "failed",
+      "failureClass": "processes-still-running-context-canceled"
+    },
+    "interpretation": "Docker Desktop processes and socket are present, but daemon and Desktop status calls do not complete. Docker-based external-storage production service launch remains unavailable."
+  },
+  "blockedReasons": [
+    "vercel-cli-oidc-host-tls-blocked",
+    "codex-vercel-no-auth-fallback-deprecated",
+    "vercel-production-deploy-not-runnable",
+    "docker-daemon-cli-eof",
+    "external-storage-docker-service-launch-not-runnable"
+  ],
+  "nextActions": [
+    "Use a valid classic VERCEL_TOKEN through a non-logged environment channel, or wait for vercel.com TLS/OIDC reachability to recover, then run the linked production deploy.",
+    "Recover Docker Desktop outside the CLI hang condition, then rerun docker ps and the external-storage service launch/smoke.",
+    "After deploy/env/storage recovery, rerun production route smoke, teacher workflow live browser smoke, external-storage production smoke, and the aggregate release gate."
+  ],
+  "redaction": {
+    "secrets": "omitted",
+    "tokens": "omitted",
+    "localPaths": "summarized",
+    "accountIdentifiers": "omitted",
+    "deploymentUrls": "none-returned"
+  }
+}

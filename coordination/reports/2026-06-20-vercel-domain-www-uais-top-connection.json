@@ -1,0 +1,220 @@
+{
+  "target": "vercel-domain-connection",
+  "domain": "www.uais.top",
+  "projectName": "uais",
+  "status": "connected-public-pages-reachable",
+  "responsibleSession": "S22",
+  "generatedAt": "2026-06-20T10:38:57+08:00",
+  "goalStatusImpact": {
+    "enterpriseGoalComplete": false,
+    "domainConnectionComplete": true,
+    "reason": "www.uais.top is connected to the Vercel project and public teaching/learning pages are reachable, but production env/auth/storage, full deployed teacher workflow, WAV audio playback, and manual PPT/WPS acceptance remain incomplete."
+  },
+  "vercelProjectSideActions": {
+    "domainAdd": {
+      "command": "npx vercel domains add www.uais.top",
+      "status": "succeeded",
+      "observedMessage": "Domain www.uais.top added to project uais."
+    },
+    "dnsRecordCorrection": {
+      "command": "npx vercel dns add uais.top www A 76.76.21.21",
+      "status": "succeeded",
+      "reason": "The default wildcard ALIAS path returned Vercel 404 for this host; Vercel CLI had recommended an explicit A record for www.uais.top.",
+      "recordIdRedacted": true
+    },
+    "productionAliasSet": {
+      "command": "npx vercel alias set <redacted-production-deployment-url> www.uais.top",
+      "status": "succeeded",
+      "observedMessage": "https://www.uais.top now points to the redacted ready production deployment."
+    },
+    "deploymentConfigFix": {
+      "file": "vercel.json",
+      "status": "added",
+      "reason": "The Vercel project was inspected as Framework Preset Other with static public output; the config pins the deployment to the Next.js framework and npm run build."
+    },
+    "productionDeploy": {
+      "command": "npx vercel deploy --prod -y --force --no-wait",
+      "status": "succeeded",
+      "deploymentStatus": "ready",
+      "target": "production",
+      "nextjsBuildOutputObserved": true,
+      "deploymentIdRedacted": true,
+      "deploymentUrlRedacted": true
+    },
+    "productionDeploymentAliases": {
+      "status": "present",
+      "aliases": [
+        "https://www.uais.top"
+      ],
+      "deploymentUrlRedacted": true
+    }
+  },
+  "dnsObservations": {
+    "ownerRegistrarScreenshot": {
+      "status": "observed",
+      "domain": "uais.top",
+      "nameserversShown": [
+        "ns1.vercel-dns.com",
+        "ns2.vercel-dns.com"
+      ]
+    },
+    "vercelDomainInspection": {
+      "domainFoundUnderAccount": true,
+      "edgeNetwork": true,
+      "configurationStatus": "nameservers-matched",
+      "currentNameserversObservedByVercel": [
+        "ns1.vercel-dns.com",
+        "ns2.vercel-dns.com"
+      ],
+      "intendedNameserversObservedByVercel": [
+        "ns1.vercel-dns.com",
+        "ns2.vercel-dns.com"
+      ],
+      "projectBinding": {
+        "projectName": "uais",
+        "domain": "www.uais.top"
+      }
+    },
+    "wwwHostRecords": {
+      "query": "A www.uais.top",
+      "status": "vercel-recommended-target-present",
+      "records": [
+        "76.76.21.21"
+      ],
+      "resolver": "1.1.1.1"
+    }
+  },
+  "httpVerification": {
+    "root": {
+      "url": "https://www.uais.top/",
+      "status": "reachable",
+      "httpStatus": 307,
+      "location": "/courses",
+      "server": "Vercel"
+    },
+    "teaching": {
+      "url": "https://www.uais.top/teaching",
+      "status": "reachable",
+      "httpStatus": 200,
+      "server": "Vercel"
+    },
+    "learning": {
+      "url": "https://www.uais.top/learning",
+      "status": "reachable",
+      "httpStatus": 200,
+      "server": "Vercel"
+    },
+    "reachabilityDiagnostics": {
+      "report": "coordination/reports/2026-06-20-deployment-reachability-diagnostics-www-uais-top-live.json",
+      "status": "passed",
+      "checks": [
+        "dns-origin",
+        "transport-origin",
+        "head-root",
+        "head-teaching",
+        "head-learning"
+      ]
+    },
+    "learningPlaybackManifest": {
+      "url": "https://www.uais.top/api/learning/ppt-playback/elementary-math-research",
+      "status": "reachable",
+      "httpStatus": 200,
+      "teacherName": "康霞博士",
+      "voiceLabel": "康霞博士克隆声音",
+      "slideCount": 19,
+      "responseBodyOmitted": true
+    },
+    "firstSlideWav": {
+      "url": "https://www.uais.top/api/learning/ppt-playback/audio/<manifest-id>/<audio-id>",
+      "status": "passed",
+      "httpChain": [
+        307,
+        200
+      ],
+      "finalContentType": "audio/wave",
+      "contentLength": 745004,
+      "wavHeader": "RIFF/WAVE",
+      "responseBodyOmitted": true,
+      "evidenceReport": "coordination/reports/2026-06-20-learning-ppt-playback-www-uais-top-audio-fix.json"
+    }
+  },
+  "diagnosticHardening": {
+    "status": "completed",
+    "file": "scripts/deployment-reachability-diagnostics.mjs",
+    "reason": "Full Vitest caught that the reachability diagnostics script treated 4xx responses as reachable. This was unsafe for the custom-domain verification because a Vercel 404 could be misclassified as healthy.",
+    "fix": "Only 2xx/3xx HEAD responses are reachable; Vercel SSO 401/403 responses with an SSO cookie are classified as deployment-protected; other 4xx/5xx responses are http-error blockers.",
+    "testCoverage": {
+      "file": "tests/deployment-reachability-diagnostics.test.ts",
+      "addedOrRestoredCases": [
+        "vercel-deployment-protection-401-is-blocked-with-redaction",
+        "404-route-response-is-blocked-http-error-with-redaction"
+      ]
+    }
+  },
+  "qualityChecks": {
+    "targetedReachabilityDiagnosticsTest": {
+      "command": "npm run test -- tests/deployment-reachability-diagnostics.test.ts",
+      "status": "passed",
+      "testFiles": 1,
+      "tests": 4
+    },
+    "fullVitest": {
+      "command": "npm run test",
+      "status": "passed",
+      "testFiles": 42,
+      "tests": 556
+    },
+    "lint": {
+      "command": "npm run lint",
+      "status": "passed"
+    },
+    "build": {
+      "command": "npm run build",
+      "status": "passed"
+    }
+  },
+  "resolvedBlockers": [
+    {
+      "id": "www-domain-not-added-to-vercel-project",
+      "status": "resolved"
+    },
+    {
+      "id": "domain-nameserver-mismatch",
+      "status": "resolved"
+    },
+    {
+      "id": "www-dns-record-not-vercel-recommended-target",
+      "status": "resolved"
+    },
+    {
+      "id": "vercel-production-deployment-static-public-404",
+      "status": "resolved"
+    },
+    {
+      "id": "production-ppt-wav-audio-route-not-serving-first-slide-audio",
+      "status": "resolved"
+    }
+  ],
+  "remainingBlockers": [
+    {
+      "id": "vercel-env-auth-storage-production-chain-not-complete",
+      "status": "blocking",
+      "detail": "Production env placement, trusted teacher auth live smoke, external durable storage live service/env, and end-to-end release-run consistency are still not proven."
+    },
+    {
+      "id": "manual-ppt-wps-powerpoint-acceptance-not-run",
+      "status": "blocking",
+      "detail": "Manual PPT/WPS/PowerPoint playback acceptance remains outstanding."
+    }
+  ],
+  "safety": {
+    "envLocalRead": false,
+    "realSecretsRead": false,
+    "tokensPrinted": false,
+    "projectIdsOmitted": true,
+    "orgIdsOmitted": true,
+    "deploymentIdsOmitted": true,
+    "deploymentUrlsRedactedWhereProjectSpecific": true,
+    "responseBodiesOmitted": true
+  }
+}

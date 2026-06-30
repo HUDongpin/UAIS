@@ -1,0 +1,72 @@
+{
+  "target": "app-auth-owner-action-packet",
+  "status": "owner-decision-needed",
+  "releaseGateStatus": "blocked",
+  "responsibleSession": "S22",
+  "decisionId": "app-auth-provider-production-selector",
+  "queueRank": 1,
+  "classification": "owner-env-live-evidence-blocked",
+  "ownerDecisionNeeded": "choose-production-app-auth-provider-and-approved-server-only-env-source",
+  "nextOwnerQuestion": "Confirm production app auth provider mode and approved server-only env source.",
+  "acceptedOptions": [
+    "trusted-account-provider"
+  ],
+  "blockedReasons": [
+    "app-auth-provider-readiness-not-live-ready"
+  ],
+  "safeNextActions": [
+    "confirm-production-app-auth-provider-mode",
+    "bind-server-only-app-auth-env-through-s19-vercel-env-sync",
+    "run-approved-app-auth-provider-readiness-after-env-sync",
+    "run-ordinary-teaching-smokes-only-after-app-auth-readiness-is-live-ready"
+  ],
+  "forbiddenUntilApproved": [
+    "inspect-or-print-app-auth-credential-values",
+    "run-live-app-auth-provider-network-call",
+    "run-production-smokes-dependent-on-app-auth"
+  ],
+  "requiredEnvNames": [
+    "UAIS_APP_SESSION_SIGNING_SECRET",
+    "UAIS_APP_AUTH_PROVIDER",
+    "UAIS_APP_AUTH_PROVIDER_URL",
+    "UAIS_APP_AUTH_PROVIDER_TOKEN"
+  ],
+  "requiredEvidence": [
+    "vercel-env-sync-evidence-with-app-auth-env-present",
+    "app-auth-provider-readiness-production-live-ready",
+    "same-release-run-id-bound-to-app-auth-readiness"
+  ],
+  "currentEvidenceSummary": {
+    "evidenceStatus": "dry-run-blocked",
+    "evidenceEnvironment": "production",
+    "appAuthProviderMode": "trusted-account-provider",
+    "endpointSecurity": "remote-https",
+    "vercelEnvSyncStatus": "missing",
+    "releaseRunIdStatus": "missing",
+    "requiredAppAuthEnvStatus": "missing"
+  },
+  "releaseGateRequirementIds": [
+    "app-auth-provider-readiness"
+  ],
+  "enterpriseAuditMissingTargets": [
+    "app-auth-provider-readiness"
+  ],
+  "commands": {
+    "vercelEnvSyncDryRun": "node scripts/vercel-env-sync.mjs --dry-run --scope full --env-file <approved-env-file> --vercel-project-readiness <vercel-project-readiness-evidence> --release-run-id <release-run-id> > <vercel-env-sync-dry-run-evidence>",
+    "vercelEnvSyncApply": "node scripts/vercel-env-sync.mjs --apply --approved --scope full --env-file <approved-env-file> --vercel-project-readiness <vercel-project-readiness-evidence> --release-run-id <release-run-id> > <vercel-env-sync-evidence>",
+    "appAuthReadinessLive": "node scripts/app-auth-provider-readiness.mjs --live --approved --environment production --env-file <approved-env-file> --release-run-id <release-run-id> --vercel-env-sync <vercel-env-sync-evidence> > <app-auth-provider-readiness-evidence>"
+  },
+  "stopConditions": [
+    "Stop if owner has not approved the app auth provider mode and env source.",
+    "Stop if approved env source is unavailable to S19.",
+    "Stop if live provider readiness would call a remote endpoint without explicit approval.",
+    "Stop if Vercel env sync evidence is missing, mismatched, or not release-run-bound."
+  ],
+  "safety": {
+    "sourcePathsOmitted": true,
+    "valuesRedacted": true,
+    "envValuesOmitted": true,
+    "liveMutationPerformed": false,
+    "deploymentMutationPerformed": false
+  }
+}

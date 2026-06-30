@@ -1,0 +1,61 @@
+{
+  "target": "deployed-smoke-transient-retry-hardening",
+  "date": "2026-06-20",
+  "responsibleSession": "S22",
+  "status": "completed-for-harness-hardening",
+  "scope": "Make deployed teacher workflow and learning PPT playback smoke checks resilient to one-off request failures without weakening HTTP/content assertions.",
+  "context": {
+    "previousTeacherWorkflowEvidence": "coordination/reports/2026-06-19-teacher-workflow-deployment-smoke-vercel-preview-live.json",
+    "previousLearningPlaybackEvidence": "coordination/reports/2026-06-19-learning-ppt-playback-deployment-smoke-vercel-preview-live.json",
+    "previousFailureClass": "TimeoutError",
+    "productionReleaseGateStillBlocked": true
+  },
+  "changes": [
+    {
+      "file": "scripts/teacher-workflow-deployment-smoke.mjs",
+      "summary": "Adds a redacted network retry policy and attempt evidence for transient request errors while keeping missing anchors and non-OK HTTP responses as hard failures."
+    },
+    {
+      "file": "scripts/learning-ppt-playback-deployment-smoke.mjs",
+      "summary": "Adds the same redacted request-error retry policy around the learning page, playback manifest, and first WAV verification chain."
+    },
+    {
+      "file": "tests/teacher-workflow-deployment-smoke.test.ts",
+      "summary": "Adds RED/GREEN coverage proving a transient first /teaching request failure is retried and the final page body remains redacted."
+    },
+    {
+      "file": "tests/learning-ppt-playback-deployment-smoke.test.ts",
+      "summary": "Adds RED/GREEN coverage proving a transient first /learning request failure is retried before checking the manifest and WAV response."
+    }
+  ],
+  "retryPolicy": {
+    "maxAttempts": 3,
+    "perAttemptTimeoutMs": 10000,
+    "retryOn": [
+      "request-error"
+    ],
+    "valuesRedacted": true
+  },
+  "redGreen": {
+    "red": "npm run test -- tests/teacher-workflow-deployment-smoke.test.ts tests/learning-ppt-playback-deployment-smoke.test.ts failed before implementation because both new transient retry tests exited after the first destroyed socket.",
+    "green": "The same command passed after implementation: 2 files / 20 tests."
+  },
+  "liveRefresh": {
+    "attempted": false,
+    "reason": "Current process environment does not contain UAIS_DEPLOYMENT_BASE_URL or VERCEL_TOKEN, and local env files were not inspected.",
+    "productionReadinessClaimed": false
+  },
+  "safety": {
+    "secretsRedacted": true,
+    "deploymentUrlOmitted": true,
+    "responseBodiesOmitted": true,
+    "localPrivatePathsOmitted": true,
+    "doesNotRetryContentFailures": true,
+    "doesNotRetryHttpAssertionFailures": true
+  },
+  "nextRequiredForProduction": [
+    "Rerun teacher workflow deployment smoke with the owner-approved production deployment URL and Vercel production deployment evidence.",
+    "Rerun learning PPT playback deployment smoke with the same release-run id and deployment evidence.",
+    "Refresh the aggregate production release gate after live production deployment and route smoke evidence exist."
+  ]
+}

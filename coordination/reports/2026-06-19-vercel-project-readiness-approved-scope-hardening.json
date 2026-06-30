@@ -1,0 +1,92 @@
+{
+  "target": "vercel-project-readiness-approved-scope-hardening",
+  "status": "hardened",
+  "productionStatus": "not-live-production-evidence",
+  "responsibleSession": "S22",
+  "objective": "Reduce false Vercel project-readiness blocking by distinguishing valid personal-account scope, malformed teams output, and owner-approved redacted scope selection before production env/deploy work.",
+  "changes": [
+    "Updated Vercel team-scope parsing to treat a valid empty teams list as an explicit personal-account scope.",
+    "Kept malformed teams output blocked as team-list-unparseable instead of silently accepting it as a personal account.",
+    "Accepted both object-shaped and array-shaped Vercel teams JSON output.",
+    "Added --scope to scripts/vercel-project-readiness.mjs so an owner-approved Vercel scope can satisfy team-scope readiness without printing the scope value.",
+    "Updated the production E2E orchestrator dry-run command to include --scope <approved-scope> in the Vercel project-readiness step.",
+    "Treated Vercel CLI 54 empty successful teams stdout as redacted personal-account scope evidence.",
+    "Filtered stale alternate Vercel team-scope blockers from the owner checklist when primary readiness proves team scope.",
+    "Refreshed current redacted Vercel project-readiness, release-gate, owner-checklist, and orchestration evidence for UAIS."
+  ],
+  "redPhase": {
+    "focusedFailures": [
+      "npm run test -- tests/deployment-ignore.test.ts -t \"personal Vercel account\" failed before implementation because valid empty teams output was blocked as vercel-team-scope-missing.",
+      "npm run test -- tests/deployment-ignore.test.ts -t \"malformed Vercel teams\" failed after the first minimal implementation, proving malformed teams output would have been falsely accepted.",
+      "npm run test -- tests/deployment-ignore.test.ts -t \"array-shaped Vercel teams\" failed before array-shaped team output support.",
+      "npm run test -- tests/deployment-ignore.test.ts -t \"approved redacted Vercel scope\" failed before --scope support.",
+      "npm run test -- tests/production-e2e-orchestrator.test.ts -t \"redacted dry-run plan\" failed before the runbook included --scope <approved-scope>.",
+      "npm run test -- tests/deployment-ignore.test.ts -t \"empty successful Vercel teams\" failed before empty stdout was recognized as Vercel CLI personal-account scope evidence.",
+      "npm run test -- tests/production-owner-decision-checklist.test.ts -t \"stale alternate Vercel team-scope\" failed before owner checklist filtering removed stale alternate team-scope blockers."
+    ]
+  },
+  "greenPhase": {
+    "focused": [
+      "npm run test -- tests/deployment-ignore.test.ts -t \"personal Vercel account|malformed Vercel teams|array-shaped Vercel teams\" passed.",
+      "npm run test -- tests/deployment-ignore.test.ts -t \"approved redacted Vercel scope\" passed.",
+      "npm run test -- tests/production-e2e-orchestrator.test.ts -t \"redacted dry-run plan\" passed.",
+      "npm run test -- tests/deployment-ignore.test.ts -t \"empty successful Vercel teams|personal Vercel account|malformed Vercel teams|array-shaped Vercel teams|approved redacted Vercel scope\" passed.",
+      "npm run test -- tests/production-owner-decision-checklist.test.ts -t \"stale alternate Vercel team-scope\" passed."
+    ],
+    "targetedSuites": "npm run test -- tests/deployment-ignore.test.ts tests/production-e2e-orchestrator.test.ts tests/production-release-gate.test.ts tests/production-owner-decision-checklist.test.ts tests/ai-env-and-smoke.test.ts passed: 5 files / 224 tests.",
+    "fullTest": "npm run test passed: 37 files / 519 tests.",
+    "lint": "npm run lint passed.",
+    "build": "npm run build initially failed in sandbox while fetching Google Fonts, then npm run build passed with approved network access.",
+    "syntax": [
+      "node --check scripts/vercel-project-readiness.mjs passed.",
+      "node --check scripts/production-owner-decision-checklist.mjs passed.",
+      "node --check scripts/production-e2e-orchestrator.mjs passed."
+    ]
+  },
+  "currentVercelProjectReadiness": {
+    "path": "coordination/reports/2026-06-19-vercel-project-readiness-current-uais.json",
+    "status": "blocked",
+    "blockedReasons": [
+      "vercel-project-candidate-missing",
+      "vercel-project-not-linked"
+    ],
+    "teamScopeEvidence": "personal-account-scope-empty-output",
+    "safeNextAction": "rerun scripts/vercel-project-readiness.mjs with the owner-approved project name or project id, then link only after explicit owner approval"
+  },
+  "currentReleaseGate": {
+    "path": "coordination/reports/2026-06-19-production-e2e-release-gate-current-vercel-personal-scope.json",
+    "vercelProjectBlockedReason": "vercel-project-candidate-missing",
+    "vercelProjectMissingChecks": [
+      "s22-vercel-project-candidate",
+      "s22-vercel-project-link"
+    ]
+  },
+  "currentOwnerChecklist": {
+    "path": "coordination/reports/2026-06-19-production-owner-decision-checklist-current-vercel-personal-scope.json",
+    "vercelProjectSelectionBlockedReasons": [
+      "vercel-project-candidate-missing",
+      "vercel-project-not-linked"
+    ],
+    "teamScopeSummary": "present"
+  },
+  "orchestrationPlan": {
+    "path": "coordination/reports/2026-06-19-production-e2e-orchestration-plan-current-vercel-scope-readiness.json",
+    "vercelProjectReadinessCommand": "node -- scripts/vercel-project-readiness.mjs --project-name <approved-project-name> --scope <approved-scope> > <evidence>"
+  },
+  "remainingProductionBlockers": [
+    "No exact Vercel project candidate has been found for the current UAIS readiness run.",
+    "The repository is not Vercel-linked; vercel link was not run.",
+    "No Vercel env apply, production deploy, deployed smoke, production auth readiness, production storage smoke, or manual PPT acceptance was run."
+  ],
+  "safety": {
+    "valuesRedacted": true,
+    "scopeValueOmitted": true,
+    "accountNamesOmitted": true,
+    "teamIdsOmitted": true,
+    "teamSlugsOmitted": true,
+    "projectNamesOmitted": true,
+    "projectIdsOmitted": true,
+    "deploymentUrlsOmitted": true,
+    "localPrivatePathsOmitted": true
+  }
+}

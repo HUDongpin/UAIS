@@ -1,0 +1,188 @@
+{
+  "target": "uais-production-e2e-release-gate",
+  "status": "blocked",
+  "responsibleSession": "S22",
+  "requirements": [
+    {
+      "id": "website-teacher-workflow-ui",
+      "status": "blocked",
+      "evidenceStatus": "missing",
+      "blockedReason": "teacher-workflow-ui-evidence-missing"
+    },
+    {
+      "id": "deployed-teacher-workflow-page",
+      "status": "blocked",
+      "evidenceStatus": "missing",
+      "blockedReason": "deployed-teacher-workflow-page-not-live-passed"
+    },
+    {
+      "id": "teacher-workflow-browser-smoke",
+      "status": "blocked",
+      "evidenceStatus": "waiting-for-deployed-page",
+      "blockedReason": "deployed-teacher-workflow-page-not-live-passed",
+      "upstreamRequirement": "deployed-teacher-workflow-page"
+    },
+    {
+      "id": "deployed-learning-ppt-playback",
+      "status": "blocked",
+      "evidenceStatus": "waiting-for-production-deployment",
+      "blockedReason": "vercel-production-deployment-not-proven",
+      "upstreamRequirement": "vercel-production-deployment"
+    },
+    {
+      "id": "vercel-project-readiness",
+      "status": "blocked",
+      "evidenceStatus": "missing",
+      "blockedReason": "vercel-project-readiness-evidence-missing"
+    },
+    {
+      "id": "vercel-env-placement",
+      "status": "blocked",
+      "evidenceStatus": "missing",
+      "blockedReason": "vercel-env-evidence-missing"
+    },
+    {
+      "id": "teacher-auth-provider-readiness",
+      "status": "blocked",
+      "evidenceStatus": "live-ready",
+      "blockedReason": "teacher-auth-session-cookie-round-trip-not-proven",
+      "evidenceEnvironment": "production",
+      "authProviderMode": "trusted-cookie-issuer",
+      "sessionCookieContract": {
+        "signingSecretStrength": "sufficient",
+        "httpOnly": "required",
+        "sameSite": "lax",
+        "secureInProduction": true,
+        "maxAgeBounded": true,
+        "cookiePair": "proved",
+        "valueRedacted": true
+      },
+      "vercelEnvSyncEvidence": {
+        "target": "vercel-env-sync",
+        "status": "matched",
+        "valueRedacted": true,
+        "applyPreflight": "proved",
+        "releaseRunIdStatus": "matched"
+      },
+      "trustedIssuerContract": {
+        "issuerSecretStrength": "sufficient",
+        "sessionIssuerSecretSeparation": "proved",
+        "issuerProofRequired": true,
+        "issuerProofMaxAgeSeconds": 300,
+        "issuerProofBoundsCookieMaxAge": true,
+        "valueRedacted": true
+      },
+      "trustedCookieSessionRoundTrip": {
+        "status": "missing",
+        "cookiePair": "missing",
+        "claimsCookie": "missing",
+        "signatureCookie": "missing",
+        "signatureVerification": "missing",
+        "expiryCheck": "missing",
+        "tamperCheck": "missing",
+        "sessionIdRedacted": false,
+        "cookieValuesEmitted": true,
+        "valuesRedacted": false
+      },
+      "redactionSafety": {
+        "valuesRedacted": "proved",
+        "secretsOmitted": "proved",
+        "providerUrlsOmitted": "proved",
+        "responseBodiesOmitted": "proved",
+        "localPrivatePathsOmitted": "proved",
+        "liveRequiresApproval": "proved",
+        "noCookieIssued": "proved"
+      }
+    },
+    {
+      "id": "external-storage-service-readiness",
+      "status": "blocked",
+      "evidenceStatus": "missing",
+      "blockedReason": "external-storage-service-readiness-missing"
+    },
+    {
+      "id": "vercel-production-deployment",
+      "status": "blocked",
+      "evidenceStatus": "missing",
+      "blockedReason": "vercel-production-deployment-not-proven"
+    },
+    {
+      "id": "deployment-route-smoke",
+      "status": "blocked",
+      "evidenceStatus": "missing",
+      "blockedReason": "deployment-route-smoke-evidence-missing"
+    },
+    {
+      "id": "teacher-auth-provider-consistency",
+      "status": "blocked",
+      "evidenceStatus": "waiting-for-auth-provider-evidence",
+      "blockedReason": "teacher-auth-provider-readiness-missing",
+      "authProviderModes": {
+        "vercelEnvSync": "missing",
+        "teacherAuthProviderReadiness": "missing",
+        "routeSmoke": "missing",
+        "match": "waiting"
+      }
+    },
+    {
+      "id": "external-durable-storage-smoke",
+      "status": "blocked",
+      "evidenceStatus": "missing",
+      "blockedReason": "external-storage-smoke-evidence-missing"
+    },
+    {
+      "id": "external-storage-service-consistency",
+      "status": "blocked",
+      "evidenceStatus": "waiting-for-production-storage-evidence",
+      "blockedReason": "external-storage-service-readiness-missing",
+      "storageServiceFingerprints": {
+        "readiness": "waiting",
+        "smoke": "waiting",
+        "match": "waiting"
+      }
+    },
+    {
+      "id": "ppt-manual-playback-acceptance",
+      "status": "blocked",
+      "evidenceStatus": "missing",
+      "blockedReason": "ppt-manual-acceptance-evidence-missing"
+    },
+    {
+      "id": "production-release-run-consistency",
+      "status": "blocked",
+      "evidenceStatus": "waiting-for-production-evidence",
+      "blockedReason": "vercel-production-deployment-not-proven",
+      "releaseRunIds": {
+        "vercelEnvSync": "waiting",
+        "vercelProductionDeployment": "waiting",
+        "deployedTeacherWorkflowUi": "waiting",
+        "teacherWorkflowBrowserUi": "waiting",
+        "learningPptPlayback": "waiting",
+        "teacherAuthProviderReadiness": "waiting",
+        "externalStorageServiceReadiness": "waiting",
+        "routeSmoke": "waiting",
+        "externalStorageSmoke": "waiting",
+        "pptAcceptance": "waiting",
+        "match": "waiting"
+      }
+    }
+  ],
+  "blockedReasons": [
+    "teacher-workflow-ui-evidence-missing",
+    "deployed-teacher-workflow-page-not-live-passed",
+    "vercel-project-readiness-evidence-missing",
+    "vercel-env-evidence-missing",
+    "teacher-auth-session-cookie-round-trip-not-proven",
+    "external-storage-service-readiness-missing",
+    "vercel-production-deployment-not-proven",
+    "deployment-route-smoke-evidence-missing",
+    "external-storage-smoke-evidence-missing",
+    "ppt-manual-acceptance-evidence-missing"
+  ],
+  "safety": {
+    "secretsRedacted": true,
+    "evidenceValuesRedacted": true,
+    "responseBodiesOmitted": true,
+    "localPrivatePathsOmitted": true
+  }
+}

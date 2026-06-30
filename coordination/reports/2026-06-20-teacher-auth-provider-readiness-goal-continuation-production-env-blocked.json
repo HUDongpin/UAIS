@@ -1,0 +1,94 @@
+{
+  "target": "teacher-auth-provider-readiness",
+  "mode": "live",
+  "environment": "production",
+  "network": "disabled",
+  "status": "blocked",
+  "releaseRunId": "uais-production-chain-20260620",
+  "responsibleSession": "S22",
+  "authProviderMode": "missing",
+  "sessionCookieContract": {
+    "signingSecretStrength": "missing",
+    "httpOnly": "required",
+    "sameSite": "lax",
+    "secureInProduction": true,
+    "maxAgeBounded": true,
+    "cookiePair": [
+      {
+        "name": "uais_teacher_auth_claims",
+        "purpose": "signed-session-claims",
+        "httpOnly": true,
+        "sameSite": "Lax",
+        "secure": "required-in-production",
+        "path": "/",
+        "maxAge": "bounded-by-session-ttl",
+        "priority": "High",
+        "valueRedacted": true
+      },
+      {
+        "name": "uais_teacher_auth_signature",
+        "purpose": "hmac-sha256-signature",
+        "httpOnly": true,
+        "sameSite": "Lax",
+        "secure": "required-in-production",
+        "path": "/",
+        "maxAge": "bounded-by-session-ttl",
+        "priority": "High",
+        "valueRedacted": true
+      }
+    ],
+    "valueRedacted": true
+  },
+  "vercelEnvSyncEvidence": {
+    "target": "vercel-env-sync",
+    "valueRedacted": true,
+    "status": "not-applied",
+    "applyPreflight": "missing",
+    "releaseRunIdStatus": "missing"
+  },
+  "trustedTeacherAuthRouteChainEvidence": {
+    "target": "trusted-teacher-auth-route-chain-contract",
+    "status": "proved",
+    "valueRedacted": true,
+    "authProvider": "trusted-cookie-issuer",
+    "routeChain": "proved",
+    "issuerProofValidation": "proved",
+    "issuerCookieHardening": "proved",
+    "sessionCookiePair": "proved",
+    "downstreamAiSession": "proved",
+    "workflowAction": "proved",
+    "localTrustedCookieRouteWiring": "proved",
+    "redactionSafety": "proved"
+  },
+  "prerequisites": [
+    {
+      "id": "s19-vercel-env-sync-apply-evidence",
+      "responsibleSession": "S19",
+      "requiredEvidence": "vercel-env-sync",
+      "status": "not-applied",
+      "valueRedacted": true
+    },
+    {
+      "id": "s12-trusted-teacher-auth-route-chain-contract",
+      "responsibleSession": "S12",
+      "requiredEvidence": "trusted-teacher-auth-route-chain-contract",
+      "status": "proved",
+      "valueRedacted": true
+    }
+  ],
+  "blockedReasons": [
+    "vercel-env-sync-evidence-not-applied",
+    "teacher-auth-provider-selector-not-proven",
+    "teacher-auth-session-signing-secret-not-sufficient"
+  ],
+  "safety": {
+    "valuesRedacted": true,
+    "secretsOmitted": true,
+    "providerUrlsOmitted": true,
+    "responseBodiesOmitted": true,
+    "localPrivatePathsOmitted": true,
+    "liveRequiresApproval": true,
+    "noCookieIssued": true,
+    "cookiesOmitted": true
+  }
+}

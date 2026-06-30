@@ -1,0 +1,89 @@
+{
+  "target": "deployment-reachability-diagnostics",
+  "mode": "live",
+  "environment": "preview",
+  "network": "enabled",
+  "status": "blocked",
+  "responsibleSession": "S22",
+  "deploymentOrigin": {
+    "status": "present",
+    "originClass": "remote-https",
+    "valueRedacted": true
+  },
+  "timeoutMs": 5000,
+  "checks": [
+    {
+      "id": "origin-class",
+      "status": "present",
+      "originClass": "remote-https",
+      "valueRedacted": true
+    },
+    {
+      "id": "dns-origin",
+      "status": "resolved",
+      "addressCount": 1,
+      "addressFamilies": [
+        4
+      ],
+      "valueRedacted": true
+    },
+    {
+      "id": "transport-origin",
+      "protocol": "tls",
+      "status": "timeout",
+      "networkError": {
+        "class": "TimeoutError",
+        "valueRedacted": true
+      },
+      "valueRedacted": true
+    },
+    {
+      "id": "head-root",
+      "method": "HEAD",
+      "route": "/",
+      "status": "timeout",
+      "networkError": {
+        "class": "TimeoutError",
+        "valueRedacted": true
+      },
+      "valueRedacted": true
+    },
+    {
+      "id": "head-teaching",
+      "method": "HEAD",
+      "route": "/teaching",
+      "status": "timeout",
+      "networkError": {
+        "class": "TimeoutError",
+        "valueRedacted": true
+      },
+      "valueRedacted": true
+    },
+    {
+      "id": "head-learning",
+      "method": "HEAD",
+      "route": "/learning",
+      "status": "timeout",
+      "networkError": {
+        "class": "TimeoutError",
+        "valueRedacted": true
+      },
+      "valueRedacted": true
+    }
+  ],
+  "blockedReasons": [
+    "transport-origin-timeout",
+    "head-root-timeout",
+    "head-teaching-timeout",
+    "head-learning-timeout"
+  ],
+  "safety": {
+    "valuesRedacted": true,
+    "urlsOmitted": true,
+    "hostnamesOmitted": true,
+    "responseBodiesOmitted": true,
+    "responseHeadersOmitted": true,
+    "localPrivatePathsOmitted": true,
+    "liveRequiresApproval": true
+  }
+}

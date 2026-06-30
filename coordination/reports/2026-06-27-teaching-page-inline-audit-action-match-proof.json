@@ -1,0 +1,59 @@
+{
+  "target": "teaching-page-inline-audit-action-match-proof",
+  "generatedAt": "2026-06-27T17:49:00+08:00",
+  "responsibleSession": "S05/S22",
+  "status": "passed",
+  "scope": "local ordinary teaching frontend audit-closure hardening",
+  "changedFiles": [
+    "src/components/pages/teaching-page.tsx",
+    "tests/teaching-page.test.tsx"
+  ],
+  "behavior": {
+    "surface": "/teaching main inline workspace actions",
+    "riskClosed": "A stale or cross-action audit readback record can no longer verify the current inline workspace action when it explicitly belongs to another operation or action slot.",
+    "matchingContract": {
+      "required": [
+        "recordId",
+        "courseId when scoped",
+        "operationId when present",
+        "actionSlot when present",
+        "domainProjection.operationRecordId",
+        "domainProjection.objectId",
+        "domainProjection.objectType"
+      ],
+      "rejectedMismatch": {
+        "expectedOperationId": "course-settings",
+        "expectedActionSlot": "primary",
+        "receivedOperationId": "knowledge-base",
+        "receivedActionSlot": "secondary"
+      }
+    },
+    "inviteWorkspace": "The invite-code workspace reuses the same explicit operation/action mismatch rejection for audited invite-code records.",
+    "valuesRedacted": true
+  },
+  "redGreenProof": {
+    "command": "npx vitest run tests/teaching-page.test.tsx --reporter=dot -t \"different operation action\"",
+    "red": "failed before implementation because the UI accepted a knowledge-base/secondary audit record as proof for course-settings/primary",
+    "green": "passed after implementation"
+  },
+  "verification": [
+    {
+      "command": "npx vitest run tests/teaching-page.test.tsx --reporter=dot",
+      "result": "77 passed"
+    },
+    {
+      "command": "npm run lint",
+      "result": "passed"
+    },
+    {
+      "command": "npm run test",
+      "result": "66 files passed, 1278 tests passed"
+    },
+    {
+      "command": "npm run build",
+      "result": "passed"
+    }
+  ],
+  "enterpriseStatus": "not-complete",
+  "remainingBlockerSummary": "This hardens local ordinary teaching audit closure. Enterprise completion still requires fresh same-run production ordinary teaching route/browser smokes, production external-storage readiness, Vercel/env/deployment proof, and live workflow/provider evidence."
+}

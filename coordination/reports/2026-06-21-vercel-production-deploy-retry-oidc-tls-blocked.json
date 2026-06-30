@@ -1,0 +1,60 @@
+{
+  "target": "vercel-production-deploy-retry",
+  "date": "2026-06-21",
+  "status": "blocked-before-upload",
+  "responsibleSession": "S22",
+  "goalItem": "production deployment chain end-to-end proof",
+  "command": {
+    "name": "npx vercel deploy --prod -y --no-wait",
+    "attempts": [
+      {
+        "mode": "sandbox",
+        "status": "failed-before-upload",
+        "failureClass": "vercel-cli-oidc-discovery-tls-failure"
+      },
+      {
+        "mode": "escalated-network",
+        "status": "failed-before-upload",
+        "failureClass": "vercel-cli-oidc-discovery-tls-failure"
+      }
+    ],
+    "stdoutOmitted": true,
+    "stderrOmitted": true,
+    "deploymentUploaded": false,
+    "productionMutationCompleted": false
+  },
+  "readinessChecks": {
+    "localProjectLink": "present",
+    "vercelignore": "present",
+    "gitRemote": "missing",
+    "vercelCli": "available",
+    "vercelWhoami": "passed",
+    "tokenEnvironment": {
+      "VERCEL_TOKEN": "missing",
+      "VERCEL_AUTH_TOKEN": "missing",
+      "valuesRedacted": true
+    },
+    "oidcDiscoveryCurl": {
+      "status": "failed",
+      "failureClass": "tls-syscall"
+    }
+  },
+  "blockedReasons": [
+    "vercel-cli-oidc-discovery-tls-failure",
+    "vercel-token-env-missing"
+  ],
+  "nextSafeActions": [
+    "Retry Vercel production deploy when vercel.com OIDC discovery is reachable from this machine.",
+    "Alternatively provide an approved VERCEL_TOKEN through a non-logged environment channel, then rerun production deploy and post-deploy route/storage/browser smokes."
+  ],
+  "safety": {
+    "secretsPrinted": false,
+    "tokenValuesPrinted": false,
+    "envValuesPrinted": false,
+    "accountNamesOmitted": true,
+    "projectIdsOmitted": true,
+    "orgIdsOmitted": true,
+    "deploymentUrlsOmitted": true,
+    "goalMarkedComplete": false
+  }
+}

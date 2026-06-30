@@ -1,0 +1,73 @@
+{
+  "target": "lrs-live-write-read-smoke",
+  "mode": "live",
+  "environment": "production",
+  "releaseRunId": "uais-lrs-live-2026-06-27-2347",
+  "status": "passed",
+  "blockedReasons": [],
+  "endpoint": {
+    "status": "present",
+    "fingerprint": "sha256:17b4c445a9705113",
+    "valueRedacted": true
+  },
+  "requiredEnv": [
+    {
+      "name": "UAIS_LRS_ENDPOINT",
+      "status": "present",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_LRS_USERNAME",
+      "status": "present",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_LRS_PASSWORD",
+      "status": "present",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_LRS_XAPI_VERSION",
+      "status": "present",
+      "valueRedacted": true
+    }
+  ],
+  "xapiVersion": "1.0.3",
+  "safety": {
+    "liveWriteRequiresApproval": true,
+    "responseBodiesOmitted": true,
+    "endpointRedacted": true,
+    "credentialsRedacted": true,
+    "statementIdFingerprinted": true,
+    "queryPolicy": "statementId-plus-agent-verb-activity"
+  },
+  "write": {
+    "status": "passed",
+    "httpStatus": 200,
+    "responseShape": "statement-ids-array",
+    "statementId": {
+      "status": "present",
+      "fingerprint": "sha256:66f1680d4eccf1b7",
+      "valueRedacted": true
+    },
+    "responseBodyOmitted": true
+  },
+  "readByStatementId": {
+    "status": "passed",
+    "httpStatus": 200,
+    "statementMatched": true,
+    "statementId": {
+      "fingerprint": "sha256:66f1680d4eccf1b7",
+      "valueRedacted": true
+    },
+    "responseBodyOmitted": true
+  },
+  "targetedRead": {
+    "status": "passed",
+    "httpStatus": 200,
+    "relatedActivities": true,
+    "statementsReturned": 1,
+    "smokeStatementFound": true,
+    "responseBodyOmitted": true
+  }
+}

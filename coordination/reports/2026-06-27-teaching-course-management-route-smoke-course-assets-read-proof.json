@@ -1,0 +1,138 @@
+{
+  "schemaVersion": "uais-enterprise-evidence-v1",
+  "generatedAt": "2026-06-27T16:26:00+08:00",
+  "responsibleSession": "S12",
+  "status": "gate-hardened",
+  "releaseGateEligible": false,
+  "scope": {
+    "surface": "teaching-course-management-route-smoke",
+    "runtime": "production-gate-contract",
+    "storagePolicy": "external-redacted-teaching-course-cover-assets"
+  },
+  "enterpriseGapClosed": {
+    "category": "production-route-smoke-readback-proof",
+    "description": "The teaching course-management route smoke and production release gate now require course-assets external readback revision and managed database adapter proof before course-cover/course-management smoke evidence can satisfy the gate.",
+    "failClosedBehavior": [
+      "route smoke plans now declare course-cover asset readback revision proof",
+      "route smoke plans now declare course-cover asset readback managed database adapter proof",
+      "live route smoke results fail unless external course-assets readback returns a non-empty revision",
+      "live route smoke results fail unless external course-assets readback returns redacted managed database adapter evidence",
+      "the production release gate blocks stale teaching course-management route smoke evidence that omits the new readback adapter result",
+      "the production orchestrator and local-production proof summary now stay aligned with the release gate required result list"
+    ],
+    "redaction": {
+      "secrets": "omitted",
+      "localFiles": "omitted",
+      "assets": "ids-only"
+    }
+  },
+  "filesChanged": [
+    "scripts/teaching-course-management-route-smoke.mjs",
+    "scripts/production-e2e-release-gate.mjs",
+    "scripts/production-e2e-orchestrator.mjs",
+    "scripts/local-production-e2e-smoke.mjs",
+    "tests/teaching-course-management-route-smoke.test.ts",
+    "tests/production-release-gate.test.ts",
+    "tests/production-e2e-orchestrator.test.ts",
+    "tests/local-production-e2e-smoke.test.ts",
+    "coordination/reports/2026-06-27-teaching-course-management-route-smoke-course-assets-read-proof.json",
+    "coordination/reports/2026-06-27-enterprise-runthrough-current-gate-refresh.md",
+    "coordination/reports/2026-06-26-current-enterprise-evidence-path-manifest.md",
+    "coordination/session-logs/2026-06-27-S12.md"
+  ],
+  "redGreenEvidence": [
+    {
+      "phase": "red",
+      "command": "npx vitest run tests/teaching-course-management-route-smoke.test.ts --reporter=dot -t \"prints a ready production dry-run\"",
+      "result": "failed-before-implementation",
+      "observedFailure": "The dry-run route smoke proof list omitted course-cover asset readback revision and managed database adapter proof labels."
+    },
+    {
+      "phase": "green",
+      "command": "npx vitest run tests/teaching-course-management-route-smoke.test.ts --reporter=dot -t \"prints a ready production dry-run\"",
+      "result": "passed-after-implementation",
+      "tests": {
+        "passed": 1,
+        "skipped": 4
+      }
+    },
+    {
+      "phase": "red",
+      "command": "npx vitest run tests/production-release-gate.test.ts --reporter=dot -t \"without course-assets readback database adapter proof\"",
+      "result": "failed-before-implementation",
+      "observedFailure": "The production release gate did not block stale course-management route smoke evidence missing the readback adapter result."
+    },
+    {
+      "phase": "green",
+      "command": "npx vitest run tests/production-release-gate.test.ts --reporter=dot -t \"without course-assets readback database adapter proof\"",
+      "result": "passed-after-implementation",
+      "tests": {
+        "passed": 1,
+        "skipped": 285
+      }
+    }
+  ],
+  "verification": [
+    {
+      "command": "npx vitest run tests/teaching-course-management-route-smoke.test.ts --reporter=dot",
+      "result": "passed",
+      "tests": {
+        "passed": 5
+      },
+      "note": "The first sandboxed attempt failed with listen EPERM on 127.0.0.1, then the same command passed with approved local-server execution."
+    },
+    {
+      "command": "npx vitest run tests/production-release-gate.test.ts tests/production-e2e-orchestrator.test.ts --reporter=dot",
+      "result": "passed",
+      "tests": {
+        "passed": 291
+      }
+    },
+    {
+      "command": "npx vitest run tests/local-production-e2e-smoke.test.ts --reporter=dot -t \"course-management proof summary\"",
+      "result": "passed",
+      "tests": {
+        "passed": 1,
+        "skipped": 7
+      }
+    },
+    {
+      "command": "node --check scripts/teaching-course-management-route-smoke.mjs && node --check scripts/production-e2e-release-gate.mjs && node --check scripts/production-e2e-orchestrator.mjs",
+      "result": "passed"
+    },
+    {
+      "command": "npm run test",
+      "result": "passed",
+      "tests": {
+        "filesPassed": 66,
+        "passed": 1271
+      }
+    },
+    {
+      "command": "npm run lint",
+      "result": "passed"
+    },
+    {
+      "command": "npm run build",
+      "result": "passed"
+    },
+    {
+      "command": "git diff --check",
+      "result": "passed"
+    }
+  ],
+  "notRun": [
+    "owner-approved Vercel env apply",
+    "live production app-auth readiness",
+    "production deployment",
+    "production teaching course-management route smoke",
+    "external-storage live smoke",
+    "live DashScope/Qwen provider generation"
+  ],
+  "remainingEnterpriseBlockers": [
+    "aggregate production release gate remains blocked",
+    "same-release-run production route and browser smokes remain missing",
+    "external-storage service readiness still needs live ordinary teaching schema and managed database adapter proof",
+    "Docker daemon remains unavailable for local external-storage container build proof"
+  ]
+}

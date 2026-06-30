@@ -1,0 +1,108 @@
+{
+  "target": "vercel-production-deploy-attempt-oidc-blocker",
+  "date": "2026-06-21",
+  "status": "blocked-before-upload",
+  "responsibleSession": "S22",
+  "goalItem": "production deployment chain end-to-end proof",
+  "domainStatus": {
+    "domain": "www.uais.top",
+    "rootResponse": {
+      "status": 307,
+      "server": "Vercel",
+      "location": "/courses",
+      "interpretation": "Domain is already routed to a Vercel deployment."
+    },
+    "authoritativeNameservers": {
+      "resolverChecks": ["1.1.1.1", "8.8.8.8"],
+      "status": "vercel-dns",
+      "values": ["ns1.vercel-dns.com", "ns2.vercel-dns.com"]
+    }
+  },
+  "localProjectLink": {
+    "status": "linked",
+    "projectName": "uais",
+    "projectIdRedacted": true,
+    "orgIdRedacted": true
+  },
+  "packageSafety": {
+    "vercelIgnorePresent": true,
+    "excludedLocalSecretPatterns": [".env", ".env.*", "All API Keys.docx"],
+    "excludedLocalEvidenceAndRuntimeDirs": [
+      "coordination/",
+      "docs/",
+      ".git/",
+      ".vercel/",
+      "node_modules/",
+      ".next/",
+      ".tmp/"
+    ],
+    "valuesRedacted": true
+  },
+  "credentialObservation": {
+    "VERCEL_TOKEN": "missing",
+    "VERCEL_ORG_ID": "missing",
+    "VERCEL_PROJECT_ID": "missing",
+    "~/.vercel/auth.json": "missing",
+    "valuesRedacted": true
+  },
+  "deployAttempt": {
+    "command": "npx vercel deploy --prod -y --no-wait",
+    "status": "failed-before-upload",
+    "failureClass": "vercel-cli-oidc-discovery-tls-failure",
+    "failureEndpoint": "https://vercel.com/.well-known/openid-configuration",
+    "errorSummary": "Client network socket disconnected before secure TLS connection was established.",
+    "uploadedArtifacts": false,
+    "productionMutationCompleted": false
+  },
+  "connectivityChecks": {
+    "https://vercel.com/.well-known/openid-configuration": {
+      "status": "failed",
+      "failure": "LibreSSL SSL_connect SSL_ERROR_SYSCALL"
+    },
+    "https://api.vercel.com": {
+      "status": "reachable",
+      "httpStatus": 308,
+      "location": "https://vercel.com/docs/api"
+    },
+    "https://www.uais.top/api/external-storage/healthz": {
+      "status": "reachable-but-failing",
+      "httpStatus": 500,
+      "interpretation": "Current production deployment still lacks the local external-storage health-contract fix and/or production env binding."
+    }
+  },
+  "checksBeforeDeployAttempt": [
+    {
+      "command": "npm run test",
+      "status": "passed",
+      "testFiles": 44,
+      "tests": 607
+    },
+    {
+      "command": "npm run lint",
+      "status": "passed"
+    },
+    {
+      "command": "npm run build",
+      "status": "passed"
+    }
+  ],
+  "remainingBlockers": [
+    "Current shell cannot authenticate or deploy through Vercel CLI because OIDC discovery to vercel.com fails at TLS setup.",
+    "No non-printing local Vercel token source is available in the current environment.",
+    "Production external storage env/service binding remains unproved; www.uais.top external-storage healthz still returns HTTP 500.",
+    "A production deployment carrying the local fixes has not been created in this attempt."
+  ],
+  "nextSafeActions": [
+    "Retry Vercel CLI deploy from a shell/network path that can reach vercel.com OIDC discovery, or provide an approved VERCEL_TOKEN through a non-logged environment channel.",
+    "After deploy, rerun production external-storage healthz, teacher-auth issued session route smoke, and teacher workflow smoke on www.uais.top.",
+    "Only mark deployment readiness after the deployed /api/ai/session and teacher workflow routes pass with issued teacher-auth cookies and durable storage."
+  ],
+  "safety": {
+    "secretsPrinted": false,
+    "tokenValuesPrinted": false,
+    "envValuesPrinted": false,
+    "deploymentUploaded": false,
+    "productionMutationCompleted": false,
+    "goalMarkedComplete": false
+  }
+}

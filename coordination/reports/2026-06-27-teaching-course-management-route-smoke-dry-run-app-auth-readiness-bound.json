@@ -1,0 +1,208 @@
+{
+  "target": "teaching-course-management-route-smoke",
+  "mode": "dry-run",
+  "environment": "production",
+  "network": "disabled",
+  "status": "ready",
+  "responsibleSessions": [
+    "S12",
+    "S22"
+  ],
+  "releaseRunId": "uais-enterprise-app-auth-route-binding-2026-06-27",
+  "routes": [
+    "/api/teaching/course-cover",
+    "/api/teaching/courses",
+    "/api/teaching/operations",
+    "/api/teaching/courses/{courseId}/classes",
+    "/api/teaching/invite-codes/{code}/join",
+    "/api/teaching/classes/{classId}/memberships/{membershipId}/approve"
+  ],
+  "deploymentFingerprint": {
+    "status": "present",
+    "value": "sha256:707a068b1d128736"
+  },
+  "deploymentOrigin": {
+    "status": "present",
+    "originClass": "remote-https",
+    "valueRedacted": true
+  },
+  "storageServiceFingerprint": {
+    "status": "present",
+    "value": "sha256:fd49c58278c49328",
+    "source": "origin",
+    "valueRedacted": true
+  },
+  "teacherAuthProviderReadinessEvidence": {
+    "target": "teacher-auth-provider-readiness",
+    "authProviderMode": "trusted-cookie-issuer",
+    "releaseRunIdStatus": "matched",
+    "valueRedacted": true,
+    "status": "matched"
+  },
+  "appAuthProviderReadinessEvidence": {
+    "target": "app-auth-provider-readiness",
+    "appAuthProviderMode": "trusted-account-provider",
+    "releaseRunIdStatus": "matched",
+    "valueRedacted": true,
+    "status": "matched"
+  },
+  "vercelProductionDeploymentEvidence": {
+    "target": "vercel-production-deployment",
+    "deploymentObservationStatus": "observed",
+    "releaseRunIdStatus": "matched",
+    "valueRedacted": true,
+    "status": "matched"
+  },
+  "externalStorageServiceReadinessEvidence": {
+    "target": "external-storage-service-readiness",
+    "valueRedacted": true,
+    "releaseRunIdStatus": "matched",
+    "status": "matched"
+  },
+  "courseManagementBackend": "external",
+  "courseAssetsBackend": "external",
+  "teachingOperationsBackend": "external",
+  "teacherAiOwnershipBackend": "external",
+  "requiredEnv": [
+    {
+      "name": "UAIS_DEPLOYMENT_BASE_URL",
+      "status": "present"
+    },
+    {
+      "name": "UAIS_TEACHING_COURSE_MANAGEMENT_BACKEND",
+      "status": "present",
+      "requiredValue": "external"
+    },
+    {
+      "name": "UAIS_TEACHING_COURSE_ASSETS_BACKEND",
+      "status": "present",
+      "requiredValue": "external"
+    },
+    {
+      "name": "UAIS_TEACHING_OPERATIONS_BACKEND",
+      "status": "present",
+      "requiredValue": "external"
+    },
+    {
+      "name": "UAIS_EXTERNAL_STORAGE_BASE_URL",
+      "status": "present",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_EXTERNAL_STORAGE_ACCESS_TOKEN",
+      "status": "present",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_TEACHER_AI_OWNERSHIP_BACKEND",
+      "status": "present",
+      "requiredValue": "external"
+    },
+    {
+      "name": "UAIS_TEACHING_COURSE_MANAGEMENT_SMOKE_COOKIE",
+      "status": "present",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_TEACHING_COURSE_MANAGEMENT_SMOKE_TEACHER_ID",
+      "status": "present",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_TEACHING_COURSE_MANAGEMENT_OTHER_TEACHER_SMOKE_COOKIE",
+      "status": "present",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_TEACHING_COURSE_MANAGEMENT_OTHER_TEACHER_SMOKE_TEACHER_ID",
+      "status": "present",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_TEACHING_COURSE_MANAGEMENT_STUDENT_SMOKE_COOKIE",
+      "status": "present",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_TEACHING_COURSE_MANAGEMENT_SMOKE_STUDENT_ID",
+      "status": "present",
+      "valueRedacted": true
+    }
+  ],
+  "proves": [
+    "unauthenticated-course-list-denied",
+    "unauthenticated-course-cover-denied",
+    "unauthenticated-course-create-denied",
+    "signed-student-course-create-denied",
+    "signed-student-course-cover-denied",
+    "unauthenticated-class-create-denied",
+    "signed-student-class-create-denied",
+    "signed-teacher-cookie-required",
+    "course-cover-asset-generated",
+    "course-cover-asset-external-storage-returned",
+    "course-cover-audit-auth-session-returned",
+    "course-cover-asset-audit-external-readback-returned",
+    "course-cover-asset-revision-retry-contract-returned",
+    "signed-course-cover-trace-header-returned",
+    "teacher-owned-course-created",
+    "course-create-external-snapshot-policy-returned",
+    "course-create-audit-source-readback-returned",
+    "created-course-used-cover-draft-scope",
+    "created-course-bound-generated-cover-asset",
+    "existing-course-cover-binding-readback-returned",
+    "existing-course-cover-binding-audit-source-returned",
+    "external-ownership-merge-returned",
+    "teacher-owned-class-created",
+    "class-create-external-snapshot-policy-returned",
+    "class-create-audit-source-readback-returned",
+    "created-course-and-class-readable-after-write",
+    "student-course-hidden-before-membership",
+    "unauthenticated-invite-join-denied",
+    "student-invite-join-persisted",
+    "student-invite-join-audit-source-returned",
+    "created-course-teaching-operation-accepted",
+    "unauthenticated-membership-approval-denied",
+    "signed-student-membership-approval-denied",
+    "signed-other-teacher-membership-approval-denied",
+    "teacher-membership-approval-persisted",
+    "teacher-membership-approval-audit-source-returned",
+    "approved-course-visible-for-student",
+    "approved-membership-readable-for-student",
+    "unauthenticated-course-list-trace-header-returned",
+    "unauthenticated-course-cover-trace-header-returned",
+    "unauthenticated-course-create-trace-header-returned",
+    "signed-student-course-create-trace-header-returned",
+    "signed-student-course-cover-trace-header-returned",
+    "unauthenticated-class-create-trace-header-returned",
+    "signed-student-class-create-trace-header-returned",
+    "signed-course-create-trace-header-returned",
+    "signed-course-create-trace-body-returned",
+    "signed-class-create-trace-header-returned",
+    "signed-class-create-trace-body-returned",
+    "signed-course-list-trace-header-returned",
+    "signed-student-prejoin-course-list-trace-header-returned",
+    "unauthenticated-invite-join-trace-header-returned",
+    "signed-student-invite-join-trace-header-returned",
+    "signed-student-invite-join-trace-body-returned",
+    "unauthenticated-membership-approval-trace-header-returned",
+    "signed-student-membership-approval-trace-header-returned",
+    "signed-other-teacher-membership-approval-trace-header-returned",
+    "signed-teacher-membership-approval-trace-header-returned",
+    "signed-teacher-membership-approval-trace-body-returned",
+    "signed-student-course-list-trace-header-returned",
+    "response-values-redacted",
+    "release-run-id-bound",
+    "same-teacher-auth-provider-readiness-bound",
+    "same-app-auth-provider-readiness-bound",
+    "same-vercel-production-deployment-bound",
+    "same-external-storage-service-readiness-bound"
+  ],
+  "blockedReasons": [],
+  "safety": {
+    "valuesRedacted": true,
+    "cookieValuesOmitted": true,
+    "responseBodiesOmitted": true,
+    "liveRequiresApproval": true,
+    "remoteMutationRequiresApproval": true
+  }
+}

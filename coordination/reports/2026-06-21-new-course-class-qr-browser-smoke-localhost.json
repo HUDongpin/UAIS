@@ -1,0 +1,20 @@
+{
+  "target": "new-course-class-qr-browser-smoke",
+  "mode": "local-dev",
+  "status": "passed",
+  "route": "/teaching",
+  "responsibleSession": "S05",
+  "results": {
+    "openTeachingPage": "passed",
+    "newCourseCreated": "passed",
+    "newClassCreated": "passed",
+    "invitationDialog": "passed",
+    "invitationCode": "passed",
+    "qrGrid": "passed",
+    "desktopHorizontalOverflow": "passed"
+  },
+  "safety": {
+    "valuesRedacted": true,
+    "screenshotsOmitted": true
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "target": "external-storage-readiness-durable-health-hardening",
+  "status": "harness-hardened",
+  "responsibleSession": "S22",
+  "productionStatus": "not-live-production-evidence",
+  "objective": "Require detailed durable backing-store health proof before external storage service readiness can count as ready.",
+  "requiredDurableBackingStoreFields": {
+    "status": "ready",
+    "storageMode": "file-backed",
+    "probe": "write-read-delete",
+    "ownershipWritePolicy": "external-atomic-merge",
+    "lifecycleAuditWritePolicy": "append-only-redacted-lifecycle-audit",
+    "valueRedacted": true
+  },
+  "evidenceAdded": {
+    "script": "scripts/external-storage-service-readiness.mjs",
+    "test": "tests/external-storage-service-readiness.test.ts",
+    "blockedReason": "external-storage-service-durable-backing-store-not-ready"
+  },
+  "safety": {
+    "valuesRedacted": true,
+    "serviceUrlOmitted": true,
+    "responseBodiesOmitted": true,
+    "localPrivatePathsOmitted": true,
+    "noWriteOperations": true
+  },
+  "remainingProductionBlockers": [
+    "owner-approved remote HTTPS external storage service",
+    "Vercel env apply evidence bound to the same storage fingerprint and release-run id",
+    "live service readiness against production /healthz",
+    "write/read external-storage-smoke against the same production service"
+  ]
+}

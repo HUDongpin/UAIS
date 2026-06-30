@@ -1,0 +1,71 @@
+{
+  "target": "deployment-reachability-diagnostics",
+  "mode": "live",
+  "environment": "production",
+  "network": "enabled",
+  "status": "passed",
+  "responsibleSession": "S22",
+  "deploymentOrigin": {
+    "status": "present",
+    "originClass": "remote-https",
+    "valueRedacted": true
+  },
+  "timeoutMs": 15000,
+  "checks": [
+    {
+      "id": "origin-class",
+      "status": "present",
+      "originClass": "remote-https",
+      "valueRedacted": true
+    },
+    {
+      "id": "dns-origin",
+      "status": "resolved",
+      "addressCount": 1,
+      "addressFamilies": [
+        4
+      ],
+      "valueRedacted": true
+    },
+    {
+      "id": "transport-origin",
+      "protocol": "tls",
+      "status": "connected",
+      "valueRedacted": true
+    },
+    {
+      "id": "head-root",
+      "method": "HEAD",
+      "route": "/",
+      "status": "reachable",
+      "httpStatusClass": "3xx",
+      "valueRedacted": true
+    },
+    {
+      "id": "head-teaching",
+      "method": "HEAD",
+      "route": "/teaching",
+      "status": "reachable",
+      "httpStatusClass": "2xx",
+      "valueRedacted": true
+    },
+    {
+      "id": "head-learning",
+      "method": "HEAD",
+      "route": "/learning",
+      "status": "reachable",
+      "httpStatusClass": "2xx",
+      "valueRedacted": true
+    }
+  ],
+  "blockedReasons": [],
+  "safety": {
+    "valuesRedacted": true,
+    "urlsOmitted": true,
+    "hostnamesOmitted": true,
+    "responseBodiesOmitted": true,
+    "responseHeadersOmitted": true,
+    "localPrivatePathsOmitted": true,
+    "liveRequiresApproval": true
+  }
+}

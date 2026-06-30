@@ -1,0 +1,73 @@
+{
+  "generatedAt": "2026-06-27T19:42:33+08:00",
+  "responsibleSession": "S12/S22",
+  "scope": "ordinary-teaching-invite-join-student-session-safe-identity",
+  "status": "passed",
+  "summary": "The ordinary /api/teaching/invite-codes/[code]/join POST route now rejects signed student app-session cookies whose account is not a safe server identity before invite lookup or membership writes can run.",
+  "filesChanged": [
+    "src/app/api/teaching/invite-codes/[code]/join/route.ts",
+    "tests/teaching-course-management-api.test.ts"
+  ],
+  "redGreenEvidence": [
+    {
+      "phase": "red",
+      "command": "./node_modules/.bin/vitest run tests/teaching-course-management-api.test.ts -t \"unsafe signed student account\"",
+      "expectedFailure": true,
+      "observed": "The unsafe signed student account regression failed with HTTP 400 instead of the expected HTTP 401, proving the route accepted a validly signed unsafe student account into downstream invite-join handling instead of failing closed at the auth boundary."
+    },
+    {
+      "phase": "green",
+      "command": "./node_modules/.bin/vitest run tests/teaching-course-management-api.test.ts -t \"unsafe signed student account\"",
+      "exitCode": 0,
+      "observed": "1 passed, 50 skipped."
+    }
+  ],
+  "behaviorHardened": [
+    "Signed invite-code join app sessions whose student account fails the safe-id boundary now resolve as unauthenticated and return HTTP 401 with student-session-required.",
+    "Unsafe signed student accounts are rejected before invite-code lookup, membership id construction, membership writes, or join-class-by-invite audit events.",
+    "The denial response preserves trace id and redaction without echoing unsafe local-path or secret-like identity values."
+  ],
+  "verification": [
+    {
+      "command": "./node_modules/.bin/vitest run tests/teaching-course-management-api.test.ts -t \"unsafe signed student account\"",
+      "exitCode": 0,
+      "observed": "1 passed, 50 skipped."
+    },
+    {
+      "command": "./node_modules/.bin/vitest run tests/teaching-course-management-api.test.ts -t \"unsafe signed student account|lets a signed-in student redeem|returns structured invite-code not-found|rejects a second invite-code membership\"",
+      "exitCode": 0,
+      "observed": "4 passed, 47 skipped."
+    },
+    {
+      "command": "./node_modules/.bin/vitest run tests/teaching-course-management-api.test.ts",
+      "exitCode": 0,
+      "observed": "51 passed."
+    },
+    {
+      "command": "npm run lint",
+      "exitCode": 0,
+      "observed": "ESLint passed."
+    },
+    {
+      "command": "npm run test",
+      "exitCode": 0,
+      "observed": "66 files passed, 1308 tests passed. Existing jsdom navigation warnings remained non-fatal."
+    },
+    {
+      "command": "npm run build",
+      "exitCode": 0,
+      "observed": "Next.js production build completed."
+    },
+    {
+      "command": "git diff --check",
+      "exitCode": 0,
+      "observed": "No whitespace errors reported."
+    }
+  ],
+  "boundary": "This is local backend/API auth-boundary hardening for the student invite-code join route. It does not replace fresh same-run live production ordinary teaching route/browser smoke artifacts and does not clear the aggregate enterprise gate.",
+  "redaction": {
+    "secrets": "omitted",
+    "localFiles": "omitted",
+    "assets": "ids-only"
+  }
+}

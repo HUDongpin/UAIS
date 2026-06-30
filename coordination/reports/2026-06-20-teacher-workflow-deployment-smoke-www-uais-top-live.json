@@ -1,0 +1,72 @@
+{
+  "target": "teacher-workflow-deployment-smoke",
+  "mode": "live",
+  "environment": "production",
+  "network": "enabled",
+  "status": "blocked",
+  "responsibleSession": "S22",
+  "releaseRunId": "uais-www-domain-teacher-page-20260620",
+  "route": "/teaching",
+  "deploymentFingerprint": {
+    "status": "present",
+    "value": "sha256:7c8e0f8c7195d5b9"
+  },
+  "deploymentOrigin": {
+    "status": "present",
+    "originClass": "remote-https",
+    "valueRedacted": true
+  },
+  "vercelProductionDeploymentEvidence": {
+    "target": "missing",
+    "status": "missing",
+    "deploymentObservationStatus": "missing",
+    "valueRedacted": true
+  },
+  "networkRetryPolicy": {
+    "maxAttempts": 3,
+    "perAttemptTimeoutMs": 10000,
+    "retryOn": [
+      "request-error"
+    ],
+    "valuesRedacted": true
+  },
+  "anchors": [
+    "teacherWorkflowTitle",
+    "voiceSampleUpload",
+    "voiceSampleSelect",
+    "uploadedSampleAudioPayload",
+    "voiceSampleDurationGate",
+    "selectedSampleIdentity",
+    "preflight",
+    "pptNarrationGenerate",
+    "perSlideWavDownloads",
+    "signedSessionBootstrap",
+    "workflowSessionActions",
+    "serverWorkflowStatus",
+    "serverWorkflowProgress"
+  ],
+  "prerequisites": [
+    {
+      "id": "s22-deployment-base-url",
+      "responsibleSession": "S22",
+      "requiredEnv": "UAIS_DEPLOYMENT_BASE_URL",
+      "status": "present"
+    },
+    {
+      "id": "s22-vercel-production-deployment-evidence",
+      "responsibleSession": "S22",
+      "requiredEvidence": "vercel-production-deployment",
+      "status": "missing",
+      "valueRedacted": true
+    }
+  ],
+  "blockedReasons": [
+    "vercel-production-deployment-evidence-missing"
+  ],
+  "safety": {
+    "valuesRedacted": true,
+    "responseBodyOmitted": true,
+    "liveRequiresApproval": true,
+    "checksRenderedTeacherWorkflowAnchors": true
+  }
+}

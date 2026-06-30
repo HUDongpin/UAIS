@@ -1,0 +1,80 @@
+{
+  "reportId": "2026-06-28-teaching-invite-target-class-safe-id-proof",
+  "generatedAt": "2026-06-28T00:52:00+08:00",
+  "sessionId": "S22",
+  "workstream": "Production reliability and release engineering",
+  "status": "local-contract-hardened",
+  "objective": "Harden ordinary teaching invite-code operations so unsafe target class identifiers are rejected at the route boundary before external course-management reads or operation-ledger writes.",
+  "changedFiles": [
+    "src/app/api/teaching/operations/route.ts",
+    "tests/teaching-operation-backend.test.ts"
+  ],
+  "codeReferences": [
+    {
+      "file": "src/app/api/teaching/operations/route.ts",
+      "line": 205,
+      "summary": "The teaching operations POST route now validates invite-code target class ids immediately after operation/action parsing."
+    },
+    {
+      "file": "src/app/api/teaching/operations/route.ts",
+      "line": 2904,
+      "summary": "The route-level target class guard rejects unsafe targetClassId/classId values with a redacted 400 response."
+    },
+    {
+      "file": "tests/teaching-operation-backend.test.ts",
+      "line": 18808,
+      "summary": "Regression proves unsafe invite-code target class ids do not trigger external course-management reads or operation appends."
+    }
+  ],
+  "redGreenEvidence": [
+    {
+      "phase": "red",
+      "command": "./node_modules/.bin/vitest run tests/teaching-operation-backend.test.ts -t \"rejects unsafe invite-code target class ids before external course-management reads or operation writes\"",
+      "result": "failed-before-fix",
+      "observedFailure": "The response came from the store-layer class-id validation as 'Invalid class id.' instead of the route-level target class guard, indicating validation happened too late."
+    },
+    {
+      "phase": "green",
+      "command": "./node_modules/.bin/vitest run tests/teaching-operation-backend.test.ts -t \"rejects unsafe invite-code target class ids before external course-management reads or operation writes\"",
+      "result": "passed",
+      "observedPass": "1 focused test passed; external course-management fetches, external operation appends, and local operation records all remained empty."
+    }
+  ],
+  "verification": [
+    {
+      "command": "./node_modules/.bin/vitest run tests/teaching-operation-backend.test.ts",
+      "result": "passed",
+      "summary": "182 tests passed."
+    },
+    {
+      "command": "./node_modules/.bin/vitest run tests/production-release-gate.test.ts -t \"invite publish|ordinary teaching|teaching operations route smoke\"",
+      "result": "passed",
+      "summary": "62 focused production release-gate tests passed; 226 tests were skipped by filter."
+    },
+    {
+      "command": "./node_modules/.bin/vitest run",
+      "result": "passed",
+      "summary": "69 files passed, 1352 tests passed."
+    },
+    {
+      "command": "npm run lint",
+      "result": "passed",
+      "summary": "ESLint completed with exit code 0."
+    },
+    {
+      "command": "npm run build",
+      "result": "passed",
+      "summary": "Next.js production build completed with exit code 0."
+    }
+  ],
+  "securityPosture": {
+    "ordinaryTeachingRoute": "Invite-code operations now reject unsafe target class ids before class ownership preflight, external course-management reads, or operation-ledger appends.",
+    "rbacBoundary": "Course ownership authorization still runs before invite target validation, and unsafe target class ids are denied before class-scope storage access.",
+    "redaction": "The unsafe path-like target class id, storage token, external origin, and local data directory are not echoed in the response.",
+    "productionPersistence": "The regression uses production-style external storage configuration and proves no external course-management request is made for the unsafe target class id."
+  },
+  "aggregateEnterpriseGateImpact": {
+    "cleared": false,
+    "summary": "This closes a narrow ordinary teaching RBAC/storage boundary gap in the invite-code class-target path. The full enterprise gate still requires same-run owner-approved production evidence for env placement, deployment, storage, ordinary teaching route/browser smokes, app-auth readiness, browser workflow smoke, and live provider generation."
+  }
+}

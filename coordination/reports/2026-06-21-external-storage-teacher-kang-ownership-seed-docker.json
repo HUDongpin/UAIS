@@ -1,0 +1,11 @@
+{
+  "target": "external-storage-teacher-kang-ownership-seed",
+  "status": "passed",
+  "mergeStatus": 200,
+  "readStatus": 200,
+  "teacherId": "teacher-kang",
+  "courseIdPresent": true,
+  "audioManifestPresent": true,
+  "secretsRedacted": true,
+  "responseBodiesOmitted": true
+}

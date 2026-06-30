@@ -1,0 +1,378 @@
+{
+  "target": "teaching-operation-detail-browser-smoke",
+  "mode": "dry-run",
+  "environment": "production",
+  "network": "disabled",
+  "status": "blocked",
+  "responsibleSession": "S22",
+  "route": "/teaching/course-settings",
+  "operationId": "course-settings",
+  "auth": "requires-live-teacher-auth-cookie",
+  "deploymentFingerprint": {
+    "status": "missing"
+  },
+  "deploymentOrigin": {
+    "status": "missing",
+    "originClass": "missing",
+    "valueRedacted": true
+  },
+  "vercelProductionDeploymentEvidence": {
+    "target": "missing",
+    "status": "missing",
+    "deploymentObservationStatus": "missing",
+    "valueRedacted": true
+  },
+  "deploymentDomainReachabilityEvidence": {
+    "target": "missing",
+    "status": "missing",
+    "releaseRunIdStatus": "missing",
+    "deploymentFingerprintStatus": "missing",
+    "valueRedacted": true
+  },
+  "teacherAuthProviderReadinessEvidence": {
+    "target": "missing",
+    "status": "missing",
+    "authProviderMode": "missing",
+    "releaseRunIdStatus": "missing",
+    "valueRedacted": true
+  },
+  "appAuthProviderReadinessEvidence": {
+    "target": "missing",
+    "status": "missing",
+    "appAuthProviderMode": "missing",
+    "releaseRunIdStatus": "missing",
+    "valueRedacted": true
+  },
+  "browserInteractions": [
+    "open-operation-page",
+    "hydrate-operation-page",
+    "verify-signed-teacher-session-evidence",
+    "click-primary-operation-button",
+    "verify-operation-post-persisted",
+    "click-secondary-operation-button",
+    "verify-secondary-operation-post-persisted",
+    "verify-audit-readback",
+    "verify-domain-projection-readback",
+    "verify-trace-actor-session-copy",
+    "verify-duplicate-submit-blocked",
+    "verify-operation-failed-save-alert",
+    "open-invite-operation-page",
+    "click-invite-operation-generate-code",
+    "verify-invite-operation-audit-pending-before-artifact",
+    "verify-invite-operation-audit-readback",
+    "verify-invite-operation-artifact",
+    "open-main-teaching-page",
+    "hydrate-main-inline-workspace",
+    "click-main-new-course-button",
+    "click-main-new-course-cover-generate",
+    "verify-main-new-course-cover-generated",
+    "verify-main-new-course-cover-asset-audit-gated",
+    "verify-main-new-course-cover-bound-to-create",
+    "verify-main-new-course-submitted",
+    "verify-main-new-course-readback",
+    "click-main-new-class-button",
+    "verify-main-new-class-submitted",
+    "verify-main-new-class-readback",
+    "click-main-inline-primary-button",
+    "verify-main-inline-duplicate-submit-blocked",
+    "verify-main-inline-course-settings-patch-submitted",
+    "verify-main-inline-operation-post-persisted",
+    "verify-main-inline-operation-failed-save-alert",
+    "verify-main-inline-audit-pending-before-success",
+    "verify-main-inline-course-settings-card-audit-gated",
+    "verify-main-inline-audit-readback",
+    "verify-main-inline-domain-projection-readback",
+    "verify-main-inline-alert-pending-before-success",
+    "click-main-inline-student-preview",
+    "verify-main-inline-student-preview-submitted",
+    "open-main-inline-knowledge-base-workspace",
+    "click-main-inline-knowledge-index-sync",
+    "verify-main-inline-knowledge-index-sync-submitted",
+    "click-main-inline-resource-placeholder",
+    "verify-main-inline-resource-placeholder-submitted",
+    "open-main-inline-students-workspace",
+    "click-main-inline-student-roster-sync",
+    "verify-main-inline-student-roster-sync-submitted",
+    "click-main-inline-student-group-suggestions",
+    "verify-main-inline-student-group-suggestions-submitted",
+    "open-main-inline-dashboard-workspace",
+    "click-main-inline-dashboard-refresh",
+    "verify-main-inline-dashboard-refresh-submitted",
+    "click-main-inline-dashboard-snapshot",
+    "verify-main-inline-dashboard-snapshot-submitted",
+    "open-main-inline-agents-workspace",
+    "click-main-inline-agent-plan-save",
+    "verify-main-inline-agent-plan-submitted",
+    "click-main-inline-agent-permission-preflight",
+    "verify-main-inline-agent-permission-preflight-submitted",
+    "open-main-inline-content-workspace",
+    "click-main-inline-content-publish",
+    "verify-main-inline-content-publish-submitted",
+    "click-main-inline-unit-draft",
+    "verify-main-inline-unit-draft-submitted",
+    "open-main-inline-admins-workspace",
+    "click-main-inline-admin-settings-save",
+    "verify-main-inline-admin-settings-submitted",
+    "click-main-inline-collaboration-invite",
+    "verify-main-inline-collaboration-invite-submitted",
+    "open-main-inline-data-export-workspace",
+    "click-main-inline-export-manifest-create",
+    "verify-main-inline-export-manifest-submitted",
+    "click-main-inline-export-redaction-validation",
+    "verify-main-inline-export-redaction-validation-submitted",
+    "open-main-inline-quiz-board-workspace",
+    "click-main-inline-quiz-board-refresh",
+    "verify-main-inline-quiz-board-refresh-submitted",
+    "click-main-inline-quiz-item-review",
+    "verify-main-inline-quiz-item-review-submitted",
+    "open-main-inline-grading-workspace",
+    "click-main-inline-grading-queue-save",
+    "verify-main-inline-grading-queue-submitted",
+    "click-main-inline-grading-feedback-draft",
+    "verify-main-inline-grading-feedback-draft-submitted",
+    "verify-main-inline-audit-alert-readback",
+    "click-main-inline-alert-notification-button",
+    "verify-main-inline-alert-notification-readback",
+    "click-main-inline-rollback-button",
+    "verify-main-inline-rollback-persisted",
+    "open-main-invite-code-workspace",
+    "hydrate-main-invite-code-workspace",
+    "click-main-invite-generate-code",
+    "verify-main-invite-audit-pending-before-code-change",
+    "verify-main-invite-audit-readback",
+    "verify-main-invite-draft-artifact",
+    "click-main-invite-publish-code",
+    "verify-main-invite-publish-audit-readback",
+    "verify-main-invite-publish-artifact",
+    "verify-main-invite-publish-class-readback",
+    "verify-all-operation-detail-pages-primary-secondary"
+  ],
+  "detailOperationCoveragePlan": [
+    {
+      "operationId": "course-settings",
+      "route": "/teaching/course-settings",
+      "primaryAction": "Save Course Settings",
+      "secondaryAction": "Preview Student View"
+    },
+    {
+      "operationId": "agents",
+      "route": "/teaching/agents",
+      "primaryAction": "Save Agent Plan",
+      "secondaryAction": "Run Permission Preflight"
+    },
+    {
+      "operationId": "knowledge-base",
+      "route": "/teaching/knowledge-base",
+      "primaryAction": "Sync Knowledge Index",
+      "secondaryAction": "Add Resource Placeholder"
+    },
+    {
+      "operationId": "content",
+      "route": "/teaching/content",
+      "primaryAction": "Publish Course Content",
+      "secondaryAction": "Generate Unit Draft"
+    },
+    {
+      "operationId": "admins",
+      "route": "/teaching/admins",
+      "primaryAction": "Save Admin Settings",
+      "secondaryAction": "Send Collaboration Invite"
+    },
+    {
+      "operationId": "students",
+      "route": "/teaching/students",
+      "primaryAction": "Sync Roster",
+      "secondaryAction": "Generate Group Suggestions"
+    },
+    {
+      "operationId": "data-export",
+      "route": "/teaching/data-export",
+      "primaryAction": "Create Export Manifest",
+      "secondaryAction": "Validate Redaction Scope"
+    },
+    {
+      "operationId": "dashboard",
+      "route": "/teaching/dashboard",
+      "primaryAction": "Refresh Dashboard",
+      "secondaryAction": "Lock Daily Snapshot"
+    },
+    {
+      "operationId": "quiz-board",
+      "route": "/teaching/quiz-board",
+      "primaryAction": "Refresh Quiz Board",
+      "secondaryAction": "Flag Low-quality Items"
+    },
+    {
+      "operationId": "grading",
+      "route": "/teaching/grading",
+      "primaryAction": "Save Review Queue",
+      "secondaryAction": "Generate AI Feedback"
+    },
+    {
+      "operationId": "invite-code",
+      "route": "/teaching/invite-code",
+      "primaryAction": "Generate New Invite Code",
+      "secondaryAction": "Publish Invite Code"
+    }
+  ],
+  "operationCoverage": [
+    {
+      "operationId": "course-settings",
+      "route": "/teaching/course-settings",
+      "primaryButtonClick": "pending",
+      "primaryPostPersisted": "pending",
+      "secondaryButtonClick": "pending",
+      "secondaryPostPersisted": "pending"
+    },
+    {
+      "operationId": "agents",
+      "route": "/teaching/agents",
+      "primaryButtonClick": "pending",
+      "primaryPostPersisted": "pending",
+      "secondaryButtonClick": "pending",
+      "secondaryPostPersisted": "pending"
+    },
+    {
+      "operationId": "knowledge-base",
+      "route": "/teaching/knowledge-base",
+      "primaryButtonClick": "pending",
+      "primaryPostPersisted": "pending",
+      "secondaryButtonClick": "pending",
+      "secondaryPostPersisted": "pending"
+    },
+    {
+      "operationId": "content",
+      "route": "/teaching/content",
+      "primaryButtonClick": "pending",
+      "primaryPostPersisted": "pending",
+      "secondaryButtonClick": "pending",
+      "secondaryPostPersisted": "pending"
+    },
+    {
+      "operationId": "admins",
+      "route": "/teaching/admins",
+      "primaryButtonClick": "pending",
+      "primaryPostPersisted": "pending",
+      "secondaryButtonClick": "pending",
+      "secondaryPostPersisted": "pending"
+    },
+    {
+      "operationId": "students",
+      "route": "/teaching/students",
+      "primaryButtonClick": "pending",
+      "primaryPostPersisted": "pending",
+      "secondaryButtonClick": "pending",
+      "secondaryPostPersisted": "pending"
+    },
+    {
+      "operationId": "data-export",
+      "route": "/teaching/data-export",
+      "primaryButtonClick": "pending",
+      "primaryPostPersisted": "pending",
+      "secondaryButtonClick": "pending",
+      "secondaryPostPersisted": "pending"
+    },
+    {
+      "operationId": "dashboard",
+      "route": "/teaching/dashboard",
+      "primaryButtonClick": "pending",
+      "primaryPostPersisted": "pending",
+      "secondaryButtonClick": "pending",
+      "secondaryPostPersisted": "pending"
+    },
+    {
+      "operationId": "quiz-board",
+      "route": "/teaching/quiz-board",
+      "primaryButtonClick": "pending",
+      "primaryPostPersisted": "pending",
+      "secondaryButtonClick": "pending",
+      "secondaryPostPersisted": "pending"
+    },
+    {
+      "operationId": "grading",
+      "route": "/teaching/grading",
+      "primaryButtonClick": "pending",
+      "primaryPostPersisted": "pending",
+      "secondaryButtonClick": "pending",
+      "secondaryPostPersisted": "pending"
+    },
+    {
+      "operationId": "invite-code",
+      "route": "/teaching/invite-code",
+      "primaryButtonClick": "pending",
+      "primaryPostPersisted": "pending",
+      "secondaryButtonClick": "pending",
+      "secondaryPostPersisted": "pending"
+    }
+  ],
+  "apiInterceptionPolicy": {
+    "operationApi": "fixture-backed-contract",
+    "courseManagementApi": "fixture-backed-contract",
+    "auditReadback": "fixture-backed-contract",
+    "auditAlertReadback": "fixture-backed-contract",
+    "alertNotificationOutbox": "fixture-backed-contract",
+    "failureProbe": "browser-negative-response",
+    "remoteMutations": "fixture-blocked",
+    "responseBodiesOmitted": true
+  },
+  "runtimeSetup": {
+    "packageName": "playwright",
+    "moduleResolution": "node-require-resolution",
+    "moduleStatus": "missing",
+    "npxStatus": "present",
+    "packageInstallCommand": "npm install --save-dev playwright",
+    "browserInstallCommand": "npx playwright install chromium",
+    "liveCommand": "node -- scripts/teaching-operation-detail-browser-smoke.mjs --live --approved --environment production --base-url <deployment-url> --env-file <env-file> --release-run-id <release-run-id> --vercel-production-deployment <vercel-production-deployment-evidence> --deployment-domain-reachability <deployment-domain-reachability-evidence> --teacher-auth-provider-readiness <teacher-auth-provider-readiness-evidence> --app-auth-provider-readiness <app-auth-provider-readiness-evidence> --api-mode live-teaching-operations",
+    "transientRuntimeCommand": "npx --yes --package playwright --call 'NODE_PATH=\"$(dirname \"$(dirname \"$(command -v playwright)\")\")\" node -- scripts/teaching-operation-detail-browser-smoke.mjs --live --approved --environment production --base-url <deployment-url> --env-file <env-file> --release-run-id <release-run-id> --vercel-production-deployment <vercel-production-deployment-evidence> --deployment-domain-reachability <deployment-domain-reachability-evidence> --teacher-auth-provider-readiness <teacher-auth-provider-readiness-evidence> --app-auth-provider-readiness <app-auth-provider-readiness-evidence> --api-mode live-teaching-operations'"
+  },
+  "prerequisites": [
+    {
+      "id": "s22-deployment-base-url",
+      "responsibleSession": "S22",
+      "requiredEnv": "UAIS_DEPLOYMENT_BASE_URL",
+      "status": "missing"
+    },
+    {
+      "id": "s22-browser-automation-runtime",
+      "responsibleSession": "S22",
+      "runtime": "playwright",
+      "status": "required-for-live"
+    },
+    {
+      "id": "s22-vercel-production-deployment-evidence",
+      "responsibleSession": "S22",
+      "requiredEvidence": "vercel-production-deployment",
+      "status": "missing",
+      "valueRedacted": true
+    },
+    {
+      "id": "s12-teacher-auth-provider-readiness",
+      "responsibleSession": "S12",
+      "requiredEvidence": "teacher-auth-provider-readiness",
+      "status": "missing",
+      "valueRedacted": true
+    },
+    {
+      "id": "s12-app-auth-provider-readiness",
+      "responsibleSession": "S12",
+      "requiredEvidence": "app-auth-provider-readiness",
+      "status": "missing",
+      "valueRedacted": true
+    }
+  ],
+  "blockedReasons": [
+    "missing-UAIS_DEPLOYMENT_BASE_URL",
+    "vercel-production-deployment-evidence-missing",
+    "deployment-domain-reachability-evidence-missing",
+    "teacher-auth-provider-readiness-evidence-missing",
+    "app-auth-provider-readiness-evidence-missing"
+  ],
+  "safety": {
+    "valuesRedacted": true,
+    "cookieValuesOmitted": true,
+    "responseBodiesOmitted": true,
+    "screenshotsOmitted": true,
+    "liveRequiresApproval": true,
+    "remoteMutationRequiresApproval": true
+  }
+}

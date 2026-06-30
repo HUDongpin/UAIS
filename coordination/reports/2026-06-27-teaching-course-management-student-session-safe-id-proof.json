@@ -1,0 +1,60 @@
+{
+  "generatedAt": "2026-06-27T20:30:19+08:00",
+  "timezone": "Asia/Hong_Kong",
+  "scope": "teaching-course-management-student-session-safe-id",
+  "status": "local-auth-boundary-hardened",
+  "summary": "The course management /api/teaching/courses and /api/teaching/courses/[courseId]/classes routes reject signed student app-session cookies whose account is an unsafe server id before course list readback, teacher-role classification, or class writes can run.",
+  "filesChanged": [
+    "src/app/api/teaching/courses/route.ts",
+    "src/app/api/teaching/courses/[courseId]/classes/route.ts",
+    "tests/teaching-course-management-api.test.ts"
+  ],
+  "behaviorHardened": [
+    "Course list reads now treat unsafe signed student account ids as unauthenticated instead of returning a student course-list receipt.",
+    "Class creation now treats unsafe signed student account ids as unauthenticated instead of classifying the request as a valid student role denial.",
+    "Denied responses preserve trace ids, omit unsafe local-path-like account values, and do not write course, class, membership, or audit records.",
+    "Normal signed student account behavior remains covered by the existing course-list and invite-code membership tests."
+  ],
+  "redGreenEvidence": {
+    "red": {
+      "command": "./node_modules/.bin/vitest run tests/teaching-course-management-api.test.ts -t \"unsafe signed student account ids\"",
+      "observedFailure": "Focused regressions failed before implementation: course list returned HTTP 200 with the unsafe student account in the receipt, and class creation returned HTTP 403 teacher-role-required instead of HTTP 401."
+    },
+    "green": {
+      "command": "./node_modules/.bin/vitest run tests/teaching-course-management-api.test.ts -t \"unsafe signed student account ids\"",
+      "observedPass": "Focused regressions passed after implementation with three tests passed and fifty skipped."
+    }
+  },
+  "verification": [
+    {
+      "command": "./node_modules/.bin/vitest run tests/teaching-course-management-api.test.ts",
+      "result": "passed",
+      "details": "53 tests passed"
+    },
+    {
+      "command": "npm run test",
+      "result": "passed",
+      "details": "66 files passed, 1317 tests passed; existing jsdom navigation warnings remained non-fatal"
+    },
+    {
+      "command": "npm run lint",
+      "result": "passed"
+    },
+    {
+      "command": "npm run build",
+      "result": "passed"
+    }
+  ],
+  "secretsHandling": {
+    "realCredentialsInspected": false,
+    "realCredentialValuesLogged": false,
+    "unsafeStudentAccountEchoChecked": true,
+    "responseRedactionChecked": true
+  },
+  "productionBoundary": {
+    "productionSystemMutated": false,
+    "liveProductionSmokeRun": false,
+    "aggregateEnterpriseGateCleared": false,
+    "remainingGateRisk": "This is local backend/API auth-boundary hardening only. It does not replace fresh same-run production course-management route smoke, ordinary teaching browser smoke, deployment, external-storage, or live provider proof."
+  }
+}

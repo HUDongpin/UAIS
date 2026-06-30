@@ -1,0 +1,48 @@
+{
+  "target": "vercel-production-deploy-token-auth-retry",
+  "date": "2026-06-21",
+  "mode": "live",
+  "environment": "production",
+  "status": "blocked-before-upload",
+  "responsibleSession": "S22",
+  "releaseRunId": "uais-token-auth-prod-deploy-20260621",
+  "authMethod": "local-vercel-auth-token-as-VERCEL_TOKEN",
+  "networkMode": "escalated",
+  "command": {
+    "name": "vercel deploy --prod -y --no-wait",
+    "exitCode": 1,
+    "stdoutOmitted": true,
+    "stderrOmitted": true,
+    "tokenOmitted": true
+  },
+  "deployment": {
+    "urlOmitted": true,
+    "urlFingerprint": "missing"
+  },
+  "inspect": null,
+  "outputSummary": {
+    "lineCount": 3,
+    "sawDeploymentUrl": false,
+    "tokenRedacted": true
+  },
+  "blockedReasons": [
+    "vercel-token-auth-invalid",
+    "vercel-production-deploy-token-auth-no-url"
+  ],
+  "diagnostic": {
+    "tokenAuthRefreshBypass": "attempted",
+    "tokenRefreshSkipped": true,
+    "apiResponseClass": "forbidden",
+    "failureClass": "vercel-token-env-invalid",
+    "debugOutputOmitted": true
+  },
+  "safety": {
+    "secretsPrinted": false,
+    "tokenValuesPrinted": false,
+    "tokenValuesWritten": false,
+    "deploymentUrlsOmitted": true,
+    "accountNamesOmitted": true,
+    "projectIdsOmitted": true,
+    "orgIdsOmitted": true
+  }
+}

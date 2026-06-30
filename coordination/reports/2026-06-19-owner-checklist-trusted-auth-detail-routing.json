@@ -1,0 +1,52 @@
+{
+  "target": "owner-checklist-trusted-auth-detail-routing",
+  "date": "2026-06-19",
+  "responsibleSession": "S22",
+  "status": "hardened",
+  "objective": "Route detailed trusted teacher-auth provider readiness and trusted route-chain blockers to the teacher-auth owner decision instead of collapsing them into the generic production release-run decision.",
+  "changedFiles": [
+    "scripts/production-owner-decision-checklist.mjs",
+    "tests/production-owner-decision-checklist.test.ts",
+    "coordination/reports/2026-06-19-production-owner-decision-checklist-current-auth-storage-launch-bound-readiness.json"
+  ],
+  "newRoutingCoverage": {
+    "teacherAuthProviderProductionSelector": [
+      "teacher-auth-provider-readiness-target-mismatch",
+      "teacher-auth-provider-vercel-env-sync-release-run-not-proven",
+      "trusted-teacher-auth-route-chain-contract-not-proven",
+      "trusted-teacher-auth-route-chain-missing",
+      "trusted-teacher-auth-route-chain-not-proved",
+      "trusted-teacher-auth-route-chain-redaction-not-proven",
+      "trusted-teacher-auth-route-chain-target-mismatch"
+    ]
+  },
+  "evidence": {
+    "redTest": {
+      "command": "npm run test -- tests/production-owner-decision-checklist.test.ts -t \"detailed trusted teacher auth route-chain blockers\"",
+      "statusBeforeImplementation": "failed",
+      "failureMode": "trusted auth provider and route-chain blockers were retained only by production-release-run"
+    },
+    "greenTest": {
+      "command": "npm run test -- tests/production-owner-decision-checklist.test.ts -t \"detailed trusted teacher auth route-chain blockers\"",
+      "statusAfterImplementation": "passed"
+    },
+    "focusedSuite": {
+      "command": "npm run test -- tests/production-owner-decision-checklist.test.ts",
+      "result": "1 file / 14 tests passed"
+    }
+  },
+  "currentOwnerChecklist": {
+    "path": "coordination/reports/2026-06-19-production-owner-decision-checklist-current-auth-storage-launch-bound-readiness.json",
+    "status": "owner-decisions-required",
+    "releaseGateStatus": "blocked"
+  },
+  "safety": {
+    "valuesRedacted": true,
+    "secretsOmitted": true,
+    "cookieValuesOmitted": true,
+    "deploymentUrlsOmitted": true,
+    "localPrivatePathsOmitted": true,
+    "productionMutationPerformed": false,
+    "vercelMutationPerformed": false
+  }
+}

@@ -1,0 +1,305 @@
+{
+  "target": "production-owner-decision-checklist",
+  "status": "owner-decisions-required",
+  "responsibleSession": "S22",
+  "releaseGateStatus": "blocked",
+  "localProductionDiagnostic": {
+    "status": "failed",
+    "evidenceFreshness": "stale",
+    "releaseEligible": false,
+    "requirementSource": "local-production-e2e-smoke-dry-run",
+    "requiredChecks": [
+      "s22-next-production-build",
+      "s22-local-external-storage-reference-service",
+      "s22-next-start-local-production-server",
+      "s22-local-learning-ppt-playback-smoke",
+      "s22-local-teacher-workflow-page-smoke",
+      "s22-local-teacher-workflow-browser-smoke",
+      "s22-local-protected-route-smoke",
+      "s22-local-teaching-course-management-route-smoke",
+      "s22-local-teaching-operations-route-smoke"
+    ],
+    "missingRequiredChecks": [
+      "s22-local-learning-ppt-playback-smoke",
+      "s22-local-teacher-workflow-browser-smoke",
+      "s22-local-teaching-course-management-route-smoke",
+      "s22-local-teaching-operations-route-smoke"
+    ],
+    "browserProofStatus": "missing",
+    "requiredBrowserResults": [
+      "openTeachingPage",
+      "browserHydration",
+      "voiceSampleDurationGate",
+      "voiceSampleFileSelection",
+      "serverWorkflowRefresh",
+      "signedSessionBootstrap",
+      "voiceSampleSubmit",
+      "voiceClonePreflight",
+      "voiceCloneStatus",
+      "pptNarrationSubmit",
+      "pptNarrationSlidePayload",
+      "perSlideWavDownloadLinks",
+      "perSlideWavDownloadHrefContract"
+    ],
+    "missingBrowserResults": [
+      "browserHydration",
+      "voiceSampleDurationGate",
+      "voiceSampleFileSelection",
+      "serverWorkflowRefresh",
+      "signedSessionBootstrap",
+      "voiceSampleSubmit",
+      "voiceClonePreflight",
+      "voiceCloneStatus",
+      "pptNarrationSubmit",
+      "pptNarrationSlidePayload",
+      "perSlideWavDownloadLinks",
+      "perSlideWavDownloadHrefContract"
+    ],
+    "passedChecks": [
+      "s22-local-external-storage-reference-service",
+      "s22-next-production-build",
+      "s22-next-start-local-production-server",
+      "s22-local-teacher-workflow-page-smoke",
+      "s22-local-protected-route-smoke"
+    ]
+  },
+  "releaseGateWaitingRequirements": [
+    {
+      "id": "teacher-workflow-live-generation-smoke",
+      "evidenceStatus": "waiting-for-browser-smoke",
+      "blockedReason": "teacher-workflow-browser-smoke-not-live-passed"
+    },
+    {
+      "id": "external-storage-service-consistency",
+      "evidenceStatus": "waiting-for-live-ready-storage-evidence",
+      "blockedReason": "external-storage-service-readiness-not-live-ready"
+    },
+    {
+      "id": "production-release-run-consistency",
+      "evidenceStatus": "waiting-for-production-evidence",
+      "blockedReason": "vercel-production-deployment-not-proven"
+    }
+  ],
+  "decisions": [
+    {
+      "id": "vercel-project-selection",
+      "status": "satisfied",
+      "responsibleSessions": [
+        "Owner",
+        "S22"
+      ],
+      "blockedReasons": [],
+      "readinessSummary": {
+        "cli": "present",
+        "auth": "present",
+        "teamScope": "present",
+        "projectCandidate": "present",
+        "projectLink": "present",
+        "uploadHygiene": "present",
+        "filteredProjectCount": 0,
+        "exactProjectNameCount": 0,
+        "alternateExactProjectNameCount": 0
+      },
+      "ownerDecisionNeeded": "none",
+      "safeNextActions": [
+        "continue-to-vercel-env-apply-readiness"
+      ],
+      "forbiddenUntilApproved": [
+        "vercel-env-apply",
+        "vercel-production-deploy"
+      ]
+    },
+    {
+      "id": "teacher-auth-provider-production-selector",
+      "status": "waiting-for-live-evidence",
+      "responsibleSessions": [
+        "Owner",
+        "S12",
+        "S19",
+        "S22"
+      ],
+      "blockedReasons": [],
+      "acceptedOptions": [
+        "trusted-cookie-issuer",
+        "oidc-jwks"
+      ],
+      "ownerDecisionNeeded": "choose-production-teacher-auth-provider-and-approved-server-only-env-source",
+      "proofNeeded": [
+        "teacher-auth-provider-readiness-live-production-ready",
+        "production-session-cookie-pair-contract",
+        "trusted-cookie-session-issuer-separation-if-selected",
+        "trusted-cookie-session-round-trip-proof-if-selected",
+        "trusted-cookie-route-chain-binding-proof-if-selected",
+        "deployed-teacher-auth-issuer-route-smoke-proof",
+        "oidc-jwks-signing-key-readiness-if-oidc-selected",
+        "vercel-env-sync-selector-matches-readiness",
+        "route-smoke-selector-matches-readiness",
+        "teacher-auth-provider-specific-readiness-proof",
+        "teacher-auth-provider-redaction-safety"
+      ]
+    },
+    {
+      "id": "external-storage-production-service",
+      "status": "owner-decision-needed",
+      "responsibleSessions": [
+        "Owner",
+        "S12",
+        "S19",
+        "S22",
+        "S24"
+      ],
+      "blockedReasons": [
+        "external-storage-container-build-readiness-not-ready",
+        "external-storage-service-readiness-not-live-ready",
+        "external-storage-service-teaching-operations-schema-not-proven",
+        "external-storage-smoke-not-live-passed"
+      ],
+      "containerBuildReadinessSummary": {
+        "evidenceStatus": "blocked",
+        "harness": "ready-for-approved-build-attempt",
+        "currentMode": "build",
+        "currentStatus": "blocked",
+        "dockerClient": "present",
+        "dockerDaemon": "unavailable",
+        "dockerfileContract": "passed",
+        "dockerignoreSecretExclusion": "passed",
+        "dockerignoreGeneratedOutputExclusion": "passed",
+        "buildInvoked": false,
+        "localImageBuild": "not-proven-docker-daemon-unavailable",
+        "releaseGateEligible": false,
+        "blockedReasons": [
+          "docker-daemon-unavailable"
+        ],
+        "safety": {
+          "secretsRedacted": true,
+          "imageTagsOmitted": true,
+          "dockerOutputOmitted": true,
+          "localPrivatePathsOmitted": true,
+          "productionMutationPerformed": false,
+          "vercelMutationPerformed": false
+        }
+      },
+      "ownerDecisionNeeded": "provision-approved-remote-https-external-storage-service-and-env",
+      "proofNeeded": [
+        "service-readiness-live-production-ready",
+        "remote-https-endpoint-class",
+        "production-launcher-env-contract",
+        "container-runtime-artifact",
+        "container-build-readiness-evidence",
+        "production-service-mode-health-target",
+        "production-service-identity",
+        "service-api-contract-version-proof",
+        "service-health-cache-control-no-store-proof",
+        "durable-backing-store-ready",
+        "teaching-operations-schema-migration-health-proof",
+        "teaching-operations-production-database-adapter-proof",
+        "teaching-course-management-schema-migration-health-proof",
+        "teaching-course-management-production-database-adapter-proof",
+        "teaching-course-assets-schema-migration-health-proof",
+        "teaching-course-assets-production-database-adapter-proof",
+        "ordinary-course-management-external-backend-proof",
+        "same-service-write-read-smoke",
+        "external-storage-persistence-read-after-restart-proof",
+        "storage-readiness-vercel-env-sync-binding",
+        "external-storage-service-fingerprint-consistency",
+        "external-storage-smoke-readiness-binding",
+        "external-storage-response-shape-contract",
+        "external-storage-redaction-safety"
+      ]
+    },
+    {
+      "id": "vercel-env-deploy-and-smoke-chain",
+      "status": "waiting-for-upstream-owner-decisions",
+      "responsibleSessions": [
+        "Owner",
+        "S19",
+        "S22"
+      ],
+      "blockedReasons": [
+        "vercel-env-not-applied",
+        "vercel-production-deployment-not-proven",
+        "teacher-workflow-browser-smoke-not-live-passed",
+        "teacher-workflow-browser-smoke-api-interception-not-proven",
+        "teaching-operations-route-smoke-evidence-missing",
+        "teaching-operation-detail-browser-smoke-not-live-passed",
+        "teaching-course-management-route-smoke-evidence-missing",
+        "deployment-route-smoke-response-shape-not-proven"
+      ],
+      "proofNeeded": [
+        "vercel-env-sync-apply-production-and-preview",
+        "vercel-env-apply-summary-redacted-counts",
+        "vercel-env-external-storage-fingerprint-bound",
+        "deployment-harness-env-sync-storage-fingerprint-guard",
+        "vercel-production-deployment-evidence",
+        "deployed-teaching-page-smoke",
+        "deployed-browser-interaction-smoke",
+        "deployed-ordinary-teaching-operation-detail-browser-smoke",
+        "deployed-course-management-route-smoke",
+        "deployed-browser-live-workflow-status-read",
+        "deployed-learning-ppt-playback-smoke",
+        "protected-route-smoke",
+        "protected-route-teacher-workflow-download-contract",
+        "protected-route-signed-session-direct-call-denial",
+        "protected-route-legacy-scoped-header-direct-call-denial",
+        "ordinary-teaching-operation-clicks-use-live-operations-api",
+        "course-cover-and-course-management-external-backend-readback",
+        "same-vercel-production-deployment-bound-to-browser-learning-and-route-smokes"
+      ],
+      "sequencing": "project-readiness-before-env-apply-before-production-deploy-before-smokes"
+    },
+    {
+      "id": "manual-ppt-playback-acceptance",
+      "status": "waiting-for-accepted-evidence",
+      "responsibleSessions": [
+        "S24"
+      ],
+      "blockedReasons": [],
+      "proofNeeded": [
+        "human-powerpoint-playback-accepted",
+        "human-wps-playback-accepted",
+        "explicit-accepted-after-human-playback-status",
+        "valid-tested-at-timestamp",
+        "same-release-run-id-bound-to-manual-record",
+        "same-vercel-production-deployment-bound-to-manual-playback-record",
+        "all-19-slide-audio-checks-true",
+        "target-cloned-voice-label-present",
+        "target-cloned-voice-heard-per-slide"
+      ]
+    },
+    {
+      "id": "production-release-run",
+      "status": "waiting-for-upstream-evidence",
+      "responsibleSessions": [
+        "S22",
+        "S24"
+      ],
+      "blockedReasons": [
+        "teacher-workflow-browser-smoke-api-interception-not-proven",
+        "vercel-env-not-applied",
+        "external-storage-container-build-readiness-not-ready",
+        "external-storage-service-teaching-operations-schema-not-proven",
+        "deployment-route-smoke-response-shape-not-proven",
+        "teaching-operations-route-smoke-evidence-missing",
+        "teaching-operation-detail-browser-smoke-not-live-passed",
+        "teaching-course-management-route-smoke-evidence-missing",
+        "external-storage-smoke-not-live-passed",
+        "teacher-workflow-browser-smoke-not-live-passed",
+        "external-storage-service-readiness-not-live-ready",
+        "vercel-production-deployment-not-proven"
+      ],
+      "proofNeeded": [
+        "one-public-release-run-id-used-across-production-evidence",
+        "final-release-gate-ready"
+      ]
+    }
+  ],
+  "safety": {
+    "valuesRedacted": true,
+    "evidencePathsOmitted": true,
+    "projectNamesOmitted": true,
+    "projectIdsOmitted": true,
+    "deploymentUrlsOmitted": true,
+    "localPrivatePathsOmitted": true,
+    "tokensOmitted": true
+  }
+}

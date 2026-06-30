@@ -1,0 +1,111 @@
+{
+  "reportId": "2026-06-28-external-storage-container-approved-mode-daemon-proof",
+  "generatedAt": "2026-06-28T00:20:27+08:00",
+  "sessionId": "S22",
+  "workstream": "Production reliability and release engineering",
+  "status": "evidence-contract-hardened",
+  "objective": "Separate owner-approved container build mode evidence from Docker daemon availability so the production gate blocker is precise and actionable.",
+  "changedFiles": [
+    "scripts/external-storage-container-build-readiness.mjs",
+    "tests/external-storage-container-build-readiness.test.ts"
+  ],
+  "codeReferences": [
+    {
+      "file": "scripts/external-storage-container-build-readiness.mjs",
+      "summary": "buildRunInApprovedMode now reflects explicit --build --approved selection rather than requiring docker build invocation."
+    },
+    {
+      "file": "tests/external-storage-container-build-readiness.test.ts",
+      "summary": "Regression covers approved build mode with present Docker client and unavailable Docker daemon."
+    }
+  ],
+  "redGreenEvidence": [
+    {
+      "phase": "red",
+      "command": "./node_modules/.bin/vitest run tests/external-storage-container-build-readiness.test.ts -t \"preserves approved build-mode evidence when the docker daemon is unavailable\"",
+      "result": "failed-before-fix",
+      "observedFailure": "The script reported safety.buildRunInApprovedMode as false even when invoked with --build --approved."
+    },
+    {
+      "phase": "green",
+      "command": "./node_modules/.bin/vitest run tests/external-storage-container-build-readiness.test.ts -t \"preserves approved build-mode evidence when the docker daemon is unavailable\"",
+      "result": "passed",
+      "observedPass": "1 focused test passed."
+    }
+  ],
+  "currentDockerEvidence": {
+    "command": "node scripts/external-storage-container-build-readiness.mjs --build --approved --image-tag <redacted> --release-run-id uais-release-2026-06-28T001700Z",
+    "result": {
+      "target": "external-storage-container-build-readiness",
+      "mode": "build",
+      "releaseRunId": "uais-release-2026-06-28T001700Z",
+      "status": "blocked",
+      "dockerfileContract": "passed",
+      "dockerignoreSecretExclusion": "passed",
+      "dockerignoreGeneratedOutputExclusion": "passed",
+      "dockerClient": "present",
+      "dockerDaemon": "unavailable",
+      "buildStatus": "not-run",
+      "buildInvoked": false,
+      "blockedReasons": [
+        "docker-daemon-unavailable"
+      ],
+      "safety": {
+        "imageTagOmitted": true,
+        "dockerOutputOmitted": true,
+        "localPrivatePathsOmitted": true,
+        "secretsExcludedFromContext": true,
+        "buildNotRunInDryRun": false,
+        "buildRunInApprovedMode": true
+      }
+    }
+  },
+  "dockerDesktopProbe": {
+    "dockerDesktopStatus": "Could not retrieve status. Is Docker Desktop running?",
+    "dockerDesktopStart": "Docker Desktop is already running",
+    "dockerInfoServer": "Cannot connect to the Docker daemon at unix socket.",
+    "redaction": "Docker plugin list and socket path are omitted from this report."
+  },
+  "relatedExternalStorageSmokeEvidence": {
+    "command": "./node_modules/.bin/vitest run tests/external-storage-smoke.test.ts -t \"retries transient storage smoke request failures before evaluating response shapes\"",
+    "result": "passed",
+    "summary": "Focused smoke harness test proves course-management and course-assets backup/restore drill results are emitted and response shapes are validated."
+  },
+  "verification": [
+    {
+      "command": "./node_modules/.bin/vitest run tests/external-storage-container-build-readiness.test.ts",
+      "result": "passed",
+      "summary": "6 tests passed."
+    },
+    {
+      "command": "./node_modules/.bin/vitest run tests/production-release-gate.test.ts -t \"external storage container readiness\"",
+      "result": "passed",
+      "summary": "1 focused production gate test passed."
+    },
+    {
+      "command": "./node_modules/.bin/vitest run tests/external-storage-smoke.test.ts -t \"retries transient storage smoke request failures before evaluating response shapes\"",
+      "result": "passed",
+      "summary": "1 focused smoke test passed."
+    },
+    {
+      "command": "./node_modules/.bin/vitest run",
+      "result": "passed",
+      "summary": "69 files passed, 1348 tests passed."
+    },
+    {
+      "command": "npm run lint",
+      "result": "passed",
+      "summary": "ESLint completed with exit code 0."
+    },
+    {
+      "command": "npm run build",
+      "result": "passed",
+      "summary": "Next.js production build completed."
+    }
+  ],
+  "aggregateEnterpriseGateImpact": {
+    "cleared": false,
+    "remainingBlocker": "docker-daemon-unavailable",
+    "summary": "The evidence contract now proves approved build mode separately, but the container artifact cannot be built until Docker daemon connectivity is restored."
+  }
+}

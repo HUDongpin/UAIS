@@ -1,0 +1,68 @@
+{
+  "target": "vercel-production-deployment",
+  "mode": "live",
+  "action": "inspect",
+  "environment": "unspecified",
+  "network": "enabled",
+  "status": "deployed",
+  "responsibleSession": "S22",
+  "releaseRunId": "uais-www-domain-prod-chain-20260620",
+  "deploymentFingerprint": {
+    "status": "present",
+    "value": "sha256:7c8e0f8c7195d5b9"
+  },
+  "deploymentObservation": {
+    "status": "observed",
+    "observedAt": "2026-06-20T08:05:02.345Z",
+    "source": "harness-clock"
+  },
+  "deploymentOrigin": {
+    "status": "present",
+    "originClass": "remote-https",
+    "valueRedacted": true
+  },
+  "operation": {
+    "command": "vercel-inspect-production",
+    "status": "passed",
+    "stdoutOmitted": true,
+    "stderrOmitted": true
+  },
+  "prerequisites": [
+    {
+      "id": "s22-vercel-auth",
+      "responsibleSession": "S22",
+      "authMethods": [
+        "VERCEL_TOKEN",
+        "vercel-cli-login"
+      ],
+      "status": "present",
+      "authMethod": "vercel-cli-login",
+      "valueRedacted": true
+    },
+    {
+      "id": "s22-production-deployment-url",
+      "responsibleSession": "S22",
+      "requiredEnv": "UAIS_DEPLOYMENT_BASE_URL",
+      "status": "present",
+      "valueRedacted": true
+    }
+  ],
+  "blockedReasons": [],
+  "safety": {
+    "valuesRedacted": true,
+    "deploymentUrlOmitted": true,
+    "deploymentUrlsOmitted": true,
+    "projectIdsOmitted": true,
+    "orgIdsOmitted": true,
+    "accountNamesOmitted": true,
+    "teamIdsOmitted": true,
+    "teamSlugsOmitted": true,
+    "tokenOmitted": true,
+    "tokenFlagForbidden": true,
+    "projectReadinessEvidencePathOmitted": true,
+    "envSyncEvidencePathOmitted": true,
+    "localPrivatePathsOmitted": true,
+    "cliOutputOmitted": true,
+    "liveRequiresApproval": true
+  }
+}

@@ -1,0 +1,89 @@
+{
+  "target": "vercel-production-deployment",
+  "mode": "live",
+  "action": "deploy",
+  "environment": "production",
+  "network": "enabled",
+  "status": "blocked",
+  "responsibleSession": "S22",
+  "releaseRunId": "uais-release-2026-06-21-production-deploy-blocked",
+  "deploymentScope": "full",
+  "deploymentFingerprint": {
+    "status": "missing"
+  },
+  "deploymentObservation": {
+    "status": "missing"
+  },
+  "deploymentOrigin": {
+    "status": "present",
+    "originClass": "remote-https",
+    "valueRedacted": true
+  },
+  "envSyncApplyPreflightGuard": {
+    "status": "missing",
+    "requiredEvidence": "vercel-env-sync.applyPreflight",
+    "valuesRedacted": true,
+    "cliSafeToInvoke": false
+  },
+  "operation": {
+    "command": "npx vercel deploy --prod -y --no-wait",
+    "status": "blocked-before-upload",
+    "failureClass": "vercel-cli-oidc-discovery-tls-failure",
+    "failureEndpoint": "https://vercel.com/.well-known/openid-configuration",
+    "stdoutOmitted": true,
+    "stderrOmitted": true,
+    "uploadedArtifacts": false
+  },
+  "cliAuthReadinessEvidence": {
+    "target": "vercel-cli-auth-readiness",
+    "status": "blocked",
+    "readyAuthMethod": "missing",
+    "envToken": "missing",
+    "cliAuthJson": "present",
+    "oidcDiscovery": "failed",
+    "valueRedacted": true
+  },
+  "prerequisites": [
+    {
+      "id": "s22-vercel-project-readiness",
+      "responsibleSession": "S22",
+      "requiredEvidence": "vercel-project-readiness",
+      "status": "ready",
+      "valueRedacted": true
+    },
+    {
+      "id": "s19-vercel-env-sync-apply-evidence",
+      "responsibleSession": "S19",
+      "requiredEvidence": "vercel-env-sync",
+      "status": "blocked",
+      "valueRedacted": true
+    },
+    {
+      "id": "s22-production-deployment-url",
+      "responsibleSession": "S22",
+      "requiredEnv": "UAIS_DEPLOYMENT_BASE_URL",
+      "status": "present",
+      "valueRedacted": true
+    }
+  ],
+  "blockedReasons": [
+    "vercel-env-sync-not-applied",
+    "vercel-cli-oidc-discovery-tls-failure",
+    "vercel-cli-auth-readiness-blocked"
+  ],
+  "safety": {
+    "valuesRedacted": true,
+    "deploymentUrlOmitted": true,
+    "deploymentUrlsOmitted": true,
+    "projectIdsOmitted": true,
+    "orgIdsOmitted": true,
+    "accountNamesOmitted": true,
+    "teamIdsOmitted": true,
+    "tokenOmitted": true,
+    "projectReadinessEvidencePathOmitted": true,
+    "envSyncEvidencePathOmitted": true,
+    "localPrivatePathsOmitted": true,
+    "cliOutputOmitted": true,
+    "liveRequiresApproval": true
+  }
+}

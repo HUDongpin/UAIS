@@ -1,0 +1,737 @@
+{
+  "target": "vercel-env-inventory",
+  "mode": "live",
+  "responsibleSession": "S19",
+  "status": "blocked",
+  "environments": [
+    "production",
+    "preview"
+  ],
+  "command": {
+    "name": "vercel-env-rest-list",
+    "format": "json",
+    "statusByEnvironment": {
+      "production": "failed",
+      "preview": "failed"
+    },
+    "failureClassByEnvironment": {
+      "production": "auth-required",
+      "preview": "auth-required"
+    },
+    "attemptsByEnvironment": {
+      "production": 1,
+      "preview": 1
+    },
+    "stdoutOmitted": true,
+    "stderrOmitted": true,
+    "apiOutputOmitted": true
+  },
+  "remoteEnvCounts": {
+    "production": 0,
+    "preview": 0
+  },
+  "remoteEnvNames": {
+    "production": [],
+    "preview": []
+  },
+  "requiredEnvCoverage": [
+    {
+      "name": "UAIS_LIVE_AI_APPROVAL_TOKEN",
+      "production": "unknown",
+      "preview": "unknown",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_AI_ACCESS_SIGNING_SECRET",
+      "production": "unknown",
+      "preview": "unknown",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_APP_SESSION_SIGNING_SECRET",
+      "production": "unknown",
+      "preview": "unknown",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_APP_AUTH_PROVIDER",
+      "production": "unknown",
+      "preview": "unknown",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_APP_AUTH_PROVIDER_URL",
+      "production": "unknown",
+      "preview": "unknown",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_APP_AUTH_PROVIDER_TOKEN",
+      "production": "unknown",
+      "preview": "unknown",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_TEACHER_AUTH_PROVIDER",
+      "production": "unknown",
+      "preview": "unknown",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET",
+      "production": "unknown",
+      "preview": "unknown",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_TEACHER_AUTH_ISSUER_SECRET",
+      "production": "unknown",
+      "preview": "unknown",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_TEACHER_AI_OWNERSHIP_BACKEND",
+      "production": "unknown",
+      "preview": "unknown",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_VOICE_LIFECYCLE_AUDIT_BACKEND",
+      "production": "unknown",
+      "preview": "unknown",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_TEACHING_OPERATIONS_BACKEND",
+      "production": "unknown",
+      "preview": "unknown",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_TEACHING_COURSE_MANAGEMENT_BACKEND",
+      "production": "unknown",
+      "preview": "unknown",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_TEACHING_COURSE_ASSETS_BACKEND",
+      "production": "unknown",
+      "preview": "unknown",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_EXTERNAL_STORAGE_BASE_URL",
+      "production": "unknown",
+      "preview": "unknown",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_EXTERNAL_STORAGE_ACCESS_TOKEN",
+      "production": "unknown",
+      "preview": "unknown",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_COLLABORATION_INVITE_EMAIL_PROVIDER",
+      "production": "unknown",
+      "preview": "unknown",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_COLLABORATION_INVITE_EMAIL_PROVIDER_URL",
+      "production": "unknown",
+      "preview": "unknown",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_COLLABORATION_INVITE_EMAIL_PROVIDER_TOKEN",
+      "production": "unknown",
+      "preview": "unknown",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_COLLABORATION_INVITE_EMAIL_CALLBACK_TOKEN",
+      "production": "unknown",
+      "preview": "unknown",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_STUDENT_ROSTER_SYNC_PROVIDER",
+      "production": "unknown",
+      "preview": "unknown",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_STUDENT_ROSTER_SYNC_PROVIDER_URL",
+      "production": "unknown",
+      "preview": "unknown",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_STUDENT_ROSTER_SYNC_PROVIDER_TOKEN",
+      "production": "unknown",
+      "preview": "unknown",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_KNOWLEDGE_INDEX_SYNC_PROVIDER",
+      "production": "unknown",
+      "preview": "unknown",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_KNOWLEDGE_INDEX_SYNC_PROVIDER_URL",
+      "production": "unknown",
+      "preview": "unknown",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_KNOWLEDGE_INDEX_SYNC_PROVIDER_TOKEN",
+      "production": "unknown",
+      "preview": "unknown",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_GRADEBOOK_RELEASE_PROVIDER",
+      "production": "unknown",
+      "preview": "unknown",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_GRADEBOOK_RELEASE_PROVIDER_URL",
+      "production": "unknown",
+      "preview": "unknown",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_GRADEBOOK_RELEASE_PROVIDER_TOKEN",
+      "production": "unknown",
+      "preview": "unknown",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_COURSE_CONTENT_PUBLISH_PROVIDER",
+      "production": "unknown",
+      "preview": "unknown",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_COURSE_CONTENT_PUBLISH_PROVIDER_URL",
+      "production": "unknown",
+      "preview": "unknown",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_COURSE_CONTENT_PUBLISH_PROVIDER_TOKEN",
+      "production": "unknown",
+      "preview": "unknown",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_COURSE_EXPORT_PROVIDER",
+      "production": "unknown",
+      "preview": "unknown",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_COURSE_EXPORT_PROVIDER_URL",
+      "production": "unknown",
+      "preview": "unknown",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_COURSE_EXPORT_PROVIDER_TOKEN",
+      "production": "unknown",
+      "preview": "unknown",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_GRADING_FEEDBACK_PROVIDER",
+      "production": "unknown",
+      "preview": "unknown",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_GRADING_FEEDBACK_PROVIDER_URL",
+      "production": "unknown",
+      "preview": "unknown",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_GRADING_FEEDBACK_PROVIDER_TOKEN",
+      "production": "unknown",
+      "preview": "unknown",
+      "valueRedacted": true
+    },
+    {
+      "name": "DEEPSEEK_API_KEY",
+      "production": "unknown",
+      "preview": "unknown",
+      "valueRedacted": true
+    },
+    {
+      "name": "DASHSCOPE_API_KEY",
+      "production": "unknown",
+      "preview": "unknown",
+      "valueRedacted": true
+    }
+  ],
+  "optionalEnvCoverage": [
+    {
+      "name": "UAIS_EXTERNAL_STORAGE_SERVICE_MODE",
+      "production": "unknown",
+      "preview": "unknown",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_EXTERNAL_STORAGE_SERVICE_DATA_DIR",
+      "production": "unknown",
+      "preview": "unknown",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_EXTERNAL_STORAGE_DATA_DIR",
+      "production": "unknown",
+      "preview": "unknown",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_EXTERNAL_STORAGE_DATABASE_ADAPTER_PROVIDER_CLASS",
+      "production": "unknown",
+      "preview": "unknown",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_EXTERNAL_STORAGE_DATABASE_ADAPTER_MIGRATION_STATUS",
+      "production": "unknown",
+      "preview": "unknown",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_EXTERNAL_STORAGE_DATABASE_ADAPTER_BACKUP_POLICY",
+      "production": "unknown",
+      "preview": "unknown",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_EXTERNAL_STORAGE_DATABASE_ADAPTER_CONCURRENCY_CONTROL",
+      "production": "unknown",
+      "preview": "unknown",
+      "valueRedacted": true
+    }
+  ],
+  "missingRequiredEnv": [],
+  "unobservedRequiredEnv": [
+    {
+      "name": "UAIS_LIVE_AI_APPROVAL_TOKEN",
+      "environment": "production",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_LIVE_AI_APPROVAL_TOKEN",
+      "environment": "preview",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_AI_ACCESS_SIGNING_SECRET",
+      "environment": "production",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_AI_ACCESS_SIGNING_SECRET",
+      "environment": "preview",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_APP_SESSION_SIGNING_SECRET",
+      "environment": "production",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_APP_SESSION_SIGNING_SECRET",
+      "environment": "preview",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_APP_AUTH_PROVIDER",
+      "environment": "production",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_APP_AUTH_PROVIDER",
+      "environment": "preview",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_APP_AUTH_PROVIDER_URL",
+      "environment": "production",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_APP_AUTH_PROVIDER_URL",
+      "environment": "preview",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_APP_AUTH_PROVIDER_TOKEN",
+      "environment": "production",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_APP_AUTH_PROVIDER_TOKEN",
+      "environment": "preview",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_TEACHER_AUTH_PROVIDER",
+      "environment": "production",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_TEACHER_AUTH_PROVIDER",
+      "environment": "preview",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET",
+      "environment": "production",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET",
+      "environment": "preview",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_TEACHER_AUTH_ISSUER_SECRET",
+      "environment": "production",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_TEACHER_AUTH_ISSUER_SECRET",
+      "environment": "preview",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_TEACHER_AI_OWNERSHIP_BACKEND",
+      "environment": "production",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_TEACHER_AI_OWNERSHIP_BACKEND",
+      "environment": "preview",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_VOICE_LIFECYCLE_AUDIT_BACKEND",
+      "environment": "production",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_VOICE_LIFECYCLE_AUDIT_BACKEND",
+      "environment": "preview",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_TEACHING_OPERATIONS_BACKEND",
+      "environment": "production",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_TEACHING_OPERATIONS_BACKEND",
+      "environment": "preview",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_TEACHING_COURSE_MANAGEMENT_BACKEND",
+      "environment": "production",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_TEACHING_COURSE_MANAGEMENT_BACKEND",
+      "environment": "preview",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_TEACHING_COURSE_ASSETS_BACKEND",
+      "environment": "production",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_TEACHING_COURSE_ASSETS_BACKEND",
+      "environment": "preview",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_EXTERNAL_STORAGE_BASE_URL",
+      "environment": "production",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_EXTERNAL_STORAGE_BASE_URL",
+      "environment": "preview",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_EXTERNAL_STORAGE_ACCESS_TOKEN",
+      "environment": "production",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_EXTERNAL_STORAGE_ACCESS_TOKEN",
+      "environment": "preview",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_COLLABORATION_INVITE_EMAIL_PROVIDER",
+      "environment": "production",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_COLLABORATION_INVITE_EMAIL_PROVIDER",
+      "environment": "preview",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_COLLABORATION_INVITE_EMAIL_PROVIDER_URL",
+      "environment": "production",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_COLLABORATION_INVITE_EMAIL_PROVIDER_URL",
+      "environment": "preview",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_COLLABORATION_INVITE_EMAIL_PROVIDER_TOKEN",
+      "environment": "production",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_COLLABORATION_INVITE_EMAIL_PROVIDER_TOKEN",
+      "environment": "preview",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_COLLABORATION_INVITE_EMAIL_CALLBACK_TOKEN",
+      "environment": "production",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_COLLABORATION_INVITE_EMAIL_CALLBACK_TOKEN",
+      "environment": "preview",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_STUDENT_ROSTER_SYNC_PROVIDER",
+      "environment": "production",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_STUDENT_ROSTER_SYNC_PROVIDER",
+      "environment": "preview",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_STUDENT_ROSTER_SYNC_PROVIDER_URL",
+      "environment": "production",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_STUDENT_ROSTER_SYNC_PROVIDER_URL",
+      "environment": "preview",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_STUDENT_ROSTER_SYNC_PROVIDER_TOKEN",
+      "environment": "production",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_STUDENT_ROSTER_SYNC_PROVIDER_TOKEN",
+      "environment": "preview",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_KNOWLEDGE_INDEX_SYNC_PROVIDER",
+      "environment": "production",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_KNOWLEDGE_INDEX_SYNC_PROVIDER",
+      "environment": "preview",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_KNOWLEDGE_INDEX_SYNC_PROVIDER_URL",
+      "environment": "production",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_KNOWLEDGE_INDEX_SYNC_PROVIDER_URL",
+      "environment": "preview",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_KNOWLEDGE_INDEX_SYNC_PROVIDER_TOKEN",
+      "environment": "production",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_KNOWLEDGE_INDEX_SYNC_PROVIDER_TOKEN",
+      "environment": "preview",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_GRADEBOOK_RELEASE_PROVIDER",
+      "environment": "production",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_GRADEBOOK_RELEASE_PROVIDER",
+      "environment": "preview",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_GRADEBOOK_RELEASE_PROVIDER_URL",
+      "environment": "production",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_GRADEBOOK_RELEASE_PROVIDER_URL",
+      "environment": "preview",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_GRADEBOOK_RELEASE_PROVIDER_TOKEN",
+      "environment": "production",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_GRADEBOOK_RELEASE_PROVIDER_TOKEN",
+      "environment": "preview",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_COURSE_CONTENT_PUBLISH_PROVIDER",
+      "environment": "production",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_COURSE_CONTENT_PUBLISH_PROVIDER",
+      "environment": "preview",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_COURSE_CONTENT_PUBLISH_PROVIDER_URL",
+      "environment": "production",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_COURSE_CONTENT_PUBLISH_PROVIDER_URL",
+      "environment": "preview",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_COURSE_CONTENT_PUBLISH_PROVIDER_TOKEN",
+      "environment": "production",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_COURSE_CONTENT_PUBLISH_PROVIDER_TOKEN",
+      "environment": "preview",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_COURSE_EXPORT_PROVIDER",
+      "environment": "production",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_COURSE_EXPORT_PROVIDER",
+      "environment": "preview",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_COURSE_EXPORT_PROVIDER_URL",
+      "environment": "production",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_COURSE_EXPORT_PROVIDER_URL",
+      "environment": "preview",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_COURSE_EXPORT_PROVIDER_TOKEN",
+      "environment": "production",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_COURSE_EXPORT_PROVIDER_TOKEN",
+      "environment": "preview",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_GRADING_FEEDBACK_PROVIDER",
+      "environment": "production",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_GRADING_FEEDBACK_PROVIDER",
+      "environment": "preview",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_GRADING_FEEDBACK_PROVIDER_URL",
+      "environment": "production",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_GRADING_FEEDBACK_PROVIDER_URL",
+      "environment": "preview",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_GRADING_FEEDBACK_PROVIDER_TOKEN",
+      "environment": "production",
+      "valueRedacted": true
+    },
+    {
+      "name": "UAIS_GRADING_FEEDBACK_PROVIDER_TOKEN",
+      "environment": "preview",
+      "valueRedacted": true
+    },
+    {
+      "name": "DEEPSEEK_API_KEY",
+      "environment": "production",
+      "valueRedacted": true
+    },
+    {
+      "name": "DEEPSEEK_API_KEY",
+      "environment": "preview",
+      "valueRedacted": true
+    },
+    {
+      "name": "DASHSCOPE_API_KEY",
+      "environment": "production",
+      "valueRedacted": true
+    },
+    {
+      "name": "DASHSCOPE_API_KEY",
+      "environment": "preview",
+      "valueRedacted": true
+    }
+  ],
+  "blockedReasons": [
+    "vercel-env-inventory-command-not-passed"
+  ],
+  "safety": {
+    "valuesRedacted": true,
+    "rawCliOutputOmitted": true,
+    "stderrOmitted": true,
+    "tokenOmitted": true,
+    "localPrivatePathsOmitted": true,
+    "noMutation": true
+  }
+}

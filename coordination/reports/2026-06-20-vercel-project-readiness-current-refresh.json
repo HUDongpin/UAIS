@@ -1,0 +1,58 @@
+{
+  "target": "vercel-project-readiness",
+  "mode": "local",
+  "status": "ready",
+  "responsibleSession": "S22",
+  "checks": [
+    {
+      "id": "s22-vercel-cli",
+      "status": "present",
+      "evidence": "project-local-version-detected",
+      "blockedReason": "vercel-cli-missing"
+    },
+    {
+      "id": "s22-vercel-auth",
+      "status": "present",
+      "evidence": "authenticated-account-detected",
+      "blockedReason": "vercel-auth-missing"
+    },
+    {
+      "id": "s22-vercel-team-scope",
+      "status": "present",
+      "evidence": "personal-account-scope-empty-output",
+      "teamCount": 0,
+      "blockedReason": "vercel-team-scope-missing"
+    },
+    {
+      "id": "s22-vercel-project-candidate",
+      "status": "present",
+      "evidence": "link-marker-present",
+      "blockedReason": "vercel-project-candidate-missing"
+    },
+    {
+      "id": "s22-vercel-project-link",
+      "status": "present",
+      "evidence": "link-marker-present",
+      "blockedReason": "vercel-project-not-linked"
+    },
+    {
+      "id": "s22-vercelignore-upload-hygiene",
+      "status": "present",
+      "evidence": "required-patterns-present",
+      "missingPatterns": [],
+      "blockedReason": "vercelignore-upload-hygiene-incomplete"
+    }
+  ],
+  "blockedReasons": [],
+  "safety": {
+    "valuesRedacted": true,
+    "projectIdsOmitted": true,
+    "orgIdsOmitted": true,
+    "accountNamesOmitted": true,
+    "teamIdsOmitted": true,
+    "teamSlugsOmitted": true,
+    "projectNamesOmitted": true,
+    "deploymentUrlsOmitted": true,
+    "localPrivatePathsOmitted": true
+  }
+}

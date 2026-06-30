@@ -1,0 +1,88 @@
+{
+  "target": "vercel-production-deployment",
+  "mode": "live",
+  "action": "inspect",
+  "environment": "production",
+  "network": "enabled",
+  "status": "blocked",
+  "responsibleSession": "S22",
+  "releaseRunId": "uais-release-2026-06-19-linked-vercel-docker-storage",
+  "deploymentFingerprint": {
+    "status": "missing"
+  },
+  "deploymentObservation": {
+    "status": "pending"
+  },
+  "deploymentOrigin": {
+    "status": "missing",
+    "originClass": "missing",
+    "valueRedacted": true
+  },
+  "envSyncApplyPreflightGuard": {
+    "status": "missing",
+    "requiredEvidence": "vercel-env-sync.applyPreflight",
+    "valuesRedacted": true,
+    "cliSafeToInvoke": false
+  },
+  "operation": {
+    "command": "vercel-inspect-production",
+    "status": "blocked-before-invocation",
+    "stdoutOmitted": true,
+    "stderrOmitted": true
+  },
+  "prerequisites": [
+    {
+      "id": "s22-vercel-auth",
+      "responsibleSession": "S22",
+      "authMethods": [
+        "VERCEL_TOKEN",
+        "vercel-cli-login"
+      ],
+      "status": "present",
+      "authMethod": "vercel-cli-login",
+      "valueRedacted": true
+    },
+    {
+      "id": "s22-vercel-project-readiness",
+      "responsibleSession": "S22",
+      "requiredEvidence": "vercel-project-readiness",
+      "status": "ready",
+      "valueRedacted": true
+    },
+    {
+      "id": "s19-vercel-env-sync-apply-evidence",
+      "responsibleSession": "S19",
+      "requiredEvidence": "vercel-env-sync",
+      "status": "blocked",
+      "valueRedacted": true
+    },
+    {
+      "id": "s22-production-deployment-url",
+      "responsibleSession": "S22",
+      "requiredEnv": "UAIS_DEPLOYMENT_BASE_URL",
+      "status": "missing",
+      "valueRedacted": true
+    }
+  ],
+  "blockedReasons": [
+    "vercel-env-sync-not-applied",
+    "missing-UAIS_DEPLOYMENT_BASE_URL"
+  ],
+  "safety": {
+    "valuesRedacted": true,
+    "deploymentUrlOmitted": true,
+    "deploymentUrlsOmitted": true,
+    "projectIdsOmitted": true,
+    "orgIdsOmitted": true,
+    "accountNamesOmitted": true,
+    "teamIdsOmitted": true,
+    "teamSlugsOmitted": true,
+    "tokenOmitted": true,
+    "tokenFlagForbidden": true,
+    "projectReadinessEvidencePathOmitted": true,
+    "envSyncEvidencePathOmitted": true,
+    "localPrivatePathsOmitted": true,
+    "cliOutputOmitted": true,
+    "liveRequiresApproval": true
+  }
+}

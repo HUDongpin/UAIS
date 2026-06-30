@@ -1,0 +1,80 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-06-27T16:46:51+08:00",
+  "status": "passed",
+  "scope": "main-teaching-class-membership-approval-error-closure",
+  "enterpriseGapAddressed": "Teacher roster approval UI no longer treats a successful HTTP response as approval success when the returned membership belongs to a different class or membership record.",
+  "changedFiles": [
+    "src/components/pages/teaching-page.tsx",
+    "tests/teaching-page.test.tsx"
+  ],
+  "proofSummary": {
+    "regression": "A teacher approves Peter's pending invite-code membership for class 1, but the backend returns Eve's approved membership for class 2.",
+    "expectedBehavior": "The page displays the approval failure message, keeps Peter in the pending list, keeps the student count unchanged, and suppresses both Peter and Eve joined-success messages.",
+    "guardedFields": [
+      "membershipId",
+      "classId",
+      "courseId",
+      "invitationCode",
+      "membershipStatus"
+    ]
+  },
+  "redGreenEvidence": [
+    {
+      "phase": "red",
+      "command": "npx vitest run tests/teaching-page.test.tsx --reporter=dot -t \"different membership\"",
+      "observedBeforeImplementation": "failed as expected because the page did not render the approval failure state for a mismatched successful response"
+    },
+    {
+      "phase": "green",
+      "command": "npx vitest run tests/teaching-page.test.tsx --reporter=dot -t \"different membership\"",
+      "result": "passed",
+      "testFilesPassed": 1,
+      "testsPassed": 1,
+      "testsSkipped": 75
+    }
+  ],
+  "verification": [
+    {
+      "command": "npx vitest run tests/teaching-page.test.tsx --reporter=dot",
+      "result": "passed",
+      "testFilesPassed": 1,
+      "testsPassed": 76
+    },
+    {
+      "command": "npm run lint",
+      "result": "passed"
+    },
+    {
+      "command": "npm run test",
+      "result": "passed",
+      "testFilesPassed": 66,
+      "testsPassed": 1273
+    },
+    {
+      "command": "npm run build",
+      "result": "passed"
+    },
+    {
+      "command": "git diff --check",
+      "result": "passed"
+    }
+  ],
+  "boundaries": [
+    "This is frontend error-closure hardening for the teacher roster approval surface.",
+    "It does not replace live production invite-code join or membership approval route smoke evidence.",
+    "The overall enterprise release gate remains blocked until owner-approved production app-auth, external-storage readiness, ordinary teaching route/browser smoke, and provider mutation proof are regenerated in one release run."
+  ],
+  "secretHandling": {
+    "realSecretsInspected": false,
+    "realSecretsLogged": false,
+    "credentialsMutated": false
+  },
+  "gitMutation": {
+    "staged": false,
+    "committed": false,
+    "branched": false,
+    "pushed": false,
+    "resetOrReverted": false
+  }
+}

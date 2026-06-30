@@ -1,0 +1,39 @@
+{
+  "target": "vercel-env-inventory-cli-json-live",
+  "date": "2026-06-21",
+  "mode": "live",
+  "networkMode": "escalated",
+  "status": "blocked",
+  "responsibleSession": "S19/S22",
+  "environments": {
+    "production": {
+      "exitCode": 1,
+      "status": "failed-or-empty-output",
+      "envNames": [],
+      "envNameCount": 0,
+      "valuesRedacted": true,
+      "stdoutJsonParsed": false,
+      "stderrOmitted": true
+    },
+    "preview": {
+      "exitCode": 1,
+      "status": "failed-or-empty-output",
+      "envNames": [],
+      "envNameCount": 0,
+      "valuesRedacted": true,
+      "stdoutJsonParsed": false,
+      "stderrOmitted": true
+    }
+  },
+  "blockedReasons": [
+    "vercel-env-json-list-production-failed",
+    "vercel-env-json-list-preview-failed"
+  ],
+  "safety": {
+    "valuesPrinted": false,
+    "valuesWritten": false,
+    "namesOnly": true,
+    "rawOutputOmitted": true,
+    "tokenOmitted": true
+  }
+}

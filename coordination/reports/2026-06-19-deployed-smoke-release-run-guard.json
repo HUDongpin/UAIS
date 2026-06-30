@@ -1,0 +1,120 @@
+{
+  "target": "deployed-smoke-release-run-guard",
+  "generatedAt": "2026-06-19T01:24:56+08:00",
+  "sessionId": "S22",
+  "status": "guarded",
+  "objective": "Prevent production live deployed teacher workflow and learning PPT playback smoke evidence from being generated without a non-secret release-run id.",
+  "guards": [
+    {
+      "script": "scripts/teacher-workflow-deployment-smoke.mjs",
+      "appliesTo": {
+        "mode": "live",
+        "environment": "production"
+      },
+      "requires": "--release-run-id",
+      "guardOrder": "after explicit owner approval validation and before deployment evidence planning or deployment page requests",
+      "missingReleaseRunIdBehavior": {
+        "exitStatus": 1,
+        "stdout": "empty",
+        "stderrMessage": "Teacher workflow deployment smoke requires --release-run-id.",
+        "commandArgumentsRedacted": true
+      }
+    },
+    {
+      "script": "scripts/learning-ppt-playback-deployment-smoke.mjs",
+      "appliesTo": {
+        "mode": "live",
+        "environment": "production"
+      },
+      "requires": "--release-run-id",
+      "guardOrder": "after explicit owner approval validation and before deployment evidence planning, learning page requests, playback manifest requests, or WAV requests",
+      "missingReleaseRunIdBehavior": {
+        "exitStatus": 1,
+        "stdout": "empty",
+        "stderrMessage": "Learning PPT playback deployment smoke requires --release-run-id.",
+        "commandArgumentsRedacted": true
+      }
+    }
+  ],
+  "regressionEvidence": {
+    "newTests": [
+      {
+        "file": "tests/teacher-workflow-deployment-smoke.test.ts",
+        "case": "rejects production live page smoke without a release-run id before deployment requests",
+        "status": "passed"
+      },
+      {
+        "file": "tests/learning-ppt-playback-deployment-smoke.test.ts",
+        "case": "rejects production live playback smoke without a release-run id before deployment requests",
+        "status": "passed"
+      }
+    ],
+    "testDesignNote": "A missing-env-file probe was avoided because the current Node runtime handles --env-file before script startup; final coverage uses local request-count probes to verify no deployment requests occur without a release-run id."
+  },
+  "checks": [
+    {
+      "command": "node --check scripts/teacher-workflow-deployment-smoke.mjs",
+      "status": "passed"
+    },
+    {
+      "command": "node --check scripts/learning-ppt-playback-deployment-smoke.mjs",
+      "status": "passed"
+    },
+    {
+      "command": "node scripts/teacher-workflow-deployment-smoke.mjs --live --approved --environment production --base-url REDACTED_LOCAL_ORIGIN",
+      "status": "passed",
+      "result": "exited 1 with release-run-id-required message before deployment requests"
+    },
+    {
+      "command": "node scripts/learning-ppt-playback-deployment-smoke.mjs --live --approved --environment production --base-url REDACTED_LOCAL_ORIGIN",
+      "status": "passed",
+      "result": "exited 1 with release-run-id-required message before deployment requests"
+    },
+    {
+      "command": "npm run test -- tests/teacher-workflow-deployment-smoke.test.ts",
+      "status": "passed",
+      "summary": "1 file / 10 tests"
+    },
+    {
+      "command": "npm run test -- tests/learning-ppt-playback-deployment-smoke.test.ts",
+      "status": "passed",
+      "summary": "1 file / 6 tests"
+    },
+    {
+      "command": "npm run test",
+      "status": "passed",
+      "summary": "34 files / 449 tests"
+    },
+    {
+      "command": "npm run lint",
+      "status": "passed"
+    },
+    {
+      "command": "npm run build",
+      "status": "passed",
+      "summary": "Next.js 16.2.9 production build compiled successfully and generated 8 static pages"
+    }
+  ],
+  "releaseImpact": {
+    "improved": [
+      "Production live deployed teacher workflow UI smoke evidence is now release-run bound before page requests.",
+      "Production live learning PPT playback and first-WAV smoke evidence is now release-run bound before page, manifest, or audio requests."
+    ],
+    "stillBlocked": [
+      "Owner-approved Vercel team/project/link and env apply remain incomplete.",
+      "Production trusted teacher auth/session provider readiness remains incomplete.",
+      "Real remote-HTTPS durable external storage service readiness and live smoke remain incomplete.",
+      "Production deployment evidence and deployed route/browser smokes remain incomplete.",
+      "Manual PowerPoint/WPS playback acceptance remains incomplete."
+    ]
+  },
+  "redaction": {
+    "secretsPrinted": false,
+    "baseUrlsPrinted": false,
+    "teacherIdsPrinted": false,
+    "localPrivatePathsPrinted": false,
+    "responseBodiesPrinted": false,
+    "audioPayloadsPrinted": false,
+    "commandArgumentsRedacted": true
+  }
+}

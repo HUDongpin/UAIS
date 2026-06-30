@@ -1,0 +1,427 @@
+{
+  "target": "deployment-route-smoke",
+  "mode": "live",
+  "environment": "production",
+  "authProviderMode": "trusted-cookie-issuer",
+  "network": "enabled",
+  "status": "failed",
+  "responsibleSession": "S22",
+  "releaseRunId": "uais-release-2026-06-21-signed-admin-production-api",
+  "deploymentFingerprint": {
+    "status": "present",
+    "value": "sha256:7c8e0f8c7195d5b9"
+  },
+  "deploymentOrigin": {
+    "status": "present",
+    "originClass": "remote-https",
+    "valueRedacted": true
+  },
+  "vercelProductionDeploymentEvidence": {
+    "target": "vercel-production-deployment",
+    "deploymentObservationStatus": "observed",
+    "releaseRunIdStatus": "matched",
+    "valueRedacted": true,
+    "status": "matched"
+  },
+  "teacherAuthProviderReadinessEvidence": {
+    "target": "teacher-auth-provider-readiness",
+    "authProviderMode": "trusted-cookie-issuer",
+    "releaseRunIdStatus": "matched",
+    "valueRedacted": true,
+    "status": "matched"
+  },
+  "networkRetryPolicy": {
+    "maxAttempts": 3,
+    "perAttemptTimeoutMs": 10000,
+    "retryOn": [
+      "request-error"
+    ],
+    "valuesRedacted": true
+  },
+  "routeChecks": [
+    {
+      "id": "s22-retention-readiness-route",
+      "route": "/api/ai/voice-assets/retention-readiness",
+      "method": "GET",
+      "action": "verify-admin-retention-readiness-route",
+      "auth": "signed-admin-ai-access",
+      "expectedStatus": 200,
+      "responsibleSessions": [
+        "S22",
+        "S12",
+        "S24"
+      ]
+    },
+    {
+      "id": "s22-voice-lifecycle-audit-route",
+      "route": "/api/ai/voice-clone/lifecycle-audit",
+      "method": "GET",
+      "action": "verify-admin-voice-lifecycle-audit-route",
+      "auth": "signed-admin-ai-access",
+      "expectedStatus": 200,
+      "responsibleSessions": [
+        "S22",
+        "S12",
+        "S24"
+      ]
+    },
+    {
+      "id": "s22-teacher-auth-issuer-route",
+      "route": "/api/ai/teacher-auth/issue",
+      "method": "POST",
+      "action": "verify-admin-teacher-auth-issuer-route",
+      "auth": "signed-admin-ai-access",
+      "expectedStatus": 200,
+      "responsibleSessions": [
+        "S22",
+        "S12",
+        "S19"
+      ],
+      "requestBodyShape": "teacher-auth-session-issue",
+      "responseHeaderChecks": [
+        "teacherAuthClaimsSetCookie",
+        "teacherAuthSignatureSetCookie",
+        "httpOnlySameSiteSecureMaxAge",
+        "priorityHigh",
+        "issuerProofBoundedMaxAge"
+      ],
+      "responseShapeChecks": [
+        "teacherAuthSession",
+        "authProviderContract",
+        "s12TeacherAuthIssuerBoundary"
+      ]
+    },
+    {
+      "id": "s22-teacher-ownership-route",
+      "route": "/api/ai/teacher-ownership",
+      "method": "GET",
+      "action": "verify-issued-teacher-ownership-route",
+      "auth": "issued-teacher-auth-cookie",
+      "expectedStatus": 200,
+      "responsibleSessions": [
+        "S22",
+        "S12",
+        "S24",
+        "S19"
+      ],
+      "responseShapeChecks": [
+        "ownership",
+        "consistency",
+        "s12TeacherOwnershipSummary"
+      ]
+    },
+    {
+      "id": "s22-teacher-ai-session-route",
+      "route": "/api/ai/session",
+      "method": "POST",
+      "action": "verify-issued-teacher-ai-session-route",
+      "auth": "issued-teacher-auth-cookie",
+      "expectedStatus": 200,
+      "responsibleSessions": [
+        "S22",
+        "S12",
+        "S19"
+      ],
+      "requestBodyShape": "teacher-ai-session-issue",
+      "responseShapeChecks": [
+        "accessSession",
+        "accessPlan",
+        "authProviderContract",
+        "s12TeacherAiSessionBoundary"
+      ]
+    },
+    {
+      "id": "s22-teacher-ppt-workflow-route",
+      "route": "/api/ai/teacher-ppt-workflow",
+      "method": "GET",
+      "action": "verify-signed-teacher-ppt-workflow-route",
+      "auth": "issued-teacher-auth-cookie",
+      "expectedStatus": 200,
+      "responsibleSessions": [
+        "S22",
+        "S12",
+        "S24",
+        "S19"
+      ],
+      "responseShapeChecks": [
+        "workflow",
+        "workflowReadyForDownloads",
+        "workflowDownloadContract",
+        "workflowAudioDownloadPattern",
+        "workflowExportDownloadUrl",
+        "agentHandoffPlan",
+        "agentHandoffPlanFramework",
+        "s22ReleaseSmokeAgent"
+      ]
+    }
+  ],
+  "prerequisites": [
+    {
+      "id": "s22-deployment-base-url",
+      "responsibleSession": "S22",
+      "requiredEnv": "UAIS_DEPLOYMENT_BASE_URL",
+      "status": "present"
+    },
+    {
+      "id": "s19-ai-access-signing-secret",
+      "responsibleSession": "S19",
+      "requiredEnv": "UAIS_AI_ACCESS_SIGNING_SECRET",
+      "status": "present"
+    },
+    {
+      "id": "s12-teacher-auth-provider",
+      "responsibleSession": "S12",
+      "requiredEnv": "UAIS_TEACHER_AUTH_PROVIDER",
+      "status": "present"
+    },
+    {
+      "id": "s19-teacher-auth-session-signing-secret",
+      "responsibleSession": "S19",
+      "requiredEnv": "UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET",
+      "status": "present"
+    },
+    {
+      "id": "s22-vercel-production-deployment-evidence",
+      "responsibleSession": "S22",
+      "requiredEvidence": "vercel-production-deployment",
+      "status": "matched",
+      "valueRedacted": true
+    },
+    {
+      "id": "s22-teacher-auth-provider-readiness-evidence",
+      "responsibleSession": "S22",
+      "requiredEvidence": "teacher-auth-provider-readiness",
+      "status": "matched",
+      "valueRedacted": true
+    },
+    {
+      "id": "s12-teacher-auth-issuer-secret",
+      "responsibleSession": "S12",
+      "requiredEnv": "UAIS_TEACHER_AUTH_ISSUER_SECRET",
+      "status": "present"
+    }
+  ],
+  "blockedReasons": [],
+  "safety": {
+    "secretsRedacted": true,
+    "valuesRedacted": true,
+    "signedAdminAccess": true,
+    "issuedTeacherAuthCookie": true,
+    "oidcBearerTokenOmitted": true,
+    "responseBodiesOmitted": true,
+    "liveRequiresApproval": true
+  },
+  "results": [
+    {
+      "id": "s22-retention-readiness-route",
+      "route": "/api/ai/voice-assets/retention-readiness",
+      "method": "GET",
+      "action": "verify-admin-retention-readiness-route",
+      "auth": "signed-admin-ai-access",
+      "expectedStatus": 200,
+      "responsibleSessions": [
+        "S22",
+        "S12",
+        "S24"
+      ],
+      "status": "ok",
+      "httpStatus": 200,
+      "networkAttempts": {
+        "attempted": 1,
+        "maxAttempts": 3,
+        "retried": false,
+        "valueRedacted": true
+      }
+    },
+    {
+      "id": "s22-voice-lifecycle-audit-route",
+      "route": "/api/ai/voice-clone/lifecycle-audit",
+      "method": "GET",
+      "action": "verify-admin-voice-lifecycle-audit-route",
+      "auth": "signed-admin-ai-access",
+      "expectedStatus": 200,
+      "responsibleSessions": [
+        "S22",
+        "S12",
+        "S24"
+      ],
+      "status": "ok",
+      "httpStatus": 200,
+      "networkAttempts": {
+        "attempted": 1,
+        "maxAttempts": 3,
+        "retried": false,
+        "valueRedacted": true
+      }
+    },
+    {
+      "id": "s22-teacher-auth-issuer-route",
+      "route": "/api/ai/teacher-auth/issue",
+      "method": "POST",
+      "action": "verify-admin-teacher-auth-issuer-route",
+      "auth": "signed-admin-ai-access",
+      "expectedStatus": 200,
+      "responsibleSessions": [
+        "S22",
+        "S12",
+        "S19"
+      ],
+      "requestBodyShape": "teacher-auth-session-issue",
+      "responseHeaderChecks": [
+        "teacherAuthClaimsSetCookie",
+        "teacherAuthSignatureSetCookie",
+        "httpOnlySameSiteSecureMaxAge",
+        "priorityHigh",
+        "issuerProofBoundedMaxAge"
+      ],
+      "responseShapeChecks": [
+        "teacherAuthSession",
+        "authProviderContract",
+        "s12TeacherAuthIssuerBoundary"
+      ],
+      "status": "ok",
+      "httpStatus": 200,
+      "networkAttempts": {
+        "attempted": 1,
+        "maxAttempts": 3,
+        "retried": false,
+        "valueRedacted": true
+      },
+      "responseShape": {
+        "checked": true,
+        "status": "ok",
+        "requiredFields": {
+          "teacherAuthSession": "present",
+          "authProviderContract": "present",
+          "s12TeacherAuthIssuerBoundary": "present"
+        }
+      },
+      "responseHeaders": {
+        "checked": true,
+        "status": "ok",
+        "requiredHeaders": {
+          "teacherAuthClaimsSetCookie": "present",
+          "teacherAuthSignatureSetCookie": "present",
+          "httpOnlySameSiteSecureMaxAge": "present",
+          "priorityHigh": "present",
+          "issuerProofBoundedMaxAge": "present"
+        }
+      }
+    },
+    {
+      "id": "s22-teacher-ownership-route",
+      "route": "/api/ai/teacher-ownership",
+      "method": "GET",
+      "action": "verify-issued-teacher-ownership-route",
+      "auth": "issued-teacher-auth-cookie",
+      "expectedStatus": 200,
+      "responsibleSessions": [
+        "S22",
+        "S12",
+        "S24",
+        "S19"
+      ],
+      "responseShapeChecks": [
+        "ownership",
+        "consistency",
+        "s12TeacherOwnershipSummary"
+      ],
+      "status": "ok",
+      "httpStatus": 200,
+      "networkAttempts": {
+        "attempted": 1,
+        "maxAttempts": 3,
+        "retried": false,
+        "valueRedacted": true
+      },
+      "responseShape": {
+        "checked": true,
+        "status": "ok",
+        "requiredFields": {
+          "ownership": "present",
+          "consistency": "present",
+          "s12TeacherOwnershipSummary": "present"
+        }
+      }
+    },
+    {
+      "id": "s22-teacher-ai-session-route",
+      "route": "/api/ai/session",
+      "method": "POST",
+      "action": "verify-issued-teacher-ai-session-route",
+      "auth": "issued-teacher-auth-cookie",
+      "expectedStatus": 200,
+      "responsibleSessions": [
+        "S22",
+        "S12",
+        "S19"
+      ],
+      "requestBodyShape": "teacher-ai-session-issue",
+      "responseShapeChecks": [
+        "accessSession",
+        "accessPlan",
+        "authProviderContract",
+        "s12TeacherAiSessionBoundary"
+      ],
+      "status": "failed",
+      "httpStatus": 403,
+      "networkAttempts": {
+        "attempted": 1,
+        "maxAttempts": 3,
+        "retried": false,
+        "valueRedacted": true
+      },
+      "responseShape": {
+        "checked": true,
+        "status": "skipped",
+        "requiredFields": {}
+      }
+    },
+    {
+      "id": "s22-teacher-ppt-workflow-route",
+      "route": "/api/ai/teacher-ppt-workflow",
+      "method": "GET",
+      "action": "verify-signed-teacher-ppt-workflow-route",
+      "auth": "issued-teacher-auth-cookie",
+      "expectedStatus": 200,
+      "responsibleSessions": [
+        "S22",
+        "S12",
+        "S24",
+        "S19"
+      ],
+      "responseShapeChecks": [
+        "workflow",
+        "workflowReadyForDownloads",
+        "workflowDownloadContract",
+        "workflowAudioDownloadPattern",
+        "workflowExportDownloadUrl",
+        "agentHandoffPlan",
+        "agentHandoffPlanFramework",
+        "s22ReleaseSmokeAgent"
+      ],
+      "status": "failed",
+      "httpStatus": 200,
+      "networkAttempts": {
+        "attempted": 1,
+        "maxAttempts": 3,
+        "retried": false,
+        "valueRedacted": true
+      },
+      "responseShape": {
+        "checked": true,
+        "status": "failed",
+        "requiredFields": {
+          "workflow": "present",
+          "workflowReadyForDownloads": "missing",
+          "workflowDownloadContract": "missing",
+          "workflowAudioDownloadPattern": "missing",
+          "workflowExportDownloadUrl": "missing",
+          "agentHandoffPlan": "present",
+          "agentHandoffPlanFramework": "present",
+          "s22ReleaseSmokeAgent": "present"
+        }
+      }
+    }
+  ]
+}

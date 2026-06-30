@@ -1,0 +1,70 @@
+{
+  "generatedAt": "2026-06-27T19:34:37+08:00",
+  "responsibleSession": "S12/S22",
+  "scope": "ordinary-teaching-course-cover-signed-session-safe-identity",
+  "status": "passed",
+  "summary": "The ordinary /api/teaching/course-cover POST route now rejects signed teacher cookies whose actorId or sessionId is not a safe server identity before ownership checks, Qwen generation, cover asset persistence, or existing-course binding writes can run.",
+  "filesChanged": [
+    "src/app/api/teaching/course-cover/route.ts",
+    "tests/teaching-course-cover-api.test.ts"
+  ],
+  "redGreenEvidence": [
+    {
+      "phase": "red",
+      "command": "./node_modules/.bin/vitest run tests/teaching-course-cover-api.test.ts -t \"rejects unsafe signed teacher\"",
+      "expectedFailure": true,
+      "observed": "Both unsafe signed teacher identity regressions failed with HTTP 502 instead of the expected HTTP 401, proving the route accepted validly signed unsafe identity fields into downstream course-cover handling instead of failing closed at the auth boundary."
+    },
+    {
+      "phase": "green",
+      "command": "./node_modules/.bin/vitest run tests/teaching-course-cover-api.test.ts -t \"rejects unsafe signed teacher\"",
+      "exitCode": 0,
+      "observed": "2 passed, 18 skipped."
+    }
+  ],
+  "behaviorHardened": [
+    "Signed course-cover cookies whose actorId fails the safe-id boundary now resolve as unauthenticated and return HTTP 401 with authenticated-session-required.",
+    "Signed course-cover cookies whose sessionId fails the safe-id boundary now resolve as unauthenticated and return HTTP 401 with authenticated-session-required.",
+    "Unsafe signed actor ids are rejected before external teacher ownership requests, Qwen client creation/generation, cover asset writes, or audit writes.",
+    "Unsafe signed session ids are rejected before provisional-course Qwen generation, cover asset writes, course-cover audit events, or existing-course binding writes.",
+    "The denial responses preserve trace id and redaction without echoing unsafe local-path or secret-like identity values."
+  ],
+  "verification": [
+    {
+      "command": "./node_modules/.bin/vitest run tests/teaching-course-cover-api.test.ts -t \"rejects unsafe signed teacher\"",
+      "exitCode": 0,
+      "observed": "2 passed, 18 skipped."
+    },
+    {
+      "command": "./node_modules/.bin/vitest run tests/teaching-course-cover-api.test.ts",
+      "exitCode": 0,
+      "observed": "20 passed."
+    },
+    {
+      "command": "npm run lint",
+      "exitCode": 0,
+      "observed": "ESLint passed."
+    },
+    {
+      "command": "npm run test",
+      "exitCode": 0,
+      "observed": "66 files passed, 1307 tests passed. Existing jsdom navigation warnings remained non-fatal."
+    },
+    {
+      "command": "npm run build",
+      "exitCode": 0,
+      "observed": "Next.js production build completed."
+    },
+    {
+      "command": "git diff --check",
+      "exitCode": 0,
+      "observed": "No whitespace errors reported."
+    }
+  ],
+  "boundary": "This is local backend/API auth-boundary hardening for the main teaching course-cover generation route. It does not replace fresh same-run live production ordinary teaching route/browser smoke artifacts, does not prove live DashScope generation, and does not clear the aggregate enterprise gate.",
+  "redaction": {
+    "secrets": "omitted",
+    "localFiles": "omitted",
+    "assets": "ids-only"
+  }
+}

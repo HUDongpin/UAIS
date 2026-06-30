@@ -1,0 +1,89 @@
+{
+  "date": "2026-06-19",
+  "sessionId": "S12",
+  "workstream": "trusted-teacher-auth-session-provider",
+  "status": "hardened",
+  "objective": "Prevent production teacher-auth issue routes from minting signed teacher session cookies when trusted-cookie issuer proof or OIDC token expiry would produce a zero-second session lifetime.",
+  "scope": {
+    "changedFiles": [
+      "src/app/api/ai/teacher-auth/issue/route.ts",
+      "tests/ai-api-routes.test.ts",
+      "coordination/session-logs/2026-06-19-S12.md",
+      "coordination/reports/2026-06-19-teacher-auth-zero-lifetime-session-hardening.json"
+    ],
+    "providerModesCovered": [
+      "trusted-cookie-issuer",
+      "oidc-jwks"
+    ],
+    "productionMutationPerformed": false
+  },
+  "behavior": {
+    "before": "The teacher-auth issue route could return 200 and emit Set-Cookie headers when upstream auth evidence was technically valid but too close to expiry, producing Max-Age=0 teacher-auth cookies.",
+    "after": "The teacher-auth issue route returns 403 with redacted progress and no Set-Cookie headers when trusted issuer proof or OIDC token expiry cannot mint at least one second of teacher-auth session lifetime."
+  },
+  "checks": [
+    {
+      "phase": "RED",
+      "command": "npm run test -- tests/ai-api-routes.test.ts -t \"zero-second session lifetime\"",
+      "result": "failed-before-implementation",
+      "failureMode": "trusted-cookie issuer branch returned 200 instead of 403"
+    },
+    {
+      "phase": "GREEN",
+      "command": "npm run test -- tests/ai-api-routes.test.ts -t \"zero-second session lifetime\"",
+      "result": "passed",
+      "files": 1,
+      "testsPassed": 1
+    },
+    {
+      "phase": "RED",
+      "command": "npm run test -- tests/ai-api-routes.test.ts -t \"OIDC teacher auth cookie issuance\"",
+      "result": "failed-before-implementation",
+      "failureMode": "OIDC branch returned 200 instead of 403"
+    },
+    {
+      "phase": "GREEN",
+      "command": "npm run test -- tests/ai-api-routes.test.ts -t \"zero-second session lifetime|OIDC teacher auth cookie issuance\"",
+      "result": "passed",
+      "files": 1,
+      "testsPassed": 2
+    },
+    {
+      "phase": "targeted",
+      "command": "npm run test -- tests/ai-api-routes.test.ts",
+      "result": "passed",
+      "files": 1,
+      "testsPassed": 71
+    },
+    {
+      "phase": "full",
+      "command": "npm run test",
+      "result": "passed",
+      "files": 37,
+      "testsPassed": 504
+    },
+    {
+      "phase": "full",
+      "command": "npm run lint",
+      "result": "passed"
+    },
+    {
+      "phase": "full",
+      "command": "npm run build",
+      "result": "passed",
+      "routesGenerated": 8
+    }
+  ],
+  "redaction": {
+    "secretValuesWritten": false,
+    "cookieValuesOmitted": true,
+    "sessionIdsOmitted": true,
+    "notes": "Only provider modes, route names, fixture status labels, and redacted progress statuses were recorded."
+  },
+  "remainingBlockers": [
+    "Production trusted teacher auth/session provider still needs owner-approved Vercel env placement and live deployed route smoke.",
+    "External durable storage still requires real remote service provisioning, Vercel env binding, and live write/read smoke.",
+    "Production deployment and deployed route/browser smokes remain unproved.",
+    "PPT/WPS/PowerPoint manual playback acceptance remains incomplete."
+  ]
+}

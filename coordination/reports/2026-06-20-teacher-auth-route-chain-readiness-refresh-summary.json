@@ -1,0 +1,76 @@
+{
+  "target": "teacher-auth-route-chain-readiness-refresh-summary",
+  "date": "2026-06-20",
+  "responsibleSessions": ["S12", "S19", "S22"],
+  "status": "code-route-chain-proved-production-env-blocked",
+  "scope": {
+    "proved": [
+      "Trusted-cookie issuer route chain can issue hardened teacher auth cookie pair from signed admin access plus trusted issuer proof",
+      "Issued teacher auth cookies can mint scoped teacher AI access through /api/ai/session",
+      "Issuer proof validation enforces 300-second max lifetime and rejects invalid timing",
+      "Teacher auth cookie pair contract is HttpOnly, SameSite=Lax, Secure in production, Path=/, Priority=High, and bounded by session TTL",
+      "In-memory signed cookie round trip verifies signature, expiry, and tamper rejection without emitting cookie values"
+    ],
+    "notProved": [
+      "Owner-approved Vercel env sync apply for teacher auth variables",
+      "Production deployed /api/ai/teacher-auth/issue route smoke bound to a release run",
+      "Production trusted teacher auth/session provider readiness",
+      "Production end-to-end teacher workflow auth bootstrap"
+    ]
+  },
+  "evidence": {
+    "trustedRouteChain": "coordination/reports/2026-06-20-trusted-teacher-auth-route-chain-contract-current-refresh.json",
+    "localProductionReadiness": "coordination/reports/2026-06-20-teacher-auth-provider-readiness-local-production-route-chain-refresh.json",
+    "productionEnvBlockedReadiness": "coordination/reports/2026-06-20-teacher-auth-provider-readiness-production-env-blocked-route-chain-refresh.json"
+  },
+  "evidenceStatuses": {
+    "trustedRouteChain": "proved-locally",
+    "localProductionReadiness": "blocked-only-because-not-production",
+    "productionReadiness": "blocked-on-vercel-env-sync-evidence-missing"
+  },
+  "productionBlockedReasons": [
+    "vercel-env-sync-evidence-missing"
+  ],
+  "checksRun": [
+    {
+      "command": "node scripts/trusted-teacher-auth-route-chain-contract.mjs",
+      "status": "passed",
+      "output": "redacted-json-evidence"
+    },
+    {
+      "command": "node scripts/teacher-auth-provider-readiness.mjs --live --approved --environment local-production ...",
+      "status": "blocked-by-design",
+      "blockedReasons": ["teacher-auth-provider-readiness-not-production"]
+    },
+    {
+      "command": "node scripts/teacher-auth-provider-readiness.mjs --live --approved --environment production ...",
+      "status": "blocked",
+      "blockedReasons": ["vercel-env-sync-evidence-missing"]
+    },
+    {
+      "command": "npm run test -- tests/teacher-auth-provider-readiness.test.ts tests/teacher-auth-issuer-proof.test.ts tests/trusted-teacher-auth-route-chain-contract.test.ts tests/ai-api-routes.test.ts -t teacher auth|trusted teacher auth|OIDC|uses issued trusted teacher auth cookies",
+      "status": "passed",
+      "files": 4,
+      "tests": 38
+    },
+    {
+      "command": "redaction scan on new teacher-auth reports",
+      "status": "passed",
+      "matches": 0
+    }
+  ],
+  "safety": {
+    "realSecretsUsed": false,
+    "fixtureSecretsOmittedFromReports": true,
+    "cookieValuesOmitted": true,
+    "sessionIdsOmitted": true,
+    "responseBodiesOmittedWhereNeeded": true,
+    "localPrivatePathsOmitted": true,
+    "productionMutationPerformed": false
+  },
+  "remainingBlockers": [
+    "Approved UAIS Vercel env sync apply evidence is missing for teacher auth variables",
+    "Production /api/ai/teacher-auth/issue route smoke is missing",
+    "Aggregate production release gate remains blocked until env sync, production deploy evidence, route smoke, external storage production smoke, and manual PPT acceptance are live-proved"
+  ]
+}

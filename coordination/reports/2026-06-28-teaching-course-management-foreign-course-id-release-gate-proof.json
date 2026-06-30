@@ -1,0 +1,117 @@
+{
+  "target": "teaching-course-management-foreign-course-id-release-gate-proof",
+  "date": "2026-06-28",
+  "session": "S22",
+  "status": "passed",
+  "scope": "release-gate-and-route-smoke-hardening",
+  "enterpriseGapAddressed": "Signed teachers must not be able to create a course using another teacher's provisional course id prefix.",
+  "proof": {
+    "releaseGateResult": "signedTeacherForeignCourseCreateDenied",
+    "routeSmokeProof": "signed-teacher-foreign-course-create-denied",
+    "expectedHttpStatus": 403,
+    "traceId": "trace-teaching-course-route-smoke-foreign-course-create-denied",
+    "redactionChecks": [
+      "response trace header must match request trace id",
+      "response body trace id must match request trace id",
+      "error body must include redaction.secrets=omitted",
+      "error body must include redaction.localFiles=omitted",
+      "error body must not include local /Users path",
+      "error body must not echo raw or URL-encoded foreign provisional course id"
+    ]
+  },
+  "changedFiles": [
+    "scripts/teaching-course-management-route-smoke.mjs",
+    "scripts/production-e2e-release-gate.mjs",
+    "scripts/local-production-e2e-smoke.mjs",
+    "scripts/production-e2e-orchestrator.mjs",
+    "tests/teaching-course-management-route-smoke.test.ts",
+    "tests/production-release-gate.test.ts",
+    "tests/local-production-e2e-smoke.test.ts",
+    "tests/production-e2e-orchestrator.test.ts"
+  ],
+  "redTestsObservedBeforeImplementation": [
+    {
+      "command": "./node_modules/.bin/vitest run tests/production-release-gate.test.ts -t \"foreign course id denial\"",
+      "result": "failed before implementation because stale evidence without signedTeacherForeignCourseCreateDenied was not blocked"
+    },
+    {
+      "command": "./node_modules/.bin/vitest run tests/teaching-course-management-route-smoke.test.ts -t \"passes live approved smoke\"",
+      "result": "failed before implementation because route smoke did not send the signed-teacher foreign provisional course-id request"
+    }
+  ],
+  "checks": [
+    {
+      "command": "./node_modules/.bin/vitest run tests/production-release-gate.test.ts -t \"foreign course id denial\"",
+      "result": "passed",
+      "tests": "1 passed, 295 skipped"
+    },
+    {
+      "command": "./node_modules/.bin/vitest run tests/teaching-course-management-route-smoke.test.ts -t \"passes live approved smoke\"",
+      "result": "passed",
+      "tests": "1 passed, 5 skipped"
+    },
+    {
+      "command": "node --check scripts/teaching-course-management-route-smoke.mjs",
+      "result": "passed"
+    },
+    {
+      "command": "node --check scripts/production-e2e-release-gate.mjs",
+      "result": "passed"
+    },
+    {
+      "command": "node --check scripts/local-production-e2e-smoke.mjs",
+      "result": "passed"
+    },
+    {
+      "command": "node --check scripts/production-e2e-orchestrator.mjs",
+      "result": "passed"
+    },
+    {
+      "command": "./node_modules/.bin/vitest run tests/teaching-course-management-route-smoke.test.ts",
+      "result": "passed",
+      "tests": "6 passed"
+    },
+    {
+      "command": "./node_modules/.bin/vitest run tests/production-release-gate.test.ts -t \"teaching course management route smoke|foreign course id denial\"",
+      "result": "passed",
+      "tests": "28 passed, 268 skipped"
+    },
+    {
+      "command": "./node_modules/.bin/vitest run tests/local-production-e2e-smoke.test.ts",
+      "result": "passed",
+      "tests": "9 passed"
+    },
+    {
+      "command": "./node_modules/.bin/vitest run tests/production-e2e-orchestrator.test.ts",
+      "result": "passed",
+      "tests": "5 passed"
+    },
+    {
+      "command": "./node_modules/.bin/vitest run tests/production-release-gate.test.ts",
+      "result": "passed",
+      "tests": "296 passed"
+    },
+    {
+      "command": "./node_modules/.bin/vitest run",
+      "result": "passed",
+      "tests": "69 files passed, 1364 tests passed",
+      "notes": "Existing jsdom navigation warnings observed."
+    },
+    {
+      "command": "npm run lint",
+      "result": "passed"
+    },
+    {
+      "command": "npm run build",
+      "result": "passed"
+    }
+  ],
+  "safety": {
+    "secretsInspected": false,
+    "secretValuesLogged": false,
+    "liveProductionMutation": false,
+    "gitMutation": false,
+    "valuesRedacted": true
+  },
+  "remainingRisk": "This is route-smoke and release-gate hardening only. Same-run owner-approved live production evidence is still required before the aggregate enterprise goal can be considered complete."
+}

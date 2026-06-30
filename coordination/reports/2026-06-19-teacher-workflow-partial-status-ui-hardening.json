@@ -1,0 +1,75 @@
+{
+  "date": "2026-06-19",
+  "sessionId": "S05",
+  "workstream": "teacher-workspace-ppt-narration-ui",
+  "status": "hardened",
+  "objective": "Keep the teacher PPT narration UI usable when the signed server workflow returns partial production-readiness status before step details or download links exist.",
+  "scope": {
+    "changedFiles": [
+      "src/components/pages/teaching-page.tsx",
+      "tests/teaching-page.test.tsx",
+      "coordination/session-logs/2026-06-19-S05.md",
+      "coordination/reports/2026-06-19-teacher-workflow-partial-status-ui-hardening.json"
+    ],
+    "unchangedProductionGates": [
+      "trusted-teacher-auth-session-provider-live-proof",
+      "external-durable-storage-real-service-and-vercel-env",
+      "production-deployment-end-to-end-smoke",
+      "manual-ppt-wps-powerpoint-playback-acceptance"
+    ]
+  },
+  "behavior": {
+    "before": "A partial /api/ai/teacher-ppt-workflow response without workflow.steps could crash the teacher workflow panel before the teacher saw production-readiness progress.",
+    "after": "The teacher workflow panel now renders workflow status and readiness progress, shows explicit empty states for missing server steps and download entry points, and preserves existing per-slide WAV download behavior when downloads are ready."
+  },
+  "checks": [
+    {
+      "phase": "RED",
+      "command": "npm run test -- tests/teaching-page.test.tsx -t \"partial server workflow\"",
+      "result": "failed-before-implementation",
+      "failureMode": "Cannot read properties of undefined (reading 'map') at serverWorkflow.steps.map"
+    },
+    {
+      "phase": "GREEN",
+      "command": "npm run test -- tests/teaching-page.test.tsx -t \"partial server workflow\"",
+      "result": "passed",
+      "files": 1,
+      "testsPassed": 1
+    },
+    {
+      "phase": "targeted",
+      "command": "npm run test -- tests/teaching-page.test.tsx",
+      "result": "passed",
+      "files": 1,
+      "testsPassed": 11
+    },
+    {
+      "phase": "full",
+      "command": "npm run test",
+      "result": "passed",
+      "files": 37,
+      "testsPassed": 502
+    },
+    {
+      "phase": "full",
+      "command": "npm run lint",
+      "result": "passed"
+    },
+    {
+      "phase": "full",
+      "command": "npm run build",
+      "result": "passed",
+      "routesGenerated": 8
+    }
+  ],
+  "redaction": {
+    "secretValuesWritten": false,
+    "notes": "Only redacted IDs, route names, and workflow status labels were recorded."
+  },
+  "remainingBlockers": [
+    "Production trusted teacher auth/session provider is still not live-proved.",
+    "External durable storage still requires real remote service provisioning, Vercel env binding, and live write/read smoke.",
+    "Production deployment and deployed route/browser smokes remain unproved.",
+    "PPT/WPS/PowerPoint manual playback acceptance remains incomplete."
+  ]
+}

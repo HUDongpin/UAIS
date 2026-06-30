@@ -1,0 +1,60 @@
+{
+  "target": "ppt-loopback-remediation-noninteractive-readiness",
+  "date": "2026-06-22",
+  "status": "blocked",
+  "responsibleSession": "S22",
+  "releaseRunId": "uais-release-2026-06-21-signed-admin-production-api",
+  "baseAudioReadinessEvidence": "coordination/reports/2026-06-22-ppt-auditory-capture-readiness-current.json",
+  "checks": {
+    "passwordlessSudo": {
+      "status": "not-available",
+      "command": "sudo -n true"
+    },
+    "homebrewBlackHoleCask": {
+      "status": "available-but-not-installed",
+      "dryRun": "would-install-blackhole-2ch",
+      "version": "0.7.0",
+      "requiresReboot": true
+    },
+    "halDirectoryOwnership": {
+      "path": "/Library/Audio/Plug-Ins/HAL",
+      "owner": "root",
+      "group": "wheel",
+      "mode": "drwxr-xr-x",
+      "currentSessionCanWrite": false
+    },
+    "currentAvfoundationLoopbackExposure": {
+      "status": "missing",
+      "visibleAudioInputs": [
+        "HIK 2K Camera-Audio",
+        "WeMeet Audio Device"
+      ]
+    },
+    "malformedBlackHoleInstall": {
+      "status": "detected",
+      "findings": [
+        "blackhole-hal-contents-at-plugin-root",
+        "blackhole-executable-has-txt-extension"
+      ]
+    }
+  },
+  "decision": {
+    "noninteractiveRepairAttempted": false,
+    "reason": "Installing or repairing BlackHole requires root-owned HAL directory changes and likely a reboot. Passwordless sudo is unavailable, and attempting an interactive installer in this unattended Codex session would risk hanging or leaving system audio in an uncertain state.",
+    "requiredExternalAction": "Run an explicit system-admin BlackHole repair/install outside this unattended session, reboot or restart CoreAudio, then rerun scripts/ppt-audio-capture-readiness.mjs."
+  },
+  "recommendedCommandsAfterExternalRepair": [
+    "node scripts/ppt-audio-capture-readiness.mjs --out coordination/reports/2026-06-22-ppt-auditory-capture-readiness-current.json",
+    "node scripts/ppt-manual-playback-acceptance.mjs --package-json coordination/reports/2026-06-16-kangxia-natural-number-ordinal-narration-package.json --preflight-report coordination/reports/2026-06-17-kangxia-ppt-desktop-playback-preflight.md --openxml-integrity coordination/reports/2026-06-21-ppt-narration-openxml-package-integrity-wav-duration-current.json --desktop-app-evidence coordination/reports/2026-06-22-kangxia-ppt-desktop-app-open-evidence-signed-admin-production-api.json --vercel-production-deployment coordination/reports/2026-06-21-vercel-production-deployment-full-public-edge-signed-admin-api.json --record-template-out coordination/reports/2026-06-22-kangxia-ppt-manual-acceptance-record-template-desktop-prefilled.json > coordination/reports/2026-06-22-kangxia-ppt-manual-playback-acceptance-gate-desktop-prefilled.json"
+  ],
+  "safety": {
+    "secretsRedacted": true,
+    "rawAudioCaptured": false,
+    "rawAudioOmitted": true,
+    "microphoneCaptureAvoided": true,
+    "systemSettingsChanged": false,
+    "interactiveInstallerAvoided": true,
+    "manualAcceptanceNotFaked": true,
+    "goalMarkedComplete": false
+  }
+}

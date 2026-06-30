@@ -1,0 +1,42 @@
+{
+  "target": "local-production-external-storage-env-readiness",
+  "status": "ready-locally",
+  "generatedAt": "2026-06-21T12:03:59.242Z",
+  "variables": [
+    {
+      "name": "UAIS_EXTERNAL_STORAGE_BASE_URL",
+      "status": "present",
+      "valueRedacted": false
+    },
+    {
+      "name": "UAIS_EXTERNAL_STORAGE_SERVICE_MODE",
+      "status": "present",
+      "valueRedacted": false
+    },
+    {
+      "name": "UAIS_EXTERNAL_STORAGE_SERVICE_DATA_DIR",
+      "status": "present",
+      "valueRedacted": false
+    },
+    {
+      "name": "UAIS_TEACHER_AI_OWNERSHIP_BACKEND",
+      "status": "present",
+      "valueRedacted": false
+    },
+    {
+      "name": "UAIS_VOICE_LIFECYCLE_AUDIT_BACKEND",
+      "status": "present",
+      "valueRedacted": false
+    },
+    {
+      "name": "UAIS_EXTERNAL_STORAGE_ACCESS_TOKEN",
+      "status": "present",
+      "valueRedacted": true
+    }
+  ],
+  "safety": {
+    "valuesRedacted": true,
+    "secretsOmitted": true,
+    "localOnly": true
+  }
+}

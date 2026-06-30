@@ -1,0 +1,66 @@
+{
+  "generatedAt": "2026-06-27T21:01:45+08:00",
+  "timezone": "Asia/Hong_Kong",
+  "scope": "teaching-gradebook-student-session-safe-id",
+  "status": "local-auth-boundary-hardened",
+  "summary": "The teaching gradebook release and release rollback routes reject signed student app-session cookies whose account is an unsafe server id before student role classification, teacher role denial, external teaching-operation storage reads, gradebook release writes, or rollback writes can run.",
+  "filesChanged": [
+    "src/app/api/teaching/gradebook-updates/[objectId]/release/route.ts",
+    "src/app/api/teaching/gradebook-updates/[objectId]/rollback/route.ts",
+    "tests/teaching-operation-backend.test.ts"
+  ],
+  "behaviorHardened": [
+    "Unsafe signed student account ids are treated as unauthenticated instead of valid student role denials for gradebook release requests.",
+    "Unsafe signed student account ids are treated as unauthenticated instead of valid student role denials for gradebook release rollback requests.",
+    "Denied unsafe-student requests return HTTP 401 with authenticated-session-required and preserve trace ids.",
+    "Denied unsafe-student requests do not call external teaching-operation storage, read gradebook records, release gradebook updates, or roll back released gradebook updates.",
+    "Denied responses do not echo local-path-like student account values or external storage tokens."
+  ],
+  "redGreenEvidence": {
+    "red": {
+      "command": "./node_modules/.bin/vitest run tests/teaching-operation-backend.test.ts -t \"unsafe signed student account ids before gradebook\"",
+      "observedFailure": "Focused regressions failed before implementation with HTTP 403 teacher-role-required instead of HTTP 401 for gradebook release and rollback."
+    },
+    "green": {
+      "command": "./node_modules/.bin/vitest run tests/teaching-operation-backend.test.ts -t \"unsafe signed student account ids before gradebook\"",
+      "observedPass": "Focused regressions passed after implementation with two tests passed and 176 skipped."
+    }
+  },
+  "verification": [
+    {
+      "command": "./node_modules/.bin/vitest run tests/teaching-operation-backend.test.ts",
+      "result": "passed",
+      "details": "178 tests passed"
+    },
+    {
+      "command": "npm run test",
+      "result": "passed",
+      "details": "66 files passed, 1324 tests passed; existing jsdom navigation warnings remained non-fatal"
+    },
+    {
+      "command": "npm run lint",
+      "result": "passed"
+    },
+    {
+      "command": "npm run build",
+      "result": "passed"
+    },
+    {
+      "command": "git diff --check",
+      "result": "passed"
+    }
+  ],
+  "secretsHandling": {
+    "realCredentialsInspected": false,
+    "realCredentialValuesLogged": false,
+    "unsafeStudentAccountEchoChecked": true,
+    "externalStorageTokenEchoChecked": true,
+    "responseRedactionChecked": true
+  },
+  "productionBoundary": {
+    "productionSystemMutated": false,
+    "liveProductionSmokeRun": false,
+    "aggregateEnterpriseGateCleared": false,
+    "remainingGateRisk": "This is local backend/API gradebook release and rollback auth-boundary hardening only. It does not replace fresh same-run production teaching gradebook route smoke, ordinary teaching browser smoke, deployment, external-storage, or live provider proof."
+  }
+}

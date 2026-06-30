@@ -1,0 +1,59 @@
+{
+  "version": 1,
+  "target": "vercel-production-deployment-release-run-guard",
+  "generatedAt": "2026-06-19T01:09:11+08:00",
+  "mode": "local-guard-verification",
+  "status": "passed",
+  "guard": {
+    "script": "scripts/vercel-production-deployment-evidence.mjs",
+    "commandClass": "vercel-production-deployment-evidence-live",
+    "requiresExplicitOwnerApproval": true,
+    "requiresReleaseRunIdForLiveProductionEvidence": true,
+    "releaseRunIdRequiredBeforeVercelCliInvocation": true,
+    "coveredActions": ["deploy", "production-inspect"]
+  },
+  "directCliProbe": {
+    "arguments": ["--live", "--approved", "--deploy", "--environment", "production"],
+    "exitStatus": 1,
+    "stderrMessageClass": "release-run-id-required",
+    "stdoutOmitted": true,
+    "stderrOmitted": true,
+    "valuesRedacted": true
+  },
+  "automatedRegression": {
+    "testFile": "tests/vercel-production-deployment-evidence.test.ts",
+    "testName": "blocks approved live deploy without a release-run id before invoking Vercel",
+    "red": {
+      "observed": true,
+      "failureClass": "live-deploy-invoked-fake-vercel-without-release-run-id"
+    },
+    "green": {
+      "observed": true,
+      "focusedCommand": "npm run test -- tests/vercel-production-deployment-evidence.test.ts"
+    },
+    "mutationProof": {
+      "fakeVercelCliLogAbsent": true,
+      "vercelDeployNotInvoked": true
+    }
+  },
+  "releaseImpact": {
+    "preventsReusableDeploymentEvidenceWithoutReleaseRunBinding": true,
+    "downstreamEvidenceBindingStrengthened": [
+      "deployed-teacher-workflow-page",
+      "deployed-teacher-workflow-browser-interaction",
+      "deployed-learning-ppt-playback-smoke",
+      "deployment-route-smoke",
+      "manual-ppt-playback-acceptance",
+      "production-e2e-release-gate"
+    ],
+    "productionReleaseStillBlocked": true
+  },
+  "redactionSafety": {
+    "deploymentUrlsOmitted": true,
+    "projectIdsOmitted": true,
+    "orgIdsOmitted": true,
+    "teamIdentifiersOmitted": true,
+    "tokensOmitted": true,
+    "localPrivatePathsOmitted": true
+  }
+}

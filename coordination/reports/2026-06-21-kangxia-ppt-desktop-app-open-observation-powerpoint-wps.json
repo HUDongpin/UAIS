@@ -1,0 +1,50 @@
+{
+  "target": "kangxia-ppt-desktop-app-open-observation",
+  "mode": "computer-use-observation",
+  "status": "observed-not-accepted",
+  "responsibleSession": "S24",
+  "generatedAt": "2026-06-21T13:53:41.131Z",
+  "packageId": "kangxia-natural-number-ordinal-theory-v1",
+  "sourceDeckTitle": "初等数学研究+PPT1+自然数的序数理论.pptx",
+  "narratedPptx": {
+    "fileName": "audio-manifest-elementary-math-research-natural-number-ordinal-theory-ppt1-kangxia-narrated.pptx",
+    "copiedDesktopSmokeFileName": "kangxia-narrated-desktop-smoke.pptx",
+    "byteLength": 36042033,
+    "artifactFingerprint": "sha256:6b92d1bdde6c2904"
+  },
+  "observations": [
+    {
+      "application": "Microsoft PowerPoint",
+      "windowTitle": "kangxia-narrated-desktop-smoke",
+      "opened": true,
+      "slideCountObserved": 19,
+      "currentSlideObserved": 1,
+      "audioObjectVisibleOnSlide": true,
+      "thumbnailPaneShowsAnimations": true,
+      "status": "opened-audio-object-visible"
+    },
+    {
+      "application": "WPS Presentation",
+      "windowTitle": "kangxia-narrated-desktop-smoke.pptx",
+      "opened": true,
+      "slideCountObserved": 19,
+      "currentSlideObserved": 1,
+      "audioObjectVisibleOnSlide": true,
+      "status": "opened-audio-object-visible"
+    }
+  ],
+  "acceptance": {
+    "manualPlaybackAccepted": false,
+    "reason": "Computer-use observation can verify desktop opening and visible audio objects, but cannot confirm heard target voice playback across all slides.",
+    "requiredHumanChecks": [
+      "Microsoft PowerPoint slide playback audio heard for 19 slides",
+      "WPS Presentation slide playback audio heard for 19 slides"
+    ]
+  },
+  "safety": {
+    "secretsRedacted": true,
+    "localPrivatePathsOmitted": true,
+    "rawAudioOmitted": true,
+    "noHumanAudioConfirmationClaimed": true
+  }
+}

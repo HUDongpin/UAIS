@@ -1,0 +1,92 @@
+{
+  "target": "deployment-domain-reachability",
+  "mode": "dry-run",
+  "environment": "production",
+  "network": "disabled",
+  "status": "blocked",
+  "responsibleSession": "S22",
+  "deploymentFingerprint": {
+    "status": "missing",
+    "valueRedacted": true
+  },
+  "domainOrigin": {
+    "status": "missing",
+    "originClass": "missing",
+    "valueRedacted": true
+  },
+  "httpObservation": {
+    "status": "planned",
+    "checkedRoutes": [
+      "/",
+      "/teaching",
+      "/learning"
+    ],
+    "valueRedacted": true
+  },
+  "timeoutMs": 10000,
+  "checks": [
+    {
+      "id": "origin-class",
+      "status": "missing",
+      "originClass": "missing",
+      "valueRedacted": true
+    },
+    {
+      "id": "dns-origin",
+      "status": "planned",
+      "valueRedacted": true
+    },
+    {
+      "id": "transport-origin",
+      "status": "planned",
+      "valueRedacted": true
+    },
+    {
+      "id": "head-root",
+      "method": "HEAD",
+      "route": "/",
+      "status": "planned",
+      "valueRedacted": true
+    },
+    {
+      "id": "head-teaching",
+      "method": "HEAD",
+      "route": "/teaching",
+      "status": "planned",
+      "valueRedacted": true
+    },
+    {
+      "id": "head-learning",
+      "method": "HEAD",
+      "route": "/learning",
+      "status": "planned",
+      "valueRedacted": true
+    }
+  ],
+  "blockedReasons": [
+    "missing-UAIS_DEPLOYMENT_BASE_URL",
+    "missing-release-run-id"
+  ],
+  "safety": {
+    "valuesRedacted": true,
+    "urlsOmitted": true,
+    "hostnamesOmitted": true,
+    "responseBodiesOmitted": true,
+    "responseHeadersOmitted": true,
+    "localPrivatePathsOmitted": true,
+    "cookieValuesOmitted": true,
+    "liveRequiresApproval": true,
+    "remoteMutationRequiresApproval": true,
+    "noMutation": true
+  },
+  "results": {
+    "deploymentDomainOriginRemoteHttps": "blocked",
+    "deploymentDomainDnsOriginReachable": "blocked",
+    "deploymentDomainTransportConnected": "blocked",
+    "deploymentDomainRootHttpReachable": "blocked",
+    "deploymentDomainTeachingHttpReachable": "blocked",
+    "deploymentDomainLearningHttpReachable": "blocked",
+    "deploymentDomainFingerprintBound": "blocked",
+    "deploymentDomainReadinessSafety": "passed"
+  }
+}

@@ -1,0 +1,95 @@
+{
+  "target": "deployment-reachability-diagnostics",
+  "mode": "live",
+  "environment": "production",
+  "network": "enabled",
+  "status": "blocked",
+  "responsibleSession": "S22",
+  "deploymentOrigin": {
+    "status": "present",
+    "originClass": "remote-https",
+    "valueRedacted": true
+  },
+  "timeoutMs": 10000,
+  "checks": [
+    {
+      "id": "origin-class",
+      "status": "present",
+      "originClass": "remote-https",
+      "valueRedacted": true
+    },
+    {
+      "id": "dns-origin",
+      "status": "failed",
+      "networkError": {
+        "class": "Error",
+        "code": "ENOTFOUND",
+        "valueRedacted": true
+      },
+      "valueRedacted": true
+    },
+    {
+      "id": "transport-origin",
+      "protocol": "tls",
+      "status": "failed",
+      "networkError": {
+        "class": "Error",
+        "code": "ENOTFOUND",
+        "valueRedacted": true
+      },
+      "valueRedacted": true
+    },
+    {
+      "id": "head-root",
+      "method": "HEAD",
+      "route": "/",
+      "status": "failed",
+      "networkError": {
+        "class": "Error",
+        "code": "ENOTFOUND",
+        "valueRedacted": true
+      },
+      "valueRedacted": true
+    },
+    {
+      "id": "head-teaching",
+      "method": "HEAD",
+      "route": "/teaching",
+      "status": "failed",
+      "networkError": {
+        "class": "Error",
+        "code": "ENOTFOUND",
+        "valueRedacted": true
+      },
+      "valueRedacted": true
+    },
+    {
+      "id": "head-learning",
+      "method": "HEAD",
+      "route": "/learning",
+      "status": "failed",
+      "networkError": {
+        "class": "Error",
+        "code": "ENOTFOUND",
+        "valueRedacted": true
+      },
+      "valueRedacted": true
+    }
+  ],
+  "blockedReasons": [
+    "dns-origin-failed",
+    "transport-origin-failed",
+    "head-root-failed",
+    "head-teaching-failed",
+    "head-learning-failed"
+  ],
+  "safety": {
+    "valuesRedacted": true,
+    "urlsOmitted": true,
+    "hostnamesOmitted": true,
+    "responseBodiesOmitted": true,
+    "responseHeadersOmitted": true,
+    "localPrivatePathsOmitted": true,
+    "liveRequiresApproval": true
+  }
+}

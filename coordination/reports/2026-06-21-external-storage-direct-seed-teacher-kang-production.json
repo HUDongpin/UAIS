@@ -1,0 +1,44 @@
+{
+  "target": "external-storage-production-direct-probe",
+  "mode": "live",
+  "environment": "production",
+  "generatedAt": "2026-06-21T12:14:33.264Z",
+  "baseUrlClass": "remote-https",
+  "tokenStatus": "present",
+  "valuesRedacted": true,
+  "checks": [
+    {
+      "id": "health",
+      "httpStatus": 500,
+      "elapsedMs": 1367,
+      "ok": false,
+      "cacheControl": "public, max-age=0, must-revalidate",
+      "shape": {
+        "redaction": "missing"
+      }
+    },
+    {
+      "id": "ownership-merge",
+      "httpStatus": 503,
+      "elapsedMs": 781,
+      "ok": false,
+      "cacheControl": "no-store",
+      "shape": {
+        "teacherId": "missing",
+        "error": "External storage service access token is not configured."
+      }
+    },
+    {
+      "id": "ownership-read",
+      "httpStatus": 503,
+      "elapsedMs": 516,
+      "ok": false,
+      "cacheControl": "no-store",
+      "shape": {
+        "teacherId": "missing",
+        "error": "External storage service access token is not configured."
+      }
+    }
+  ],
+  "status": "failed"
+}

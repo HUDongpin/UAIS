@@ -1,0 +1,52 @@
+{
+  "target": "vercel-rest-auth-scope-readiness",
+  "mode": "live",
+  "status": "blocked",
+  "responsibleSession": "S22",
+  "readyAuthMethod": "cli-auth-json",
+  "projectLink": {
+    "status": "linked",
+    "projectId": "present",
+    "orgId": "present",
+    "orgScope": "team",
+    "projectName": "present",
+    "valuesRedacted": true
+  },
+  "probes": {
+    "user": {
+      "status": "failed",
+      "httpStatus": 403,
+      "failureClass": "auth-required",
+      "responseBodyOmitted": true
+    },
+    "project": {
+      "status": "failed",
+      "httpStatus": 403,
+      "failureClass": "auth-required",
+      "responseBodyOmitted": true
+    },
+    "envProduction": {
+      "status": "failed",
+      "httpStatus": 403,
+      "failureClass": "auth-required",
+      "responseBodyOmitted": true
+    }
+  },
+  "blockedReasons": [
+    "vercel-rest-user-auth-required",
+    "vercel-rest-project-auth-required",
+    "vercel-rest-env-auth-required"
+  ],
+  "safety": {
+    "valuesRedacted": true,
+    "tokenValuesOmitted": true,
+    "authFilePathOmitted": true,
+    "envFilePathOmitted": true,
+    "projectIdsOmitted": true,
+    "orgIdsOmitted": true,
+    "accountNamesOmitted": true,
+    "responseBodiesOmitted": true,
+    "liveRequiresApproval": true,
+    "noMutation": true
+  }
+}

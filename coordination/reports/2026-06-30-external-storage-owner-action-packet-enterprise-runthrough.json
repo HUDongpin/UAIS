@@ -1,0 +1,104 @@
+{
+  "target": "external-storage-owner-action-packet",
+  "status": "owner-decision-needed",
+  "releaseGateStatus": "blocked",
+  "responsibleSession": "S22",
+  "decisionId": "external-storage-production-service",
+  "queueRank": 3,
+  "classification": "owner-env-service-live-smoke-blocked",
+  "ownerDecisionNeeded": "provision-approved-remote-https-external-storage-service-and-env",
+  "nextOwnerQuestion": "Confirm the approved remote HTTPS external-storage service and server-only env source.",
+  "blockedReasons": [
+    "external-storage-service-readiness-not-live-ready",
+    "external-storage-smoke-not-live-passed"
+  ],
+  "safeNextActions": [
+    "confirm-approved-remote-https-external-storage-service",
+    "bind-server-only-external-storage-env-through-s19-vercel-env-sync",
+    "run-approved-external-storage-persistence-read-after-restart-smoke",
+    "run-external-storage-service-readiness-after-env-sync-launch-and-persistence-evidence",
+    "run-external-storage-smoke-only-after-service-readiness-is-live-ready"
+  ],
+  "forbiddenUntilApproved": [
+    "inspect-or-print-external-storage-secret-values",
+    "run-live-external-storage-service-readiness",
+    "run-live-external-storage-smoke",
+    "run-production-smokes-dependent-on-external-storage"
+  ],
+  "requiredServiceClass": "approved-remote-https-external-storage-service",
+  "requiredEnvNames": [
+    "UAIS_TEACHER_AI_OWNERSHIP_BACKEND",
+    "UAIS_VOICE_LIFECYCLE_AUDIT_BACKEND",
+    "UAIS_TEACHING_OPERATIONS_BACKEND",
+    "UAIS_TEACHING_COURSE_MANAGEMENT_BACKEND",
+    "UAIS_TEACHING_COURSE_ASSETS_BACKEND",
+    "UAIS_EXTERNAL_STORAGE_BASE_URL",
+    "UAIS_EXTERNAL_STORAGE_ACCESS_TOKEN",
+    "UAIS_EXTERNAL_STORAGE_SERVICE_MODE",
+    "UAIS_EXTERNAL_STORAGE_SERVICE_DATA_DIR",
+    "UAIS_EXTERNAL_STORAGE_DATA_DIR",
+    "UAIS_EXTERNAL_STORAGE_DATABASE_ADAPTER_PROVIDER_CLASS",
+    "UAIS_EXTERNAL_STORAGE_DATABASE_ADAPTER_MIGRATION_STATUS",
+    "UAIS_EXTERNAL_STORAGE_DATABASE_ADAPTER_BACKUP_POLICY",
+    "UAIS_EXTERNAL_STORAGE_DATABASE_ADAPTER_CONCURRENCY_CONTROL"
+  ],
+  "requiredEvidence": [
+    "approved-remote-https-external-storage-service",
+    "vercel-env-sync-evidence-with-external-storage-env-present",
+    "external-storage-production-launch-contract",
+    "external-storage-persistence-read-after-restart-proof",
+    "external-storage-service-readiness-production-live-ready",
+    "external-storage-smoke-live-passed",
+    "same-release-run-id-bound-to-external-storage-readiness-and-smoke"
+  ],
+  "currentEvidenceSummary": {
+    "containerBuildReadinessStatus": "ready",
+    "localImageBuild": "passed",
+    "externalStorageReadinessStatus": "dry-run-blocked",
+    "evidenceEnvironment": "production",
+    "healthStatus": "missing",
+    "healthTarget": "missing",
+    "productionServiceIdentity": "missing",
+    "apiContractVersion": "missing",
+    "cacheControl": "missing",
+    "durableBackingStore": "missing",
+    "teachingOperationsSchemaStatus": "missing",
+    "teachingCourseManagementSchemaStatus": "missing",
+    "teachingCourseAssetsSchemaStatus": "missing",
+    "vercelEnvSyncStatus": "missing"
+  },
+  "releaseGateRequirementIds": [
+    "external-storage-service-readiness",
+    "external-durable-storage-smoke",
+    "external-storage-service-consistency"
+  ],
+  "enterpriseAuditMissingTargets": [
+    "external-storage-persistence",
+    "external-storage-service-readiness",
+    "external-storage-smoke"
+  ],
+  "commands": {
+    "vercelEnvSyncDryRun": "node scripts/vercel-env-sync.mjs --dry-run --scope external-storage --env-file <approved-env-file> --vercel-project-readiness <vercel-project-readiness-evidence> --release-run-id <release-run-id> > <external-storage-vercel-env-sync-dry-run-evidence>",
+    "vercelEnvSyncApply": "node scripts/vercel-env-sync.mjs --apply --approved --scope external-storage --env-file <approved-env-file> --vercel-project-readiness <vercel-project-readiness-evidence> --release-run-id <release-run-id> > <external-storage-vercel-env-sync-evidence>",
+    "externalStorageReadinessLive": "node scripts/external-storage-service-readiness.mjs --live --approved --environment production --env-file <approved-env-file> --release-run-id <release-run-id> --vercel-env-sync <external-storage-vercel-env-sync-evidence> --external-storage-production-launch-contract <external-storage-production-launch-contract-evidence> --external-storage-persistence <external-storage-persistence-evidence> > <external-storage-service-readiness-evidence>",
+    "externalStorageSmokeLive": "node scripts/external-storage-smoke.mjs --live --approved --environment production --env-file <approved-env-file> --teacher-id <approved-smoke-teacher-id> --release-run-id <release-run-id> --external-storage-service-readiness <external-storage-service-readiness-evidence> > <external-storage-smoke-evidence>"
+  },
+  "stopConditions": [
+    "Stop if owner has not confirmed the approved remote HTTPS external-storage service and env source.",
+    "Stop if approved env source is unavailable to S19.",
+    "Stop if the external-storage endpoint is not remote HTTPS.",
+    "Stop if Vercel env sync evidence is missing, mismatched, or not release-run-bound.",
+    "Stop if production launch contract or persistence evidence is missing.",
+    "Stop if live external-storage smoke would write to production without an approved smoke teacher id."
+  ],
+  "safety": {
+    "sourcePathsOmitted": true,
+    "endpointValuesOmitted": true,
+    "valuesRedacted": true,
+    "envValuesOmitted": true,
+    "liveMutationPerformed": false,
+    "deploymentMutationPerformed": false,
+    "remoteWritePerformed": false,
+    "responseBodiesOmitted": true
+  }
+}

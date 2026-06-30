@@ -1,0 +1,101 @@
+{
+  "target": "env-file-help-node-v24-sweep",
+  "date": "2026-06-19",
+  "sessionId": "S22",
+  "status": "completed-for-incremental-runbook-hardening",
+  "overallGoalStatus": "active-incomplete",
+  "summary": {
+    "change": "All operator-facing script help entries that expose --env-file now show node -- scripts/... usage.",
+    "why": "Under Node v24, bare node scripts/... --env-file can be parsed as a Node runtime flag instead of a UAIS script argument. This sweep prevents production proof operators from copying unsafe env-file command shapes.",
+    "scope": "Help text only; no live network calls, secret reads, Vercel mutations, provider calls, or smoke execution behavior changed."
+  },
+  "scriptsCovered": [
+    "scripts/ai-provider-smoke.mjs",
+    "scripts/ai-route-smoke.mjs",
+    "scripts/external-storage-service-readiness.mjs",
+    "scripts/external-storage-smoke.mjs",
+    "scripts/learning-ppt-playback-deployment-smoke.mjs",
+    "scripts/production-e2e-orchestrator.mjs",
+    "scripts/qwen-voice-disposable-create-smoke.mjs",
+    "scripts/qwen-voice-revoke-smoke.mjs",
+    "scripts/teacher-auth-provider-readiness.mjs",
+    "scripts/teacher-workflow-browser-smoke.mjs",
+    "scripts/teacher-workflow-deployment-smoke.mjs",
+    "scripts/vercel-env-sync.mjs",
+    "scripts/vercel-production-deployment-evidence.mjs"
+  ],
+  "filesChanged": [
+    "scripts/ai-provider-smoke.mjs",
+    "scripts/external-storage-service-readiness.mjs",
+    "scripts/external-storage-smoke.mjs",
+    "scripts/learning-ppt-playback-deployment-smoke.mjs",
+    "scripts/qwen-voice-disposable-create-smoke.mjs",
+    "scripts/qwen-voice-revoke-smoke.mjs",
+    "scripts/teacher-auth-provider-readiness.mjs",
+    "scripts/teacher-workflow-deployment-smoke.mjs",
+    "scripts/vercel-env-sync.mjs",
+    "scripts/vercel-production-deployment-evidence.mjs",
+    "tests/cli-help-usage.test.ts",
+    "coordination/reports/2026-06-19-env-file-help-node-v24-sweep.json",
+    "coordination/session-logs/2026-06-19-S22.md"
+  ],
+  "redGreenEvidence": [
+    {
+      "phase": "red",
+      "command": "npm run test -- tests/cli-help-usage.test.ts",
+      "result": "failed-before-implementation",
+      "testFiles": 1,
+      "testsFailed": 10,
+      "evidence": "Ten env-file help entries still began with bare node scripts/... usage."
+    },
+    {
+      "phase": "green",
+      "command": "npm run test -- tests/cli-help-usage.test.ts",
+      "result": "passed",
+      "testFiles": 1,
+      "testsPassed": 13
+    }
+  ],
+  "verification": [
+    {
+      "command": "node --check <each changed env-file help script>",
+      "result": "passed",
+      "scriptsChecked": 10
+    },
+    {
+      "command": "unsafe-env-file-help-usage-scan",
+      "result": "no-matches"
+    },
+    {
+      "command": "npm run test",
+      "result": "passed",
+      "testFiles": 35,
+      "testsPassed": 467
+    },
+    {
+      "command": "npm run lint",
+      "result": "passed"
+    },
+    {
+      "command": "npm run build",
+      "result": "passed",
+      "details": "Next.js 16.2.9 production build compiled successfully and generated 8 static pages."
+    }
+  ],
+  "safety": {
+    "secretsPrinted": false,
+    "urlsPrinted": false,
+    "localPathsPrinted": false,
+    "remoteMutations": false,
+    "liveNetworkCalls": false
+  },
+  "remainingBlockers": [
+    "No owner-approved Vercel project/team/link and production deployment evidence are available yet.",
+    "Approved production env values and S19 env apply evidence are still pending.",
+    "Production trusted teacher auth/session provider readiness evidence is still pending.",
+    "Real remote external durable storage service/env/readiness and live smoke evidence are still pending.",
+    "Production deployed route/page/browser/learner smokes have not been run against a real production URL.",
+    "Human PowerPoint/WPS/PPT playback acceptance has not been completed."
+  ],
+  "nextRecommendedProofStep": "After owner-approved project/env/storage/auth decisions are available, use only node -- scripts/... command shapes when invoking any proof script with --env-file."
+}

@@ -1,0 +1,75 @@
+{
+  "target": "signed-admin-production-api-readiness",
+  "status": "passed",
+  "generatedAt": "2026-06-21T12:52:42.766Z",
+  "responsibleSession": "S22",
+  "productionDomain": "www.uais.top",
+  "vercelDeployment": {
+    "observedDeploymentId": "D9PDTSNP1CicFUhtJiPWktwraWJ9",
+    "observedDeploymentShortId": "D9PDTSNP1",
+    "createdFrom": "Vercel environment variable Redeploy action",
+    "deploymentSpecificUrlStatus": "not-used-for-pass; production domain verified directly",
+    "valuesRedacted": true
+  },
+  "vercelEnvironmentVariables": {
+    "addedOrVerified": [
+      "UAIS_EXTERNAL_STORAGE_SERVICE_MODE",
+      "UAIS_EXTERNAL_STORAGE_SERVICE_DATA_DIR",
+      "UAIS_EXTERNAL_STORAGE_BASE_URL",
+      "UAIS_TEACHER_AI_OWNERSHIP_BACKEND",
+      "UAIS_VOICE_LIFECYCLE_AUDIT_BACKEND",
+      "UAIS_EXTERNAL_STORAGE_ACCESS_TOKEN"
+    ],
+    "environments": "Production and Preview",
+    "sensitive": "enabled-in-vercel-ui",
+    "secretValuesRedacted": true
+  },
+  "productionHealthz": {
+    "status": "passed",
+    "httpStatus": 200,
+    "serviceTarget": "uais-external-storage-production-service",
+    "serviceMode": "production",
+    "durableBackingStoreStatus": "ready",
+    "accessTokenStatus": "present"
+  },
+  "teacherKangSeed": {
+    "status": "passed",
+    "httpStatus": {
+      "merge": 200,
+      "readBack": 200
+    },
+    "counts": {
+      "courseIds": 1,
+      "sampleAssets": 1,
+      "pptAssets": 1,
+      "clonedVoiceRefs": 1,
+      "audioManifests": 1
+    }
+  },
+  "protectedRouteSmoke": {
+    "status": "passed",
+    "passedRoutes": [
+      "s22-retention-readiness-route",
+      "s22-voice-lifecycle-audit-route",
+      "s22-teacher-auth-issuer-route",
+      "s22-teacher-ownership-route",
+      "s22-teacher-ai-session-route",
+      "s22-teacher-ppt-workflow-route"
+    ],
+    "blockedReasons": [],
+    "stderrLength": 0
+  },
+  "evidenceFiles": {
+    "seed": "coordination/reports/2026-06-21-external-storage-teacher-kang-production-seed-after-vercel-env.json",
+    "smoke": "coordination/reports/2026-06-21-protected-route-smoke-www-uais-top-after-external-storage-env-and-seed.json",
+    "smokeStderr": "coordination/reports/2026-06-21-protected-route-smoke-www-uais-top-after-external-storage-env-and-seed.stderr.txt"
+  },
+  "safety": {
+    "valuesRedacted": true,
+    "secretsOmitted": true,
+    "cookiesOmitted": true,
+    "responseBodiesOmittedFromSummary": true,
+    "clipboardClearedAfterSecretPaste": true
+  },
+  "remainingGoalStatus": "not-complete; UI teacher workflow, real auth/session provider hardening, manual PPT playback, and production E2E proof remain in progress"
+}

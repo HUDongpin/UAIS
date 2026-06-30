@@ -1,0 +1,97 @@
+{
+  "target": "production-orchestrator-operation-detail-artifact-proof-refresh",
+  "status": "passed",
+  "generatedAt": "2026-06-27T17:25:00+08:00",
+  "responsibleSession": "S22",
+  "scope": {
+    "orchestrator": "scripts/production-e2e-orchestrator.mjs",
+    "test": "tests/production-e2e-orchestrator.test.ts",
+    "productionMutation": "none",
+    "secretsRead": false,
+    "responseBodiesOmitted": true
+  },
+  "externalStateRecheck": {
+    "dockerInfo": {
+      "status": "blocked",
+      "client": "present",
+      "daemon": "unavailable",
+      "summary": "Docker client responded, but the Docker daemon was still unreachable, so container build readiness remains externally blocked."
+    }
+  },
+  "redTestObserved": {
+    "command": "npx vitest run tests/production-e2e-orchestrator.test.ts --reporter=dot -t \"prints a redacted dry-run plan\"",
+    "exitCode": 1,
+    "expectedFailure": "the dry-run plan did not expose operation-detail-invite-artifact-audit-gated or the final gate proof label"
+  },
+  "proofs": [
+    {
+      "id": "operation-detail-browser-step-proof-label",
+      "status": "passed",
+      "summary": "The production orchestrator detail-browser step now declares operation-detail-invite-artifact-audit-gated in its human-readable proof labels."
+    },
+    {
+      "id": "operation-detail-browser-required-result-binding",
+      "status": "passed",
+      "summary": "The production orchestrator detail-browser step carries releaseGateRequiredResults from requiredTeachingOperationDetailBrowserResults, including operationInviteArtifactAuditGated."
+    },
+    {
+      "id": "final-gate-proof-label",
+      "status": "passed",
+      "summary": "The final production release-gate step now declares ordinary-teaching-operation-detail-invite-artifact-audit-gate-proof so the next live runbook names the artifact-gating proof explicitly."
+    }
+  ],
+  "dryRunMachineCheck": {
+    "command": "node -e <production-e2e-orchestrator dry-run proof-label assertion>",
+    "status": "passed",
+    "releaseRunId": "enterprise-current-20260627-operation-detail-artifact-plan-refresh",
+    "stepCount": 24,
+    "detailProofLabel": "operation-detail-invite-artifact-audit-gated",
+    "requiredResult": "operationInviteArtifactAuditGated",
+    "finalGateProofLabel": "ordinary-teaching-operation-detail-invite-artifact-audit-gate-proof"
+  },
+  "checks": [
+    {
+      "command": "npx vitest run tests/production-e2e-orchestrator.test.ts --reporter=dot -t \"prints a redacted dry-run plan\"",
+      "status": "passed",
+      "tests": "1 passed, 4 skipped"
+    },
+    {
+      "command": "npx vitest run tests/production-e2e-orchestrator.test.ts --reporter=dot",
+      "status": "passed",
+      "tests": "5 passed"
+    },
+    {
+      "command": "node --check scripts/production-e2e-orchestrator.mjs",
+      "status": "passed"
+    },
+    {
+      "command": "npm run lint",
+      "status": "passed"
+    },
+    {
+      "command": "npm run test",
+      "status": "passed",
+      "tests": "66 files passed, 1276 tests passed",
+      "notes": "Existing jsdom navigation warnings remained non-fatal."
+    },
+    {
+      "command": "npm run build",
+      "status": "passed"
+    },
+    {
+      "command": "node -e \"JSON.parse(require('node:fs').readFileSync('coordination/reports/2026-06-27-production-orchestrator-operation-detail-artifact-proof-refresh.json','utf8')); console.log('json-ok')\"",
+      "status": "passed"
+    },
+    {
+      "command": "git diff --check",
+      "status": "passed",
+      "notes": "Current repository has many untracked worktree files; git diff --check covers tracked diffs in this checkout."
+    }
+  ],
+  "enterpriseCompletionImpact": {
+    "orchestratorTightened": true,
+    "freshLiveProductionEvidenceGenerated": false,
+    "aggregateEnterpriseGateReady": false,
+    "remainingBlockerSummary": "The next production runbook now names the operation-detail invite artifact audit-gate proof, but production completion still requires owner-approved same-run live evidence and an available Docker daemon for container build readiness."
+  }
+}

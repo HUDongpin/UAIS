@@ -1,0 +1,24 @@
+# Blocker Report
+
+- Date: 2026-06-18
+- Session ID: S22
+- Task: Vercel project selection and production deployment proof chain
+- Blocker type: Missing requirement
+- What happened:
+  - Redacted Vercel readiness for `--project-name uais` found the Vercel CLI, authenticated account evidence, exactly one current team scope, and required `.vercelignore` upload-hygiene patterns.
+  - The same evidence found 2 filtered project matches but 0 exact `uais` matches, and no local `.vercel/project.json` or `.vercel/repo.json` link marker.
+  - A secondary redacted readiness probe for `--project-name uais-top` found 0 filtered matches and 0 exact matches.
+  - No `npx vercel link`, env apply, deploy, or production smoke command was run.
+- Files involved:
+  - `coordination/reports/2026-06-18-vercel-project-readiness.json`
+  - `coordination/reports/2026-06-18-vercel-project-readiness-uais-top.json`
+  - `coordination/reports/2026-06-17-production-e2e-release-gate.json`
+  - `coordination/reports/2026-06-17-production-release-unblocker-matrix.md`
+- Why the session stopped:
+  - Selecting or creating the production Vercel project is an owner decision. Linking the workspace or deploying to production would mutate external/project state and should not be guessed from partial project-list matches.
+- Decision needed from owner:
+  - Confirm the intended Vercel project name, create the project if it does not exist, or provide an owner-approved project-id selector for redacted readiness.
+  - Confirm whether S22 may run `npx vercel link` for that approved project after readiness identifies a single candidate.
+- Safe next step:
+  - Rerun `node scripts/vercel-project-readiness.mjs --project-name <approved-name>` or `node scripts/vercel-project-readiness.mjs --project-id <approved-project-id>` and confirm it reports project-candidate evidence as present.
+  - After owner approval, run `npx vercel link`, rerun project readiness, then continue with S19 env apply and S22 production deployment/page/browser/route smoke evidence.

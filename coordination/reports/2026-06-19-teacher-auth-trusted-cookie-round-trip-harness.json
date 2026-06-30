@@ -1,0 +1,29 @@
+{
+  "target": "teacher-auth-trusted-cookie-round-trip-harness",
+  "status": "harness-proved",
+  "responsibleSession": "S22",
+  "productionStatus": "not-live-production-evidence",
+  "objective": "Strengthen trusted-cookie teacher auth readiness with redacted in-memory signed session cookie round-trip proof.",
+  "evidenceAdded": {
+    "script": "scripts/teacher-auth-provider-readiness.mjs",
+    "test": "tests/teacher-auth-provider-readiness.test.ts",
+    "field": "trustedCookieSessionRoundTrip",
+    "requiredStatuses": [
+      "signatureVerification: passed",
+      "expiryCheck: passed",
+      "tamperCheck: passed"
+    ]
+  },
+  "safety": {
+    "valuesRedacted": true,
+    "secretsOmitted": true,
+    "cookieValuesEmitted": false,
+    "localPrivatePathsOmitted": true
+  },
+  "remainingProductionBlockers": [
+    "owner-approved production auth provider/env source",
+    "Vercel env apply evidence for production and preview",
+    "production route smoke bound to same release-run id",
+    "deployed teacher workflow browser smoke with production auth evidence"
+  ]
+}

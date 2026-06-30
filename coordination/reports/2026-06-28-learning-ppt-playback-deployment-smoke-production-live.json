@@ -1,0 +1,57 @@
+{
+  "target": "learning-ppt-playback-deployment-smoke",
+  "mode": "dry-run",
+  "environment": "production",
+  "network": "disabled",
+  "status": "blocked",
+  "responsibleSession": "S22",
+  "routes": {
+    "learningPage": "/learning",
+    "playbackManifest": "/api/learning/ppt-playback/<course-id>",
+    "firstSlideAudio": "/api/learning/ppt-playback/audio/<manifest-id>/<audio-id>"
+  },
+  "deploymentFingerprint": {
+    "status": "missing"
+  },
+  "deploymentOrigin": {
+    "status": "missing",
+    "originClass": "missing",
+    "valueRedacted": true
+  },
+  "networkAddressOverride": {
+    "status": "disabled",
+    "valueRedacted": true
+  },
+  "networkRetryPolicy": {
+    "maxAttempts": 3,
+    "perAttemptTimeoutMs": 10000,
+    "retryOn": [
+      "request-error"
+    ],
+    "valuesRedacted": true
+  },
+  "prerequisites": [
+    {
+      "id": "s22-deployment-base-url",
+      "responsibleSession": "S22",
+      "requiredEnv": "UAIS_DEPLOYMENT_BASE_URL",
+      "status": "missing"
+    }
+  ],
+  "checks": [
+    "learning-page-http-200",
+    "kang-xia-manifest-19-slides",
+    "student-safe-manifest-redaction",
+    "first-slide-audio-wav-response"
+  ],
+  "blockedReasons": [
+    "missing-UAIS_DEPLOYMENT_BASE_URL"
+  ],
+  "safety": {
+    "valuesRedacted": true,
+    "responseBodiesOmitted": true,
+    "audioPayloadOmitted": true,
+    "liveRequiresApproval": true,
+    "checksPublishedLearningPlayback": true
+  }
+}

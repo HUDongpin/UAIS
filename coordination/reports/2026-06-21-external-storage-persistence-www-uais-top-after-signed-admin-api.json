@@ -1,0 +1,178 @@
+{
+  "target": "external-storage-persistence-smoke",
+  "mode": "live",
+  "environment": "production",
+  "phase": "write",
+  "network": "enabled",
+  "storageEndpoint": {
+    "status": "present",
+    "networkClass": "remote",
+    "endpointClass": "remote-https",
+    "valueRedacted": true
+  },
+  "storageServiceFingerprint": {
+    "status": "present",
+    "value": "sha256:7c8e0f8c7195d5b9",
+    "source": "origin",
+    "valueRedacted": true
+  },
+  "persistenceProofFingerprint": {
+    "status": "present",
+    "value": "sha256:b343a491bf838aeb",
+    "valueRedacted": true
+  },
+  "releaseRunId": "uais-release-2026-06-21-signed-admin-production-api",
+  "status": "passed",
+  "responsibleSession": "S22",
+  "networkRetryPolicy": {
+    "maxAttempts": 3,
+    "perAttemptTimeoutMs": 10000,
+    "retryOn": [
+      "request-error"
+    ],
+    "valuesRedacted": true
+  },
+  "checks": [
+    {
+      "id": "s22-external-storage-persistence-health",
+      "method": "GET",
+      "endpointTemplate": "/healthz",
+      "expectedStatus": 200,
+      "responseShapeChecks": [
+        "status",
+        "target",
+        "apiContractVersion",
+        "durableBackingStore",
+        "redaction"
+      ]
+    },
+    {
+      "id": "s12-external-storage-persistence-ownership-write",
+      "method": "POST",
+      "endpointTemplate": "/teacher-ai-ownership/{teacherId}/merge",
+      "expectedStatus": 200,
+      "responseShapeChecks": [
+        "status",
+        "storageWritePolicy",
+        "redaction"
+      ]
+    },
+    {
+      "id": "s24-external-storage-persistence-audit-write",
+      "method": "POST",
+      "endpointTemplate": "/qwen-voice-lifecycle-audit",
+      "expectedStatus": 200,
+      "responseShapeChecks": [
+        "status",
+        "provider",
+        "redaction"
+      ]
+    }
+  ],
+  "prerequisites": [
+    {
+      "id": "s19-external-storage-base-url",
+      "responsibleSession": "S19",
+      "requiredEnv": "UAIS_EXTERNAL_STORAGE_BASE_URL",
+      "status": "present"
+    },
+    {
+      "id": "s19-external-storage-access-token",
+      "responsibleSession": "S19",
+      "requiredEnv": "UAIS_EXTERNAL_STORAGE_ACCESS_TOKEN",
+      "status": "present"
+    },
+    {
+      "id": "s22-external-storage-persistence-teacher-id",
+      "responsibleSession": "S22",
+      "requiredArg": "--teacher-id",
+      "status": "present"
+    },
+    {
+      "id": "s22-external-storage-persistence-proof-id",
+      "responsibleSession": "S22",
+      "requiredArg": "--proof-id",
+      "status": "present"
+    }
+  ],
+  "blockedReasons": [],
+  "safety": {
+    "secretsRedacted": true,
+    "valuesRedacted": true,
+    "serviceUrlOmitted": true,
+    "teacherIdOmitted": true,
+    "proofIdOmitted": true,
+    "writePayloadsRedacted": true,
+    "responseBodiesOmitted": true,
+    "localPrivatePathsOmitted": true,
+    "destructiveWrites": false,
+    "liveRequiresApproval": true
+  },
+  "results": [
+    {
+      "id": "s22-external-storage-persistence-health",
+      "status": "ok",
+      "httpStatus": 200,
+      "expectedStatus": 200,
+      "responseShape": {
+        "checked": true,
+        "status": "ok",
+        "requiredFields": {
+          "status": "present",
+          "target": "present",
+          "apiContractVersion": "present",
+          "durableBackingStore": "present",
+          "redaction": "present"
+        }
+      },
+      "networkAttempts": {
+        "attempted": 1,
+        "maxAttempts": 3,
+        "retried": false,
+        "valueRedacted": true
+      }
+    },
+    {
+      "id": "s12-external-storage-persistence-ownership-write",
+      "status": "ok",
+      "httpStatus": 200,
+      "expectedStatus": 200,
+      "responseShape": {
+        "checked": true,
+        "status": "ok",
+        "requiredFields": {
+          "status": "present",
+          "storageWritePolicy": "present",
+          "redaction": "present"
+        }
+      },
+      "networkAttempts": {
+        "attempted": 1,
+        "maxAttempts": 3,
+        "retried": false,
+        "valueRedacted": true
+      }
+    },
+    {
+      "id": "s24-external-storage-persistence-audit-write",
+      "status": "ok",
+      "httpStatus": 200,
+      "expectedStatus": 200,
+      "responseShape": {
+        "checked": true,
+        "status": "ok",
+        "requiredFields": {
+          "status": "present",
+          "provider": "present",
+          "redaction": "present"
+        }
+      },
+      "networkAttempts": {
+        "attempted": 1,
+        "maxAttempts": 3,
+        "retried": false,
+        "valueRedacted": true
+      }
+    }
+  ]
+}

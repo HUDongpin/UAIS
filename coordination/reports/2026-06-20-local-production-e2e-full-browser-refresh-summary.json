@@ -1,0 +1,56 @@
+{
+  "date": "2026-06-20",
+  "sessionId": "S22",
+  "workstream": "production reliability and release engineering",
+  "status": "completed-for-local-production-full-browser-e2e-refresh",
+  "overallGoalStatus": "active-incomplete",
+  "evidence": {
+    "localProductionE2eSmoke": "coordination/reports/2026-06-20-local-production-e2e-smoke-full-browser-current.json",
+    "target": "local-production-e2e-smoke",
+    "mode": "live",
+    "environment": "local-production",
+    "status": "passed",
+    "productionGateEligible": false
+  },
+  "provedChecks": [
+    "local external storage reference service passed for teacher-ai-ownership and qwen-voice-lifecycle-audit backends",
+    "Next production server started from the existing build",
+    "learning PPT playback returned Kang Xia 19-slide manifest and first-slide WAV header proof",
+    "teacher workflow page anchors were present, including upload/select voice, duration gate, preflight, generation, per-slide WAV download markers, signed session bootstrap, workflow actions, server workflow status, and server workflow progress",
+    "teacher workflow browser smoke passed with apiInterceptionPolicy.workflowApis=live-workflow-status and remoteMutations=fixture-blocked",
+    "protected route smoke passed through signed admin access, trusted issuer proof, issued teacher cookies, AI session, teacher ownership, and teacher PPT workflow download contract"
+  ],
+  "qualityGates": [
+    {
+      "command": "node scripts/local-production-e2e-smoke.mjs --live --approved --skip-build --timeout-ms 180000 > coordination/reports/2026-06-20-local-production-e2e-smoke-full-browser-current.json",
+      "result": "passed"
+    },
+    {
+      "command": "npm run test -- tests/local-production-e2e-smoke.test.ts tests/teacher-workflow-browser-smoke.test.ts tests/teacher-workflow-deployment-smoke.test.ts tests/learning-ppt-playback-deployment-smoke.test.ts",
+      "result": "passed, 4 files / 42 tests"
+    },
+    {
+      "command": "redaction scan on coordination/reports/2026-06-20-local-production-e2e-smoke-full-browser-current.json",
+      "result": "passed"
+    },
+    {
+      "command": "JSON parse check on coordination/reports/2026-06-20-local-production-e2e-smoke-full-browser-current.json",
+      "result": "passed"
+    }
+  ],
+  "remainingProductionBlockers": [
+    "approved production/preview Vercel env values are still not applied",
+    "production trusted teacher auth readiness and route smoke remain unproved",
+    "real remote HTTPS external storage service readiness and smoke remain unproved",
+    "production Vercel deployment chain remains blocked by env-sync proof",
+    "deployed production browser smoke remains fixture-only until production auth/env can support live workflow status",
+    "manual PPT/WPS/PowerPoint playback acceptance is still missing"
+  ],
+  "redaction": {
+    "secrets": "omitted",
+    "localPrivatePaths": "omitted",
+    "responseBodies": "redacted-by-harness",
+    "providerValues": "omitted"
+  },
+  "nextRecommendedStep": "Use this local-production evidence as the current pre-production baseline, then continue with S19/S22 approved Vercel env placement and rerun production route/browser/storage smokes."
+}

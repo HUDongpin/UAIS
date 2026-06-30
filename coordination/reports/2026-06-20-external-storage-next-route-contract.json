@@ -1,0 +1,58 @@
+{
+  "target": "external-storage-next-route-contract",
+  "status": "implemented-local-build-verified",
+  "mode": "local-code-and-test",
+  "generatedAt": "2026-06-20T13:50:29.290Z",
+  "responsibleSessions": [
+    "S12",
+    "S22",
+    "S24"
+  ],
+  "routes": [
+    "GET /api/external-storage/healthz",
+    "GET /api/external-storage/teacher-ai-ownership/{teacherId}",
+    "POST /api/external-storage/teacher-ai-ownership/{teacherId}/merge",
+    "GET /api/external-storage/qwen-voice-lifecycle-audit",
+    "POST /api/external-storage/qwen-voice-lifecycle-audit"
+  ],
+  "apiContractVersion": "uais-external-storage-v1",
+  "serviceTargets": [
+    "uais-external-storage-reference-service",
+    "uais-external-storage-production-service"
+  ],
+  "implementedFiles": [
+    "src/lib/server/external-storage-route-service.ts",
+    "src/app/api/external-storage/healthz/route.ts",
+    "src/app/api/external-storage/teacher-ai-ownership/[teacherId]/route.ts",
+    "src/app/api/external-storage/teacher-ai-ownership/[teacherId]/merge/route.ts",
+    "src/app/api/external-storage/qwen-voice-lifecycle-audit/route.ts",
+    "tests/external-storage-next-route.test.ts"
+  ],
+  "proof": {
+    "routeContractTest": "passed",
+    "relatedExternalStorageTests": "passed",
+    "fullVitest": "passed",
+    "lint": "passed",
+    "nextBuild": "passed"
+  },
+  "releaseImpact": {
+    "remoteHttpsServiceSurface": "implemented-after-next-deploy",
+    "vercelEnvRequired": [
+      "UAIS_EXTERNAL_STORAGE_BASE_URL",
+      "UAIS_EXTERNAL_STORAGE_ACCESS_TOKEN",
+      "UAIS_EXTERNAL_STORAGE_SERVICE_MODE",
+      "UAIS_EXTERNAL_STORAGE_SERVICE_DATA_DIR"
+    ],
+    "suggestedBaseUrl": "https://www.uais.top/api/external-storage",
+    "productionReadinessStatus": "not-live-ready-until-env-deploy-and-persistence-smoke",
+    "doesNotReplaceExternalStorageSmoke": true
+  },
+  "safety": {
+    "valuesRedacted": true,
+    "tokensOmitted": true,
+    "responseBodiesWithSecretsOmitted": true,
+    "localPrivatePathsOmitted": true,
+    "productionMutationPerformed": false,
+    "vercelMutationPerformed": false
+  }
+}

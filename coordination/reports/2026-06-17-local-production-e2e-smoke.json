@@ -1,0 +1,193 @@
+{
+  "target": "local-production-e2e-smoke",
+  "mode": "live",
+  "environment": "local-production",
+  "network": "local-only",
+  "status": "passed",
+  "responsibleSession": "S22",
+  "server": {
+    "host": "127.0.0.1",
+    "port": "redacted",
+    "startCommand": "next start -H 127.0.0.1 -p <redacted-port>"
+  },
+  "checks": [
+    {
+      "id": "s22-local-external-storage-reference-service",
+      "status": "passed",
+      "environment": "local-production",
+      "command": "node scripts/external-storage-service.mjs --host 127.0.0.1 --port <redacted-port> --data-dir <ephemeral-dir>",
+      "target": "uais-external-storage-reference-service",
+      "responsibleSession": "S12/S22/S24",
+      "endpoints": [
+        "GET /healthz",
+        "GET /teacher-ai-ownership/{teacherId}",
+        "POST /teacher-ai-ownership/{teacherId}/merge",
+        "GET /qwen-voice-lifecycle-audit",
+        "POST /qwen-voice-lifecycle-audit"
+      ],
+      "storageBackends": [
+        "teacher-ai-ownership:external",
+        "qwen-voice-lifecycle-audit:external"
+      ],
+      "requiredFixtureEnv": [
+        "UAIS_EXTERNAL_STORAGE_BASE_URL",
+        "UAIS_EXTERNAL_STORAGE_ACCESS_TOKEN",
+        "UAIS_TEACHER_AI_OWNERSHIP_BACKEND",
+        "UAIS_VOICE_LIFECYCLE_AUDIT_BACKEND"
+      ],
+      "safety": {
+        "bearerTokenOmitted": true,
+        "dataDirOmitted": true,
+        "localPrivatePathsOmitted": true,
+        "responseBodiesRedactedByContract": true
+      }
+    },
+    {
+      "id": "s22-next-production-build",
+      "status": "passed",
+      "command": "npm run build"
+    },
+    {
+      "id": "s22-next-start-local-production-server",
+      "status": "passed",
+      "command": "next start -H 127.0.0.1 -p <redacted-port>"
+    },
+    {
+      "id": "s22-local-teacher-workflow-page-smoke",
+      "status": "passed",
+      "environment": "local-production",
+      "command": "node scripts/teacher-workflow-deployment-smoke.mjs --live --approved --environment local-production --base-url <local-production-url>",
+      "httpStatus": 200,
+      "results": {
+        "teacherWorkflowTitle": "present",
+        "voiceSampleUpload": "present",
+        "voiceSampleSelect": "present",
+        "selectedSampleIdentity": "present",
+        "preflight": "present",
+        "pptNarrationGenerate": "present",
+        "perSlideWavDownloads": "present",
+        "signedSessionBootstrap": "present"
+      }
+    },
+    {
+      "id": "s22-local-protected-route-smoke",
+      "status": "passed",
+      "environment": "local-production",
+      "command": "node scripts/ai-route-smoke.mjs --live --approved --environment local-production --base-url <local-production-url> --env-file <ephemeral-env>",
+      "authChain": [
+        "signed-admin-ai-access",
+        "signed-trusted-issuer-proof",
+        "issued-teacher-auth-cookie",
+        "teacher-ai-session",
+        "teacher-ppt-workflow"
+      ],
+      "requiredFixtureEnv": [
+        "UAIS_AI_ACCESS_SIGNING_SECRET",
+        "UAIS_TEACHER_AUTH_PROVIDER",
+        "UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET",
+        "UAIS_TEACHER_AUTH_ISSUER_SECRET",
+        "UAIS_TEACHER_AI_OWNERSHIP_BACKEND",
+        "UAIS_VOICE_LIFECYCLE_AUDIT_BACKEND",
+        "UAIS_EXTERNAL_STORAGE_BASE_URL",
+        "UAIS_EXTERNAL_STORAGE_ACCESS_TOKEN"
+      ],
+      "storageBackends": [
+        "teacher-ai-ownership:external",
+        "qwen-voice-lifecycle-audit:external"
+      ],
+      "routeProofSummary": [
+        "teacherAuthIssuer.responseHeaders",
+        "teacherAiSession.authProviderContract",
+        "teacherOwnership.responseShape",
+        "teacherPptWorkflow.responseShape"
+      ],
+      "routeResults": [
+        {
+          "id": "s22-retention-readiness-route",
+          "status": "ok",
+          "httpStatus": 200,
+          "auth": "signed-admin-ai-access"
+        },
+        {
+          "id": "s22-voice-lifecycle-audit-route",
+          "status": "ok",
+          "httpStatus": 200,
+          "auth": "signed-admin-ai-access"
+        },
+        {
+          "id": "s22-teacher-auth-issuer-route",
+          "status": "ok",
+          "httpStatus": 200,
+          "auth": "signed-admin-ai-access",
+          "responseHeaders": {
+            "checked": true,
+            "status": "ok",
+            "requiredHeaders": {
+              "teacherAuthClaimsSetCookie": "present",
+              "teacherAuthSignatureSetCookie": "present",
+              "httpOnlySameSiteSecureMaxAge": "present",
+              "priorityHigh": "present",
+              "issuerProofBoundedMaxAge": "present"
+            }
+          }
+        },
+        {
+          "id": "s22-teacher-ai-session-route",
+          "status": "ok",
+          "httpStatus": 200,
+          "auth": "issued-teacher-auth-cookie",
+          "responseShape": {
+            "checked": true,
+            "status": "ok",
+            "requiredFields": {
+              "accessSession": "present",
+              "accessPlan": "present",
+              "authProviderContract": "present",
+              "s12TeacherAiSessionBoundary": "present"
+            }
+          }
+        },
+        {
+          "id": "s22-teacher-ownership-route",
+          "status": "ok",
+          "httpStatus": 200,
+          "auth": "issued-teacher-auth-cookie",
+          "responseShape": {
+            "checked": true,
+            "status": "ok",
+            "requiredFields": {
+              "ownership": "present",
+              "consistency": "present",
+              "s12TeacherOwnershipSummary": "present"
+            }
+          }
+        },
+        {
+          "id": "s22-teacher-ppt-workflow-route",
+          "status": "ok",
+          "httpStatus": 200,
+          "auth": "issued-teacher-auth-cookie",
+          "responseShape": {
+            "checked": true,
+            "status": "ok",
+            "requiredFields": {
+              "workflow": "present",
+              "agentHandoffPlan": "present",
+              "agentHandoffPlanFramework": "present",
+              "s22ReleaseSmokeAgent": "present"
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "blockedReasons": [],
+  "safety": {
+    "secretsRedacted": true,
+    "localPrivatePathsOmitted": true,
+    "tempEnvFileOmitted": true,
+    "responseBodiesOmitted": true,
+    "productionGateEligible": false,
+    "liveRequiresApproval": true
+  }
+}

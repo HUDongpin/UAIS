@@ -1,0 +1,85 @@
+{
+  "target": "kangxia-ppt-desktop-playback-readiness",
+  "date": "2026-06-21",
+  "status": "powerpoint-windowed-slideshow-ready-wps-window-not-observed",
+  "responsibleSession": "S24",
+  "packageId": "kangxia-natural-number-ordinal-theory-v1",
+  "sourceDeckTitle": "初等数学研究+PPT1+自然数的序数理论.pptx",
+  "expectedSlideCount": 19,
+  "narratedPptx": {
+    "relativePath": ".tmp/uais-ai-assets/ppt-narration-pptx/audio-manifest-elementary-math-research-natural-number-ordinal-theory-ppt1-kangxia-narrated.pptx",
+    "desktopSmokeCopy": "/private/tmp/uais-ppt-desktop-smoke/kangxia-narrated-desktop-smoke.pptx",
+    "exists": true,
+    "sizeMiB": 34.37
+  },
+  "microsoftPowerPoint": {
+    "installed": true,
+    "bundlePath": "/Applications/Microsoft PowerPoint.app",
+    "version": "16.110",
+    "openDocumentSmoke": {
+      "status": "passed",
+      "activePresentationName": "kangxia-narrated-desktop-smoke.pptx",
+      "observedPresentationCount": 1,
+      "observedSlideCount": 19,
+      "visualEvidence": "output/playwright/kangxia-powerpoint-user-open-evidence-2026-06-21.png",
+      "visualEvidenceNotes": "User-provided screenshot confirms PowerPoint opened the copied narrated PPTX, shows Slide 7 of 19, and shows a slide audio icon."
+    },
+    "windowedSlideshowSmoke": {
+      "status": "passed",
+      "settings": {
+        "showType": "slide-show-type-window",
+        "showWithNarration": true,
+        "startingSlide": 1,
+        "endingSlide": 19,
+        "rangeType": "slide-show-range"
+      },
+      "runSlideShowCommand": "accepted",
+      "observedSlideShowWindowCountAfterDelay": 1,
+      "currentShowPosition": 1,
+      "slideState": "slide show state running",
+      "presentationElapsedTimeSecondsObserved": 34.08,
+      "exitSlideShowCommand": "passed"
+    }
+  },
+  "wpsPresentation": {
+    "installed": true,
+    "bundlePath": "/Applications/wpsoffice.app",
+    "bundleIdentifier": "com.kingsoft.wpsoffice.mac",
+    "version": "7.2.2",
+    "openDocumentSmoke": {
+      "status": "blocked",
+      "openByApplicationNameCommand": "returned-zero-exit",
+      "openByBundleIdentifierCommand": "returned-zero-exit",
+      "processObserved": true,
+      "accessibleDocumentWindowObserved": false,
+      "blockedReason": "wps-process-running-but-no-accessible-document-window-exposed-under-automation"
+    }
+  },
+  "manualAcceptanceStatus": {
+    "accepted": false,
+    "powerPointHumanAuditoryAllSlidesConfirmed": false,
+    "wpsHumanAuditoryAllSlidesConfirmed": false,
+    "reason": "PowerPoint desktop open and windowed slideshow readiness are now evidenced, but no human auditory confirmation has been recorded for all 19 slides in both Microsoft PowerPoint and WPS Presentation."
+  },
+  "evidenceLinks": {
+    "openXmlIntegrity": "coordination/reports/2026-06-21-ppt-narration-openxml-package-integrity-current.json",
+    "localAppAvailability": "coordination/reports/2026-06-21-kangxia-ppt-manual-playback-local-app-availability.json",
+    "manualAcceptanceGate": "coordination/reports/2026-06-21-kangxia-ppt-manual-playback-acceptance-gate-current-desktop-readiness.json",
+    "manualAcceptanceTemplate": "coordination/reports/2026-06-21-kangxia-ppt-manual-acceptance-record-template-current-desktop-readiness.json",
+    "manualAcceptanceChecklist": "coordination/reports/2026-06-21-kangxia-ppt-manual-playback-acceptance-checklist-current-desktop-readiness.md"
+  },
+  "blockedReasons": [
+    "manual-PowerPoint-all-slides-auditory-confirmation-not-recorded",
+    "manual-WPS-document-window-not-observed",
+    "manual-WPS-playback-not-recorded"
+  ],
+  "safety": {
+    "secretsRedacted": true,
+    "rawAudioOmitted": true,
+    "providerValuesOmitted": true,
+    "localPrivateSourcePathsOmitted": true,
+    "accidentalUnrelatedScreenshotRemoved": true,
+    "desktopReadinessNotFinalManualAcceptance": true,
+    "goalMarkedComplete": false
+  }
+}
