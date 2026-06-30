@@ -1,0 +1,134 @@
+{
+  "target": "production-release-run-action-packet",
+  "status": "waiting-for-upstream-evidence",
+  "releaseGateStatus": "blocked",
+  "responsibleSessions": [
+    "S22",
+    "S24"
+  ],
+  "decisionId": "production-release-run",
+  "queueRank": 8,
+  "classification": "final-release-run-binding-blocked",
+  "nextOwnerQuestion": "Do not bind the production release-run ID until the release gate is ready.",
+  "blockedReasons": [
+    "deployed-teacher-workflow-page-not-live-passed",
+    "deployed-learning-ppt-playback-not-live-passed",
+    "vercel-env-not-applied",
+    "app-auth-provider-readiness-not-live-ready",
+    "teacher-auth-provider-readiness-not-live-ready",
+    "external-storage-service-readiness-not-live-ready",
+    "vercel-production-deployment-not-proven",
+    "deployment-route-smoke-not-live-passed",
+    "teaching-operations-route-smoke-not-live-passed",
+    "teaching-operation-detail-browser-smoke-not-live-passed",
+    "teaching-course-management-route-smoke-not-live-passed",
+    "external-storage-smoke-not-live-passed",
+    "manual-ppt-playback-not-accepted",
+    "enterprise-live-evidence-audit-not-ready",
+    "teacher-workflow-browser-smoke-not-live-passed"
+  ],
+  "safeNextActions": [
+    "wait-for-final-release-gate-ready",
+    "bind-one-public-release-run-id-after-all-production-evidence-is-ready",
+    "verify-owner-checklist-has-no-waiting-or-blocked-decisions",
+    "publish-release-run-summary-with-redacted-evidence-only"
+  ],
+  "forbiddenUntilApproved": [
+    "bind-release-run-id-while-release-gate-blocked",
+    "mix-production-evidence-from-multiple-release-run-ids",
+    "include-local-private-paths-or-secret-values-in-release-run-summary",
+    "treat-owner-decisions-required-as-release-ready"
+  ],
+  "requiredEvidence": [
+    "one-public-release-run-id-used-across-production-evidence",
+    "final-release-gate-ready"
+  ],
+  "currentEvidenceSummary": {
+    "requirementStatus": "blocked",
+    "evidenceStatus": "waiting-for-production-evidence",
+    "blockedReason": "vercel-production-deployment-not-proven",
+    "releaseRunEvidenceStatusBySource": {
+      "vercelEnvSync": "waiting",
+      "vercelProductionDeployment": "waiting",
+      "deployedTeacherWorkflowUi": "waiting",
+      "teacherWorkflowBrowserUi": "waiting",
+      "teacherWorkflowLiveGeneration": "waiting",
+      "learningPptPlayback": "waiting",
+      "appAuthProviderReadiness": "waiting",
+      "teacherAuthProviderReadiness": "waiting",
+      "externalStorageContainerBuildReadiness": "present",
+      "externalStorageServiceReadiness": "waiting",
+      "routeSmoke": "waiting",
+      "teachingOperationsRouteSmoke": "waiting",
+      "teachingOperationDetailBrowserSmoke": "waiting",
+      "teachingCourseManagementRouteSmoke": "waiting",
+      "externalStorageSmoke": "waiting",
+      "pptAcceptance": "waiting",
+      "match": "waiting"
+    },
+    "waitingReleaseRunEvidenceCount": 15,
+    "presentReleaseRunEvidenceCount": 1,
+    "matchedReleaseRunEvidenceCount": 0,
+    "matchStatus": "waiting"
+  },
+  "releaseGateRequirementIds": [
+    "deployed-teacher-workflow-page",
+    "teacher-workflow-browser-smoke",
+    "teacher-workflow-live-generation-smoke",
+    "deployed-learning-ppt-playback",
+    "vercel-env-placement",
+    "app-auth-provider-readiness",
+    "teacher-auth-provider-readiness",
+    "external-storage-service-readiness",
+    "vercel-production-deployment",
+    "deployment-route-smoke",
+    "teacher-auth-provider-consistency",
+    "teaching-operations-route-smoke",
+    "teaching-operation-detail-browser-smoke",
+    "teaching-course-management-route-smoke",
+    "external-durable-storage-smoke",
+    "external-storage-service-consistency",
+    "ppt-manual-playback-acceptance",
+    "enterprise-live-evidence-audit",
+    "production-release-run-consistency"
+  ],
+  "enterpriseAuditMissingTargets": [
+    "app-auth-provider-readiness",
+    "teacher-auth-issuer-route-smoke",
+    "teacher-auth-provider-readiness",
+    "external-storage-persistence",
+    "external-storage-service-readiness",
+    "deployment-domain-reachability",
+    "teacher-workflow-deployment-smoke",
+    "teacher-workflow-browser-smoke",
+    "teacher-workflow-live-generation-smoke",
+    "learning-ppt-playback-deployment-smoke",
+    "ppt-manual-playback-acceptance",
+    "deployment-route-smoke",
+    "teaching-operations-route-smoke",
+    "teaching-operation-detail-browser-smoke",
+    "teaching-course-management-route-smoke",
+    "external-storage-smoke"
+  ],
+  "commands": {
+    "finalReleaseGateCheck": "node -- scripts/production-e2e-release-gate.mjs <release-gate-inputs> > <production-e2e-release-gate-output>",
+    "releaseRunBindingReview": "review production-release-run-consistency in <production-e2e-release-gate-output> and bind one public release-run ID only after status is ready"
+  },
+  "stopConditions": [
+    "Stop if the final release gate is not ready.",
+    "Stop if any upstream owner decision or production live evidence remains blocked.",
+    "Stop if release-run IDs across production evidence are missing or mismatched.",
+    "Stop if a release-run ID would be bound while the release gate is blocked.",
+    "Stop if production evidence comes from multiple release-run IDs.",
+    "Stop if local private paths, raw URLs, response bodies, or secret-like values would be included in the release summary."
+  ],
+  "safety": {
+    "sourcePathsOmitted": true,
+    "rawUrlsOmitted": true,
+    "secretValuesOmitted": true,
+    "responseBodiesOmitted": true,
+    "noReleaseRunIdBound": true,
+    "releaseGateStillBlocked": true,
+    "noGitOperation": true
+  }
+}
