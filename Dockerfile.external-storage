@@ -1,0 +1,17 @@
+FROM node:24-alpine
+
+WORKDIR /app
+
+COPY scripts/external-storage-service.mjs scripts/external-storage-service-production-launcher.mjs ./scripts/
+
+ENV NODE_ENV=production
+ENV UAIS_EXTERNAL_STORAGE_HOST=0.0.0.0
+ENV UAIS_EXTERNAL_STORAGE_DATA_DIR=/data/uais-external-storage
+
+RUN mkdir -p /data/uais-external-storage && chown -R node:node /data/uais-external-storage /app
+
+USER node
+VOLUME ["/data/uais-external-storage"]
+EXPOSE 8787
+
+CMD ["node", "scripts/external-storage-service-production-launcher.mjs", "--live"]

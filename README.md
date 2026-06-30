@@ -1,36 +1,49 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# UAIS Teaching Website Template
 
-## Getting Started
+UAIS is a personal teaching website template for `uais.top`. The name supports both
+University AI System and University Adaptive Interactive System.
 
-First, run the development server:
+The interface is MAIC-informed at the pattern level: course plaza cards, learner playback,
+human-AI group chat, and a teacher course-management workspace. It does not include private
+ClosedMAIC screenshots, internal identities, proprietary assets, or copied MAIC content.
+
+## Stack
+
+- Next.js App Router
+- React and TypeScript
+- Tailwind CSS v4
+- Phosphor Icons
+- Vitest acceptance tests
+
+## Routes
+
+- `/courses` - 课程广场, with exactly two course cards: 大学研究方法 and 数学教学法.
+- `/learning` - 我的学习, with enrolled courses, playback-style learning panel, and a chatroom entry button.
+- `/learning/chatroom` - full 人机协作聊天室 interface for group messages, AI agents, PDF export, and sharing.
+- `/teaching` - 我的教学, with teacher course cards and management entry points.
+- `/` - redirects to `/courses`.
+
+## Project Structure
+
+- `src/data/uais.ts` - mock courses, learning records, AI agents, chat messages, and teacher dashboard items.
+- `src/i18n/copy.ts` - bilingual copy for `zh-CN` and `en-US`, with Simplified Chinese as the default.
+- `src/lib/chat-actions.ts` - UI-ready mocked PDF export and share-link helpers.
+- `src/components/providers/app-preferences.tsx` - language and light/dark theme state.
+- `src/components/layout/` - app shell and top navigation.
+- `src/components/pages/` - page-level UI for the three teaching areas.
+- `tests/uais-data.test.ts` - acceptance checks for the brief-critical data contract.
+
+## Extending
+
+Replace mock data in `src/data/uais.ts` first, then update page components only when the shape of the
+workflow changes. Real PDF export and share links can be connected behind `src/lib/chat-actions.ts`
+without changing the chatroom UI.
+
+## Development
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm run test
+npm run lint
+npm run build
 ```
-
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
-
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.

@@ -1,0 +1,31 @@
+# Local secrets and environment files
+.env
+.env.*
+!.env.local.example
+All API Keys.docx
+
+# Owner/local source bundles and generated runtime artifacts
+OpenMAIC-main.zip
+.tmp/
+output/
+coordination/
+docs/
+.git/
+.vercel/
+
+# Dependency, build, and cache outputs
+node_modules/
+.next/
+out/
+build/
+.playwright-cli/
+coverage/
+tsconfig.tsbuildinfo
+next-env.d.ts
+
+# OS/editor noise
+.DS_Store
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
