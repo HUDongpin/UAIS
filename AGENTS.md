@@ -20,6 +20,7 @@ This file is the coordination contract for AI/Codex sessions working in `/Users/
   - `npm run start` starts the production server after a build.
   - `npm run lint` runs ESLint.
   - `npm run test` runs the Vitest acceptance suite.
+  - `npm run release:package-gate` verifies dirty-map path coverage against an explicit review-slice pathspec list.
 - Current checkout note: this folder is a Git repository and may contain owner/session changes at once. Sessions must inspect `git status --short` before editing, must not revert unrelated changes, and must not stage, commit, branch, merge, rebase, push, or delete files unless the owner explicitly assigns that Git operation.
 - Do not edit generated or local-only outputs: `node_modules/`, `.next/`, `.tmp/`, `tsconfig.tsbuildinfo`, `.DS_Store`, `.env`, `.env.local`, or other real secret files.
 
@@ -44,6 +45,8 @@ Every session must:
 - New parallel assignments should prefer smaller packages for existing owners, especially S25 release intake, S22 build/deployment checks, S11 targeted regression, and S08/S09 shared data/copy cleanup.
 - The root checkout is an intake/integration surface, not a scratch workspace. Feature sessions should work from an explicitly assigned branch or worktree, keep changes inside their owner pathspecs, and leave `git status --short --untracked-files=all` clean before handoff.
 - Dirty-root rescue work must begin with `npm run release:dirty-map -- --reason "<short reason>"`, then use explicit pathspec staging only. Do not use `git add .` for UAIS rescue, release, or owner-slice commits.
+- Before starting root-checkout work, run `npm run release:clean-check`. If it fails, only S25/S10/S22 rescue, release-intake, or owner-approved cleanup work may continue in the root until clean-status evidence is published.
+- Generated evidence refreshes must overwrite the canonical report names or go under ignored `.scratch/` folders. Archive superseded generated reports and dirty-map probes before handoff instead of accumulating new timestamped piles in the root.
 
 ## High-Intensity Release Coordination Protocol
 

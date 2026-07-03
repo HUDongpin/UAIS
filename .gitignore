@@ -15,6 +15,8 @@
 /.playwright-cli/
 /.tmp/
 /output/
+coordination/reports/.scratch/
+coordination/release-intake/.scratch/
 
 # next.js
 /.next/

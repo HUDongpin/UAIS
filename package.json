@@ -10,6 +10,7 @@
     "test": "vitest run",
     "release:dirty-map": "node scripts/release-dirty-map.mjs",
     "release:clean-check": "node scripts/release-clean-check.mjs",
+    "release:package-gate": "node scripts/enterprise-runthrough-package-gate.mjs",
     "ai:provider:smoke": "node scripts/ai-provider-smoke.mjs --dry-run"
   },
   "dependencies": {
