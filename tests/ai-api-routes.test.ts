@@ -88,6 +88,7 @@ const appSessionSigningSecret = "test-app-session-signing-secret";
 const teacherAuthSessionSigningSecret = "test-teacher-auth-session-signing-secret";
 const teacherAuthIssuerSecret = "test-teacher-auth-issuer-secret-strong";
 const stableFutureIssueTime = new Date("2099-01-01T00:00:00.000Z");
+const activeRetentionFixtureCreatedAt = "2099-01-01T00:00:00.000Z";
 const liveApprovalHeaders = { "x-uais-live-ai-approval": liveApprovalToken };
 const teacherAiAccessHeaders = {
   ...liveApprovalHeaders,
@@ -4744,7 +4745,7 @@ describe("UAIS AI API route contracts", () => {
         sourceKind: "owner-provided",
         mimeType: "audio/wav",
         audioBase64: Buffer.from([1, 2, 3, 4]).toString("base64"),
-        createdAt: "2026-06-17T00:00:00.000Z",
+        createdAt: activeRetentionFixtureCreatedAt,
       });
       const getRetentionReadiness = createVoiceAssetRetentionReadinessGetHandler({
         env: {
