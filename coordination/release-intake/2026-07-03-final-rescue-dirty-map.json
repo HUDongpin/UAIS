@@ -1,0 +1,757 @@
+{
+  "generatedAt": "2026-07-03T11:55:16.668Z",
+  "reason": "2026-07-03 final rescue retained surface",
+  "branch": "codex/uais-dirty-rescue-2026-06-30",
+  "summary": {
+    "totalEntries": 147,
+    "byStatus": {
+      " M": 4,
+      "??": 143
+    },
+    "byTopLevel": {
+      ".gitignore": 1,
+      "AGENTS.md": 1,
+      "coordination": 24,
+      "package.json": 1,
+      "scripts": 59,
+      "tests": 61
+    }
+  },
+  "entries": [
+    {
+      "status": " M",
+      "path": ".gitignore",
+      "topLevel": ".gitignore"
+    },
+    {
+      "status": " M",
+      "path": "AGENTS.md",
+      "topLevel": "AGENTS.md"
+    },
+    {
+      "status": " M",
+      "path": "coordination/session-logs/2026-06-30-S22.md",
+      "topLevel": "coordination"
+    },
+    {
+      "status": " M",
+      "path": "package.json",
+      "topLevel": "package.json"
+    },
+    {
+      "status": "??",
+      "path": "coordination/release-intake/2026-07-03-current-rescue-dirty-map.json",
+      "topLevel": "coordination"
+    },
+    {
+      "status": "??",
+      "path": "coordination/release-intake/2026-07-03-dirty-worktree-rescue-archive-manifest.json",
+      "topLevel": "coordination"
+    },
+    {
+      "status": "??",
+      "path": "coordination/release-intake/2026-07-03-dirty-worktree-rescue-pathspecs.txt",
+      "topLevel": "coordination"
+    },
+    {
+      "status": "??",
+      "path": "coordination/release-intake/2026-07-03-final-rescue-dirty-map.json",
+      "topLevel": "coordination"
+    },
+    {
+      "status": "??",
+      "path": "coordination/reports/2026-07-01-enterprise-live-evidence-triage-enterprise-runthrough.json",
+      "topLevel": "coordination"
+    },
+    {
+      "status": "??",
+      "path": "coordination/reports/2026-07-01-enterprise-live-evidence-triage-enterprise-runthrough.md",
+      "topLevel": "coordination"
+    },
+    {
+      "status": "??",
+      "path": "coordination/reports/2026-07-01-enterprise-runthrough-bundle-manifest.json",
+      "topLevel": "coordination"
+    },
+    {
+      "status": "??",
+      "path": "coordination/reports/2026-07-01-enterprise-runthrough-bundle-manifest.md",
+      "topLevel": "coordination"
+    },
+    {
+      "status": "??",
+      "path": "coordination/reports/2026-07-01-enterprise-runthrough-package-gate.json",
+      "topLevel": "coordination"
+    },
+    {
+      "status": "??",
+      "path": "coordination/reports/2026-07-01-enterprise-runthrough-package-gate.md",
+      "topLevel": "coordination"
+    },
+    {
+      "status": "??",
+      "path": "coordination/reports/2026-07-01-enterprise-runthrough-review-slice-index.json",
+      "topLevel": "coordination"
+    },
+    {
+      "status": "??",
+      "path": "coordination/reports/2026-07-01-enterprise-runthrough-review-slice-index.md",
+      "topLevel": "coordination"
+    },
+    {
+      "status": "??",
+      "path": "coordination/reports/2026-07-01-owner-decision-package-manifest-enterprise-runthrough.json",
+      "topLevel": "coordination"
+    },
+    {
+      "status": "??",
+      "path": "coordination/reports/2026-07-01-owner-decision-package-manifest-enterprise-runthrough.md",
+      "topLevel": "coordination"
+    },
+    {
+      "status": "??",
+      "path": "coordination/reports/2026-07-01-president-report.docx",
+      "topLevel": "coordination"
+    },
+    {
+      "status": "??",
+      "path": "coordination/reports/2026-07-01-release-blocker-dependency-graph-enterprise-runthrough.json",
+      "topLevel": "coordination"
+    },
+    {
+      "status": "??",
+      "path": "coordination/reports/2026-07-01-release-blocker-dependency-graph-enterprise-runthrough.md",
+      "topLevel": "coordination"
+    },
+    {
+      "status": "??",
+      "path": "coordination/reports/2026-07-02-owner-decision-response-gap-matrix-enterprise-runthrough.json",
+      "topLevel": "coordination"
+    },
+    {
+      "status": "??",
+      "path": "coordination/reports/2026-07-02-owner-decision-response-gap-matrix-enterprise-runthrough.md",
+      "topLevel": "coordination"
+    },
+    {
+      "status": "??",
+      "path": "coordination/reports/2026-07-03-dirty-worktree-rescue-closeout.md",
+      "topLevel": "coordination"
+    },
+    {
+      "status": "??",
+      "path": "coordination/session-logs/2026-07-01-S10.md",
+      "topLevel": "coordination"
+    },
+    {
+      "status": "??",
+      "path": "coordination/session-logs/2026-07-02-S10.md",
+      "topLevel": "coordination"
+    },
+    {
+      "status": "??",
+      "path": "coordination/session-logs/2026-07-03-S25.md",
+      "topLevel": "coordination"
+    },
+    {
+      "status": "??",
+      "path": "scripts/app-auth-env-source-intake.mjs",
+      "topLevel": "scripts"
+    },
+    {
+      "status": "??",
+      "path": "scripts/app-auth-production-evidence-gate.mjs",
+      "topLevel": "scripts"
+    },
+    {
+      "status": "??",
+      "path": "scripts/app-auth-production-evidence-preflight.mjs",
+      "topLevel": "scripts"
+    },
+    {
+      "status": "??",
+      "path": "scripts/app-auth-vercel-env-sync-evidence-gate.mjs",
+      "topLevel": "scripts"
+    },
+    {
+      "status": "??",
+      "path": "scripts/enterprise-live-evidence-audit-production-evidence-gate.mjs",
+      "topLevel": "scripts"
+    },
+    {
+      "status": "??",
+      "path": "scripts/enterprise-live-evidence-audit-production-evidence-preflight.mjs",
+      "topLevel": "scripts"
+    },
+    {
+      "status": "??",
+      "path": "scripts/enterprise-live-evidence-triage.mjs",
+      "topLevel": "scripts"
+    },
+    {
+      "status": "??",
+      "path": "scripts/enterprise-runthrough-bundle-manifest.mjs",
+      "topLevel": "scripts"
+    },
+    {
+      "status": "??",
+      "path": "scripts/enterprise-runthrough-package-gate.mjs",
+      "topLevel": "scripts"
+    },
+    {
+      "status": "??",
+      "path": "scripts/enterprise-runthrough-review-slice-index.mjs",
+      "topLevel": "scripts"
+    },
+    {
+      "status": "??",
+      "path": "scripts/external-storage-env-source-intake.mjs",
+      "topLevel": "scripts"
+    },
+    {
+      "status": "??",
+      "path": "scripts/external-storage-production-evidence-gate.mjs",
+      "topLevel": "scripts"
+    },
+    {
+      "status": "??",
+      "path": "scripts/external-storage-production-evidence-preflight.mjs",
+      "topLevel": "scripts"
+    },
+    {
+      "status": "??",
+      "path": "scripts/external-storage-vercel-env-sync-evidence-gate.mjs",
+      "topLevel": "scripts"
+    },
+    {
+      "status": "??",
+      "path": "scripts/manual-ppt-playback-acceptance-production-evidence-gate.mjs",
+      "topLevel": "scripts"
+    },
+    {
+      "status": "??",
+      "path": "scripts/manual-ppt-playback-acceptance-production-evidence-preflight.mjs",
+      "topLevel": "scripts"
+    },
+    {
+      "status": "??",
+      "path": "scripts/ordinary-teaching-production-evidence-gate.mjs",
+      "topLevel": "scripts"
+    },
+    {
+      "status": "??",
+      "path": "scripts/ordinary-teaching-production-evidence-preflight.mjs",
+      "topLevel": "scripts"
+    },
+    {
+      "status": "??",
+      "path": "scripts/ordinary-teaching-production-evidence-prerequisite-index.mjs",
+      "topLevel": "scripts"
+    },
+    {
+      "status": "??",
+      "path": "scripts/owner-decision-action-packet-index.mjs",
+      "topLevel": "scripts"
+    },
+    {
+      "status": "??",
+      "path": "scripts/owner-decision-app-auth-response-template.mjs",
+      "topLevel": "scripts"
+    },
+    {
+      "status": "??",
+      "path": "scripts/owner-decision-app-auth-response-validation.mjs",
+      "topLevel": "scripts"
+    },
+    {
+      "status": "??",
+      "path": "scripts/owner-decision-enterprise-live-evidence-audit-response-template.mjs",
+      "topLevel": "scripts"
+    },
+    {
+      "status": "??",
+      "path": "scripts/owner-decision-enterprise-live-evidence-audit-response-validation.mjs",
+      "topLevel": "scripts"
+    },
+    {
+      "status": "??",
+      "path": "scripts/owner-decision-external-storage-response-template.mjs",
+      "topLevel": "scripts"
+    },
+    {
+      "status": "??",
+      "path": "scripts/owner-decision-external-storage-response-validation.mjs",
+      "topLevel": "scripts"
+    },
+    {
+      "status": "??",
+      "path": "scripts/owner-decision-first-blocker-request.mjs",
+      "topLevel": "scripts"
+    },
+    {
+      "status": "??",
+      "path": "scripts/owner-decision-live-run-approval-gate.mjs",
+      "topLevel": "scripts"
+    },
+    {
+      "status": "??",
+      "path": "scripts/owner-decision-manual-ppt-playback-acceptance-response-template.mjs",
+      "topLevel": "scripts"
+    },
+    {
+      "status": "??",
+      "path": "scripts/owner-decision-manual-ppt-playback-acceptance-response-validation.mjs",
+      "topLevel": "scripts"
+    },
+    {
+      "status": "??",
+      "path": "scripts/owner-decision-ordinary-teaching-production-evidence-response-template.mjs",
+      "topLevel": "scripts"
+    },
+    {
+      "status": "??",
+      "path": "scripts/owner-decision-ordinary-teaching-production-evidence-response-validation.mjs",
+      "topLevel": "scripts"
+    },
+    {
+      "status": "??",
+      "path": "scripts/owner-decision-package-manifest.mjs",
+      "topLevel": "scripts"
+    },
+    {
+      "status": "??",
+      "path": "scripts/owner-decision-production-release-run-response-template.mjs",
+      "topLevel": "scripts"
+    },
+    {
+      "status": "??",
+      "path": "scripts/owner-decision-production-release-run-response-validation.mjs",
+      "topLevel": "scripts"
+    },
+    {
+      "status": "??",
+      "path": "scripts/owner-decision-response-completion-extract.mjs",
+      "topLevel": "scripts"
+    },
+    {
+      "status": "??",
+      "path": "scripts/owner-decision-response-completion-from-responses.mjs",
+      "topLevel": "scripts"
+    },
+    {
+      "status": "??",
+      "path": "scripts/owner-decision-response-completion-packet.mjs",
+      "topLevel": "scripts"
+    },
+    {
+      "status": "??",
+      "path": "scripts/owner-decision-response-completion-validation.mjs",
+      "topLevel": "scripts"
+    },
+    {
+      "status": "??",
+      "path": "scripts/owner-decision-response-gap-matrix.mjs",
+      "topLevel": "scripts"
+    },
+    {
+      "status": "??",
+      "path": "scripts/owner-decision-response-package-manifest.mjs",
+      "topLevel": "scripts"
+    },
+    {
+      "status": "??",
+      "path": "scripts/owner-decision-response-postvalidation-suite.mjs",
+      "topLevel": "scripts"
+    },
+    {
+      "status": "??",
+      "path": "scripts/owner-decision-teacher-auth-response-template.mjs",
+      "topLevel": "scripts"
+    },
+    {
+      "status": "??",
+      "path": "scripts/owner-decision-teacher-auth-response-validation.mjs",
+      "topLevel": "scripts"
+    },
+    {
+      "status": "??",
+      "path": "scripts/owner-decision-vercel-env-deploy-response-template.mjs",
+      "topLevel": "scripts"
+    },
+    {
+      "status": "??",
+      "path": "scripts/owner-decision-vercel-env-deploy-response-validation.mjs",
+      "topLevel": "scripts"
+    },
+    {
+      "status": "??",
+      "path": "scripts/production-env-source-handoff.mjs",
+      "topLevel": "scripts"
+    },
+    {
+      "status": "??",
+      "path": "scripts/production-evidence-execution-plan.mjs",
+      "topLevel": "scripts"
+    },
+    {
+      "status": "??",
+      "path": "scripts/production-evidence-reuse-audit.mjs",
+      "topLevel": "scripts"
+    },
+    {
+      "status": "??",
+      "path": "scripts/production-release-run-production-evidence-gate.mjs",
+      "topLevel": "scripts"
+    },
+    {
+      "status": "??",
+      "path": "scripts/production-release-run-production-evidence-preflight.mjs",
+      "topLevel": "scripts"
+    },
+    {
+      "status": "??",
+      "path": "scripts/release-blocker-dependency-graph.mjs",
+      "topLevel": "scripts"
+    },
+    {
+      "status": "??",
+      "path": "scripts/release-blocker-diagnosis-coverage.mjs",
+      "topLevel": "scripts"
+    },
+    {
+      "status": "??",
+      "path": "scripts/teacher-auth-env-source-intake.mjs",
+      "topLevel": "scripts"
+    },
+    {
+      "status": "??",
+      "path": "scripts/teacher-auth-production-evidence-gate.mjs",
+      "topLevel": "scripts"
+    },
+    {
+      "status": "??",
+      "path": "scripts/teacher-auth-production-evidence-preflight.mjs",
+      "topLevel": "scripts"
+    },
+    {
+      "status": "??",
+      "path": "scripts/teacher-auth-vercel-env-sync-evidence-gate.mjs",
+      "topLevel": "scripts"
+    },
+    {
+      "status": "??",
+      "path": "scripts/vercel-env-deploy-production-evidence-gate.mjs",
+      "topLevel": "scripts"
+    },
+    {
+      "status": "??",
+      "path": "scripts/vercel-env-deploy-production-evidence-preflight.mjs",
+      "topLevel": "scripts"
+    },
+    {
+      "status": "??",
+      "path": "tests/app-auth-env-source-intake.test.ts",
+      "topLevel": "tests"
+    },
+    {
+      "status": "??",
+      "path": "tests/app-auth-production-evidence-gate.test.ts",
+      "topLevel": "tests"
+    },
+    {
+      "status": "??",
+      "path": "tests/app-auth-production-evidence-preflight.test.ts",
+      "topLevel": "tests"
+    },
+    {
+      "status": "??",
+      "path": "tests/app-auth-vercel-env-sync-evidence-gate.test.ts",
+      "topLevel": "tests"
+    },
+    {
+      "status": "??",
+      "path": "tests/enterprise-live-evidence-audit-production-evidence-gate.test.ts",
+      "topLevel": "tests"
+    },
+    {
+      "status": "??",
+      "path": "tests/enterprise-live-evidence-audit-production-evidence-preflight.test.ts",
+      "topLevel": "tests"
+    },
+    {
+      "status": "??",
+      "path": "tests/enterprise-live-evidence-triage.test.ts",
+      "topLevel": "tests"
+    },
+    {
+      "status": "??",
+      "path": "tests/enterprise-runthrough-bundle-manifest.test.ts",
+      "topLevel": "tests"
+    },
+    {
+      "status": "??",
+      "path": "tests/enterprise-runthrough-package-gate.test.ts",
+      "topLevel": "tests"
+    },
+    {
+      "status": "??",
+      "path": "tests/enterprise-runthrough-review-slice-index.test.ts",
+      "topLevel": "tests"
+    },
+    {
+      "status": "??",
+      "path": "tests/external-storage-env-source-intake.test.ts",
+      "topLevel": "tests"
+    },
+    {
+      "status": "??",
+      "path": "tests/external-storage-production-evidence-gate.test.ts",
+      "topLevel": "tests"
+    },
+    {
+      "status": "??",
+      "path": "tests/external-storage-production-evidence-preflight.test.ts",
+      "topLevel": "tests"
+    },
+    {
+      "status": "??",
+      "path": "tests/external-storage-vercel-env-sync-evidence-gate.test.ts",
+      "topLevel": "tests"
+    },
+    {
+      "status": "??",
+      "path": "tests/manual-ppt-playback-acceptance-production-evidence-gate.test.ts",
+      "topLevel": "tests"
+    },
+    {
+      "status": "??",
+      "path": "tests/manual-ppt-playback-acceptance-production-evidence-preflight.test.ts",
+      "topLevel": "tests"
+    },
+    {
+      "status": "??",
+      "path": "tests/operator-input-packet-markdown-visibility.test.ts",
+      "topLevel": "tests"
+    },
+    {
+      "status": "??",
+      "path": "tests/operator-input-packet-safety-propagation.test.ts",
+      "topLevel": "tests"
+    },
+    {
+      "status": "??",
+      "path": "tests/ordinary-teaching-production-evidence-gate.test.ts",
+      "topLevel": "tests"
+    },
+    {
+      "status": "??",
+      "path": "tests/ordinary-teaching-production-evidence-preflight.test.ts",
+      "topLevel": "tests"
+    },
+    {
+      "status": "??",
+      "path": "tests/ordinary-teaching-production-evidence-prerequisite-index.test.ts",
+      "topLevel": "tests"
+    },
+    {
+      "status": "??",
+      "path": "tests/owner-decision-action-packet-index.test.ts",
+      "topLevel": "tests"
+    },
+    {
+      "status": "??",
+      "path": "tests/owner-decision-app-auth-response-template.test.ts",
+      "topLevel": "tests"
+    },
+    {
+      "status": "??",
+      "path": "tests/owner-decision-app-auth-response-validation.test.ts",
+      "topLevel": "tests"
+    },
+    {
+      "status": "??",
+      "path": "tests/owner-decision-enterprise-live-evidence-audit-response-template.test.ts",
+      "topLevel": "tests"
+    },
+    {
+      "status": "??",
+      "path": "tests/owner-decision-enterprise-live-evidence-audit-response-validation.test.ts",
+      "topLevel": "tests"
+    },
+    {
+      "status": "??",
+      "path": "tests/owner-decision-external-storage-response-template.test.ts",
+      "topLevel": "tests"
+    },
+    {
+      "status": "??",
+      "path": "tests/owner-decision-external-storage-response-validation.test.ts",
+      "topLevel": "tests"
+    },
+    {
+      "status": "??",
+      "path": "tests/owner-decision-first-blocker-request.test.ts",
+      "topLevel": "tests"
+    },
+    {
+      "status": "??",
+      "path": "tests/owner-decision-live-run-approval-gate.test.ts",
+      "topLevel": "tests"
+    },
+    {
+      "status": "??",
+      "path": "tests/owner-decision-manual-ppt-playback-acceptance-response-template.test.ts",
+      "topLevel": "tests"
+    },
+    {
+      "status": "??",
+      "path": "tests/owner-decision-manual-ppt-playback-acceptance-response-validation.test.ts",
+      "topLevel": "tests"
+    },
+    {
+      "status": "??",
+      "path": "tests/owner-decision-ordinary-teaching-production-evidence-response-template.test.ts",
+      "topLevel": "tests"
+    },
+    {
+      "status": "??",
+      "path": "tests/owner-decision-ordinary-teaching-production-evidence-response-validation.test.ts",
+      "topLevel": "tests"
+    },
+    {
+      "status": "??",
+      "path": "tests/owner-decision-package-manifest.test.ts",
+      "topLevel": "tests"
+    },
+    {
+      "status": "??",
+      "path": "tests/owner-decision-production-release-run-response-template.test.ts",
+      "topLevel": "tests"
+    },
+    {
+      "status": "??",
+      "path": "tests/owner-decision-production-release-run-response-validation.test.ts",
+      "topLevel": "tests"
+    },
+    {
+      "status": "??",
+      "path": "tests/owner-decision-response-completion-extract.test.ts",
+      "topLevel": "tests"
+    },
+    {
+      "status": "??",
+      "path": "tests/owner-decision-response-completion-from-responses.test.ts",
+      "topLevel": "tests"
+    },
+    {
+      "status": "??",
+      "path": "tests/owner-decision-response-completion-packet.test.ts",
+      "topLevel": "tests"
+    },
+    {
+      "status": "??",
+      "path": "tests/owner-decision-response-completion-validation.test.ts",
+      "topLevel": "tests"
+    },
+    {
+      "status": "??",
+      "path": "tests/owner-decision-response-gap-matrix.test.ts",
+      "topLevel": "tests"
+    },
+    {
+      "status": "??",
+      "path": "tests/owner-decision-response-package-manifest.test.ts",
+      "topLevel": "tests"
+    },
+    {
+      "status": "??",
+      "path": "tests/owner-decision-response-postvalidation-suite.test.ts",
+      "topLevel": "tests"
+    },
+    {
+      "status": "??",
+      "path": "tests/owner-decision-teacher-auth-response-template.test.ts",
+      "topLevel": "tests"
+    },
+    {
+      "status": "??",
+      "path": "tests/owner-decision-teacher-auth-response-validation.test.ts",
+      "topLevel": "tests"
+    },
+    {
+      "status": "??",
+      "path": "tests/owner-decision-vercel-env-deploy-response-template.test.ts",
+      "topLevel": "tests"
+    },
+    {
+      "status": "??",
+      "path": "tests/owner-decision-vercel-env-deploy-response-validation.test.ts",
+      "topLevel": "tests"
+    },
+    {
+      "status": "??",
+      "path": "tests/production-env-source-handoff.test.ts",
+      "topLevel": "tests"
+    },
+    {
+      "status": "??",
+      "path": "tests/production-evidence-execution-plan.test.ts",
+      "topLevel": "tests"
+    },
+    {
+      "status": "??",
+      "path": "tests/production-evidence-reuse-audit.test.ts",
+      "topLevel": "tests"
+    },
+    {
+      "status": "??",
+      "path": "tests/production-release-run-production-evidence-gate.test.ts",
+      "topLevel": "tests"
+    },
+    {
+      "status": "??",
+      "path": "tests/production-release-run-production-evidence-preflight.test.ts",
+      "topLevel": "tests"
+    },
+    {
+      "status": "??",
+      "path": "tests/release-blocker-dependency-graph.test.ts",
+      "topLevel": "tests"
+    },
+    {
+      "status": "??",
+      "path": "tests/release-blocker-diagnosis-coverage.test.ts",
+      "topLevel": "tests"
+    },
+    {
+      "status": "??",
+      "path": "tests/teacher-auth-env-source-intake.test.ts",
+      "topLevel": "tests"
+    },
+    {
+      "status": "??",
+      "path": "tests/teacher-auth-production-evidence-gate.test.ts",
+      "topLevel": "tests"
+    },
+    {
+      "status": "??",
+      "path": "tests/teacher-auth-production-evidence-preflight.test.ts",
+      "topLevel": "tests"
+    },
+    {
+      "status": "??",
+      "path": "tests/teacher-auth-vercel-env-sync-evidence-gate.test.ts",
+      "topLevel": "tests"
+    },
+    {
+      "status": "??",
+      "path": "tests/vercel-env-deploy-production-evidence-gate.test.ts",
+      "topLevel": "tests"
+    },
+    {
+      "status": "??",
+      "path": "tests/vercel-env-deploy-production-evidence-preflight.test.ts",
+      "topLevel": "tests"
+    }
+  ]
+}

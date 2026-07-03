@@ -1,0 +1,1051 @@
+{
+  "target": "enterprise-live-evidence-triage",
+  "status": "blocked",
+  "releaseGateStatus": "blocked",
+  "responsibleSession": "S22",
+  "summary": {
+    "totalTargets": 16,
+    "acceptedTargets": 0,
+    "blockedTargets": 16,
+    "missingRequiredTargets": 16,
+    "releaseRunIdConsistency": "missing",
+    "sharedReleaseRunIdStatus": "missing"
+  },
+  "missingRequiredTargets": [
+    "app-auth-provider-readiness",
+    "teacher-auth-issuer-route-smoke",
+    "teacher-auth-provider-readiness",
+    "external-storage-persistence",
+    "external-storage-service-readiness",
+    "deployment-domain-reachability",
+    "teacher-workflow-deployment-smoke",
+    "teacher-workflow-browser-smoke",
+    "teacher-workflow-live-generation-smoke",
+    "learning-ppt-playback-deployment-smoke",
+    "ppt-manual-playback-acceptance",
+    "deployment-route-smoke",
+    "teaching-operations-route-smoke",
+    "teaching-operation-detail-browser-smoke",
+    "teaching-course-management-route-smoke",
+    "external-storage-smoke"
+  ],
+  "blockerCounts": {
+    "mode-not-live": 15,
+    "status-not-ready": 3,
+    "target-result-proof-missing": 16,
+    "status-not-reachable": 1,
+    "release-run-missing": 14,
+    "status-not-passed": 11,
+    "safety-not-proven": 5,
+    "mode-not-record": 1,
+    "environment-not-production": 1,
+    "status-not-accepted": 1
+  },
+  "categories": {
+    "ownerApprovedLiveRunRequired": [
+      "app-auth-provider-readiness",
+      "deployment-domain-reachability",
+      "external-storage-persistence",
+      "external-storage-service-readiness",
+      "external-storage-smoke",
+      "learning-ppt-playback-deployment-smoke",
+      "deployment-route-smoke",
+      "teacher-auth-issuer-route-smoke",
+      "teacher-auth-provider-readiness",
+      "teacher-workflow-browser-smoke",
+      "teacher-workflow-deployment-smoke",
+      "teacher-workflow-live-generation-smoke",
+      "teaching-course-management-route-smoke",
+      "teaching-operation-detail-browser-smoke",
+      "teaching-operations-route-smoke"
+    ],
+    "sharedReleaseRunRequired": [
+      "deployment-domain-reachability",
+      "external-storage-persistence",
+      "external-storage-service-readiness",
+      "external-storage-smoke",
+      "learning-ppt-playback-deployment-smoke",
+      "ppt-manual-playback-acceptance",
+      "deployment-route-smoke",
+      "teacher-auth-issuer-route-smoke",
+      "teacher-workflow-browser-smoke",
+      "teacher-workflow-deployment-smoke",
+      "teacher-workflow-live-generation-smoke",
+      "teaching-course-management-route-smoke",
+      "teaching-operation-detail-browser-smoke",
+      "teaching-operations-route-smoke"
+    ],
+    "targetResultProofRequired": [
+      "app-auth-provider-readiness",
+      "deployment-domain-reachability",
+      "external-storage-persistence",
+      "external-storage-service-readiness",
+      "external-storage-smoke",
+      "learning-ppt-playback-deployment-smoke",
+      "ppt-manual-playback-acceptance",
+      "deployment-route-smoke",
+      "teacher-auth-issuer-route-smoke",
+      "teacher-auth-provider-readiness",
+      "teacher-workflow-browser-smoke",
+      "teacher-workflow-deployment-smoke",
+      "teacher-workflow-live-generation-smoke",
+      "teaching-course-management-route-smoke",
+      "teaching-operation-detail-browser-smoke",
+      "teaching-operations-route-smoke"
+    ],
+    "targetContractProofRequired": [
+      "teaching-operation-detail-browser-smoke"
+    ],
+    "safetyProofRequired": [
+      "external-storage-smoke",
+      "learning-ppt-playback-deployment-smoke",
+      "teacher-workflow-browser-smoke",
+      "teacher-workflow-deployment-smoke",
+      "teacher-workflow-live-generation-smoke"
+    ],
+    "manualHumanQaRequired": [
+      "ppt-manual-playback-acceptance"
+    ]
+  },
+  "executionWaves": [
+    {
+      "id": "provider-and-env-decisions",
+      "label": "Provider and env decisions",
+      "gate": "Owner, S12, S19, S22, and S24 settle provider/service readiness before live production runs.",
+      "stopCondition": "Stop if owner provider choices, approved env placement, or service readiness cannot be confirmed.",
+      "targetCount": 3,
+      "targets": [
+        {
+          "target": "app-auth-provider-readiness",
+          "acceptanceStatus": "not-accepted-filename-only",
+          "current": {
+            "mode": "dry-run",
+            "expectedMode": "live",
+            "environment": "production",
+            "status": "blocked",
+            "expectedStatus": "ready"
+          },
+          "releaseRunIdStatus": "present",
+          "targetResultStatus": "missing",
+          "targetContractStatus": "not-required",
+          "safetyStatus": "proved",
+          "topBlockers": [
+            "mode-not-live",
+            "status-not-ready",
+            "target-result-proof-missing"
+          ],
+          "responsibleSessions": [
+            "Owner",
+            "S12",
+            "S19",
+            "S22"
+          ],
+          "nextAction": "Run owner-approved production live evidence for this target with body-level result proof."
+        },
+        {
+          "target": "teacher-auth-provider-readiness",
+          "acceptanceStatus": "not-accepted-filename-only",
+          "current": {
+            "mode": "dry-run",
+            "expectedMode": "live",
+            "environment": "production",
+            "status": "blocked",
+            "expectedStatus": "ready"
+          },
+          "releaseRunIdStatus": "present",
+          "targetResultStatus": "missing",
+          "targetContractStatus": "not-required",
+          "safetyStatus": "proved",
+          "topBlockers": [
+            "mode-not-live",
+            "status-not-ready",
+            "target-result-proof-missing"
+          ],
+          "responsibleSessions": [
+            "Owner",
+            "S12",
+            "S19",
+            "S22"
+          ],
+          "nextAction": "Run owner-approved production live evidence for this target with body-level result proof."
+        },
+        {
+          "target": "external-storage-service-readiness",
+          "acceptanceStatus": "not-accepted-filename-only",
+          "current": {
+            "mode": "dry-run",
+            "expectedMode": "live",
+            "environment": "production",
+            "status": "blocked",
+            "expectedStatus": "ready"
+          },
+          "releaseRunIdStatus": "missing",
+          "targetResultStatus": "missing",
+          "targetContractStatus": "not-required",
+          "safetyStatus": "proved",
+          "topBlockers": [
+            "mode-not-live",
+            "status-not-ready",
+            "release-run-missing"
+          ],
+          "responsibleSessions": [
+            "Owner",
+            "S12",
+            "S19",
+            "S22",
+            "S24"
+          ],
+          "nextAction": "Rerun this production live evidence on the shared release-run ID with body-level result proof."
+        }
+      ]
+    },
+    {
+      "id": "deployment-and-domain-binding",
+      "label": "Deployment and domain binding",
+      "gate": "S22 proves production deployment, domain reachability, and deployment route smoke prerequisites.",
+      "stopCondition": "Stop if production deployment, domain reachability, or deployment route proof cannot be produced.",
+      "targetCount": 4,
+      "targets": [
+        {
+          "target": "deployment-domain-reachability",
+          "acceptanceStatus": "not-accepted-filename-only",
+          "current": {
+            "mode": "dry-run",
+            "expectedMode": "live",
+            "environment": "production",
+            "status": "blocked",
+            "expectedStatus": "reachable"
+          },
+          "releaseRunIdStatus": "missing",
+          "targetResultStatus": "missing",
+          "targetContractStatus": "not-required",
+          "safetyStatus": "proved",
+          "topBlockers": [
+            "mode-not-live",
+            "status-not-reachable",
+            "release-run-missing"
+          ],
+          "responsibleSessions": [
+            "S22"
+          ],
+          "nextAction": "Rerun this production live evidence on the shared release-run ID with body-level result proof."
+        },
+        {
+          "target": "deployment-route-smoke",
+          "acceptanceStatus": "not-accepted-filename-only",
+          "current": {
+            "mode": "dry-run",
+            "expectedMode": "live",
+            "environment": "production",
+            "status": "blocked",
+            "expectedStatus": "passed"
+          },
+          "releaseRunIdStatus": "missing",
+          "targetResultStatus": "missing",
+          "targetContractStatus": "not-required",
+          "safetyStatus": "proved",
+          "topBlockers": [
+            "mode-not-live",
+            "status-not-passed",
+            "release-run-missing"
+          ],
+          "responsibleSessions": [
+            "S22"
+          ],
+          "nextAction": "Rerun this production live evidence on the shared release-run ID with body-level result proof."
+        },
+        {
+          "target": "teacher-workflow-deployment-smoke",
+          "acceptanceStatus": "not-accepted-filename-only",
+          "current": {
+            "mode": "dry-run",
+            "expectedMode": "live",
+            "environment": "production",
+            "status": "blocked",
+            "expectedStatus": "passed"
+          },
+          "releaseRunIdStatus": "missing",
+          "targetResultStatus": "missing",
+          "targetContractStatus": "not-required",
+          "safetyStatus": "missing",
+          "topBlockers": [
+            "mode-not-live",
+            "status-not-passed",
+            "release-run-missing"
+          ],
+          "responsibleSessions": [
+            "S22"
+          ],
+          "nextAction": "Rerun this production live evidence on the shared release-run ID with body-level result proof."
+        },
+        {
+          "target": "learning-ppt-playback-deployment-smoke",
+          "acceptanceStatus": "not-accepted-filename-only",
+          "current": {
+            "mode": "dry-run",
+            "expectedMode": "live",
+            "environment": "production",
+            "status": "blocked",
+            "expectedStatus": "passed"
+          },
+          "releaseRunIdStatus": "missing",
+          "targetResultStatus": "missing",
+          "targetContractStatus": "not-required",
+          "safetyStatus": "missing",
+          "topBlockers": [
+            "mode-not-live",
+            "status-not-passed",
+            "release-run-missing"
+          ],
+          "responsibleSessions": [
+            "S22",
+            "S24"
+          ],
+          "nextAction": "Rerun this production live evidence on the shared release-run ID with body-level result proof."
+        }
+      ]
+    },
+    {
+      "id": "auth-and-storage-readiness",
+      "label": "Auth and storage readiness",
+      "gate": "S12, S19, S22, and S24 prove auth issuer and external storage readiness on the shared run.",
+      "stopCondition": "Stop if auth issuer, provider readiness, or storage persistence proof is missing.",
+      "targetCount": 3,
+      "targets": [
+        {
+          "target": "teacher-auth-issuer-route-smoke",
+          "acceptanceStatus": "not-accepted-filename-only",
+          "current": {
+            "mode": "dry-run",
+            "expectedMode": "live",
+            "environment": "production",
+            "status": "blocked",
+            "expectedStatus": "passed"
+          },
+          "releaseRunIdStatus": "missing",
+          "targetResultStatus": "missing",
+          "targetContractStatus": "not-required",
+          "safetyStatus": "proved",
+          "topBlockers": [
+            "mode-not-live",
+            "status-not-passed",
+            "release-run-missing"
+          ],
+          "responsibleSessions": [
+            "S12",
+            "S22"
+          ],
+          "nextAction": "Rerun this production live evidence on the shared release-run ID with body-level result proof."
+        },
+        {
+          "target": "external-storage-persistence",
+          "acceptanceStatus": "not-accepted-filename-only",
+          "current": {
+            "mode": "dry-run",
+            "expectedMode": "live",
+            "environment": "production",
+            "status": "blocked",
+            "expectedStatus": "passed"
+          },
+          "releaseRunIdStatus": "missing",
+          "targetResultStatus": "missing",
+          "targetContractStatus": "not-required",
+          "safetyStatus": "proved",
+          "topBlockers": [
+            "mode-not-live",
+            "status-not-passed",
+            "release-run-missing"
+          ],
+          "responsibleSessions": [
+            "S12",
+            "S22",
+            "S24"
+          ],
+          "nextAction": "Rerun this production live evidence on the shared release-run ID with body-level result proof."
+        },
+        {
+          "target": "external-storage-smoke",
+          "acceptanceStatus": "not-accepted-filename-only",
+          "current": {
+            "mode": "dry-run",
+            "expectedMode": "live",
+            "environment": "production",
+            "status": "blocked",
+            "expectedStatus": "passed"
+          },
+          "releaseRunIdStatus": "missing",
+          "targetResultStatus": "missing",
+          "targetContractStatus": "not-required",
+          "safetyStatus": "missing",
+          "topBlockers": [
+            "mode-not-live",
+            "status-not-passed",
+            "release-run-missing"
+          ],
+          "responsibleSessions": [
+            "S12",
+            "S22",
+            "S24"
+          ],
+          "nextAction": "Run owner-approved production live smoke on the shared release-run ID with body-level result proof."
+        }
+      ]
+    },
+    {
+      "id": "workflow-and-ordinary-teaching-smokes",
+      "label": "Workflow and ordinary teaching smokes",
+      "gate": "S05, S07, S12, S13, S19, S22, and S24 prove production teaching and workflow routes.",
+      "stopCondition": "Stop if body-level result proof, target contract proof, or safety proof is missing.",
+      "targetCount": 5,
+      "targets": [
+        {
+          "target": "teacher-workflow-browser-smoke",
+          "acceptanceStatus": "not-accepted-filename-only",
+          "current": {
+            "mode": "dry-run",
+            "expectedMode": "live",
+            "environment": "production",
+            "status": "blocked",
+            "expectedStatus": "passed"
+          },
+          "releaseRunIdStatus": "missing",
+          "targetResultStatus": "missing",
+          "targetContractStatus": "not-required",
+          "safetyStatus": "missing",
+          "topBlockers": [
+            "mode-not-live",
+            "status-not-passed",
+            "release-run-missing"
+          ],
+          "responsibleSessions": [
+            "S22"
+          ],
+          "nextAction": "Rerun this production live evidence on the shared release-run ID with body-level result proof."
+        },
+        {
+          "target": "teacher-workflow-live-generation-smoke",
+          "acceptanceStatus": "not-accepted-filename-only",
+          "current": {
+            "mode": "dry-run",
+            "expectedMode": "live",
+            "environment": "production",
+            "status": "blocked",
+            "expectedStatus": "passed"
+          },
+          "releaseRunIdStatus": "missing",
+          "targetResultStatus": "missing",
+          "targetContractStatus": "not-required",
+          "safetyStatus": "missing",
+          "topBlockers": [
+            "mode-not-live",
+            "status-not-passed",
+            "release-run-missing"
+          ],
+          "responsibleSessions": [
+            "S07",
+            "S22"
+          ],
+          "nextAction": "Rerun this production live evidence on the shared release-run ID with body-level result proof."
+        },
+        {
+          "target": "teaching-operations-route-smoke",
+          "acceptanceStatus": "not-accepted-filename-only",
+          "current": {
+            "mode": "dry-run",
+            "expectedMode": "live",
+            "environment": "production",
+            "status": "blocked",
+            "expectedStatus": "passed"
+          },
+          "releaseRunIdStatus": "missing",
+          "targetResultStatus": "missing",
+          "targetContractStatus": "proved",
+          "safetyStatus": "proved",
+          "topBlockers": [
+            "mode-not-live",
+            "status-not-passed",
+            "release-run-missing"
+          ],
+          "responsibleSessions": [
+            "S05",
+            "S12",
+            "S13",
+            "S19",
+            "S22"
+          ],
+          "nextAction": "Run owner-approved production live smoke on the shared release-run ID with body-level result proof."
+        },
+        {
+          "target": "teaching-operation-detail-browser-smoke",
+          "acceptanceStatus": "not-accepted-filename-only",
+          "current": {
+            "mode": "dry-run",
+            "expectedMode": "live",
+            "environment": "production",
+            "status": "blocked",
+            "expectedStatus": "passed"
+          },
+          "releaseRunIdStatus": "missing",
+          "targetResultStatus": "missing",
+          "targetContractStatus": "missing",
+          "safetyStatus": "proved",
+          "topBlockers": [
+            "mode-not-live",
+            "status-not-passed",
+            "release-run-missing"
+          ],
+          "responsibleSessions": [
+            "S05",
+            "S12",
+            "S13",
+            "S19",
+            "S22"
+          ],
+          "nextAction": "Run owner-approved production live smoke on the shared release-run ID with body-level result proof."
+        },
+        {
+          "target": "teaching-course-management-route-smoke",
+          "acceptanceStatus": "not-accepted-filename-only",
+          "current": {
+            "mode": "dry-run",
+            "expectedMode": "live",
+            "environment": "production",
+            "status": "blocked",
+            "expectedStatus": "passed"
+          },
+          "releaseRunIdStatus": "missing",
+          "targetResultStatus": "missing",
+          "targetContractStatus": "proved",
+          "safetyStatus": "proved",
+          "topBlockers": [
+            "mode-not-live",
+            "status-not-passed",
+            "release-run-missing"
+          ],
+          "responsibleSessions": [
+            "S05",
+            "S12",
+            "S13",
+            "S19",
+            "S22"
+          ],
+          "nextAction": "Run owner-approved production live smoke on the shared release-run ID with body-level result proof."
+        }
+      ]
+    },
+    {
+      "id": "manual-qa-and-final-audit",
+      "label": "Manual QA and final audit",
+      "gate": "Owner, S24, and S22 bind manual playback acceptance and final audit review to the shared run.",
+      "stopCondition": "Stop if human PowerPoint/WPS playback acceptance or final release-run consistency is missing.",
+      "targetCount": 1,
+      "targets": [
+        {
+          "target": "ppt-manual-playback-acceptance",
+          "acceptanceStatus": "not-accepted-filename-only",
+          "current": {
+            "mode": "plan",
+            "expectedMode": "record",
+            "environment": "missing",
+            "status": "blocked",
+            "expectedStatus": "accepted"
+          },
+          "releaseRunIdStatus": "missing",
+          "targetResultStatus": "missing",
+          "targetContractStatus": "not-required",
+          "safetyStatus": "proved",
+          "topBlockers": [
+            "mode-not-record",
+            "environment-not-production",
+            "status-not-accepted"
+          ],
+          "responsibleSessions": [
+            "Owner",
+            "S24",
+            "S22"
+          ],
+          "nextAction": "Collect S24 human PowerPoint/WPS playback acceptance after production deployment, bound to the shared release-run ID."
+        }
+      ]
+    }
+  ],
+  "nextActions": [
+    {
+      "target": "app-auth-provider-readiness",
+      "evidenceFileName": "2026-06-28-app-auth-provider-readiness-production-live.json",
+      "acceptanceStatus": "not-accepted-filename-only",
+      "current": {
+        "mode": "dry-run",
+        "expectedMode": "live",
+        "environment": "production",
+        "status": "blocked",
+        "expectedStatus": "ready"
+      },
+      "releaseRunIdStatus": "present",
+      "safetyStatus": "proved",
+      "targetResultStatus": "missing",
+      "targetContractStatus": "not-required",
+      "blockedReasons": [
+        "mode-not-live",
+        "status-not-ready",
+        "target-result-proof-missing"
+      ],
+      "missingResultKeyCount": 2,
+      "nextAction": "Run owner-approved production live evidence for this target with body-level result proof.",
+      "responsibleSessions": [
+        "Owner",
+        "S12",
+        "S19",
+        "S22"
+      ]
+    },
+    {
+      "target": "deployment-domain-reachability",
+      "evidenceFileName": "2026-06-28-deployment-domain-reachability-production-live.json",
+      "acceptanceStatus": "not-accepted-filename-only",
+      "current": {
+        "mode": "dry-run",
+        "expectedMode": "live",
+        "environment": "production",
+        "status": "blocked",
+        "expectedStatus": "reachable"
+      },
+      "releaseRunIdStatus": "missing",
+      "safetyStatus": "proved",
+      "targetResultStatus": "missing",
+      "targetContractStatus": "not-required",
+      "blockedReasons": [
+        "mode-not-live",
+        "status-not-reachable",
+        "release-run-missing",
+        "target-result-proof-missing"
+      ],
+      "missingResultKeyCount": 7,
+      "nextAction": "Rerun this production live evidence on the shared release-run ID with body-level result proof.",
+      "responsibleSessions": [
+        "S22"
+      ]
+    },
+    {
+      "target": "external-storage-persistence",
+      "evidenceFileName": "2026-06-28-external-storage-persistence-production-live.json",
+      "acceptanceStatus": "not-accepted-filename-only",
+      "current": {
+        "mode": "dry-run",
+        "expectedMode": "live",
+        "environment": "production",
+        "status": "blocked",
+        "expectedStatus": "passed"
+      },
+      "releaseRunIdStatus": "missing",
+      "safetyStatus": "proved",
+      "targetResultStatus": "missing",
+      "targetContractStatus": "not-required",
+      "blockedReasons": [
+        "mode-not-live",
+        "status-not-passed",
+        "release-run-missing",
+        "target-result-proof-missing"
+      ],
+      "missingResultKeyCount": 3,
+      "nextAction": "Rerun this production live evidence on the shared release-run ID with body-level result proof.",
+      "responsibleSessions": [
+        "S12",
+        "S22",
+        "S24"
+      ]
+    },
+    {
+      "target": "external-storage-service-readiness",
+      "evidenceFileName": "2026-06-28-external-storage-service-readiness-production-live.json",
+      "acceptanceStatus": "not-accepted-filename-only",
+      "current": {
+        "mode": "dry-run",
+        "expectedMode": "live",
+        "environment": "production",
+        "status": "blocked",
+        "expectedStatus": "ready"
+      },
+      "releaseRunIdStatus": "missing",
+      "safetyStatus": "proved",
+      "targetResultStatus": "missing",
+      "targetContractStatus": "not-required",
+      "blockedReasons": [
+        "mode-not-live",
+        "status-not-ready",
+        "release-run-missing",
+        "target-result-proof-missing"
+      ],
+      "missingResultKeyCount": 8,
+      "nextAction": "Rerun this production live evidence on the shared release-run ID with body-level result proof.",
+      "responsibleSessions": [
+        "Owner",
+        "S12",
+        "S19",
+        "S22",
+        "S24"
+      ]
+    },
+    {
+      "target": "external-storage-smoke",
+      "evidenceFileName": "2026-06-28-external-storage-smoke-production-live.json",
+      "acceptanceStatus": "not-accepted-filename-only",
+      "current": {
+        "mode": "dry-run",
+        "expectedMode": "live",
+        "environment": "production",
+        "status": "blocked",
+        "expectedStatus": "passed"
+      },
+      "releaseRunIdStatus": "missing",
+      "safetyStatus": "missing",
+      "targetResultStatus": "missing",
+      "targetContractStatus": "not-required",
+      "blockedReasons": [
+        "mode-not-live",
+        "status-not-passed",
+        "release-run-missing",
+        "safety-not-proven",
+        "target-result-proof-missing"
+      ],
+      "missingResultKeyCount": 11,
+      "nextAction": "Run owner-approved production live smoke on the shared release-run ID with body-level result proof.",
+      "responsibleSessions": [
+        "S12",
+        "S22",
+        "S24"
+      ]
+    },
+    {
+      "target": "learning-ppt-playback-deployment-smoke",
+      "evidenceFileName": "2026-06-28-learning-ppt-playback-deployment-smoke-production-live.json",
+      "acceptanceStatus": "not-accepted-filename-only",
+      "current": {
+        "mode": "dry-run",
+        "expectedMode": "live",
+        "environment": "production",
+        "status": "blocked",
+        "expectedStatus": "passed"
+      },
+      "releaseRunIdStatus": "missing",
+      "safetyStatus": "missing",
+      "targetResultStatus": "missing",
+      "targetContractStatus": "not-required",
+      "blockedReasons": [
+        "mode-not-live",
+        "status-not-passed",
+        "release-run-missing",
+        "safety-not-proven",
+        "target-result-proof-missing"
+      ],
+      "missingResultKeyCount": 5,
+      "nextAction": "Rerun this production live evidence on the shared release-run ID with body-level result proof.",
+      "responsibleSessions": [
+        "S22",
+        "S24"
+      ]
+    },
+    {
+      "target": "ppt-manual-playback-acceptance",
+      "evidenceFileName": "2026-06-28-ppt-manual-playback-acceptance-production-live.json",
+      "acceptanceStatus": "not-accepted-filename-only",
+      "current": {
+        "mode": "plan",
+        "expectedMode": "record",
+        "environment": "missing",
+        "status": "blocked",
+        "expectedStatus": "accepted"
+      },
+      "releaseRunIdStatus": "missing",
+      "safetyStatus": "proved",
+      "targetResultStatus": "missing",
+      "targetContractStatus": "not-required",
+      "blockedReasons": [
+        "mode-not-record",
+        "environment-not-production",
+        "status-not-accepted",
+        "release-run-missing",
+        "target-result-proof-missing"
+      ],
+      "missingResultKeyCount": 11,
+      "nextAction": "Collect S24 human PowerPoint/WPS playback acceptance after production deployment, bound to the shared release-run ID.",
+      "responsibleSessions": [
+        "Owner",
+        "S24",
+        "S22"
+      ]
+    },
+    {
+      "target": "deployment-route-smoke",
+      "evidenceFileName": "2026-06-28-route-smoke-production-live.json",
+      "acceptanceStatus": "not-accepted-filename-only",
+      "current": {
+        "mode": "dry-run",
+        "expectedMode": "live",
+        "environment": "production",
+        "status": "blocked",
+        "expectedStatus": "passed"
+      },
+      "releaseRunIdStatus": "missing",
+      "safetyStatus": "proved",
+      "targetResultStatus": "missing",
+      "targetContractStatus": "not-required",
+      "blockedReasons": [
+        "mode-not-live",
+        "status-not-passed",
+        "release-run-missing",
+        "target-result-proof-missing"
+      ],
+      "missingResultKeyCount": 8,
+      "nextAction": "Rerun this production live evidence on the shared release-run ID with body-level result proof.",
+      "responsibleSessions": [
+        "S22"
+      ]
+    },
+    {
+      "target": "teacher-auth-issuer-route-smoke",
+      "evidenceFileName": "2026-06-28-teacher-auth-issuer-route-smoke-production-live.json",
+      "acceptanceStatus": "not-accepted-filename-only",
+      "current": {
+        "mode": "dry-run",
+        "expectedMode": "live",
+        "environment": "production",
+        "status": "blocked",
+        "expectedStatus": "passed"
+      },
+      "releaseRunIdStatus": "missing",
+      "safetyStatus": "proved",
+      "targetResultStatus": "missing",
+      "targetContractStatus": "not-required",
+      "blockedReasons": [
+        "mode-not-live",
+        "status-not-passed",
+        "release-run-missing",
+        "target-result-proof-missing"
+      ],
+      "missingResultKeyCount": 1,
+      "nextAction": "Rerun this production live evidence on the shared release-run ID with body-level result proof.",
+      "responsibleSessions": [
+        "S12",
+        "S22"
+      ]
+    },
+    {
+      "target": "teacher-auth-provider-readiness",
+      "evidenceFileName": "2026-06-28-teacher-auth-provider-readiness-production-live.json",
+      "acceptanceStatus": "not-accepted-filename-only",
+      "current": {
+        "mode": "dry-run",
+        "expectedMode": "live",
+        "environment": "production",
+        "status": "blocked",
+        "expectedStatus": "ready"
+      },
+      "releaseRunIdStatus": "present",
+      "safetyStatus": "proved",
+      "targetResultStatus": "missing",
+      "targetContractStatus": "not-required",
+      "blockedReasons": [
+        "mode-not-live",
+        "status-not-ready",
+        "target-result-proof-missing"
+      ],
+      "missingResultKeyCount": 1,
+      "nextAction": "Run owner-approved production live evidence for this target with body-level result proof.",
+      "responsibleSessions": [
+        "Owner",
+        "S12",
+        "S19",
+        "S22"
+      ]
+    },
+    {
+      "target": "teacher-workflow-browser-smoke",
+      "evidenceFileName": "2026-06-28-teacher-workflow-browser-smoke-production-live.json",
+      "acceptanceStatus": "not-accepted-filename-only",
+      "current": {
+        "mode": "dry-run",
+        "expectedMode": "live",
+        "environment": "production",
+        "status": "blocked",
+        "expectedStatus": "passed"
+      },
+      "releaseRunIdStatus": "missing",
+      "safetyStatus": "missing",
+      "targetResultStatus": "missing",
+      "targetContractStatus": "not-required",
+      "blockedReasons": [
+        "mode-not-live",
+        "status-not-passed",
+        "release-run-missing",
+        "safety-not-proven",
+        "target-result-proof-missing"
+      ],
+      "missingResultKeyCount": 13,
+      "nextAction": "Rerun this production live evidence on the shared release-run ID with body-level result proof.",
+      "responsibleSessions": [
+        "S22"
+      ]
+    },
+    {
+      "target": "teacher-workflow-deployment-smoke",
+      "evidenceFileName": "2026-06-28-teacher-workflow-deployment-smoke-production-live.json",
+      "acceptanceStatus": "not-accepted-filename-only",
+      "current": {
+        "mode": "dry-run",
+        "expectedMode": "live",
+        "environment": "production",
+        "status": "blocked",
+        "expectedStatus": "passed"
+      },
+      "releaseRunIdStatus": "missing",
+      "safetyStatus": "missing",
+      "targetResultStatus": "missing",
+      "targetContractStatus": "not-required",
+      "blockedReasons": [
+        "mode-not-live",
+        "status-not-passed",
+        "release-run-missing",
+        "safety-not-proven",
+        "target-result-proof-missing"
+      ],
+      "missingResultKeyCount": 14,
+      "nextAction": "Rerun this production live evidence on the shared release-run ID with body-level result proof.",
+      "responsibleSessions": [
+        "S22"
+      ]
+    },
+    {
+      "target": "teacher-workflow-live-generation-smoke",
+      "evidenceFileName": "2026-06-28-teacher-workflow-live-generation-smoke-production-live.json",
+      "acceptanceStatus": "not-accepted-filename-only",
+      "current": {
+        "mode": "dry-run",
+        "expectedMode": "live",
+        "environment": "production",
+        "status": "blocked",
+        "expectedStatus": "passed"
+      },
+      "releaseRunIdStatus": "missing",
+      "safetyStatus": "missing",
+      "targetResultStatus": "missing",
+      "targetContractStatus": "not-required",
+      "blockedReasons": [
+        "mode-not-live",
+        "status-not-passed",
+        "release-run-missing",
+        "safety-not-proven",
+        "target-result-proof-missing"
+      ],
+      "missingResultKeyCount": 8,
+      "nextAction": "Rerun this production live evidence on the shared release-run ID with body-level result proof.",
+      "responsibleSessions": [
+        "S07",
+        "S22"
+      ]
+    },
+    {
+      "target": "teaching-course-management-route-smoke",
+      "evidenceFileName": "2026-06-28-teaching-course-management-route-smoke-production-live.json",
+      "acceptanceStatus": "not-accepted-filename-only",
+      "current": {
+        "mode": "dry-run",
+        "expectedMode": "live",
+        "environment": "production",
+        "status": "blocked",
+        "expectedStatus": "passed"
+      },
+      "releaseRunIdStatus": "missing",
+      "safetyStatus": "proved",
+      "targetResultStatus": "missing",
+      "targetContractStatus": "proved",
+      "blockedReasons": [
+        "mode-not-live",
+        "status-not-passed",
+        "release-run-missing",
+        "target-result-proof-missing"
+      ],
+      "missingResultKeyCount": 107,
+      "nextAction": "Run owner-approved production live smoke on the shared release-run ID with body-level result proof.",
+      "responsibleSessions": [
+        "S05",
+        "S12",
+        "S13",
+        "S19",
+        "S22"
+      ]
+    },
+    {
+      "target": "teaching-operation-detail-browser-smoke",
+      "evidenceFileName": "2026-06-28-teaching-operation-detail-browser-smoke-production-live.json",
+      "acceptanceStatus": "not-accepted-filename-only",
+      "current": {
+        "mode": "dry-run",
+        "expectedMode": "live",
+        "environment": "production",
+        "status": "blocked",
+        "expectedStatus": "passed"
+      },
+      "releaseRunIdStatus": "missing",
+      "safetyStatus": "proved",
+      "targetResultStatus": "missing",
+      "targetContractStatus": "missing",
+      "blockedReasons": [
+        "mode-not-live",
+        "status-not-passed",
+        "release-run-missing",
+        "target-result-proof-missing"
+      ],
+      "missingResultKeyCount": 74,
+      "nextAction": "Run owner-approved production live smoke on the shared release-run ID with body-level result proof.",
+      "responsibleSessions": [
+        "S05",
+        "S12",
+        "S13",
+        "S19",
+        "S22"
+      ]
+    },
+    {
+      "target": "teaching-operations-route-smoke",
+      "evidenceFileName": "2026-06-28-teaching-operations-route-smoke-production-live.json",
+      "acceptanceStatus": "not-accepted-filename-only",
+      "current": {
+        "mode": "dry-run",
+        "expectedMode": "live",
+        "environment": "production",
+        "status": "blocked",
+        "expectedStatus": "passed"
+      },
+      "releaseRunIdStatus": "missing",
+      "safetyStatus": "proved",
+      "targetResultStatus": "missing",
+      "targetContractStatus": "proved",
+      "blockedReasons": [
+        "mode-not-live",
+        "status-not-passed",
+        "release-run-missing",
+        "target-result-proof-missing"
+      ],
+      "missingResultKeyCount": 184,
+      "nextAction": "Run owner-approved production live smoke on the shared release-run ID with body-level result proof.",
+      "responsibleSessions": [
+        "S05",
+        "S12",
+        "S13",
+        "S19",
+        "S22"
+      ]
+    }
+  ],
+  "safety": {
+    "sourcePathsOmitted": true,
+    "rawUrlsOmitted": true,
+    "cookieValuesOmitted": true,
+    "responseBodiesOmitted": true,
+    "noLiveMutationPerformed": true,
+    "noDeploymentMutationPerformed": true,
+    "noReleaseRunBindingPerformed": true,
+    "usesAuditRowsOnly": true
+  }
+}

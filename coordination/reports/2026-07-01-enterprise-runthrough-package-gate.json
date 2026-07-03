@@ -1,0 +1,42 @@
+{
+  "target": "enterprise-runthrough-package-gate",
+  "status": "package-gate-passed",
+  "releaseReady": false,
+  "releaseGateStatus": "blocked",
+  "ownerDecisionQueueStatus": "owner-decisions-cleared-awaiting-production-evidence",
+  "sourceOwnerDecisionQueueStatus": "owner-decisions-required",
+  "responsibleSession": "S25/S22",
+  "sourceDirtyMapReason": "2026-07-03 final rescue retained surface",
+  "summary": {
+    "dirtyEntryCount": 147,
+    "aggregatePathspecCount": 147,
+    "reviewGroupCount": 12,
+    "missingDirtyPathCount": 0,
+    "stalePathspecCount": 0,
+    "duplicatePathspecCount": 0,
+    "wildcardPathspecCount": 0,
+    "pathspecFileMismatchCount": 0,
+    "retainedIntermediateDirtyMapCount": 0,
+    "reviewIndexUncoveredPathCount": 0,
+    "reviewIndexDuplicatePathCount": 0,
+    "needsOwnerInput": false,
+    "productionEvidenceRequired": true,
+    "releaseReady": false
+  },
+  "missingDirtyPaths": [],
+  "stalePathspecs": [],
+  "duplicatePathspecs": [],
+  "wildcardPathspecs": [],
+  "pathspecFileMismatches": [],
+  "retainedIntermediateDirtyMaps": [],
+  "safety": {
+    "sourcePathsOmitted": true,
+    "rawUrlsOmitted": true,
+    "secretValuesOmitted": true,
+    "responseBodiesOmitted": true,
+    "noGitMutationPerformed": true,
+    "noStagingPerformed": true,
+    "explicitPathspecsOnly": true,
+    "noWildcardPathspecs": true
+  }
+}

@@ -1,0 +1,1082 @@
+{
+  "target": "release-blocker-dependency-graph",
+  "status": "blocked",
+  "releaseGateStatus": "blocked",
+  "ownerDecisionQueueStatus": "owner-decisions-required",
+  "enterpriseLiveEvidenceTriageStatus": "blocked",
+  "diagnosisCoverageStatus": "coverage-complete",
+  "responsibleSession": "S22",
+  "summary": {
+    "blockedRequirementCount": 19,
+    "mappedBlockedRequirementCount": 19,
+    "unmappedBlockedRequirementCount": 0,
+    "ownerDecisionCount": 8,
+    "executionWaveCount": 5,
+    "liveEvidenceTargetCount": 16,
+    "diagnosisCoverageReady": false,
+    "diagnosisCoverageBlockerCount": 1,
+    "releaseReady": false
+  },
+  "releaseReadinessBlockers": [
+    "owner-queue-status-owner-decisions-required"
+  ],
+  "unmappedRequirementIds": [],
+  "requirements": [
+    {
+      "requirementId": "deployed-teacher-workflow-page",
+      "status": "blocked",
+      "blockedReason": "deployed-teacher-workflow-page-not-live-passed",
+      "upstreamStatus": "waiting-for-upstream-owner-decisions",
+      "blockingDecisionIds": [
+        "vercel-env-deploy-and-smoke-chain",
+        "production-release-run"
+      ],
+      "blockingDecisionRanks": [
+        4,
+        8
+      ],
+      "triageTargetIds": [
+        "deployment-domain-reachability",
+        "teacher-workflow-deployment-smoke",
+        "teacher-workflow-browser-smoke",
+        "teacher-workflow-live-generation-smoke",
+        "learning-ppt-playback-deployment-smoke",
+        "deployment-route-smoke"
+      ],
+      "executionWaveIds": [
+        "deployment-and-domain-binding",
+        "workflow-and-ordinary-teaching-smokes"
+      ],
+      "nextSafeActions": [
+        "confirm-s19-vercel-env-apply-approval",
+        "run-redacted-vercel-env-sync-apply-with-approved-project-and-release-run-id",
+        "run-production-deployment-only-after-env-sync-evidence-is-applied",
+        "run-deployed-route-smokes-only-after-production-deployment-is-proven",
+        "run-ordinary-teaching-smokes-only-after-auth-storage-and-deployment-evidence-are-live-ready",
+        "wait-for-final-release-gate-ready",
+        "bind-one-public-release-run-id-after-all-production-evidence-is-ready",
+        "verify-owner-checklist-has-no-waiting-or-blocked-decisions",
+        "publish-release-run-summary-with-redacted-evidence-only"
+      ],
+      "responsibleSessions": []
+    },
+    {
+      "requirementId": "teacher-workflow-browser-smoke",
+      "status": "blocked",
+      "blockedReason": "deployed-teacher-workflow-page-not-live-passed",
+      "upstreamStatus": "waiting-for-upstream-owner-decisions",
+      "blockingDecisionIds": [
+        "vercel-env-deploy-and-smoke-chain",
+        "production-release-run"
+      ],
+      "blockingDecisionRanks": [
+        4,
+        8
+      ],
+      "triageTargetIds": [
+        "teacher-workflow-browser-smoke",
+        "deployment-domain-reachability",
+        "teacher-workflow-deployment-smoke",
+        "teacher-workflow-live-generation-smoke",
+        "learning-ppt-playback-deployment-smoke",
+        "deployment-route-smoke"
+      ],
+      "executionWaveIds": [
+        "workflow-and-ordinary-teaching-smokes",
+        "deployment-and-domain-binding"
+      ],
+      "nextSafeActions": [
+        "confirm-s19-vercel-env-apply-approval",
+        "run-redacted-vercel-env-sync-apply-with-approved-project-and-release-run-id",
+        "run-production-deployment-only-after-env-sync-evidence-is-applied",
+        "run-deployed-route-smokes-only-after-production-deployment-is-proven",
+        "run-ordinary-teaching-smokes-only-after-auth-storage-and-deployment-evidence-are-live-ready",
+        "wait-for-final-release-gate-ready",
+        "bind-one-public-release-run-id-after-all-production-evidence-is-ready",
+        "verify-owner-checklist-has-no-waiting-or-blocked-decisions",
+        "publish-release-run-summary-with-redacted-evidence-only"
+      ],
+      "responsibleSessions": []
+    },
+    {
+      "requirementId": "teacher-workflow-live-generation-smoke",
+      "status": "blocked",
+      "blockedReason": "teacher-workflow-browser-smoke-not-live-passed",
+      "upstreamStatus": "waiting-for-upstream-owner-decisions",
+      "blockingDecisionIds": [
+        "vercel-env-deploy-and-smoke-chain",
+        "production-release-run"
+      ],
+      "blockingDecisionRanks": [
+        4,
+        8
+      ],
+      "triageTargetIds": [
+        "teacher-workflow-live-generation-smoke",
+        "deployment-domain-reachability",
+        "teacher-workflow-deployment-smoke",
+        "teacher-workflow-browser-smoke",
+        "learning-ppt-playback-deployment-smoke",
+        "deployment-route-smoke"
+      ],
+      "executionWaveIds": [
+        "workflow-and-ordinary-teaching-smokes",
+        "deployment-and-domain-binding"
+      ],
+      "nextSafeActions": [
+        "confirm-s19-vercel-env-apply-approval",
+        "run-redacted-vercel-env-sync-apply-with-approved-project-and-release-run-id",
+        "run-production-deployment-only-after-env-sync-evidence-is-applied",
+        "run-deployed-route-smokes-only-after-production-deployment-is-proven",
+        "run-ordinary-teaching-smokes-only-after-auth-storage-and-deployment-evidence-are-live-ready",
+        "wait-for-final-release-gate-ready",
+        "bind-one-public-release-run-id-after-all-production-evidence-is-ready",
+        "verify-owner-checklist-has-no-waiting-or-blocked-decisions",
+        "publish-release-run-summary-with-redacted-evidence-only"
+      ],
+      "responsibleSessions": []
+    },
+    {
+      "requirementId": "deployed-learning-ppt-playback",
+      "status": "blocked",
+      "blockedReason": "deployed-learning-ppt-playback-not-live-passed",
+      "upstreamStatus": "waiting-for-upstream-owner-decisions",
+      "blockingDecisionIds": [
+        "vercel-env-deploy-and-smoke-chain",
+        "production-release-run"
+      ],
+      "blockingDecisionRanks": [
+        4,
+        8
+      ],
+      "triageTargetIds": [
+        "deployment-domain-reachability",
+        "teacher-workflow-deployment-smoke",
+        "teacher-workflow-browser-smoke",
+        "teacher-workflow-live-generation-smoke",
+        "learning-ppt-playback-deployment-smoke",
+        "deployment-route-smoke"
+      ],
+      "executionWaveIds": [
+        "deployment-and-domain-binding",
+        "workflow-and-ordinary-teaching-smokes"
+      ],
+      "nextSafeActions": [
+        "confirm-s19-vercel-env-apply-approval",
+        "run-redacted-vercel-env-sync-apply-with-approved-project-and-release-run-id",
+        "run-production-deployment-only-after-env-sync-evidence-is-applied",
+        "run-deployed-route-smokes-only-after-production-deployment-is-proven",
+        "run-ordinary-teaching-smokes-only-after-auth-storage-and-deployment-evidence-are-live-ready",
+        "wait-for-final-release-gate-ready",
+        "bind-one-public-release-run-id-after-all-production-evidence-is-ready",
+        "verify-owner-checklist-has-no-waiting-or-blocked-decisions",
+        "publish-release-run-summary-with-redacted-evidence-only"
+      ],
+      "responsibleSessions": []
+    },
+    {
+      "requirementId": "vercel-env-placement",
+      "status": "blocked",
+      "blockedReason": "vercel-env-not-applied",
+      "upstreamStatus": "waiting-for-upstream-owner-decisions",
+      "blockingDecisionIds": [
+        "vercel-env-deploy-and-smoke-chain",
+        "production-release-run"
+      ],
+      "blockingDecisionRanks": [
+        4,
+        8
+      ],
+      "triageTargetIds": [
+        "deployment-domain-reachability",
+        "teacher-workflow-deployment-smoke",
+        "teacher-workflow-browser-smoke",
+        "teacher-workflow-live-generation-smoke",
+        "learning-ppt-playback-deployment-smoke",
+        "deployment-route-smoke"
+      ],
+      "executionWaveIds": [
+        "deployment-and-domain-binding",
+        "workflow-and-ordinary-teaching-smokes"
+      ],
+      "nextSafeActions": [
+        "confirm-s19-vercel-env-apply-approval",
+        "run-redacted-vercel-env-sync-apply-with-approved-project-and-release-run-id",
+        "run-production-deployment-only-after-env-sync-evidence-is-applied",
+        "run-deployed-route-smokes-only-after-production-deployment-is-proven",
+        "run-ordinary-teaching-smokes-only-after-auth-storage-and-deployment-evidence-are-live-ready",
+        "wait-for-final-release-gate-ready",
+        "bind-one-public-release-run-id-after-all-production-evidence-is-ready",
+        "verify-owner-checklist-has-no-waiting-or-blocked-decisions",
+        "publish-release-run-summary-with-redacted-evidence-only"
+      ],
+      "responsibleSessions": []
+    },
+    {
+      "requirementId": "app-auth-provider-readiness",
+      "status": "blocked",
+      "blockedReason": "app-auth-provider-readiness-not-live-ready",
+      "upstreamStatus": "owner-decision-required",
+      "blockingDecisionIds": [
+        "app-auth-provider-production-selector",
+        "production-release-run"
+      ],
+      "blockingDecisionRanks": [
+        1,
+        8
+      ],
+      "triageTargetIds": [
+        "app-auth-provider-readiness"
+      ],
+      "executionWaveIds": [
+        "provider-and-env-decisions"
+      ],
+      "nextSafeActions": [
+        "confirm-production-app-auth-provider-mode",
+        "bind-server-only-app-auth-env-through-s19-vercel-env-sync",
+        "run-approved-app-auth-provider-readiness-after-env-sync",
+        "run-ordinary-teaching-smokes-only-after-app-auth-readiness-is-live-ready",
+        "wait-for-final-release-gate-ready",
+        "bind-one-public-release-run-id-after-all-production-evidence-is-ready",
+        "verify-owner-checklist-has-no-waiting-or-blocked-decisions",
+        "publish-release-run-summary-with-redacted-evidence-only"
+      ],
+      "responsibleSessions": []
+    },
+    {
+      "requirementId": "teacher-auth-provider-readiness",
+      "status": "blocked",
+      "blockedReason": "teacher-auth-provider-readiness-not-live-ready",
+      "upstreamStatus": "owner-decision-required",
+      "blockingDecisionIds": [
+        "teacher-auth-provider-production-selector",
+        "production-release-run"
+      ],
+      "blockingDecisionRanks": [
+        2,
+        8
+      ],
+      "triageTargetIds": [
+        "teacher-auth-provider-readiness",
+        "teacher-auth-issuer-route-smoke"
+      ],
+      "executionWaveIds": [
+        "provider-and-env-decisions",
+        "auth-and-storage-readiness"
+      ],
+      "nextSafeActions": [
+        "confirm-production-teacher-auth-provider-mode",
+        "bind-server-only-teacher-auth-env-through-s19-vercel-env-sync",
+        "run-approved-teacher-auth-provider-readiness-after-env-sync",
+        "run-deployed-teacher-auth-issuer-route-smoke-after-production-deploy",
+        "run-production-smokes-only-after-teacher-auth-readiness-is-live-ready",
+        "wait-for-final-release-gate-ready",
+        "bind-one-public-release-run-id-after-all-production-evidence-is-ready",
+        "verify-owner-checklist-has-no-waiting-or-blocked-decisions",
+        "publish-release-run-summary-with-redacted-evidence-only"
+      ],
+      "responsibleSessions": []
+    },
+    {
+      "requirementId": "external-storage-service-readiness",
+      "status": "blocked",
+      "blockedReason": "external-storage-service-readiness-not-live-ready",
+      "upstreamStatus": "owner-decision-required",
+      "blockingDecisionIds": [
+        "external-storage-production-service",
+        "production-release-run"
+      ],
+      "blockingDecisionRanks": [
+        3,
+        8
+      ],
+      "triageTargetIds": [
+        "external-storage-service-readiness",
+        "external-storage-persistence",
+        "external-storage-smoke"
+      ],
+      "executionWaveIds": [
+        "provider-and-env-decisions",
+        "auth-and-storage-readiness"
+      ],
+      "nextSafeActions": [
+        "confirm-approved-remote-https-external-storage-service",
+        "bind-server-only-external-storage-env-through-s19-vercel-env-sync",
+        "run-approved-external-storage-persistence-read-after-restart-smoke",
+        "run-external-storage-service-readiness-after-env-sync-launch-and-persistence-evidence",
+        "run-external-storage-smoke-only-after-service-readiness-is-live-ready",
+        "wait-for-final-release-gate-ready",
+        "bind-one-public-release-run-id-after-all-production-evidence-is-ready",
+        "verify-owner-checklist-has-no-waiting-or-blocked-decisions",
+        "publish-release-run-summary-with-redacted-evidence-only"
+      ],
+      "responsibleSessions": []
+    },
+    {
+      "requirementId": "vercel-production-deployment",
+      "status": "blocked",
+      "blockedReason": "vercel-production-deployment-not-proven",
+      "upstreamStatus": "waiting-for-upstream-owner-decisions",
+      "blockingDecisionIds": [
+        "vercel-env-deploy-and-smoke-chain",
+        "production-release-run"
+      ],
+      "blockingDecisionRanks": [
+        4,
+        8
+      ],
+      "triageTargetIds": [
+        "deployment-domain-reachability",
+        "teacher-workflow-deployment-smoke",
+        "teacher-workflow-browser-smoke",
+        "teacher-workflow-live-generation-smoke",
+        "learning-ppt-playback-deployment-smoke",
+        "deployment-route-smoke"
+      ],
+      "executionWaveIds": [
+        "deployment-and-domain-binding",
+        "workflow-and-ordinary-teaching-smokes"
+      ],
+      "nextSafeActions": [
+        "confirm-s19-vercel-env-apply-approval",
+        "run-redacted-vercel-env-sync-apply-with-approved-project-and-release-run-id",
+        "run-production-deployment-only-after-env-sync-evidence-is-applied",
+        "run-deployed-route-smokes-only-after-production-deployment-is-proven",
+        "run-ordinary-teaching-smokes-only-after-auth-storage-and-deployment-evidence-are-live-ready",
+        "wait-for-final-release-gate-ready",
+        "bind-one-public-release-run-id-after-all-production-evidence-is-ready",
+        "verify-owner-checklist-has-no-waiting-or-blocked-decisions",
+        "publish-release-run-summary-with-redacted-evidence-only"
+      ],
+      "responsibleSessions": []
+    },
+    {
+      "requirementId": "deployment-route-smoke",
+      "status": "blocked",
+      "blockedReason": "deployment-route-smoke-not-live-passed",
+      "upstreamStatus": "waiting-for-upstream-owner-decisions",
+      "blockingDecisionIds": [
+        "vercel-env-deploy-and-smoke-chain",
+        "production-release-run"
+      ],
+      "blockingDecisionRanks": [
+        4,
+        8
+      ],
+      "triageTargetIds": [
+        "deployment-route-smoke",
+        "deployment-domain-reachability",
+        "teacher-workflow-deployment-smoke",
+        "teacher-workflow-browser-smoke",
+        "teacher-workflow-live-generation-smoke",
+        "learning-ppt-playback-deployment-smoke"
+      ],
+      "executionWaveIds": [
+        "deployment-and-domain-binding",
+        "workflow-and-ordinary-teaching-smokes"
+      ],
+      "nextSafeActions": [
+        "confirm-s19-vercel-env-apply-approval",
+        "run-redacted-vercel-env-sync-apply-with-approved-project-and-release-run-id",
+        "run-production-deployment-only-after-env-sync-evidence-is-applied",
+        "run-deployed-route-smokes-only-after-production-deployment-is-proven",
+        "run-ordinary-teaching-smokes-only-after-auth-storage-and-deployment-evidence-are-live-ready",
+        "wait-for-final-release-gate-ready",
+        "bind-one-public-release-run-id-after-all-production-evidence-is-ready",
+        "verify-owner-checklist-has-no-waiting-or-blocked-decisions",
+        "publish-release-run-summary-with-redacted-evidence-only"
+      ],
+      "responsibleSessions": []
+    },
+    {
+      "requirementId": "teacher-auth-provider-consistency",
+      "status": "blocked",
+      "blockedReason": "teacher-auth-provider-readiness-not-live-ready",
+      "upstreamStatus": "owner-decision-required",
+      "blockingDecisionIds": [
+        "teacher-auth-provider-production-selector",
+        "production-release-run"
+      ],
+      "blockingDecisionRanks": [
+        2,
+        8
+      ],
+      "triageTargetIds": [
+        "teacher-auth-provider-readiness",
+        "teacher-auth-issuer-route-smoke"
+      ],
+      "executionWaveIds": [
+        "provider-and-env-decisions",
+        "auth-and-storage-readiness"
+      ],
+      "nextSafeActions": [
+        "confirm-production-teacher-auth-provider-mode",
+        "bind-server-only-teacher-auth-env-through-s19-vercel-env-sync",
+        "run-approved-teacher-auth-provider-readiness-after-env-sync",
+        "run-deployed-teacher-auth-issuer-route-smoke-after-production-deploy",
+        "run-production-smokes-only-after-teacher-auth-readiness-is-live-ready",
+        "wait-for-final-release-gate-ready",
+        "bind-one-public-release-run-id-after-all-production-evidence-is-ready",
+        "verify-owner-checklist-has-no-waiting-or-blocked-decisions",
+        "publish-release-run-summary-with-redacted-evidence-only"
+      ],
+      "responsibleSessions": []
+    },
+    {
+      "requirementId": "teaching-operations-route-smoke",
+      "status": "blocked",
+      "blockedReason": "teaching-operations-route-smoke-not-live-passed",
+      "upstreamStatus": "waiting-for-upstream-owner-decisions",
+      "blockingDecisionIds": [
+        "vercel-env-deploy-and-smoke-chain",
+        "ordinary-teaching-production-evidence",
+        "production-release-run"
+      ],
+      "blockingDecisionRanks": [
+        4,
+        5,
+        8
+      ],
+      "triageTargetIds": [
+        "teaching-operations-route-smoke",
+        "deployment-domain-reachability",
+        "teacher-workflow-deployment-smoke",
+        "teacher-workflow-browser-smoke",
+        "teacher-workflow-live-generation-smoke",
+        "learning-ppt-playback-deployment-smoke",
+        "deployment-route-smoke",
+        "teaching-operation-detail-browser-smoke",
+        "teaching-course-management-route-smoke"
+      ],
+      "executionWaveIds": [
+        "workflow-and-ordinary-teaching-smokes",
+        "deployment-and-domain-binding"
+      ],
+      "nextSafeActions": [
+        "confirm-s19-vercel-env-apply-approval",
+        "run-redacted-vercel-env-sync-apply-with-approved-project-and-release-run-id",
+        "run-production-deployment-only-after-env-sync-evidence-is-applied",
+        "run-deployed-route-smokes-only-after-production-deployment-is-proven",
+        "run-ordinary-teaching-smokes-only-after-auth-storage-and-deployment-evidence-are-live-ready",
+        "confirm-ordinary-teaching-live-smoke-prerequisites",
+        "wait-for-auth-storage-and-vercel-deployment-evidence",
+        "run-live-teaching-operations-route-smoke-after-auth-storage-deployment-readiness",
+        "run-live-operation-detail-and-course-management-smokes-with-issued-teacher-auth-cookie",
+        "collect-release-run-bound-ordinary-teaching-evidence-for-enterprise-audit",
+        "wait-for-final-release-gate-ready",
+        "bind-one-public-release-run-id-after-all-production-evidence-is-ready",
+        "verify-owner-checklist-has-no-waiting-or-blocked-decisions",
+        "publish-release-run-summary-with-redacted-evidence-only"
+      ],
+      "responsibleSessions": []
+    },
+    {
+      "requirementId": "teaching-operation-detail-browser-smoke",
+      "status": "blocked",
+      "blockedReason": "teaching-operation-detail-browser-smoke-not-live-passed",
+      "upstreamStatus": "waiting-for-upstream-owner-decisions",
+      "blockingDecisionIds": [
+        "vercel-env-deploy-and-smoke-chain",
+        "ordinary-teaching-production-evidence",
+        "production-release-run"
+      ],
+      "blockingDecisionRanks": [
+        4,
+        5,
+        8
+      ],
+      "triageTargetIds": [
+        "teaching-operation-detail-browser-smoke",
+        "deployment-domain-reachability",
+        "teacher-workflow-deployment-smoke",
+        "teacher-workflow-browser-smoke",
+        "teacher-workflow-live-generation-smoke",
+        "learning-ppt-playback-deployment-smoke",
+        "deployment-route-smoke",
+        "teaching-operations-route-smoke",
+        "teaching-course-management-route-smoke"
+      ],
+      "executionWaveIds": [
+        "workflow-and-ordinary-teaching-smokes",
+        "deployment-and-domain-binding"
+      ],
+      "nextSafeActions": [
+        "confirm-s19-vercel-env-apply-approval",
+        "run-redacted-vercel-env-sync-apply-with-approved-project-and-release-run-id",
+        "run-production-deployment-only-after-env-sync-evidence-is-applied",
+        "run-deployed-route-smokes-only-after-production-deployment-is-proven",
+        "run-ordinary-teaching-smokes-only-after-auth-storage-and-deployment-evidence-are-live-ready",
+        "confirm-ordinary-teaching-live-smoke-prerequisites",
+        "wait-for-auth-storage-and-vercel-deployment-evidence",
+        "run-live-teaching-operations-route-smoke-after-auth-storage-deployment-readiness",
+        "run-live-operation-detail-and-course-management-smokes-with-issued-teacher-auth-cookie",
+        "collect-release-run-bound-ordinary-teaching-evidence-for-enterprise-audit",
+        "wait-for-final-release-gate-ready",
+        "bind-one-public-release-run-id-after-all-production-evidence-is-ready",
+        "verify-owner-checklist-has-no-waiting-or-blocked-decisions",
+        "publish-release-run-summary-with-redacted-evidence-only"
+      ],
+      "responsibleSessions": []
+    },
+    {
+      "requirementId": "teaching-course-management-route-smoke",
+      "status": "blocked",
+      "blockedReason": "teaching-course-management-route-smoke-not-live-passed",
+      "upstreamStatus": "waiting-for-upstream-owner-decisions",
+      "blockingDecisionIds": [
+        "vercel-env-deploy-and-smoke-chain",
+        "ordinary-teaching-production-evidence",
+        "production-release-run"
+      ],
+      "blockingDecisionRanks": [
+        4,
+        5,
+        8
+      ],
+      "triageTargetIds": [
+        "teaching-course-management-route-smoke",
+        "deployment-domain-reachability",
+        "teacher-workflow-deployment-smoke",
+        "teacher-workflow-browser-smoke",
+        "teacher-workflow-live-generation-smoke",
+        "learning-ppt-playback-deployment-smoke",
+        "deployment-route-smoke",
+        "teaching-operations-route-smoke",
+        "teaching-operation-detail-browser-smoke"
+      ],
+      "executionWaveIds": [
+        "workflow-and-ordinary-teaching-smokes",
+        "deployment-and-domain-binding"
+      ],
+      "nextSafeActions": [
+        "confirm-s19-vercel-env-apply-approval",
+        "run-redacted-vercel-env-sync-apply-with-approved-project-and-release-run-id",
+        "run-production-deployment-only-after-env-sync-evidence-is-applied",
+        "run-deployed-route-smokes-only-after-production-deployment-is-proven",
+        "run-ordinary-teaching-smokes-only-after-auth-storage-and-deployment-evidence-are-live-ready",
+        "confirm-ordinary-teaching-live-smoke-prerequisites",
+        "wait-for-auth-storage-and-vercel-deployment-evidence",
+        "run-live-teaching-operations-route-smoke-after-auth-storage-deployment-readiness",
+        "run-live-operation-detail-and-course-management-smokes-with-issued-teacher-auth-cookie",
+        "collect-release-run-bound-ordinary-teaching-evidence-for-enterprise-audit",
+        "wait-for-final-release-gate-ready",
+        "bind-one-public-release-run-id-after-all-production-evidence-is-ready",
+        "verify-owner-checklist-has-no-waiting-or-blocked-decisions",
+        "publish-release-run-summary-with-redacted-evidence-only"
+      ],
+      "responsibleSessions": []
+    },
+    {
+      "requirementId": "external-durable-storage-smoke",
+      "status": "blocked",
+      "blockedReason": "external-storage-smoke-not-live-passed",
+      "upstreamStatus": "owner-decision-required",
+      "blockingDecisionIds": [
+        "external-storage-production-service",
+        "production-release-run"
+      ],
+      "blockingDecisionRanks": [
+        3,
+        8
+      ],
+      "triageTargetIds": [
+        "external-storage-persistence",
+        "external-storage-service-readiness",
+        "external-storage-smoke"
+      ],
+      "executionWaveIds": [
+        "auth-and-storage-readiness",
+        "provider-and-env-decisions"
+      ],
+      "nextSafeActions": [
+        "confirm-approved-remote-https-external-storage-service",
+        "bind-server-only-external-storage-env-through-s19-vercel-env-sync",
+        "run-approved-external-storage-persistence-read-after-restart-smoke",
+        "run-external-storage-service-readiness-after-env-sync-launch-and-persistence-evidence",
+        "run-external-storage-smoke-only-after-service-readiness-is-live-ready",
+        "wait-for-final-release-gate-ready",
+        "bind-one-public-release-run-id-after-all-production-evidence-is-ready",
+        "verify-owner-checklist-has-no-waiting-or-blocked-decisions",
+        "publish-release-run-summary-with-redacted-evidence-only"
+      ],
+      "responsibleSessions": []
+    },
+    {
+      "requirementId": "external-storage-service-consistency",
+      "status": "blocked",
+      "blockedReason": "external-storage-service-readiness-not-live-ready",
+      "upstreamStatus": "owner-decision-required",
+      "blockingDecisionIds": [
+        "external-storage-production-service",
+        "production-release-run"
+      ],
+      "blockingDecisionRanks": [
+        3,
+        8
+      ],
+      "triageTargetIds": [
+        "external-storage-persistence",
+        "external-storage-service-readiness",
+        "external-storage-smoke"
+      ],
+      "executionWaveIds": [
+        "auth-and-storage-readiness",
+        "provider-and-env-decisions"
+      ],
+      "nextSafeActions": [
+        "confirm-approved-remote-https-external-storage-service",
+        "bind-server-only-external-storage-env-through-s19-vercel-env-sync",
+        "run-approved-external-storage-persistence-read-after-restart-smoke",
+        "run-external-storage-service-readiness-after-env-sync-launch-and-persistence-evidence",
+        "run-external-storage-smoke-only-after-service-readiness-is-live-ready",
+        "wait-for-final-release-gate-ready",
+        "bind-one-public-release-run-id-after-all-production-evidence-is-ready",
+        "verify-owner-checklist-has-no-waiting-or-blocked-decisions",
+        "publish-release-run-summary-with-redacted-evidence-only"
+      ],
+      "responsibleSessions": []
+    },
+    {
+      "requirementId": "ppt-manual-playback-acceptance",
+      "status": "blocked",
+      "blockedReason": "manual-ppt-playback-not-accepted",
+      "upstreamStatus": "human-qa-needed",
+      "blockingDecisionIds": [
+        "manual-ppt-playback-acceptance",
+        "production-release-run"
+      ],
+      "blockingDecisionRanks": [
+        6,
+        8
+      ],
+      "triageTargetIds": [
+        "ppt-manual-playback-acceptance"
+      ],
+      "executionWaveIds": [
+        "manual-qa-and-final-audit"
+      ],
+      "nextSafeActions": [
+        "package-manual-ppt-playback-evidence-for-human-review",
+        "verify-powerpoint-and-wps-playback-after-production-deployment",
+        "bind-manual-ppt-record-to-release-run-and-vercel-deployment",
+        "confirm-target-cloned-voice-label-and-per-slide-audio",
+        "submit-human-accepted-playback-record-for-release-gate",
+        "wait-for-final-release-gate-ready",
+        "bind-one-public-release-run-id-after-all-production-evidence-is-ready",
+        "verify-owner-checklist-has-no-waiting-or-blocked-decisions",
+        "publish-release-run-summary-with-redacted-evidence-only"
+      ],
+      "responsibleSessions": []
+    },
+    {
+      "requirementId": "enterprise-live-evidence-audit",
+      "status": "blocked",
+      "blockedReason": "enterprise-live-evidence-audit-not-ready",
+      "upstreamStatus": "waiting-for-live-evidence",
+      "blockingDecisionIds": [
+        "enterprise-live-evidence-audit",
+        "production-release-run"
+      ],
+      "blockingDecisionRanks": [
+        7,
+        8
+      ],
+      "triageTargetIds": [
+        "app-auth-provider-readiness",
+        "teacher-auth-issuer-route-smoke",
+        "teacher-auth-provider-readiness",
+        "external-storage-persistence",
+        "external-storage-service-readiness",
+        "deployment-domain-reachability",
+        "teacher-workflow-deployment-smoke",
+        "teacher-workflow-browser-smoke",
+        "teacher-workflow-live-generation-smoke",
+        "learning-ppt-playback-deployment-smoke",
+        "ppt-manual-playback-acceptance",
+        "deployment-route-smoke",
+        "teaching-operations-route-smoke",
+        "teaching-operation-detail-browser-smoke",
+        "teaching-course-management-route-smoke",
+        "external-storage-smoke"
+      ],
+      "executionWaveIds": [
+        "provider-and-env-decisions",
+        "auth-and-storage-readiness",
+        "deployment-and-domain-binding",
+        "workflow-and-ordinary-teaching-smokes",
+        "manual-qa-and-final-audit"
+      ],
+      "nextSafeActions": [
+        "wait-for-approved-production-live-evidence-files",
+        "run-enterprise-live-evidence-audit-after-all-target-evidence-exists",
+        "reject-filename-only-or-blocked-evidence-records",
+        "verify-shared-release-run-id-across-production-live-evidence",
+        "attach-audit-summary-before-final-release-run",
+        "wait-for-final-release-gate-ready",
+        "bind-one-public-release-run-id-after-all-production-evidence-is-ready",
+        "verify-owner-checklist-has-no-waiting-or-blocked-decisions",
+        "publish-release-run-summary-with-redacted-evidence-only"
+      ],
+      "responsibleSessions": []
+    },
+    {
+      "requirementId": "production-release-run-consistency",
+      "status": "blocked",
+      "blockedReason": "vercel-production-deployment-not-proven",
+      "upstreamStatus": "waiting-for-upstream-owner-decisions",
+      "blockingDecisionIds": [
+        "vercel-env-deploy-and-smoke-chain",
+        "production-release-run"
+      ],
+      "blockingDecisionRanks": [
+        4,
+        8
+      ],
+      "triageTargetIds": [
+        "deployment-domain-reachability",
+        "teacher-workflow-deployment-smoke",
+        "teacher-workflow-browser-smoke",
+        "teacher-workflow-live-generation-smoke",
+        "learning-ppt-playback-deployment-smoke",
+        "deployment-route-smoke"
+      ],
+      "executionWaveIds": [
+        "deployment-and-domain-binding",
+        "workflow-and-ordinary-teaching-smokes"
+      ],
+      "nextSafeActions": [
+        "confirm-s19-vercel-env-apply-approval",
+        "run-redacted-vercel-env-sync-apply-with-approved-project-and-release-run-id",
+        "run-production-deployment-only-after-env-sync-evidence-is-applied",
+        "run-deployed-route-smokes-only-after-production-deployment-is-proven",
+        "run-ordinary-teaching-smokes-only-after-auth-storage-and-deployment-evidence-are-live-ready",
+        "wait-for-final-release-gate-ready",
+        "bind-one-public-release-run-id-after-all-production-evidence-is-ready",
+        "verify-owner-checklist-has-no-waiting-or-blocked-decisions",
+        "publish-release-run-summary-with-redacted-evidence-only"
+      ],
+      "responsibleSessions": []
+    }
+  ],
+  "decisionDependencies": [
+    {
+      "decisionId": "app-auth-provider-production-selector",
+      "rank": 1,
+      "status": "owner-decision-needed",
+      "category": "owner-decision",
+      "blockedRequirementIds": [
+        "app-auth-provider-readiness"
+      ],
+      "blockedReasons": [
+        "app-auth-provider-readiness-not-live-ready"
+      ],
+      "triageTargetIds": [
+        "app-auth-provider-readiness"
+      ],
+      "executionWaveIds": [
+        "provider-and-env-decisions"
+      ],
+      "nextSafeActions": [
+        "confirm-production-app-auth-provider-mode",
+        "bind-server-only-app-auth-env-through-s19-vercel-env-sync",
+        "run-approved-app-auth-provider-readiness-after-env-sync",
+        "run-ordinary-teaching-smokes-only-after-app-auth-readiness-is-live-ready"
+      ]
+    },
+    {
+      "decisionId": "teacher-auth-provider-production-selector",
+      "rank": 2,
+      "status": "owner-decision-needed",
+      "category": "owner-decision",
+      "blockedRequirementIds": [
+        "teacher-auth-provider-readiness",
+        "teacher-auth-provider-consistency"
+      ],
+      "blockedReasons": [
+        "teacher-auth-provider-readiness-not-live-ready"
+      ],
+      "triageTargetIds": [
+        "teacher-auth-provider-readiness",
+        "teacher-auth-issuer-route-smoke"
+      ],
+      "executionWaveIds": [
+        "provider-and-env-decisions",
+        "auth-and-storage-readiness"
+      ],
+      "nextSafeActions": [
+        "confirm-production-teacher-auth-provider-mode",
+        "bind-server-only-teacher-auth-env-through-s19-vercel-env-sync",
+        "run-approved-teacher-auth-provider-readiness-after-env-sync",
+        "run-deployed-teacher-auth-issuer-route-smoke-after-production-deploy",
+        "run-production-smokes-only-after-teacher-auth-readiness-is-live-ready"
+      ]
+    },
+    {
+      "decisionId": "external-storage-production-service",
+      "rank": 3,
+      "status": "owner-decision-needed",
+      "category": "owner-decision",
+      "blockedRequirementIds": [
+        "external-storage-service-readiness",
+        "external-durable-storage-smoke",
+        "external-storage-service-consistency"
+      ],
+      "blockedReasons": [
+        "external-storage-service-readiness-not-live-ready",
+        "external-storage-smoke-not-live-passed"
+      ],
+      "triageTargetIds": [
+        "external-storage-persistence",
+        "external-storage-service-readiness",
+        "external-storage-smoke"
+      ],
+      "executionWaveIds": [
+        "auth-and-storage-readiness",
+        "provider-and-env-decisions"
+      ],
+      "nextSafeActions": [
+        "confirm-approved-remote-https-external-storage-service",
+        "bind-server-only-external-storage-env-through-s19-vercel-env-sync",
+        "run-approved-external-storage-persistence-read-after-restart-smoke",
+        "run-external-storage-service-readiness-after-env-sync-launch-and-persistence-evidence",
+        "run-external-storage-smoke-only-after-service-readiness-is-live-ready"
+      ]
+    },
+    {
+      "decisionId": "vercel-env-deploy-and-smoke-chain",
+      "rank": 4,
+      "status": "waiting-for-upstream-owner-decisions",
+      "category": "env-deploy-chain",
+      "blockedRequirementIds": [
+        "deployed-teacher-workflow-page",
+        "teacher-workflow-browser-smoke",
+        "teacher-workflow-live-generation-smoke",
+        "deployed-learning-ppt-playback",
+        "vercel-env-placement",
+        "vercel-production-deployment",
+        "deployment-route-smoke",
+        "teaching-operations-route-smoke",
+        "teaching-operation-detail-browser-smoke",
+        "teaching-course-management-route-smoke",
+        "production-release-run-consistency"
+      ],
+      "blockedReasons": [
+        "vercel-env-not-applied",
+        "vercel-production-deployment-not-proven",
+        "deployed-teacher-workflow-page-not-live-passed",
+        "teacher-workflow-browser-smoke-not-live-passed",
+        "deployed-learning-ppt-playback-not-live-passed",
+        "deployment-route-smoke-not-live-passed",
+        "teaching-operations-route-smoke-not-live-passed",
+        "teaching-operation-detail-browser-smoke-not-live-passed",
+        "teaching-course-management-route-smoke-not-live-passed"
+      ],
+      "triageTargetIds": [
+        "deployment-domain-reachability",
+        "teacher-workflow-deployment-smoke",
+        "teacher-workflow-browser-smoke",
+        "teacher-workflow-live-generation-smoke",
+        "learning-ppt-playback-deployment-smoke",
+        "deployment-route-smoke",
+        "teaching-operations-route-smoke",
+        "teaching-operation-detail-browser-smoke",
+        "teaching-course-management-route-smoke"
+      ],
+      "executionWaveIds": [
+        "deployment-and-domain-binding",
+        "workflow-and-ordinary-teaching-smokes"
+      ],
+      "nextSafeActions": [
+        "confirm-s19-vercel-env-apply-approval",
+        "run-redacted-vercel-env-sync-apply-with-approved-project-and-release-run-id",
+        "run-production-deployment-only-after-env-sync-evidence-is-applied",
+        "run-deployed-route-smokes-only-after-production-deployment-is-proven",
+        "run-ordinary-teaching-smokes-only-after-auth-storage-and-deployment-evidence-are-live-ready"
+      ]
+    },
+    {
+      "decisionId": "ordinary-teaching-production-evidence",
+      "rank": 5,
+      "status": "waiting-for-live-evidence",
+      "category": "live-evidence",
+      "blockedRequirementIds": [
+        "teaching-operations-route-smoke",
+        "teaching-operation-detail-browser-smoke",
+        "teaching-course-management-route-smoke"
+      ],
+      "blockedReasons": [
+        "teaching-operations-route-smoke-not-live-passed",
+        "teaching-operation-detail-browser-smoke-not-live-passed",
+        "teaching-course-management-route-smoke-not-live-passed"
+      ],
+      "triageTargetIds": [
+        "teaching-operations-route-smoke",
+        "teaching-operation-detail-browser-smoke",
+        "teaching-course-management-route-smoke"
+      ],
+      "executionWaveIds": [
+        "workflow-and-ordinary-teaching-smokes"
+      ],
+      "nextSafeActions": [
+        "confirm-ordinary-teaching-live-smoke-prerequisites",
+        "wait-for-auth-storage-and-vercel-deployment-evidence",
+        "run-live-teaching-operations-route-smoke-after-auth-storage-deployment-readiness",
+        "run-live-operation-detail-and-course-management-smokes-with-issued-teacher-auth-cookie",
+        "collect-release-run-bound-ordinary-teaching-evidence-for-enterprise-audit"
+      ]
+    },
+    {
+      "decisionId": "manual-ppt-playback-acceptance",
+      "rank": 6,
+      "status": "human-qa-needed",
+      "category": "human-qa",
+      "blockedRequirementIds": [
+        "ppt-manual-playback-acceptance"
+      ],
+      "blockedReasons": [
+        "manual-ppt-playback-not-accepted"
+      ],
+      "triageTargetIds": [
+        "ppt-manual-playback-acceptance"
+      ],
+      "executionWaveIds": [
+        "manual-qa-and-final-audit"
+      ],
+      "nextSafeActions": [
+        "package-manual-ppt-playback-evidence-for-human-review",
+        "verify-powerpoint-and-wps-playback-after-production-deployment",
+        "bind-manual-ppt-record-to-release-run-and-vercel-deployment",
+        "confirm-target-cloned-voice-label-and-per-slide-audio",
+        "submit-human-accepted-playback-record-for-release-gate"
+      ]
+    },
+    {
+      "decisionId": "enterprise-live-evidence-audit",
+      "rank": 7,
+      "status": "waiting-for-live-evidence",
+      "category": "evidence-audit",
+      "blockedRequirementIds": [
+        "enterprise-live-evidence-audit"
+      ],
+      "blockedReasons": [
+        "enterprise-live-evidence-audit-not-ready"
+      ],
+      "triageTargetIds": [
+        "app-auth-provider-readiness",
+        "teacher-auth-issuer-route-smoke",
+        "teacher-auth-provider-readiness",
+        "external-storage-persistence",
+        "external-storage-service-readiness",
+        "deployment-domain-reachability",
+        "teacher-workflow-deployment-smoke",
+        "teacher-workflow-browser-smoke",
+        "teacher-workflow-live-generation-smoke",
+        "learning-ppt-playback-deployment-smoke",
+        "ppt-manual-playback-acceptance",
+        "deployment-route-smoke",
+        "teaching-operations-route-smoke",
+        "teaching-operation-detail-browser-smoke",
+        "teaching-course-management-route-smoke",
+        "external-storage-smoke"
+      ],
+      "executionWaveIds": [
+        "provider-and-env-decisions",
+        "auth-and-storage-readiness",
+        "deployment-and-domain-binding",
+        "workflow-and-ordinary-teaching-smokes",
+        "manual-qa-and-final-audit"
+      ],
+      "nextSafeActions": [
+        "wait-for-approved-production-live-evidence-files",
+        "run-enterprise-live-evidence-audit-after-all-target-evidence-exists",
+        "reject-filename-only-or-blocked-evidence-records",
+        "verify-shared-release-run-id-across-production-live-evidence",
+        "attach-audit-summary-before-final-release-run"
+      ]
+    },
+    {
+      "decisionId": "production-release-run",
+      "rank": 8,
+      "status": "waiting-for-upstream-evidence",
+      "category": "final-release-binding",
+      "blockedRequirementIds": [
+        "deployed-teacher-workflow-page",
+        "teacher-workflow-browser-smoke",
+        "teacher-workflow-live-generation-smoke",
+        "deployed-learning-ppt-playback",
+        "vercel-env-placement",
+        "app-auth-provider-readiness",
+        "teacher-auth-provider-readiness",
+        "external-storage-service-readiness",
+        "vercel-production-deployment",
+        "deployment-route-smoke",
+        "teacher-auth-provider-consistency",
+        "teaching-operations-route-smoke",
+        "teaching-operation-detail-browser-smoke",
+        "teaching-course-management-route-smoke",
+        "external-durable-storage-smoke",
+        "external-storage-service-consistency",
+        "ppt-manual-playback-acceptance",
+        "enterprise-live-evidence-audit",
+        "production-release-run-consistency"
+      ],
+      "blockedReasons": [
+        "deployed-teacher-workflow-page-not-live-passed",
+        "deployed-learning-ppt-playback-not-live-passed",
+        "vercel-env-not-applied",
+        "app-auth-provider-readiness-not-live-ready",
+        "teacher-auth-provider-readiness-not-live-ready",
+        "external-storage-service-readiness-not-live-ready",
+        "vercel-production-deployment-not-proven",
+        "deployment-route-smoke-not-live-passed",
+        "teaching-operations-route-smoke-not-live-passed",
+        "teaching-operation-detail-browser-smoke-not-live-passed",
+        "teaching-course-management-route-smoke-not-live-passed",
+        "external-storage-smoke-not-live-passed",
+        "manual-ppt-playback-not-accepted",
+        "enterprise-live-evidence-audit-not-ready",
+        "teacher-workflow-browser-smoke-not-live-passed"
+      ],
+      "triageTargetIds": [
+        "app-auth-provider-readiness",
+        "teacher-auth-issuer-route-smoke",
+        "teacher-auth-provider-readiness",
+        "external-storage-persistence",
+        "external-storage-service-readiness",
+        "deployment-domain-reachability",
+        "teacher-workflow-deployment-smoke",
+        "teacher-workflow-browser-smoke",
+        "teacher-workflow-live-generation-smoke",
+        "learning-ppt-playback-deployment-smoke",
+        "ppt-manual-playback-acceptance",
+        "deployment-route-smoke",
+        "teaching-operations-route-smoke",
+        "teaching-operation-detail-browser-smoke",
+        "teaching-course-management-route-smoke",
+        "external-storage-smoke"
+      ],
+      "executionWaveIds": [
+        "provider-and-env-decisions",
+        "auth-and-storage-readiness",
+        "deployment-and-domain-binding",
+        "workflow-and-ordinary-teaching-smokes",
+        "manual-qa-and-final-audit"
+      ],
+      "nextSafeActions": [
+        "wait-for-final-release-gate-ready",
+        "bind-one-public-release-run-id-after-all-production-evidence-is-ready",
+        "verify-owner-checklist-has-no-waiting-or-blocked-decisions",
+        "publish-release-run-summary-with-redacted-evidence-only"
+      ]
+    }
+  ],
+  "safety": {
+    "sourcePathsOmitted": true,
+    "rawUrlsOmitted": true,
+    "secretValuesOmitted": true,
+    "responseBodiesOmitted": true,
+    "noLiveMutationPerformed": true,
+    "noDeploymentMutationPerformed": true,
+    "noReleaseRunBindingPerformed": true
+  }
+}
