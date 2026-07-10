@@ -1418,6 +1418,7 @@ describe("UAIS AI environment and provider smoke plan", () => {
 
   it("executes live provider smoke calls with redacted HTTP status only", async () => {
     const requests: Array<{ url: string; init: RequestInit }> = [];
+    let qwenResponse: Response | undefined;
     const results = await executeProviderSmoke({
       env: {
         DEEPSEEK_API_KEY: "secret-deepseek",
@@ -1426,6 +1427,16 @@ describe("UAIS AI environment and provider smoke plan", () => {
       liveApproved: true,
       fetch: async (url, init) => {
         requests.push({ url: String(url), init: init ?? {} });
+        if (String(url).includes("dashscope")) {
+          qwenResponse = new Response(
+            [
+              `data: ${JSON.stringify({ choices: [{ delta: { content: "OK" } }] })}`,
+              "data: [DONE]",
+            ].join("\n\n"),
+            { headers: { "Content-Type": "text/event-stream" } },
+          );
+          return qwenResponse;
+        }
         return Response.json({ choices: [{ message: { content: "ok" } }] });
       },
     });
@@ -1448,6 +1459,12 @@ describe("UAIS AI environment and provider smoke plan", () => {
     expect(requests[1].url).toBe(
       "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
     );
+    const deepseekRequestBody = JSON.parse(String(requests[0].init.body));
+    const qwenRequestBody = JSON.parse(String(requests[1].init.body));
+    expect(deepseekRequestBody.stream).toBe(false);
+    expect(qwenRequestBody.stream).toBe(true);
+    expect(qwenRequestBody.stream_options).toEqual({ include_usage: true });
+    expect(qwenResponse?.bodyUsed).toBe(true);
     expect(JSON.stringify(results)).not.toContain("secret");
   });
 
@@ -8400,6 +8417,71 @@ describe("UAIS AI environment and provider smoke plan", () => {
         stdio: "pipe",
       }),
     ).toThrow("explicit owner approval");
+  });
+
+  it("runs the live provider smoke CLI with the Qwen Omni streaming contract", async () => {
+    const requests: Array<{ url: string; body: Record<string, unknown> }> = [];
+    const server = createServer(async (request, response) => {
+      requests.push({
+        url: request.url ?? "",
+        body: JSON.parse(await readBodyForTest(request)) as Record<string, unknown>,
+      });
+
+      if (request.url?.includes("/compatible-mode/v1/chat/completions")) {
+        response.writeHead(200, { "Content-Type": "text/event-stream" });
+        response.end(
+          [
+            `data: ${JSON.stringify({ choices: [{ delta: { content: "OK" } }] })}`,
+            "data: [DONE]",
+          ].join("\n\n"),
+        );
+        return;
+      }
+
+      response.writeHead(200, { "Content-Type": "application/json" });
+      response.end(JSON.stringify({ choices: [{ message: { content: "OK" } }] }));
+    });
+    const baseUrl = await listenForTest(server);
+    const tmpDir = mkdtempSync(join(tmpdir(), "uais-ai-provider-live-smoke-"));
+    const envFile = join(tmpDir, "ai-provider-live-smoke.test.env");
+    writeFileSync(
+      envFile,
+      [
+        "DEEPSEEK_API_KEY=secret-deepseek-live-cli",
+        `DEEPSEEK_BASE_URL=${baseUrl}`,
+        "DASHSCOPE_API_KEY=secret-qwen-live-cli",
+        `DASHSCOPE_BASE_URL=${baseUrl}`,
+        "QWEN_MULTIMODAL_MODEL=qwen3.5-omni-plus",
+      ].join("\n"),
+    );
+
+    try {
+      const output = await execFileForTest("node", [
+        "scripts/ai-provider-smoke.mjs",
+        "--live",
+        "--approved",
+        "--env-file",
+        envFile,
+      ]);
+      const body = JSON.parse(output);
+      const qwenRequest = requests.find((request) =>
+        request.url.includes("/compatible-mode/v1/chat/completions"),
+      );
+
+      expect(body.results).toEqual([
+        expect.objectContaining({ provider: "deepseek", status: "ok", httpStatus: 200 }),
+        expect.objectContaining({ provider: "qwen", status: "ok", httpStatus: 200 }),
+      ]);
+      expect(qwenRequest?.body).toMatchObject({
+        model: "qwen3.5-omni-plus",
+        stream: true,
+        stream_options: { include_usage: true },
+      });
+      expect(output).not.toContain("secret-deepseek-live-cli");
+      expect(output).not.toContain("secret-qwen-live-cli");
+    } finally {
+      await closeServerForTest(server);
+    }
   });
 
   it("runs the provider smoke CLI in approved live mode with skipped redacted results when env is absent", () => {

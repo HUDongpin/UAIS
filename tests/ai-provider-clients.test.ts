@@ -38,16 +38,28 @@ describe("UAIS provider clients", () => {
     expect(JSON.stringify(result)).not.toContain("secret-qwen");
   });
 
-  it("calls Qwen multimodal chat through DashScope compatible mode", async () => {
+  it("streams Qwen Omni chat through DashScope compatible mode", async () => {
     const requests: Array<{ url: string; init: RequestInit }> = [];
     const client = createQwenMultimodalClient({
       apiKey: "secret-qwen",
       fetch: async (url, init) => {
         requests.push({ url: String(url), init: init ?? {} });
-        return Response.json({
-          choices: [{ message: { content: "Qwen multimodal response" } }],
-          usage: { total_tokens: 9 },
-        });
+        return new Response(
+          [
+            `data: ${JSON.stringify({
+              choices: [{ delta: { content: "Qwen multimodal " } }],
+            })}`,
+            `data: ${JSON.stringify({
+              choices: [{ delta: { content: "response" } }],
+            })}`,
+            `data: ${JSON.stringify({
+              choices: [],
+              usage: { total_tokens: 9 },
+            })}`,
+            "data: [DONE]",
+          ].join("\n\n"),
+          { headers: { "Content-Type": "text/event-stream" } },
+        );
       },
     });
 
@@ -80,11 +92,42 @@ describe("UAIS provider clients", () => {
     );
     expect(requests[0].init.method).toBe("POST");
     expect(requestBody.model).toBe("qwen3.5-omni-plus");
+    expect(requestBody.stream).toBe(true);
+    expect(requestBody.stream_options).toEqual({ include_usage: true });
     expect(requestBody.messages[1].content[1]).toEqual({
       type: "image_url",
       image_url: { url: "https://www.uais.top/learning/slide.png" },
     });
     expect(JSON.stringify(result)).not.toContain("secret-qwen");
+  });
+
+  it("keeps non-Omni Qwen compatible chat on the JSON response path", async () => {
+    const requests: Array<{ url: string; init: RequestInit }> = [];
+    const client = createQwenMultimodalClient({
+      apiKey: "secret-qwen",
+      fetch: async (url, init) => {
+        requests.push({ url: String(url), init: init ?? {} });
+        return Response.json({
+          choices: [{ message: { content: "Qwen VL response" } }],
+          usage: { total_tokens: 7 },
+        });
+      },
+    });
+
+    const result = await client.complete({
+      model: "qwen-vl-plus",
+      messages: [{ role: "user", content: "Describe this image." }],
+    });
+    const requestBody = JSON.parse(String(requests[0].init.body));
+
+    expect(requestBody.stream).toBe(false);
+    expect(requestBody).not.toHaveProperty("stream_options");
+    expect(result).toMatchObject({
+      provider: "qwen",
+      model: "qwen-vl-plus",
+      content: "Qwen VL response",
+      usage: { totalTokens: 7 },
+    });
   });
 
   it("generates a Qwen course cover through the official multimodal image API", async () => {

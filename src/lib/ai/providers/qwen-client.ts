@@ -198,6 +198,21 @@ type QwenCompatibleChatResponseBody = {
   message?: string;
 };
 
+type QwenCompatibleChatStreamChunk = {
+  choices?: Array<{
+    delta?: {
+      content?: QwenCompatibleMessageContent;
+    };
+  }>;
+  usage?: {
+    total_tokens?: number;
+  };
+  error?: {
+    message?: string;
+  };
+  message?: string;
+};
+
 type QwenCompatibleMessageContent = string | Array<{ text?: string }> | undefined;
 
 const DEFAULT_DASHSCOPE_BASE_URL = "https://dashscope.aliyuncs.com";
@@ -216,6 +231,7 @@ export function createQwenMultimodalClient(options: QwenImageClientOptions) {
       input: QwenMultimodalCompleteInput,
     ): Promise<QwenMultimodalCompleteResult> {
       const model = input.model ?? provider.defaultModel;
+      const stream = isQwenOmniModel(model);
       const response = await fetchImpl(`${baseUrl}/chat/completions`, {
         method: "POST",
         headers: {
@@ -225,9 +241,29 @@ export function createQwenMultimodalClient(options: QwenImageClientOptions) {
         body: JSON.stringify({
           model,
           messages: input.messages,
-          stream: false,
+          stream,
+          ...(stream ? { stream_options: { include_usage: true } } : {}),
         }),
       });
+
+      if (stream) {
+        const responseText = await response.text();
+        if (!response.ok) {
+          throw new Error(readQwenCompatibleErrorMessage(responseText));
+        }
+
+        const streamedCompletion = readQwenCompatibleStream(responseText);
+        return {
+          provider: "qwen",
+          providerRole: "multimodal",
+          model,
+          content: streamedCompletion.content,
+          usage:
+            streamedCompletion.totalTokens === undefined
+              ? undefined
+              : { totalTokens: streamedCompletion.totalTokens },
+        };
+      }
 
       const body = (await response.json()) as QwenCompatibleChatResponseBody;
       if (!response.ok) {
@@ -327,6 +363,53 @@ function toQwenCompatibleBaseUrl(baseUrl: string) {
   return normalized.endsWith("/compatible-mode/v1")
     ? normalized
     : `${normalized}/compatible-mode/v1`;
+}
+
+function isQwenOmniModel(model: string) {
+  return /(?:^|-)omni(?:-|$)/i.test(model);
+}
+
+function readQwenCompatibleStream(responseText: string) {
+  let content = "";
+  let totalTokens: number | undefined;
+
+  for (const line of responseText.split(/\r?\n/)) {
+    if (!line.startsWith("data:")) {
+      continue;
+    }
+
+    const data = line.slice("data:".length).trim();
+    if (!data || data === "[DONE]") {
+      continue;
+    }
+
+    let chunk: QwenCompatibleChatStreamChunk;
+    try {
+      chunk = JSON.parse(data) as QwenCompatibleChatStreamChunk;
+    } catch {
+      throw new Error("Qwen multimodal stream returned invalid SSE data.");
+    }
+
+    if (chunk.error?.message || chunk.message) {
+      throw new Error(chunk.error?.message ?? chunk.message);
+    }
+
+    content += readQwenCompatibleMessageContent(chunk.choices?.[0]?.delta?.content);
+    if (typeof chunk.usage?.total_tokens === "number") {
+      totalTokens = chunk.usage.total_tokens;
+    }
+  }
+
+  return { content, totalTokens };
+}
+
+function readQwenCompatibleErrorMessage(responseText: string) {
+  try {
+    const body = JSON.parse(responseText) as QwenCompatibleChatResponseBody;
+    return body.error?.message ?? body.message ?? "Qwen multimodal request failed.";
+  } catch {
+    return "Qwen multimodal request failed.";
+  }
 }
 
 function readQwenCompatibleMessageContent(content: QwenCompatibleMessageContent) {

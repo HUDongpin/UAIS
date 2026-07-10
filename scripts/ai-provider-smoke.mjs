@@ -233,9 +233,11 @@ async function smokeQwen(env) {
     body: JSON.stringify({
       model,
       messages: [{ role: "user", content: "Reply with OK." }],
-      stream: false,
+      stream: true,
+      stream_options: { include_usage: true },
     }),
   });
+  await cancelSmokeResponseBody(response);
 
   return {
     provider: "qwen",
@@ -243,6 +245,14 @@ async function smokeQwen(env) {
     httpStatus: response.status,
     model,
   };
+}
+
+async function cancelSmokeResponseBody(response) {
+  try {
+    await response.body?.cancel();
+  } catch {
+    // Smoke checks report only redacted HTTP status; response content is intentionally discarded.
+  }
 }
 
 function qwenCompatibleBaseUrl(baseUrl) {
