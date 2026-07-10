@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "status": "passed",
+  "commitCandidates": 115,
+  "matched": 115,
+  "mismatched": 0,
+  "mismatchPaths": [],
+  "quarantinePaths": 1,
+  "quarantineAbsentFromCompose": true
+}
