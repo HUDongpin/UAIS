@@ -5,12 +5,10 @@ import {
   resolveTeachingCourseManagementDataDir,
   TeachingCourseManagementStoreError,
 } from "@/lib/server/teaching-course-management-store";
-import { findPublishedPlaybackByCourseId } from "@/lib/learning/ppt-playback-catalog";
-import { resolveUaisAppAuthProviderContract } from "@/lib/server/uais-app-auth-provider";
 import {
   getUaisAppSessionUserFromCookieString,
-  isUaisAppDeployedRuntime,
 } from "@/lib/server/uais-app-session";
+import { isPublishedDemoTeacherCourseAccess } from "@/lib/server/published-demo-course-access";
 
 type LearningPptPlaybackAccessReason =
   | "student-session-required"
@@ -84,7 +82,7 @@ export async function authorizeLearningPptPlaybackAccess(input: {
 
   if (
     actor.role === "teacher" &&
-    isDemoPublishedTeacherAccess({
+    isPublishedDemoTeacherCourseAccess({
       actor,
       courseId: input.courseId,
       env: input.env,
@@ -220,29 +218,6 @@ function createDeniedAccess(
     responsibleSession: "S12",
     redaction: createRedaction(),
   };
-}
-
-function isDemoPublishedTeacherAccess(input: {
-  actor: LearningPptPlaybackActor;
-  courseId: string;
-  env: Record<string, string | undefined>;
-}) {
-  if (
-    input.actor.actorId !== "Phoebe" ||
-    !findPublishedPlaybackByCourseId(input.courseId)
-  ) {
-    return false;
-  }
-
-  const authProviderContract = resolveUaisAppAuthProviderContract({ env: input.env });
-  if (authProviderContract.providerKind !== "local-demo") {
-    return false;
-  }
-
-  return (
-    !isUaisAppDeployedRuntime(input.env) ||
-    authProviderContract.demoProductionAccess?.enabled === true
-  );
 }
 
 function createAccessDeniedMessage(reasonCode: LearningPptPlaybackAccessReason) {

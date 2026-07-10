@@ -24,7 +24,13 @@ describe("UAIS provider clients", () => {
 
     const result = await client.complete({
       messages: [{ role: "user", content: "变量怎么定？" }],
+      maxTokens: 256,
+      thinking: { type: "disabled" },
+    } as Parameters<typeof client.complete>[0] & {
+      maxTokens: number;
+      thinking: { type: "disabled" };
     });
+    const requestBody = JSON.parse(String(requests[0].init.body));
 
     expect(result).toEqual({
       provider: "deepseek",
@@ -34,7 +40,9 @@ describe("UAIS provider clients", () => {
     });
     expect(requests[0].url).toBe("https://api.deepseek.com/chat/completions");
     expect(requests[0].init.method).toBe("POST");
-    expect(JSON.stringify(requests[0].init.body)).toContain("deepseek-v4-flash");
+    expect(requestBody.model).toBe("deepseek-v4-flash");
+    expect(requestBody.max_tokens).toBe(256);
+    expect(requestBody.thinking).toEqual({ type: "disabled" });
     expect(JSON.stringify(result)).not.toContain("secret-qwen");
   });
 
@@ -77,6 +85,11 @@ describe("UAIS provider clients", () => {
           ],
         },
       ],
+      maxTokens: 256,
+      enableThinking: false,
+    } as Parameters<typeof client.complete>[0] & {
+      maxTokens: number;
+      enableThinking: boolean;
     });
     const requestBody = JSON.parse(String(requests[0].init.body));
 
@@ -92,6 +105,8 @@ describe("UAIS provider clients", () => {
     );
     expect(requests[0].init.method).toBe("POST");
     expect(requestBody.model).toBe("qwen3.5-omni-plus");
+    expect(requestBody.max_tokens).toBe(256);
+    expect(requestBody.enable_thinking).toBe(false);
     expect(requestBody.stream).toBe(true);
     expect(requestBody.stream_options).toEqual({ include_usage: true });
     expect(requestBody.messages[1].content[1]).toEqual({

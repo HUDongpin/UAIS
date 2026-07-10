@@ -121,6 +121,8 @@ const learningAiGuideAgents: Record<LearningAiGuideAgentId, LearningAiGuideAgent
   },
 };
 
+const learningGuideMultiAgentMaxTokens = 256;
+
 export const POST = createLearningAiGuidePostHandler();
 
 export function createLearningAiGuidePostHandler(
@@ -392,6 +394,8 @@ function createLearningGuideMultiAgentCompleter(input: {
     if (call.agent.providerRole === "multimodal") {
       const completion = await qwenClient.complete({
         model: input.env.QWEN_MULTIMODAL_MODEL ?? qwenProvider.defaultModel,
+        maxTokens: learningGuideMultiAgentMaxTokens,
+        enableThinking: false,
         messages: [
           { role: "system", content: agent.systemPrompt[call.locale] },
           { role: "user", content: createQwenUserContent(context, call.slideImageUrl) },
@@ -408,6 +412,8 @@ function createLearningGuideMultiAgentCompleter(input: {
 
     const completion = await deepSeekClient.complete({
       model: input.env.DEEPSEEK_MODEL ?? deepSeekProvider.defaultModel,
+      maxTokens: learningGuideMultiAgentMaxTokens,
+      thinking: { type: "disabled" },
       messages: [
         { role: "system", content: agent.systemPrompt[call.locale] },
         { role: "user", content: context },

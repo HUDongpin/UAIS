@@ -36,6 +36,8 @@ export type QwenMultimodalChatMessage = {
 export type QwenMultimodalCompleteInput = {
   messages: QwenMultimodalChatMessage[];
   model?: string;
+  maxTokens?: number;
+  enableThinking?: boolean;
 };
 
 export type QwenMultimodalCompleteResult = {
@@ -241,6 +243,8 @@ export function createQwenMultimodalClient(options: QwenImageClientOptions) {
         body: JSON.stringify({
           model,
           messages: input.messages,
+          max_tokens: input.maxTokens,
+          enable_thinking: input.enableThinking,
           stream,
           ...(stream ? { stream_options: { include_usage: true } } : {}),
         }),

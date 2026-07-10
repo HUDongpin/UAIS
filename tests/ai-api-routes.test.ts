@@ -914,6 +914,123 @@ describe("UAIS AI API route contracts", () => {
     expectNoCredentialValues(body);
   });
 
+  it("runs the published AI guide for the explicitly opted-in Production demo teacher without reading the ordinary course database", async () => {
+    const fetchImpl = createExternalLangGraphPersistenceFetch();
+    const deepSeekRequests: Array<unknown> = [];
+    const qwenRequests: Array<unknown> = [];
+    const teacherCookie = createUaisAppSessionCookie(
+      {
+        account: "Phoebe",
+        department: "教师账号",
+        displayName: "Phoebe",
+        role: "teacher",
+      },
+      {
+        secret: appSessionSigningSecret,
+        now: stableFutureIssueTime,
+        sessionId: "production-demo-learning-ai-guide-session",
+      },
+    );
+    const postLearningAiGuide = createLearningAiGuidePostHandler({
+      env: {
+        NODE_ENV: "production",
+        UAIS_APP_AUTH_PROVIDER: "local-demo",
+        UAIS_APP_ALLOW_PRODUCTION_DEMO_AUTH: "true",
+        UAIS_APP_SESSION_SIGNING_SECRET: appSessionSigningSecret,
+        UAIS_TEACHING_COURSE_MANAGEMENT_BACKEND: "external",
+        UAIS_LANGGRAPH_PERSISTENCE_BACKEND: "external",
+        UAIS_EXTERNAL_STORAGE_BASE_URL: "https://storage.example.test",
+        UAIS_EXTERNAL_STORAGE_ACCESS_TOKEN: "test-external-storage-token-strong-fixture",
+        DEEPSEEK_API_KEY: "secret-deepseek",
+        DASHSCOPE_API_KEY: "secret-qwen",
+      },
+      fetch: fetchImpl,
+      createDeepSeekTextClient: () => ({
+        complete: async (input) => {
+          deepSeekRequests.push(input);
+          return {
+            provider: "deepseek",
+            model: input.model ?? "deepseek-live-node",
+            content: `DeepSeek Production demo response ${deepSeekRequests.length}`,
+          };
+        },
+      }),
+      createQwenMultimodalClient: () => ({
+        complete: async (input) => {
+          qwenRequests.push(input);
+          return {
+            provider: "qwen",
+            providerRole: "multimodal",
+            model: input.model ?? "qwen-live-node",
+            content: "Qwen Production demo response",
+          };
+        },
+      }),
+    });
+
+    vi.stubGlobal("fetch", fetchImpl);
+    try {
+      const response = await postLearningAiGuide(
+        new Request("https://www.uais.top/api/learning/ai-guide", {
+          method: "POST",
+          headers: { cookie: teacherCookie },
+          body: JSON.stringify({
+            agentId: "learning-advisor",
+            mode: "multi-agent",
+            locale: "zh-CN",
+            question: "请基于自然数的序数理论给我一个 10 分钟学习路径",
+            course: {
+              courseId: "elementary-math-research",
+              courseTitle: "初等数学研究",
+            },
+            slide: {
+              slideNumber: 1,
+              slideTitle: "自然数的序数理论",
+            },
+          }),
+        }),
+      );
+      const body = await response.json();
+
+      expect(
+        response.status,
+        JSON.stringify({
+          body,
+          deepSeekRequestCount: deepSeekRequests.length,
+          qwenRequestCount: qwenRequests.length,
+          persistenceRequestPaths: fetchImpl.mock.calls.map(
+            ([url]) => new URL(String(url)).pathname,
+          ),
+        }),
+      ).toBe(200);
+      expect(deepSeekRequests).toHaveLength(2);
+      expect(qwenRequests).toHaveLength(1);
+      expect(deepSeekRequests).toEqual([
+        expect.objectContaining({
+          maxTokens: 256,
+          thinking: { type: "disabled" },
+        }),
+        expect.objectContaining({
+          maxTokens: 256,
+          thinking: { type: "disabled" },
+        }),
+      ]);
+      expect(qwenRequests).toEqual([
+        expect.objectContaining({
+          maxTokens: 256,
+          enableThinking: false,
+        }),
+      ]);
+      expect(fetchImpl.mock.calls.map(([url]) => String(url))).not.toContain(
+        "https://storage.example.test/teaching-course-management/database",
+      );
+      expect(body.message?.text).toContain("LangGraph 多智能体导学已完成");
+      expectNoCredentialValues(body);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("runs the learning AI guide manual prompt through LangGraph live provider nodes", async () => {
     const fixture = await createLearningAiGuideCourseAccessFixture({
       courseId: "elementary-math-research",

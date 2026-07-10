@@ -8,6 +8,10 @@ export type DeepSeekChatMessage = {
 export type DeepSeekCompleteInput = {
   messages: DeepSeekChatMessage[];
   model?: string;
+  maxTokens?: number;
+  thinking?: {
+    type: "enabled" | "disabled";
+  };
 };
 
 export type DeepSeekCompleteResult = {
@@ -58,6 +62,8 @@ export function createDeepSeekTextClient(options: DeepSeekTextClientOptions) {
         body: JSON.stringify({
           model,
           messages: input.messages,
+          max_tokens: input.maxTokens,
+          thinking: input.thinking,
         }),
       });
 

@@ -5,6 +5,7 @@ import {
   resolveTeachingCourseManagementDataDir,
   type TeachingCourseManagementRepository,
 } from "@/lib/server/teaching-course-management-store";
+import { isPublishedDemoTeacherCourseAccess } from "@/lib/server/published-demo-course-access";
 
 type LearningAiGuideCourseAccessReason =
   | "course-context-required"
@@ -27,7 +28,10 @@ type LearningAiGuideCourseAccessResource = {
 export type LearningAiGuideCourseAccessDecision =
   | {
       status: "authorized";
-      reasonCode: "student-course-membership-approved" | "teacher-course-ownership-approved";
+      reasonCode:
+        | "student-course-membership-approved"
+        | "teacher-course-ownership-approved"
+        | "teacher-demo-published-playback-approved";
       actor: LearningAiGuideCourseAccessActor;
       resource: LearningAiGuideCourseAccessResource;
       membershipId?: string;
@@ -60,6 +64,23 @@ export async function authorizeLearningAiGuideCourseAccess(input: {
   const resource = { courseId: input.courseId };
   if (actor.role === "admin") {
     return createDeniedAccess("student-or-teacher-role-required", actor, resource);
+  }
+
+  if (
+    isPublishedDemoTeacherCourseAccess({
+      actor,
+      courseId: input.courseId,
+      env: input.env,
+    })
+  ) {
+    return {
+      status: "authorized",
+      reasonCode: "teacher-demo-published-playback-approved",
+      actor,
+      resource,
+      responsibleSession: "S12",
+      redaction: createLearningAiGuideAccessRedaction(),
+    };
   }
 
   const repository =
