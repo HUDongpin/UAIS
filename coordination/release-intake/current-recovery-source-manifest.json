@@ -1,0 +1,831 @@
+{
+  "version": 1,
+  "source": {
+    "branch": "codex/uais-dirty-rescue-2026-06-30",
+    "head": "d28d8a6cb2e8efbdf29bf7515de2ae7e93d500a8",
+    "statusFingerprint": "cf919fa0876f7dcdb6e18874b1bc6c09c3fa94c2c4f5af8df91e4da716e38fc2"
+  },
+  "summary": {
+    "totalStatusPaths": 116,
+    "commitCandidates": 115,
+    "quarantinePaths": 1,
+    "trackedModified": 44,
+    "untracked": 72,
+    "staged": 0
+  },
+  "entries": [
+    {
+      "path": ".env.local.example",
+      "package": "R1",
+      "status": " M",
+      "size": 2903,
+      "sha256": "ad34e998cf262818e619260e74efbcfdc8ba133cd7efc6010b1b8eeefa504f38"
+    },
+    {
+      "path": ".github/workflows/critical-flow.yml",
+      "package": "R1",
+      "status": "??",
+      "size": 983,
+      "sha256": "9d7a43b5987dffdba100e8327445e2e24042b52c331324e841ebdfb696ecbb9f"
+    },
+    {
+      "path": "CONTRIBUTING.md",
+      "package": "R5",
+      "status": "??",
+      "size": 3996,
+      "sha256": "a0d4b44609725ffb382d555b5e0fa956a6140d04244dda35ea06eb51d1b647f9"
+    },
+    {
+      "path": "coordination/reports/2026-07-08-critical-flow-regression-matrix.md",
+      "package": "R5",
+      "status": "??",
+      "size": 3029,
+      "sha256": "b205f178a5c34a8718f1845f9b03a96e02285659f6bf7c752226c1336325bafa"
+    },
+    {
+      "path": "coordination/session-logs/2026-07-08-S05.md",
+      "package": "R5",
+      "status": "??",
+      "size": 3672,
+      "sha256": "3202aeb67aef9e9fada16f0140e37cb86fa8591173e3776ab4b49b61ce61ffc2"
+    },
+    {
+      "path": "coordination/session-logs/2026-07-08-S10.md",
+      "package": "R5",
+      "status": "??",
+      "size": 11500,
+      "sha256": "4ec807daf9c618df39677e0c368cff4b571782492226f8807dccb3bb2c004c4c"
+    },
+    {
+      "path": "coordination/session-logs/2026-07-08-S11.md",
+      "package": "R5",
+      "status": "??",
+      "size": 4941,
+      "sha256": "1e355d5c62edbe1870e55bf21b02ba3e32501b93960dd5c6df9e6ae1ecde33a7"
+    },
+    {
+      "path": "coordination/session-logs/2026-07-08-S12.md",
+      "package": "R5",
+      "status": "??",
+      "size": 16116,
+      "sha256": "2bfb0247701e86c3bce90c8d534a82c2bab7563ff090c97dc8c187ffa59882df"
+    },
+    {
+      "path": "coordination/session-logs/2026-07-08-S15.md",
+      "package": "R5",
+      "status": "??",
+      "size": 4669,
+      "sha256": "9c551e09616f3c992dc2aab3ab013a2fb3c8e6bc6fda93d1a2ac5b57935f81e0"
+    },
+    {
+      "path": "coordination/session-logs/2026-07-08-S19.md",
+      "package": "R5",
+      "status": "??",
+      "size": 2424,
+      "sha256": "45648fc3ac371a276675ebf1fdf5f244b80d2b588329d4ad3c799a94d14029c0"
+    },
+    {
+      "path": "coordination/session-logs/2026-07-08-S22.md",
+      "package": "R5",
+      "status": "??",
+      "size": 17239,
+      "sha256": "21bce0475b7bc41f6644ecae8fe05d55c6c608a6062c1aa21c581197fad35c85"
+    },
+    {
+      "path": "coordination/session-logs/2026-07-09-S22.md",
+      "package": "R5",
+      "status": "??",
+      "size": 6965,
+      "sha256": "f211d55df4b31ca956491f994de083cba85f2ba4b4643719f029692a4d91a1f5"
+    },
+    {
+      "path": "docs/adaptive-recommendations.md",
+      "package": "R4",
+      "status": "??",
+      "size": 2499,
+      "sha256": "e8b3e787a1220445ba497f9f507e3a103537835609a6038430a7f69890c3d347"
+    },
+    {
+      "path": "docs/API.md",
+      "package": "R2",
+      "status": "??",
+      "size": 6467,
+      "sha256": "80f2274665e0a3e6fdefce8d7c1aa4667885701c71f80399c2c365c78ec63db4"
+    },
+    {
+      "path": "docs/architecture-map.md",
+      "package": "R1",
+      "status": "??",
+      "size": 5577,
+      "sha256": "5755588404e9d9f90c032080c5338baa3fe1381720a985890e844430aeeff41c"
+    },
+    {
+      "path": "docs/core-schema-design.md",
+      "package": "R2",
+      "status": "??",
+      "size": 9217,
+      "sha256": "29cd9fa3ff03aaac06aa260bd800eb2198d7de54b3bb63df19451ad593466885"
+    },
+    {
+      "path": "docs/env-surface.md",
+      "package": "R1",
+      "status": "??",
+      "size": 2045,
+      "sha256": "701b15a2d6508b669edb234ab711c20a7588cbb5f15f5f959cc9d7b75c880424"
+    },
+    {
+      "path": "docs/learner-profiles.md",
+      "package": "R4",
+      "status": "??",
+      "size": 1724,
+      "sha256": "26ffce03b6f285be5f27fb627f3dfd098050078cae5bf374f7e18b94ef38fba5"
+    },
+    {
+      "path": "docs/performance-accessibility-baseline.md",
+      "package": "R3",
+      "status": "??",
+      "size": 1534,
+      "sha256": "34cca136a8a4ad19ad290dcc1f69f1564659f6b8e897651b3ec1a9aafad5ee2a"
+    },
+    {
+      "path": "docs/privacy-baseline.md",
+      "package": "R5",
+      "status": "??",
+      "size": 7734,
+      "sha256": "17e6681c953c44bc61908cc77b3c284c697d7ec32473603c1d03c6412745c93c"
+    },
+    {
+      "path": "docs/runbooks/observability.md",
+      "package": "R1",
+      "status": "??",
+      "size": 2453,
+      "sha256": "412dccc5944ba02b282c5330663fa5708ec66d1c4900c789b638e01b13ae37e0"
+    },
+    {
+      "path": "docs/runbooks/pre-deploy-checklist.md",
+      "package": "R1",
+      "status": "??",
+      "size": 2568,
+      "sha256": "e678e3dc7cda889657995fe5c112fd12f8e81b26209de20a838a371563935820"
+    },
+    {
+      "path": "docs/runbooks/production-rollback.md",
+      "package": "R1",
+      "status": "??",
+      "size": 2212,
+      "sha256": "d6bccde9459d92ca7869b6356580299832aa9635e408f590efbf8039d0b69ca7"
+    },
+    {
+      "path": "docs/runbooks/staging-preview.md",
+      "package": "R1",
+      "status": "??",
+      "size": 3232,
+      "sha256": "310a6472d34f472e5f05a2a9dbf81d163583d539ec1604735832d08a3c52784c"
+    },
+    {
+      "path": "docs/technical-advisory/20260708-UAIS-Codex-Verification-Report.md",
+      "package": "R5",
+      "status": "??",
+      "size": 11188,
+      "sha256": "b9ce94beccfd9b73f1bd7b91fce7138ccc6ec9b52916e7e9b6f2c85436da3f4d"
+    },
+    {
+      "path": "docs/technical-advisory/20260708-UAIS-Technical-Advisory-Report-Codex-Clean.docx",
+      "package": "R5",
+      "status": "??",
+      "size": 38318,
+      "sha256": "ac6b2e00f17529b01dc1d12e51f761a9973de6738d865089b8cc564d1fad89ea"
+    },
+    {
+      "path": "docs/technical-advisory/20260708-UAIS-Technical-Advisory-Report-Codex-Tracked.docx",
+      "package": "R5",
+      "status": "??",
+      "size": 40252,
+      "sha256": "a44b7767946ac4b327ab54f422cb29b0f3140443ff564b602b8fcdb64a4136ff"
+    },
+    {
+      "path": "docs/technical-advisory/UAIS_Executive_Summary.md",
+      "package": "R5",
+      "status": "??",
+      "size": 3701,
+      "sha256": "96630b4bee9dadce10fe49daef73182e4d6921885a787e3952398e8153c4fa4c"
+    },
+    {
+      "path": "docs/technical-advisory/UAIS_Issue_Register_and_Backlog.xlsx",
+      "package": "R5",
+      "status": "??",
+      "size": 31084,
+      "sha256": "e3bb0d6165ce4e101cb7f8fd500ec2b170235732acd4bbed13ca7dc6a868b891"
+    },
+    {
+      "path": "docs/technical-advisory/UAIS_Senior_Technical_Advisory_Report.docx",
+      "package": "R5",
+      "status": "??",
+      "size": 37979,
+      "sha256": "538e3ca0a41ebdf480ed11cf1456d29773326fcfefb8ae94ebbfefbc2e027957"
+    },
+    {
+      "path": "docs/technical-advisory/UAIS_Target_Architecture.md",
+      "package": "R5",
+      "status": "??",
+      "size": 6096,
+      "sha256": "a98b99b4d2167e5a12ee9f29717da7619b58363c0ec9a40238e29a7694750fdc"
+    },
+    {
+      "path": "docs/technical-advisory/UAIS_Technical_Review.md",
+      "package": "R5",
+      "status": "??",
+      "size": 16040,
+      "sha256": "265cd6b7a053daa7f7b1739ede538a0174370fad1e5e267d6d2835038d1d71fe"
+    },
+    {
+      "path": "migrations/0001_core_poc.sql",
+      "package": "R2",
+      "status": "??",
+      "size": 8046,
+      "sha256": "2772cd30dd89dbfa864b89ca86172d1564a3c43cf6687515f0181f3032aa570c"
+    },
+    {
+      "path": "next.config.ts",
+      "package": "R1",
+      "status": " M",
+      "size": 569,
+      "sha256": "f9c1cd43ce8827d212f00c4da20c42fd19cb54424b7fbe560a3a100f9ef3f6f1"
+    },
+    {
+      "path": "package-lock.json",
+      "package": "R1",
+      "status": " M",
+      "size": 521084,
+      "sha256": "cb5f037fb1c245868cdf1f6a2e83081b2117a8bdaaabe86aa0b751724607fb4f"
+    },
+    {
+      "path": "package.json",
+      "package": "R1",
+      "status": " M",
+      "size": 1640,
+      "sha256": "5d6f79157fdf22e7aa8a6a4a67a2cf7eb60f3355d34ca4014c3ad3708863eeda"
+    },
+    {
+      "path": "README.md",
+      "package": "R1",
+      "status": " M",
+      "size": 4122,
+      "sha256": "50b83f44eed9dc90f49a133d7a587813a690d8dd894a20818eda5034c8d2efaa"
+    },
+    {
+      "path": "SCOPE.md",
+      "package": "R5",
+      "status": "??",
+      "size": 2859,
+      "sha256": "05adf9cf6114726d190b292bb9514d12736188764abc374a6590c253feec9c7b"
+    },
+    {
+      "path": "scripts/apply-core-migrations.mjs",
+      "package": "R2",
+      "status": "??",
+      "size": 2117,
+      "sha256": "0c7100ea1d60369dd2b32035261a6fb774d0f56e48051400647bda8bc7e16459"
+    },
+    {
+      "path": "src/app/api/auth/app-session/route.ts",
+      "package": "R2",
+      "status": " M",
+      "size": 6821,
+      "sha256": "52c78c20c21ccdba011b3628dba3a5b541df4aab9d358bc54d8dc9b7dc248d2d"
+    },
+    {
+      "path": "src/app/api/learning-records/analytics/route.ts",
+      "package": "R4",
+      "status": " M",
+      "size": 10489,
+      "sha256": "e2103aab6d20d9c51dc00a9287ff4532c168bcbe513219f695480120863cf14d"
+    },
+    {
+      "path": "src/app/api/learning-records/events/route.ts",
+      "package": "R4",
+      "status": " M",
+      "size": 7295,
+      "sha256": "4b93ee9e4eb2c7d3cc2e6125ec561bdcb8571b5e6a9afb4e7cb171624525e631"
+    },
+    {
+      "path": "src/app/api/learning/ai-guide/hitl/route.ts",
+      "package": "R4",
+      "status": " M",
+      "size": 11159,
+      "sha256": "0038afa69c0a33494e7e469195b1a05c6997e19e533bfd1920a7d0515e807a1f"
+    },
+    {
+      "path": "src/app/api/learning/ai-guide/route.ts",
+      "package": "R4",
+      "status": " M",
+      "size": 18993,
+      "sha256": "f99f2c0122892e441cd0f4f3a2d268039c3537bb38ffab873dd3fae22b4d7f95"
+    },
+    {
+      "path": "src/app/api/learning/ppt-playback/[courseId]/route.ts",
+      "package": "R4",
+      "status": " M",
+      "size": 7295,
+      "sha256": "39f3c6af769c5d08ee00f01a8bd4271d20843612fc27db74d030d02d50c497c0"
+    },
+    {
+      "path": "src/app/api/teaching/course-cover/route.ts",
+      "package": "R2",
+      "status": " M",
+      "size": 20982,
+      "sha256": "d859971425686a73901a58ed3f276d268915bb50cc4b747efa4e101b5f2be44b"
+    },
+    {
+      "path": "src/app/api/teaching/courses/route.ts",
+      "package": "R2",
+      "status": " M",
+      "size": 26925,
+      "sha256": "eea2860dc8d08deed6ac6daf6004af9822802098e408ee0717f654e081ea3564"
+    },
+    {
+      "path": "src/app/globals.css",
+      "package": "R3",
+      "status": " M",
+      "size": 2035,
+      "sha256": "da336c3546a6ed3d14c8f918e95785a4b2a4d7e719eaa3de7c90ea669f4e05bf"
+    },
+    {
+      "path": "src/app/healthz/route.ts",
+      "package": "R1",
+      "status": "??",
+      "size": 715,
+      "sha256": "60485bed61b4e14b365595ecd8b9c3d7f035eb47d671ecbfef045ac89adbb368"
+    },
+    {
+      "path": "src/app/learning/chatroom/page.tsx",
+      "package": "R3",
+      "status": " M",
+      "size": 798,
+      "sha256": "53af206cd50b5aa5aaebebd84201e1138479686509bf31bcd06dd3c43b1b4130"
+    },
+    {
+      "path": "src/app/learning/page.tsx",
+      "package": "R3",
+      "status": " M",
+      "size": 1306,
+      "sha256": "a1a7d82fb61cd223c8903f28e1bb7e2e3c7b840ff71869cc041d9dede34275e5"
+    },
+    {
+      "path": "src/app/legal-document.tsx",
+      "package": "R3",
+      "status": " M",
+      "size": 3897,
+      "sha256": "90db2ebe783c096b2060cb050c2207b860eb9b31897d75017bd35e52980bdc97"
+    },
+    {
+      "path": "src/app/teaching/page.tsx",
+      "package": "R3",
+      "status": " M",
+      "size": 775,
+      "sha256": "7a3aa948fc66c40b58433bf346ee098ac5cf2355dc83dfdf4944630c321c5e2f"
+    },
+    {
+      "path": "src/components/layout/header.tsx",
+      "package": "R3",
+      "status": " M",
+      "size": 16467,
+      "sha256": "5812b7f4239c399d70d2e33c263325a0982546c295ffaa93c79177c77b863687"
+    },
+    {
+      "path": "src/components/pages/course-plaza-page.tsx",
+      "package": "R3",
+      "status": " M",
+      "size": 14338,
+      "sha256": "3bff4fc85a4e6ca302e6629ce53579215826234750f866423cea78ded5ae5f27"
+    },
+    {
+      "path": "src/components/pages/learning-page-shell.tsx",
+      "package": "R3",
+      "status": "??",
+      "size": 893,
+      "sha256": "7c43933f99aeb0a975fa8f84d65fea92f5553f9f979e94ef6eabb0813f413f80"
+    },
+    {
+      "path": "src/components/pages/learning-page.tsx",
+      "package": "R3",
+      "status": " M",
+      "size": 133505,
+      "sha256": "7c82131931a9d6d1bba8d525352a83c2d8866c1ef6bd693a56adee2a35150ff7"
+    },
+    {
+      "path": "src/components/pages/login-page.tsx",
+      "package": "R3",
+      "status": " M",
+      "size": 20865,
+      "sha256": "d826cca96a43c1e7521c698a7fca8619dff5aee414639a2608ebb147fefbdceb"
+    },
+    {
+      "path": "src/components/pages/page-loading-shell.tsx",
+      "package": "R3",
+      "status": "??",
+      "size": 1116,
+      "sha256": "24b93edf8b086319c6a0538ca0824ebe5f8a6ff1d4277c5d3caef22b0da99b06"
+    },
+    {
+      "path": "src/components/pages/student-dashboard-page.tsx",
+      "package": "R3",
+      "status": " M",
+      "size": 24031,
+      "sha256": "75eaf08257f9336025c4f56a81aab6e5d6753491d596c72e3ab94651cadbb242"
+    },
+    {
+      "path": "src/components/pages/teaching-page-shell.tsx",
+      "package": "R3",
+      "status": "??",
+      "size": 416,
+      "sha256": "34af69a18f4e92b32ff8cf28bc79a951eb5436b85c62e713245596a35965bb19"
+    },
+    {
+      "path": "src/components/pages/teaching-page.tsx",
+      "package": "R3",
+      "status": " M",
+      "size": 300140,
+      "sha256": "e72a96507aa27047f8c9a2b242b2d37662eac8f43dcfc0468e0be69ade155f5a"
+    },
+    {
+      "path": "src/components/teaching/teaching-operation-page.tsx",
+      "package": "R3",
+      "status": " M",
+      "size": 103097,
+      "sha256": "71752daf7c35ae5d21bd14c3b4849aa4730e95671f9f6dff94a6284f12e78954"
+    },
+    {
+      "path": "src/instrumentation-client.ts",
+      "package": "R1",
+      "status": "??",
+      "size": 330,
+      "sha256": "d7f30e17e327cae99e33005fdf56997ee9f74486c66cba377033fcefc29c9ce3"
+    },
+    {
+      "path": "src/instrumentation.ts",
+      "package": "R1",
+      "status": "??",
+      "size": 326,
+      "sha256": "158fe4c748f1599b56a1681e417ceddcda7ce40b988f95fca298c5ab548ca38c"
+    },
+    {
+      "path": "src/lib/adaptive-learning/recommendations.ts",
+      "package": "R4",
+      "status": "??",
+      "size": 11696,
+      "sha256": "bb7c96c6b866e0aad6a2ebf27204c7a5735737c7c4ee671d8feb62f086535473"
+    },
+    {
+      "path": "src/lib/ai/langgraph-runtime/runtime.ts",
+      "package": "R4",
+      "status": " M",
+      "size": 11841,
+      "sha256": "43de702c078b0f4fe57ff8ea3bff7e21dd87471b9fb51e027841652abfa69e7c"
+    },
+    {
+      "path": "src/lib/ai/orchestration/agent-loop.ts",
+      "package": "R4",
+      "status": " M",
+      "size": 12887,
+      "sha256": "0c7c6d552728a322ea0028c2414ce832899db95e96e4119ac28a3c23b2dcf0cb"
+    },
+    {
+      "path": "src/lib/ai/orchestration/learning-guide-graph.ts",
+      "package": "R4",
+      "status": " M",
+      "size": 12027,
+      "sha256": "7baf5fd7df2585b2d35bc25b6b046a831e7b33dfaf0db7fd9d4c4614cb74d796"
+    },
+    {
+      "path": "src/lib/auth/uais-app-session.ts",
+      "package": "R2",
+      "status": " M",
+      "size": 1013,
+      "sha256": "b2fc569edb98ee3a5afe2a493e99f76be32d776a27723c60c213a2093bbdf57d"
+    },
+    {
+      "path": "src/lib/db/core-database.ts",
+      "package": "R2",
+      "status": "??",
+      "size": 2582,
+      "sha256": "f16e5d85a149022e483ef597e35e3629840bf9ab81ca08dd8cc2d369afa953df"
+    },
+    {
+      "path": "src/lib/db/migrations.ts",
+      "package": "R2",
+      "status": "??",
+      "size": 572,
+      "sha256": "2eaceff3863aea2d68efaeb5270641f2496dedf2881aebfb845b70c2d3d27be1"
+    },
+    {
+      "path": "src/lib/db/schema.ts",
+      "package": "R2",
+      "status": "??",
+      "size": 11210,
+      "sha256": "e51e20c2b0f9761ae7fac3a2f0ef19dfeaedf3e5eb4f6770764bdc4238d141db"
+    },
+    {
+      "path": "src/lib/learning-records/learner-profile.ts",
+      "package": "R4",
+      "status": "??",
+      "size": 10088,
+      "sha256": "a3eedae693f77bf31655c456c1e35bbd6d0bd5f0f2252e0721db527fb73e3336"
+    },
+    {
+      "path": "src/lib/learning/ppt-playback.ts",
+      "package": "R4",
+      "status": " M",
+      "size": 6906,
+      "sha256": "0c5f126f8763d4f3a3564cdcb6b3f29f9e9e3fcbd959128dbb231800a0ecfdce"
+    },
+    {
+      "path": "src/lib/observability/sentry-options.ts",
+      "package": "R1",
+      "status": "??",
+      "size": 3254,
+      "sha256": "4fb8d291b25aa6342b1cbc27090cc22fb8555a894b9d876aa6fda52bc0508185"
+    },
+    {
+      "path": "src/lib/release/deployment-lanes.ts",
+      "package": "R1",
+      "status": "??",
+      "size": 2711,
+      "sha256": "ae8b2dbcd07cf59a679438cb3a181ec57fc5def13f956673966fd80005c99659"
+    },
+    {
+      "path": "src/lib/release/env-surface.ts",
+      "package": "R1",
+      "status": "??",
+      "size": 12745,
+      "sha256": "2ffe4d28e56fbc3cd64b9fccb78b38e7029e6055113e039a78d9121194e4a6db"
+    },
+    {
+      "path": "src/lib/server/learning-ai-guide-access.ts",
+      "package": "R2",
+      "status": " M",
+      "size": 5946,
+      "sha256": "e0c2976bfd36fdc41abcb52f3d6b55fd85b10c5d14f5e81950628b603f47c09f"
+    },
+    {
+      "path": "src/lib/server/learning-ppt-playback-access.ts",
+      "package": "R2",
+      "status": " M",
+      "size": 6736,
+      "sha256": "a7dcfc983f72580ddd50549513e5a86d1ba227d79e1c4f390c367c18915b2b96"
+    },
+    {
+      "path": "src/lib/server/localized-route-metadata.ts",
+      "package": "R2",
+      "status": "??",
+      "size": 585,
+      "sha256": "646085fea62538c7d2a64e63cd428bc297a0ac8034946fb3568b4909cc5ecb25"
+    },
+    {
+      "path": "src/lib/server/teaching-course-management-external-store.ts",
+      "package": "R2",
+      "status": " M",
+      "size": 7597,
+      "sha256": "cea3b4ad671735a3ae7375503953158af6b0e36df89ddbe044b501ce8ee241ea"
+    },
+    {
+      "path": "src/lib/server/teaching-course-management-postgres-store.ts",
+      "package": "R2",
+      "status": "??",
+      "size": 4521,
+      "sha256": "e263528e5b4d26d216da173de26f3a119a4c3d03e464bb9f4baf3f6342ce0970"
+    },
+    {
+      "path": "src/lib/server/teaching-course-management-store.ts",
+      "package": "R2",
+      "status": " M",
+      "size": 226610,
+      "sha256": "3306b8f6f177f8230baffe72005bec4df76e19ea11f564d7e4c34ffa0ba47a2e"
+    },
+    {
+      "path": "src/lib/server/teaching-course-management-types.ts",
+      "package": "R2",
+      "status": "??",
+      "size": 22077,
+      "sha256": "fdf64e7c8952ee46dfc8252c7cf0dbd0a8f1e87710d4f44429c90a0b7868f18e"
+    },
+    {
+      "path": "src/lib/server/uais-app-auth-provider.ts",
+      "package": "R2",
+      "status": " M",
+      "size": 7054,
+      "sha256": "4accff0ef18bc87fdfabd7c3b26fd99a904ace7f95d1153e45fcfe709342fa7a"
+    },
+    {
+      "path": "src/lib/server/uais-app-session.ts",
+      "package": "R2",
+      "status": " M",
+      "size": 8097,
+      "sha256": "43934858b89f826e788b9d42eb05d41e494ac711967252f5c08676ff3ba6cd24"
+    },
+    {
+      "path": "src/lib/teaching/course-readback.ts",
+      "package": "R2",
+      "status": "??",
+      "size": 13815,
+      "sha256": "73330f07fc89fdd473cc32b644fcd3ef81ad92936c018974fe3d4fda0a2f3f23"
+    },
+    {
+      "path": "src/proxy.ts",
+      "package": "R2",
+      "status": " M",
+      "size": 2429,
+      "sha256": "5c094d8a31761c4eed0916fd21997c1837ceeb3b82a48740b8d42187037ab46a"
+    },
+    {
+      "path": "src/sentry.edge.config.ts",
+      "package": "R1",
+      "status": "??",
+      "size": 251,
+      "sha256": "9cd0278436a1764d1d0d49344050de3218268e4f47224cf2a36c56d61f9c7ea6"
+    },
+    {
+      "path": "src/sentry.server.config.ts",
+      "package": "R1",
+      "status": "??",
+      "size": 253,
+      "sha256": "fb8cc4f5b7f365b6fb5d9f820e0a1c68e4c390de31afbef472943a884abf3de6"
+    },
+    {
+      "path": "tests/adaptive-recommendations.test.ts",
+      "package": "R4",
+      "status": "??",
+      "size": 6246,
+      "sha256": "78a5afdb58c40455e7493d551b646f1e3bd3475e9d1273313683e3d235ba2da3"
+    },
+    {
+      "path": "tests/advisory-recovery-governance.test.ts",
+      "package": "R5",
+      "status": "??",
+      "size": 1695,
+      "sha256": "ebc61dc0e3d4b0e6b4d1d9a9afabd7fb5703e71cc1460ce628e7db5bbf0f5152"
+    },
+    {
+      "path": "tests/ai-orchestration.test.ts",
+      "package": "R4",
+      "status": " M",
+      "size": 11678,
+      "sha256": "22d2ac80aed3dbd52774c463a7dc879b7ed378a28b4927a095a61243c52f44a6"
+    },
+    {
+      "path": "tests/app-healthz.test.ts",
+      "package": "R1",
+      "status": "??",
+      "size": 865,
+      "sha256": "b245081cedfcec44c8ad44ddb1f3753ac4e7b3461066bd6e1645ac4302beaa3e"
+    },
+    {
+      "path": "tests/app-proxy-auth.test.ts",
+      "package": "R2",
+      "status": " M",
+      "size": 6714,
+      "sha256": "953a7db07e8592d1495c19a1dfaece0dcfcc96ab4c0540b119c3885bdf86e046"
+    },
+    {
+      "path": "tests/core-database-foundation.test.ts",
+      "package": "R2",
+      "status": "??",
+      "size": 4628,
+      "sha256": "3cbf30a85b75ac9e85c0b874f3730e25b7170bc8a26d256e85f68e761a2ac293"
+    },
+    {
+      "path": "tests/core-schema-design.test.ts",
+      "package": "R2",
+      "status": "??",
+      "size": 1832,
+      "sha256": "de8dd130d702fadb6ac9d086d85b01f307ae724fd449162bfd87ef4b418d7555"
+    },
+    {
+      "path": "tests/critical-flow-gate-script.test.ts",
+      "package": "R1",
+      "status": "??",
+      "size": 1109,
+      "sha256": "a82425c4ea520139fd1e8156149adbabc9960545f61a5be97a28470789437b29"
+    },
+    {
+      "path": "tests/critical-user-flow-matrix.test.ts",
+      "package": "R5",
+      "status": "??",
+      "size": 1881,
+      "sha256": "9b1590fec252843bd3a8042f588fac8bba28f849a963d9369e25de1e2875f7ab"
+    },
+    {
+      "path": "tests/critical-user-flows-backend.test.ts",
+      "package": "R5",
+      "status": "??",
+      "size": 9517,
+      "sha256": "4a73db227b5776bf93a3c2e5576a6aa27c6c37b7d2ebcaba58b1f6abc92670e0"
+    },
+    {
+      "path": "tests/deployment-lanes.test.ts",
+      "package": "R1",
+      "status": "??",
+      "size": 2569,
+      "sha256": "bce62a22cb0192cbe7d41b32b7cec8ea163a382b3bd2e34f805e5d8467c21315"
+    },
+    {
+      "path": "tests/enterprise-closed-loop-regression.test.ts",
+      "package": "R5",
+      "status": " M",
+      "size": 84699,
+      "sha256": "042455a6251b3077c6e235898b7f8d295b2c7e99c03d73d0df217eb278d5301b"
+    },
+    {
+      "path": "tests/env-surface.test.ts",
+      "package": "R1",
+      "status": "??",
+      "size": 3473,
+      "sha256": "e95c1d474a775554395680ee0e2e8382462c13c44241253c73dfd7b772485ea1"
+    },
+    {
+      "path": "tests/langgraph-runtime.test.ts",
+      "package": "R4",
+      "status": " M",
+      "size": 12012,
+      "sha256": "0ebcd24a5e577b22ae1e927675b3194d0c77bdcf831eddf1fd89aae293b2e6c1"
+    },
+    {
+      "path": "tests/learner-profile.test.ts",
+      "package": "R4",
+      "status": "??",
+      "size": 7739,
+      "sha256": "25f31190a553a0ff29bf11d92fe512e24a7b8d96a7b1e6384124428de4828913"
+    },
+    {
+      "path": "tests/learning-ai-guide-hitl-thread-scope.test.ts",
+      "package": "R4",
+      "status": "??",
+      "size": 1502,
+      "sha256": "ecd07a92536c4eba39f8a997eca237ef96bb5d8af20e8ee5fc4ea3baaec2ff9d"
+    },
+    {
+      "path": "tests/observability-readiness.test.ts",
+      "package": "R1",
+      "status": "??",
+      "size": 3984,
+      "sha256": "408928b8bb2adcf44699ca8ed9f00efa7cf7849588f62e2c07770f579bc1781d"
+    },
+    {
+      "path": "tests/performance-accessibility-baseline.test.ts",
+      "package": "R3",
+      "status": "??",
+      "size": 2756,
+      "sha256": "56de96895f8f24e81cb1161f65b3e75aabea79fd79f65332dc1f6467ef71573b"
+    },
+    {
+      "path": "tests/privacy-baseline.test.ts",
+      "package": "R5",
+      "status": "??",
+      "size": 2367,
+      "sha256": "815bcb8caabd53b078dc2514278155c43a40907b7c0d7aadf0488bd376db9e3d"
+    },
+    {
+      "path": "tests/teaching-course-management-api.test.ts",
+      "package": "R2",
+      "status": " M",
+      "size": 262949,
+      "sha256": "5ae1538cd38185cf6fe547b9e9f169d9b8ca6288847b8c351ac6da396624e8fa"
+    },
+    {
+      "path": "tests/teaching-course-management-postgres-policy.test.ts",
+      "package": "R2",
+      "status": "??",
+      "size": 3830,
+      "sha256": "cbef7f07c392e27e31c9c0edd4c69cf8b225a385d666973c091a8bb6679416e9"
+    },
+    {
+      "path": "tests/teaching-course-readback.test.ts",
+      "package": "R2",
+      "status": "??",
+      "size": 6903,
+      "sha256": "52ed4b4ca6d4cb516456384e0cc4edf1ff6e0889676e5e4c5aa911af125548ca"
+    },
+    {
+      "path": "tests/uais-app-session.test.ts",
+      "package": "R2",
+      "status": " M",
+      "size": 16046,
+      "sha256": "9868fc7620c1a037dd79abb2c8e3a82854f57aeee96a9c31a8f677888547adb9"
+    },
+    {
+      "path": "tsconfig.json",
+      "package": "R1",
+      "status": " M",
+      "size": 788,
+      "sha256": "2144a7a5c2e82f32e5e3623dfb55e1d2675102cbe88a171d9ec7826fd306b91d"
+    }
+  ],
+  "quarantine": [
+    {
+      "path": "docs/technical-advisory/.Rhistory",
+      "disposition": "Q0",
+      "status": "??",
+      "contentInspected": false
+    }
+  ]
+}

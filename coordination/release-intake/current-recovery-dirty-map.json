@@ -1,0 +1,599 @@
+{
+  "version": 1,
+  "source": {
+    "branch": "codex/uais-dirty-rescue-2026-06-30",
+    "head": "d28d8a6cb2e8efbdf29bf7515de2ae7e93d500a8",
+    "statusFingerprint": "cf919fa0876f7dcdb6e18874b1bc6c09c3fa94c2c4f5af8df91e4da716e38fc2"
+  },
+  "summary": {
+    "totalStatusPaths": 116,
+    "commitCandidates": 115,
+    "quarantinePaths": 1,
+    "trackedModified": 44,
+    "untracked": 72,
+    "staged": 0
+  },
+  "entries": [
+    {
+      "status": " M",
+      "path": ".env.local.example",
+      "package": "R1"
+    },
+    {
+      "status": "??",
+      "path": ".github/workflows/critical-flow.yml",
+      "package": "R1"
+    },
+    {
+      "status": "??",
+      "path": "CONTRIBUTING.md",
+      "package": "R5"
+    },
+    {
+      "status": "??",
+      "path": "coordination/reports/2026-07-08-critical-flow-regression-matrix.md",
+      "package": "R5"
+    },
+    {
+      "status": "??",
+      "path": "coordination/session-logs/2026-07-08-S05.md",
+      "package": "R5"
+    },
+    {
+      "status": "??",
+      "path": "coordination/session-logs/2026-07-08-S10.md",
+      "package": "R5"
+    },
+    {
+      "status": "??",
+      "path": "coordination/session-logs/2026-07-08-S11.md",
+      "package": "R5"
+    },
+    {
+      "status": "??",
+      "path": "coordination/session-logs/2026-07-08-S12.md",
+      "package": "R5"
+    },
+    {
+      "status": "??",
+      "path": "coordination/session-logs/2026-07-08-S15.md",
+      "package": "R5"
+    },
+    {
+      "status": "??",
+      "path": "coordination/session-logs/2026-07-08-S19.md",
+      "package": "R5"
+    },
+    {
+      "status": "??",
+      "path": "coordination/session-logs/2026-07-08-S22.md",
+      "package": "R5"
+    },
+    {
+      "status": "??",
+      "path": "coordination/session-logs/2026-07-09-S22.md",
+      "package": "R5"
+    },
+    {
+      "status": "??",
+      "path": "docs/adaptive-recommendations.md",
+      "package": "R4"
+    },
+    {
+      "status": "??",
+      "path": "docs/API.md",
+      "package": "R2"
+    },
+    {
+      "status": "??",
+      "path": "docs/architecture-map.md",
+      "package": "R1"
+    },
+    {
+      "status": "??",
+      "path": "docs/core-schema-design.md",
+      "package": "R2"
+    },
+    {
+      "status": "??",
+      "path": "docs/env-surface.md",
+      "package": "R1"
+    },
+    {
+      "status": "??",
+      "path": "docs/learner-profiles.md",
+      "package": "R4"
+    },
+    {
+      "status": "??",
+      "path": "docs/performance-accessibility-baseline.md",
+      "package": "R3"
+    },
+    {
+      "status": "??",
+      "path": "docs/privacy-baseline.md",
+      "package": "R5"
+    },
+    {
+      "status": "??",
+      "path": "docs/runbooks/observability.md",
+      "package": "R1"
+    },
+    {
+      "status": "??",
+      "path": "docs/runbooks/pre-deploy-checklist.md",
+      "package": "R1"
+    },
+    {
+      "status": "??",
+      "path": "docs/runbooks/production-rollback.md",
+      "package": "R1"
+    },
+    {
+      "status": "??",
+      "path": "docs/runbooks/staging-preview.md",
+      "package": "R1"
+    },
+    {
+      "status": "??",
+      "path": "docs/technical-advisory/.Rhistory",
+      "disposition": "Q0",
+      "contentInspected": false
+    },
+    {
+      "status": "??",
+      "path": "docs/technical-advisory/20260708-UAIS-Codex-Verification-Report.md",
+      "package": "R5"
+    },
+    {
+      "status": "??",
+      "path": "docs/technical-advisory/20260708-UAIS-Technical-Advisory-Report-Codex-Clean.docx",
+      "package": "R5"
+    },
+    {
+      "status": "??",
+      "path": "docs/technical-advisory/20260708-UAIS-Technical-Advisory-Report-Codex-Tracked.docx",
+      "package": "R5"
+    },
+    {
+      "status": "??",
+      "path": "docs/technical-advisory/UAIS_Executive_Summary.md",
+      "package": "R5"
+    },
+    {
+      "status": "??",
+      "path": "docs/technical-advisory/UAIS_Issue_Register_and_Backlog.xlsx",
+      "package": "R5"
+    },
+    {
+      "status": "??",
+      "path": "docs/technical-advisory/UAIS_Senior_Technical_Advisory_Report.docx",
+      "package": "R5"
+    },
+    {
+      "status": "??",
+      "path": "docs/technical-advisory/UAIS_Target_Architecture.md",
+      "package": "R5"
+    },
+    {
+      "status": "??",
+      "path": "docs/technical-advisory/UAIS_Technical_Review.md",
+      "package": "R5"
+    },
+    {
+      "status": "??",
+      "path": "migrations/0001_core_poc.sql",
+      "package": "R2"
+    },
+    {
+      "status": " M",
+      "path": "next.config.ts",
+      "package": "R1"
+    },
+    {
+      "status": " M",
+      "path": "package-lock.json",
+      "package": "R1"
+    },
+    {
+      "status": " M",
+      "path": "package.json",
+      "package": "R1"
+    },
+    {
+      "status": " M",
+      "path": "README.md",
+      "package": "R1"
+    },
+    {
+      "status": "??",
+      "path": "SCOPE.md",
+      "package": "R5"
+    },
+    {
+      "status": "??",
+      "path": "scripts/apply-core-migrations.mjs",
+      "package": "R2"
+    },
+    {
+      "status": " M",
+      "path": "src/app/api/auth/app-session/route.ts",
+      "package": "R2"
+    },
+    {
+      "status": " M",
+      "path": "src/app/api/learning-records/analytics/route.ts",
+      "package": "R4"
+    },
+    {
+      "status": " M",
+      "path": "src/app/api/learning-records/events/route.ts",
+      "package": "R4"
+    },
+    {
+      "status": " M",
+      "path": "src/app/api/learning/ai-guide/hitl/route.ts",
+      "package": "R4"
+    },
+    {
+      "status": " M",
+      "path": "src/app/api/learning/ai-guide/route.ts",
+      "package": "R4"
+    },
+    {
+      "status": " M",
+      "path": "src/app/api/learning/ppt-playback/[courseId]/route.ts",
+      "package": "R4"
+    },
+    {
+      "status": " M",
+      "path": "src/app/api/teaching/course-cover/route.ts",
+      "package": "R2"
+    },
+    {
+      "status": " M",
+      "path": "src/app/api/teaching/courses/route.ts",
+      "package": "R2"
+    },
+    {
+      "status": " M",
+      "path": "src/app/globals.css",
+      "package": "R3"
+    },
+    {
+      "status": "??",
+      "path": "src/app/healthz/route.ts",
+      "package": "R1"
+    },
+    {
+      "status": " M",
+      "path": "src/app/learning/chatroom/page.tsx",
+      "package": "R3"
+    },
+    {
+      "status": " M",
+      "path": "src/app/learning/page.tsx",
+      "package": "R3"
+    },
+    {
+      "status": " M",
+      "path": "src/app/legal-document.tsx",
+      "package": "R3"
+    },
+    {
+      "status": " M",
+      "path": "src/app/teaching/page.tsx",
+      "package": "R3"
+    },
+    {
+      "status": " M",
+      "path": "src/components/layout/header.tsx",
+      "package": "R3"
+    },
+    {
+      "status": " M",
+      "path": "src/components/pages/course-plaza-page.tsx",
+      "package": "R3"
+    },
+    {
+      "status": "??",
+      "path": "src/components/pages/learning-page-shell.tsx",
+      "package": "R3"
+    },
+    {
+      "status": " M",
+      "path": "src/components/pages/learning-page.tsx",
+      "package": "R3"
+    },
+    {
+      "status": " M",
+      "path": "src/components/pages/login-page.tsx",
+      "package": "R3"
+    },
+    {
+      "status": "??",
+      "path": "src/components/pages/page-loading-shell.tsx",
+      "package": "R3"
+    },
+    {
+      "status": " M",
+      "path": "src/components/pages/student-dashboard-page.tsx",
+      "package": "R3"
+    },
+    {
+      "status": "??",
+      "path": "src/components/pages/teaching-page-shell.tsx",
+      "package": "R3"
+    },
+    {
+      "status": " M",
+      "path": "src/components/pages/teaching-page.tsx",
+      "package": "R3"
+    },
+    {
+      "status": " M",
+      "path": "src/components/teaching/teaching-operation-page.tsx",
+      "package": "R3"
+    },
+    {
+      "status": "??",
+      "path": "src/instrumentation-client.ts",
+      "package": "R1"
+    },
+    {
+      "status": "??",
+      "path": "src/instrumentation.ts",
+      "package": "R1"
+    },
+    {
+      "status": "??",
+      "path": "src/lib/adaptive-learning/recommendations.ts",
+      "package": "R4"
+    },
+    {
+      "status": " M",
+      "path": "src/lib/ai/langgraph-runtime/runtime.ts",
+      "package": "R4"
+    },
+    {
+      "status": " M",
+      "path": "src/lib/ai/orchestration/agent-loop.ts",
+      "package": "R4"
+    },
+    {
+      "status": " M",
+      "path": "src/lib/ai/orchestration/learning-guide-graph.ts",
+      "package": "R4"
+    },
+    {
+      "status": " M",
+      "path": "src/lib/auth/uais-app-session.ts",
+      "package": "R2"
+    },
+    {
+      "status": "??",
+      "path": "src/lib/db/core-database.ts",
+      "package": "R2"
+    },
+    {
+      "status": "??",
+      "path": "src/lib/db/migrations.ts",
+      "package": "R2"
+    },
+    {
+      "status": "??",
+      "path": "src/lib/db/schema.ts",
+      "package": "R2"
+    },
+    {
+      "status": "??",
+      "path": "src/lib/learning-records/learner-profile.ts",
+      "package": "R4"
+    },
+    {
+      "status": " M",
+      "path": "src/lib/learning/ppt-playback.ts",
+      "package": "R4"
+    },
+    {
+      "status": "??",
+      "path": "src/lib/observability/sentry-options.ts",
+      "package": "R1"
+    },
+    {
+      "status": "??",
+      "path": "src/lib/release/deployment-lanes.ts",
+      "package": "R1"
+    },
+    {
+      "status": "??",
+      "path": "src/lib/release/env-surface.ts",
+      "package": "R1"
+    },
+    {
+      "status": " M",
+      "path": "src/lib/server/learning-ai-guide-access.ts",
+      "package": "R2"
+    },
+    {
+      "status": " M",
+      "path": "src/lib/server/learning-ppt-playback-access.ts",
+      "package": "R2"
+    },
+    {
+      "status": "??",
+      "path": "src/lib/server/localized-route-metadata.ts",
+      "package": "R2"
+    },
+    {
+      "status": " M",
+      "path": "src/lib/server/teaching-course-management-external-store.ts",
+      "package": "R2"
+    },
+    {
+      "status": "??",
+      "path": "src/lib/server/teaching-course-management-postgres-store.ts",
+      "package": "R2"
+    },
+    {
+      "status": " M",
+      "path": "src/lib/server/teaching-course-management-store.ts",
+      "package": "R2"
+    },
+    {
+      "status": "??",
+      "path": "src/lib/server/teaching-course-management-types.ts",
+      "package": "R2"
+    },
+    {
+      "status": " M",
+      "path": "src/lib/server/uais-app-auth-provider.ts",
+      "package": "R2"
+    },
+    {
+      "status": " M",
+      "path": "src/lib/server/uais-app-session.ts",
+      "package": "R2"
+    },
+    {
+      "status": "??",
+      "path": "src/lib/teaching/course-readback.ts",
+      "package": "R2"
+    },
+    {
+      "status": " M",
+      "path": "src/proxy.ts",
+      "package": "R2"
+    },
+    {
+      "status": "??",
+      "path": "src/sentry.edge.config.ts",
+      "package": "R1"
+    },
+    {
+      "status": "??",
+      "path": "src/sentry.server.config.ts",
+      "package": "R1"
+    },
+    {
+      "status": "??",
+      "path": "tests/adaptive-recommendations.test.ts",
+      "package": "R4"
+    },
+    {
+      "status": "??",
+      "path": "tests/advisory-recovery-governance.test.ts",
+      "package": "R5"
+    },
+    {
+      "status": " M",
+      "path": "tests/ai-orchestration.test.ts",
+      "package": "R4"
+    },
+    {
+      "status": "??",
+      "path": "tests/app-healthz.test.ts",
+      "package": "R1"
+    },
+    {
+      "status": " M",
+      "path": "tests/app-proxy-auth.test.ts",
+      "package": "R2"
+    },
+    {
+      "status": "??",
+      "path": "tests/core-database-foundation.test.ts",
+      "package": "R2"
+    },
+    {
+      "status": "??",
+      "path": "tests/core-schema-design.test.ts",
+      "package": "R2"
+    },
+    {
+      "status": "??",
+      "path": "tests/critical-flow-gate-script.test.ts",
+      "package": "R1"
+    },
+    {
+      "status": "??",
+      "path": "tests/critical-user-flow-matrix.test.ts",
+      "package": "R5"
+    },
+    {
+      "status": "??",
+      "path": "tests/critical-user-flows-backend.test.ts",
+      "package": "R5"
+    },
+    {
+      "status": "??",
+      "path": "tests/deployment-lanes.test.ts",
+      "package": "R1"
+    },
+    {
+      "status": " M",
+      "path": "tests/enterprise-closed-loop-regression.test.ts",
+      "package": "R5"
+    },
+    {
+      "status": "??",
+      "path": "tests/env-surface.test.ts",
+      "package": "R1"
+    },
+    {
+      "status": " M",
+      "path": "tests/langgraph-runtime.test.ts",
+      "package": "R4"
+    },
+    {
+      "status": "??",
+      "path": "tests/learner-profile.test.ts",
+      "package": "R4"
+    },
+    {
+      "status": "??",
+      "path": "tests/learning-ai-guide-hitl-thread-scope.test.ts",
+      "package": "R4"
+    },
+    {
+      "status": "??",
+      "path": "tests/observability-readiness.test.ts",
+      "package": "R1"
+    },
+    {
+      "status": "??",
+      "path": "tests/performance-accessibility-baseline.test.ts",
+      "package": "R3"
+    },
+    {
+      "status": "??",
+      "path": "tests/privacy-baseline.test.ts",
+      "package": "R5"
+    },
+    {
+      "status": " M",
+      "path": "tests/teaching-course-management-api.test.ts",
+      "package": "R2"
+    },
+    {
+      "status": "??",
+      "path": "tests/teaching-course-management-postgres-policy.test.ts",
+      "package": "R2"
+    },
+    {
+      "status": "??",
+      "path": "tests/teaching-course-readback.test.ts",
+      "package": "R2"
+    },
+    {
+      "status": " M",
+      "path": "tests/uais-app-session.test.ts",
+      "package": "R2"
+    },
+    {
+      "status": " M",
+      "path": "tsconfig.json",
+      "package": "R1"
+    }
+  ]
+}
