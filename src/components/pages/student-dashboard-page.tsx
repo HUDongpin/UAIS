@@ -2,19 +2,17 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import {
-  ArrowRight,
-  BookOpen,
-  ChatTeardropText,
-  CheckCircle,
-  ClockCountdown,
-  Compass,
-  GraduationCap,
-  Notebook,
-  Robot,
-  Sparkle,
-  Target,
-} from "@phosphor-icons/react";
+import { ArrowRight } from "@phosphor-icons/react/dist/ssr/ArrowRight";
+import { BookOpen } from "@phosphor-icons/react/dist/ssr/BookOpen";
+import { ChatTeardropText } from "@phosphor-icons/react/dist/ssr/ChatTeardropText";
+import { CheckCircle } from "@phosphor-icons/react/dist/ssr/CheckCircle";
+import { ClockCountdown } from "@phosphor-icons/react/dist/ssr/ClockCountdown";
+import { Compass } from "@phosphor-icons/react/dist/ssr/Compass";
+import { GraduationCap } from "@phosphor-icons/react/dist/ssr/GraduationCap";
+import { Notebook } from "@phosphor-icons/react/dist/ssr/Notebook";
+import { Robot } from "@phosphor-icons/react/dist/ssr/Robot";
+import { Sparkle } from "@phosphor-icons/react/dist/ssr/Sparkle";
+import { Target } from "@phosphor-icons/react/dist/ssr/Target";
 import { useAppPreferences } from "@/components/providers/app-preferences";
 import { localizedText } from "@/components/ui/localized-text";
 import { aiAgents, chatMessages, learningCourses, plazaCourses } from "@/data/uais";

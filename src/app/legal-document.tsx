@@ -1,6 +1,6 @@
 "use client";
 
-import { CaretDown } from "@phosphor-icons/react";
+import { CaretDown } from "@phosphor-icons/react/dist/ssr/CaretDown";
 import { useAppPreferences } from "@/components/providers/app-preferences";
 import type { Locale } from "@/i18n/copy";
 

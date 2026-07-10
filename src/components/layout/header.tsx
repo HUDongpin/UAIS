@@ -3,21 +3,19 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import {
-  Bell,
-  BookOpen,
-  CalendarBlank,
-  CaretDown,
-  ChartBar,
-  CheckCircle,
-  Moon,
-  SignOut,
-  Sparkle,
-  Sun,
-  Translate,
-  UserCircle,
-  UsersThree,
-} from "@phosphor-icons/react";
+import { Bell } from "@phosphor-icons/react/dist/ssr/Bell";
+import { BookOpen } from "@phosphor-icons/react/dist/ssr/BookOpen";
+import { CalendarBlank } from "@phosphor-icons/react/dist/ssr/CalendarBlank";
+import { CaretDown } from "@phosphor-icons/react/dist/ssr/CaretDown";
+import { ChartBar } from "@phosphor-icons/react/dist/ssr/ChartBar";
+import { CheckCircle } from "@phosphor-icons/react/dist/ssr/CheckCircle";
+import { Moon } from "@phosphor-icons/react/dist/ssr/Moon";
+import { SignOut } from "@phosphor-icons/react/dist/ssr/SignOut";
+import { Sparkle } from "@phosphor-icons/react/dist/ssr/Sparkle";
+import { Sun } from "@phosphor-icons/react/dist/ssr/Sun";
+import { Translate } from "@phosphor-icons/react/dist/ssr/Translate";
+import { UserCircle } from "@phosphor-icons/react/dist/ssr/UserCircle";
+import { UsersThree } from "@phosphor-icons/react/dist/ssr/UsersThree";
 import { useAppPreferences } from "@/components/providers/app-preferences";
 import { getTeachingOperationHref } from "@/components/teaching/teaching-operation-data";
 import { getNavItemsForRole, teacherCourses, teacherSidebarItems } from "@/data/uais";
@@ -41,17 +39,23 @@ export function Header({
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [sessionUser] = useState(() => initialSessionUser ?? null);
   const role = sessionUser?.role ?? "teacher";
-  const primaryNavItems = getNavItemsForRole(role);
+  const navRole = role === "student" ? "student" : "teacher";
+  const primaryNavItems = getNavItemsForRole(navRole);
   const userControlLabel =
     locale === "zh-CN"
       ? role === "student"
         ? "学生账号"
-        : "教师账号"
+        : role === "admin"
+          ? "管理员账号"
+          : "教师账号"
       : role === "student"
         ? "Student"
-        : "Teacher";
-  const accountDisplayName =
-    sessionUser?.displayName ?? (role === "student" ? "Peter" : "Phoebe");
+        : role === "admin"
+          ? "Admin"
+          : "Teacher";
+  const defaultAccountDisplayName =
+    role === "student" ? "Peter" : role === "admin" ? "Admin" : "Phoebe";
+  const accountDisplayName = sessionUser?.displayName ?? defaultAccountDisplayName;
   const userDisplayName =
     locale === "zh-CN" ? userControlLabel : accountDisplayName;
   const accountMenuCopy =

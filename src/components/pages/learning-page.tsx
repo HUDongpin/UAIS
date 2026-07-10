@@ -3,32 +3,30 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
-import {
-  ArrowLeft,
-  ArrowRight,
-  BookOpen,
-  CaretLeft,
-  CaretRight,
-  ChatTeardropText,
-  ChatsCircle,
-  CheckCircle,
-  CornersIn,
-  CornersOut,
-  FilePdf,
-  GearSix,
-  LinkSimple,
-  Notebook,
-  PaperPlaneTilt,
-  PauseCircle,
-  PlayCircle,
-  Robot,
-  SlidersHorizontal,
-  SpeakerHigh,
-  SpeakerSlash,
-  Sparkle,
-  Target,
-  X,
-} from "@phosphor-icons/react";
+import { ArrowLeft } from "@phosphor-icons/react/dist/ssr/ArrowLeft";
+import { ArrowRight } from "@phosphor-icons/react/dist/ssr/ArrowRight";
+import { BookOpen } from "@phosphor-icons/react/dist/ssr/BookOpen";
+import { CaretLeft } from "@phosphor-icons/react/dist/ssr/CaretLeft";
+import { CaretRight } from "@phosphor-icons/react/dist/ssr/CaretRight";
+import { ChatTeardropText } from "@phosphor-icons/react/dist/ssr/ChatTeardropText";
+import { ChatsCircle } from "@phosphor-icons/react/dist/ssr/ChatsCircle";
+import { CheckCircle } from "@phosphor-icons/react/dist/ssr/CheckCircle";
+import { CornersIn } from "@phosphor-icons/react/dist/ssr/CornersIn";
+import { CornersOut } from "@phosphor-icons/react/dist/ssr/CornersOut";
+import { FilePdf } from "@phosphor-icons/react/dist/ssr/FilePdf";
+import { GearSix } from "@phosphor-icons/react/dist/ssr/GearSix";
+import { LinkSimple } from "@phosphor-icons/react/dist/ssr/LinkSimple";
+import { Notebook } from "@phosphor-icons/react/dist/ssr/Notebook";
+import { PaperPlaneTilt } from "@phosphor-icons/react/dist/ssr/PaperPlaneTilt";
+import { PauseCircle } from "@phosphor-icons/react/dist/ssr/PauseCircle";
+import { PlayCircle } from "@phosphor-icons/react/dist/ssr/PlayCircle";
+import { Robot } from "@phosphor-icons/react/dist/ssr/Robot";
+import { SlidersHorizontal } from "@phosphor-icons/react/dist/ssr/SlidersHorizontal";
+import { SpeakerHigh } from "@phosphor-icons/react/dist/ssr/SpeakerHigh";
+import { SpeakerSlash } from "@phosphor-icons/react/dist/ssr/SpeakerSlash";
+import { Sparkle } from "@phosphor-icons/react/dist/ssr/Sparkle";
+import { Target } from "@phosphor-icons/react/dist/ssr/Target";
+import { X } from "@phosphor-icons/react/dist/ssr/X";
 import { useAppPreferences } from "@/components/providers/app-preferences";
 import { localizedText } from "@/components/ui/localized-text";
 import {

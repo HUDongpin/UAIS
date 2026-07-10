@@ -1,6 +1,9 @@
 "use client";
 
-import { ArrowRight, BookOpen, ChalkboardTeacher, Sparkle } from "@phosphor-icons/react";
+import { ArrowRight } from "@phosphor-icons/react/dist/ssr/ArrowRight";
+import { BookOpen } from "@phosphor-icons/react/dist/ssr/BookOpen";
+import { ChalkboardTeacher } from "@phosphor-icons/react/dist/ssr/ChalkboardTeacher";
+import { Sparkle } from "@phosphor-icons/react/dist/ssr/Sparkle";
 import Link from "next/link";
 import { useState } from "react";
 import { useAppPreferences } from "@/components/providers/app-preferences";

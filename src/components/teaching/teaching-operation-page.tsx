@@ -2,24 +2,22 @@
 
 import { useRef, useState } from "react";
 import Link from "next/link";
-import {
-  ArrowLeft,
-  Books,
-  ChartBar,
-  CheckCircle,
-  ClipboardText,
-  Exam,
-  Export as ExportIcon,
-  FileText,
-  GearSix,
-  Lightning,
-  QrCode,
-  Robot,
-  ShieldCheck,
-  SquaresFour,
-  UserGear,
-  UsersThree,
-} from "@phosphor-icons/react";
+import { ArrowLeft } from "@phosphor-icons/react/dist/ssr/ArrowLeft";
+import { Books } from "@phosphor-icons/react/dist/ssr/Books";
+import { ChartBar } from "@phosphor-icons/react/dist/ssr/ChartBar";
+import { CheckCircle } from "@phosphor-icons/react/dist/ssr/CheckCircle";
+import { ClipboardText } from "@phosphor-icons/react/dist/ssr/ClipboardText";
+import { Exam } from "@phosphor-icons/react/dist/ssr/Exam";
+import { Export as ExportIcon } from "@phosphor-icons/react/dist/ssr/Export";
+import { FileText } from "@phosphor-icons/react/dist/ssr/FileText";
+import { GearSix } from "@phosphor-icons/react/dist/ssr/GearSix";
+import { Lightning } from "@phosphor-icons/react/dist/ssr/Lightning";
+import { QrCode } from "@phosphor-icons/react/dist/ssr/QrCode";
+import { Robot } from "@phosphor-icons/react/dist/ssr/Robot";
+import { ShieldCheck } from "@phosphor-icons/react/dist/ssr/ShieldCheck";
+import { SquaresFour } from "@phosphor-icons/react/dist/ssr/SquaresFour";
+import { UserGear } from "@phosphor-icons/react/dist/ssr/UserGear";
+import { UsersThree } from "@phosphor-icons/react/dist/ssr/UsersThree";
 import { useAppPreferences } from "@/components/providers/app-preferences";
 import {
   getTeachingOperationHref,

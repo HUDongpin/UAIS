@@ -3,23 +3,21 @@
 import { useCallback, useState, type FormEvent, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import {
-  Brain,
-  BookOpen,
-  CaretDown,
-  CheckCircle,
-  Eye,
-  EyeSlash,
-  GraduationCap,
-  Laptop,
-  LockKey,
-  MagicWand,
-  PaperPlaneTilt,
-  Sparkle,
-  Student,
-  UserCircle,
-  UsersThree,
-} from "@phosphor-icons/react";
+import { BookOpen } from "@phosphor-icons/react/dist/ssr/BookOpen";
+import { Brain } from "@phosphor-icons/react/dist/ssr/Brain";
+import { CaretDown } from "@phosphor-icons/react/dist/ssr/CaretDown";
+import { CheckCircle } from "@phosphor-icons/react/dist/ssr/CheckCircle";
+import { Eye } from "@phosphor-icons/react/dist/ssr/Eye";
+import { EyeSlash } from "@phosphor-icons/react/dist/ssr/EyeSlash";
+import { GraduationCap } from "@phosphor-icons/react/dist/ssr/GraduationCap";
+import { Laptop } from "@phosphor-icons/react/dist/ssr/Laptop";
+import { LockKey } from "@phosphor-icons/react/dist/ssr/LockKey";
+import { MagicWand } from "@phosphor-icons/react/dist/ssr/MagicWand";
+import { PaperPlaneTilt } from "@phosphor-icons/react/dist/ssr/PaperPlaneTilt";
+import { Sparkle } from "@phosphor-icons/react/dist/ssr/Sparkle";
+import { Student } from "@phosphor-icons/react/dist/ssr/Student";
+import { UserCircle } from "@phosphor-icons/react/dist/ssr/UserCircle";
+import { UsersThree } from "@phosphor-icons/react/dist/ssr/UsersThree";
 import { useAppPreferences } from "@/components/providers/app-preferences";
 import {
   getUaisHomeHrefForRole,

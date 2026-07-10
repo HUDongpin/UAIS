@@ -2,30 +2,28 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import {
-  ArrowRight,
-  BellRinging,
-  BookOpen,
-  Books,
-  CaretDown,
-  ChartBar,
-  ClipboardText,
-  Exam,
-  Export as ExportIcon,
-  FileText,
-  GearSix,
-  MagicWand,
-  Package,
-  PencilSimple,
-  Plus,
-  QrCode,
-  Robot,
-  SquaresFour,
-  UserGear,
-  UsersThree,
-  WarningCircle,
-  X,
-} from "@phosphor-icons/react";
+import { ArrowRight } from "@phosphor-icons/react/dist/ssr/ArrowRight";
+import { BellRinging } from "@phosphor-icons/react/dist/ssr/BellRinging";
+import { BookOpen } from "@phosphor-icons/react/dist/ssr/BookOpen";
+import { Books } from "@phosphor-icons/react/dist/ssr/Books";
+import { CaretDown } from "@phosphor-icons/react/dist/ssr/CaretDown";
+import { ChartBar } from "@phosphor-icons/react/dist/ssr/ChartBar";
+import { ClipboardText } from "@phosphor-icons/react/dist/ssr/ClipboardText";
+import { Exam } from "@phosphor-icons/react/dist/ssr/Exam";
+import { Export as ExportIcon } from "@phosphor-icons/react/dist/ssr/Export";
+import { FileText } from "@phosphor-icons/react/dist/ssr/FileText";
+import { GearSix } from "@phosphor-icons/react/dist/ssr/GearSix";
+import { MagicWand } from "@phosphor-icons/react/dist/ssr/MagicWand";
+import { Package } from "@phosphor-icons/react/dist/ssr/Package";
+import { PencilSimple } from "@phosphor-icons/react/dist/ssr/PencilSimple";
+import { Plus } from "@phosphor-icons/react/dist/ssr/Plus";
+import { QrCode } from "@phosphor-icons/react/dist/ssr/QrCode";
+import { Robot } from "@phosphor-icons/react/dist/ssr/Robot";
+import { SquaresFour } from "@phosphor-icons/react/dist/ssr/SquaresFour";
+import { UserGear } from "@phosphor-icons/react/dist/ssr/UserGear";
+import { UsersThree } from "@phosphor-icons/react/dist/ssr/UsersThree";
+import { WarningCircle } from "@phosphor-icons/react/dist/ssr/WarningCircle";
+import { X } from "@phosphor-icons/react/dist/ssr/X";
 import { useAppPreferences } from "@/components/providers/app-preferences";
 import {
   getTeachingCourseActionHref,
@@ -43,6 +41,35 @@ import {
   createPptNarrationJob,
   createTeacherVoiceCloneJob,
 } from "@/lib/ai/voice/ppt-narration";
+import {
+  applyCourseSettingsPatchToTeacherCourse,
+  createCourseSettingsDraft,
+  createDefaultNewCourseDraft,
+  createPersistedCourseLoadErrorMessage,
+  createTeacherClassesByCourseFromPersistedClasses,
+  createTeacherCourseFromPersistedCourse,
+  createTeacherMembershipFromPersistedMembership,
+  createTeacherMembershipsByClassFromPersistedMemberships,
+  extractCourseSemester,
+  isMatchingMembershipApprovalResult,
+  isPersistedMembershipApprovalReceipt,
+  mergeTeacherClassesByCourseId,
+  mergeTeacherCoursesById,
+  mergeTeacherMembershipsByClassId,
+  normalizeTeachingActorId,
+  readTeachingCourseListTeacherActorId,
+  shouldLoadPersistedTeachingCourses,
+  type CourseSettingsDraft,
+  type CourseSettingsPatchPayload,
+  type NewCourseDraft,
+  type PersistedTeachingCourseReadback,
+  type TeacherClassItem,
+  type TeacherClassMembershipItem,
+  type TeachingClassCreateResponse,
+  type TeachingClassMembershipApproveResponse,
+  type TeachingCourseCreateResponse,
+  type TeachingCourseListResponse,
+} from "@/lib/teaching/course-readback";
 import { createProvisionalTeachingCourseId } from "@/lib/teaching-course-id";
 import { createTeachingOperationIdempotencyKey } from "@/lib/teaching-operation-idempotency";
 
@@ -60,25 +87,6 @@ const dashboardIcons = {
   grading: ClipboardText,
   "invite-code": QrCode,
 };
-
-type NewCourseDraft = {
-  courseId?: string;
-  name: string;
-  instructor: string;
-  unit: string;
-  department: string;
-  semester: string;
-  description: string;
-  coverAssetId?: string;
-};
-
-type CourseSettingsDraft = {
-  courseName: string;
-  semester: string;
-  description: string;
-};
-
-type CourseSettingsPatchPayload = Partial<CourseSettingsDraft>;
 
 type GeneratedCourseCover = {
   imageUrl: string;
@@ -125,27 +133,6 @@ type CourseCoverGenerationResponse = {
   access?: {
     reasonCode?: string;
   };
-};
-
-type TeacherClassItem = {
-  id: string;
-  courseId: string;
-  name: string;
-  students: number;
-  semester: string;
-  invitationCode: string;
-};
-
-type TeacherClassMembershipItem = {
-  id: string;
-  courseId: string;
-  classId: string;
-  invitationCode: string;
-  studentId: string;
-  studentDisplayName: string;
-  membershipStatus: "pending-teacher-review" | "approved";
-  joinedAt?: string;
-  approvedAt?: string;
 };
 
 type TeacherCourseAction = "manage" | "continue";
@@ -483,152 +470,6 @@ type InlineWorkspaceRollbackStatus = {
   message?: string;
 };
 
-type TeachingCourseCreateResponse = {
-  course?: {
-    courseId?: string;
-    courseName?: string;
-    instructor?: string;
-    unit?: string;
-    department?: string;
-    semester?: string;
-    description?: string;
-    students?: number;
-  };
-  receipt?: {
-    action?: string;
-    actorId?: string;
-    courseId?: string;
-    status?: string;
-    traceId?: string;
-    authSession?: InlineTeachingOperationAuditAuthSession;
-  };
-  ownershipReceipt?: {
-    teacherId?: string;
-    courseIds?: string[];
-    status?: string;
-    storagePolicy?: string;
-    storageWritePolicy?: string;
-    responsibleSession?: string;
-    updatedAt?: string;
-  };
-  error?: string;
-  traceId?: string;
-  access?: {
-    reasonCode?: string;
-  };
-};
-
-type TeachingClassCreateResponse = {
-  classItem?: {
-    classId?: string;
-    courseId?: string;
-    className?: string;
-    students?: number;
-    semester?: string;
-    invitationCode?: string;
-  };
-  receipt?: {
-    action?: string;
-    actorId?: string;
-    courseId?: string;
-    classId?: string;
-    status?: string;
-    traceId?: string;
-    authSession?: InlineTeachingOperationAuditAuthSession;
-  };
-  error?: string;
-  traceId?: string;
-  access?: {
-    reasonCode?: string;
-  };
-};
-
-type TeachingCourseListResponse = {
-  courses?: Array<{
-    courseId?: string;
-    courseName?: string;
-    instructor?: string;
-    unit?: string;
-    department?: string;
-    semester?: string;
-    students?: number;
-  }>;
-  classes?: Array<{
-    classId?: string;
-    courseId?: string;
-    className?: string;
-    students?: number;
-    semester?: string;
-    invitationCode?: string;
-  }>;
-  memberships?: Array<{
-    membershipId?: string;
-    courseId?: string;
-    classId?: string;
-    invitationCode?: string;
-    studentId?: string;
-    studentDisplayName?: string;
-    membershipStatus?: string;
-    joinedAt?: string;
-    approvedAt?: string;
-  }>;
-  receipt?: {
-    action?: string;
-    actorId?: string;
-  };
-  error?: string;
-};
-
-type PersistedTeachingCourseReadback = {
-  courses: TeacherCourse[];
-  classesByCourse: Record<string, TeacherClassItem[]>;
-  membershipsByClass: Record<string, TeacherClassMembershipItem[]>;
-  authenticatedTeacherActorId?: string;
-};
-
-type TeachingClassMembershipApproveResponse = {
-  membership?: NonNullable<TeachingCourseListResponse["memberships"]>[number];
-  classItem?: TeachingClassCreateResponse["classItem"];
-  course?: TeachingCourseCreateResponse["course"];
-  receipt?: {
-    action?: string;
-    actorId?: string;
-    courseId?: string;
-    classId?: string;
-    status?: string;
-    traceId?: string;
-  };
-  error?: string;
-  traceId?: string;
-  access?: {
-    reasonCode?: string;
-  };
-};
-
-const DEFAULT_NEW_COURSE_DRAFT: NewCourseDraft = {
-  name: "",
-  instructor: "康霞",
-  unit: "广州大学（404）",
-  department: "实验教学中心",
-  semester: "2025-2026第二学期",
-  description: "",
-};
-
-function createDefaultNewCourseDraft(locale: Locale): NewCourseDraft {
-  if (locale === "en-US") {
-    return {
-      name: "",
-      instructor: "Dr. Kang Xia",
-      unit: "Guangzhou University (404)",
-      department: "Faculty of Teacher Education",
-      semester: "Spring 2026",
-      description: "",
-    };
-  }
-
-  return DEFAULT_NEW_COURSE_DRAFT;
-}
-
 const DEFAULT_INVITE_CODE = "55395057";
 const INVITE_VALID_UNTIL = "2026-12-17";
 const INVITE_JOIN_LIMIT = 60;
@@ -690,10 +531,6 @@ const TEACHING_COURSE_LOAD_FAILED_MESSAGE: LocalizedText = {
   "zh-CN": "服务端课程数据未读回。当前显示本地演示课程，请重新登录或检查课程权限。",
   "en-US":
     "Server course data was not read back. Local demo courses remain visible; sign in again or check course access.",
-};
-const TEACHING_COURSE_LOAD_GENERIC_ERROR_MESSAGE: LocalizedText = {
-  "zh-CN": "课程数据读回失败。",
-  "en-US": "Course data readback failed.",
 };
 const TEACHING_COURSE_COVER_TEACHER_READBACK_REQUIRED_MESSAGE: LocalizedText = {
   "zh-CN": "教师身份未读回，请重新登录或等待课程数据读回后再生成封面。",
@@ -5172,298 +5009,6 @@ function NewCourseCoverPreview({
       <span className="absolute right-16 bottom-5 h-12 w-24 rotate-[18deg] rounded-full border-[7px] border-[#f2bf26]" />
       <span className="absolute bottom-0 left-0 h-16 w-full bg-gradient-to-t from-[#285cc8]/70 to-transparent" />
     </div>
-  );
-}
-
-function extractCourseSemester(course: TeacherCourse, locale: Locale) {
-  const status = localizedText(course.status, locale).trim();
-  const explicitSemester = status.match(/20\d{2}-20\d{2}第[一二三四]学期/)?.[0];
-  if (explicitSemester) {
-    return explicitSemester;
-  }
-
-  const persistedSemester = status.split(" / ")[0]?.trim();
-  return persistedSemester && persistedSemester !== status
-    ? persistedSemester
-    : createDefaultNewCourseDraft(locale).semester;
-}
-
-function createCourseSettingsDraft(course: TeacherCourse, locale: Locale): CourseSettingsDraft {
-  return {
-    courseName: localizedText(course.title, locale),
-    semester: extractCourseSemester(course, locale),
-    description: "",
-  };
-}
-
-function applyCourseSettingsPatchToTeacherCourse(
-  course: TeacherCourse,
-  patch: CourseSettingsPatchPayload,
-): TeacherCourse {
-  const courseName = patch.courseName?.trim();
-  const semester = patch.semester?.trim();
-  const description = patch.description?.trim();
-
-  return {
-    ...course,
-    title: courseName
-      ? {
-          "zh-CN": courseName,
-          "en-US": courseName,
-        }
-      : course.title,
-    status: semester
-      ? {
-          "zh-CN": `${semester} / 已保存课程`,
-          "en-US": `${semester} / Saved course`,
-        }
-      : course.status,
-    currentFocus: description
-      ? {
-          "zh-CN": description,
-          "en-US": description,
-        }
-      : course.currentFocus,
-  };
-}
-
-function shouldLoadPersistedTeachingCourses() {
-  if (typeof window === "undefined") {
-    return false;
-  }
-  return window.location.pathname === "/teaching" || window.location.pathname === "/teaching/";
-}
-
-function normalizeTeachingActorId(actorId: unknown) {
-  if (typeof actorId !== "string") {
-    return undefined;
-  }
-
-  const normalized = actorId.trim();
-  return normalized.length > 0 ? normalized : undefined;
-}
-
-function readTeachingCourseListTeacherActorId(receipt: TeachingCourseListResponse["receipt"]) {
-  if (receipt?.action !== "list-courses") {
-    return undefined;
-  }
-
-  return normalizeTeachingActorId(receipt.actorId);
-}
-
-function createPersistedCourseLoadErrorMessage(error: unknown, locale: Locale) {
-  const fallback = localizedText(TEACHING_COURSE_LOAD_GENERIC_ERROR_MESSAGE, locale);
-  if (typeof error !== "string") {
-    return fallback;
-  }
-
-  const normalized = error.trim().slice(0, 180);
-  if (!normalized) {
-    return fallback;
-  }
-  if (/\/Users\/|secret|api[_-]?key|token/i.test(normalized)) {
-    return fallback;
-  }
-  return normalized;
-}
-
-function createTeacherCourseFromPersistedCourse(
-  course: NonNullable<TeachingCourseListResponse["courses"]>[number],
-): TeacherCourse | undefined {
-  const courseId = course.courseId?.trim();
-  const courseName = course.courseName?.trim();
-  if (!courseId || !courseName) {
-    return undefined;
-  }
-
-  const semester = course.semester?.trim() || "Server course";
-  const instructor = course.instructor?.trim() || "Teacher";
-  const department = course.department?.trim() || "Department";
-  const unit = course.unit?.trim() || "Unit";
-
-  return {
-    id: courseId,
-    title: {
-      "zh-CN": courseName,
-      "en-US": courseName,
-    },
-    status: {
-      "zh-CN": `${semester} / 已保存课程`,
-      "en-US": `${semester} / Saved course`,
-    },
-    students: course.students ?? 0,
-    currentFocus: {
-      "zh-CN": `${instructor} · ${department} · ${unit}`,
-      "en-US": `${instructor} · ${department} · ${unit}`,
-    },
-  };
-}
-
-function createTeacherClassesByCourseFromPersistedClasses(
-  classes: NonNullable<TeachingCourseListResponse["classes"]>,
-) {
-  return classes.reduce<Record<string, TeacherClassItem[]>>((classesByCourse, classItem) => {
-    const nextClass = createTeacherClassFromPersistedClass(classItem);
-    if (!nextClass) {
-      return classesByCourse;
-    }
-
-    return {
-      ...classesByCourse,
-      [nextClass.courseId]: [...(classesByCourse[nextClass.courseId] ?? []), nextClass],
-    };
-  }, {});
-}
-
-function createTeacherClassFromPersistedClass(
-  classItem: NonNullable<TeachingCourseListResponse["classes"]>[number],
-): TeacherClassItem | undefined {
-  const classId = classItem.classId?.trim();
-  const courseId = classItem.courseId?.trim();
-  const className = classItem.className?.trim();
-  const invitationCode = classItem.invitationCode?.trim();
-  if (!classId || !courseId || !className || !invitationCode) {
-    return undefined;
-  }
-
-  return {
-    id: classId,
-    courseId,
-    name: className,
-    students: classItem.students ?? 0,
-    semester: classItem.semester?.trim() || "",
-    invitationCode,
-  };
-}
-
-function createTeacherMembershipsByClassFromPersistedMemberships(
-  memberships: NonNullable<TeachingCourseListResponse["memberships"]>,
-) {
-  return memberships.reduce<Record<string, TeacherClassMembershipItem[]>>(
-    (membershipsByClass, membership) => {
-      const nextMembership = createTeacherMembershipFromPersistedMembership(membership);
-      if (!nextMembership) {
-        return membershipsByClass;
-      }
-
-      return {
-        ...membershipsByClass,
-        [nextMembership.classId]: [
-          ...(membershipsByClass[nextMembership.classId] ?? []),
-          nextMembership,
-        ],
-      };
-    },
-    {},
-  );
-}
-
-function createTeacherMembershipFromPersistedMembership(
-  membership: NonNullable<TeachingCourseListResponse["memberships"]>[number],
-): TeacherClassMembershipItem | undefined {
-  const membershipId = membership.membershipId?.trim();
-  const courseId = membership.courseId?.trim();
-  const classId = membership.classId?.trim();
-  const invitationCode = membership.invitationCode?.trim();
-  const studentId = membership.studentId?.trim();
-  const studentDisplayName = membership.studentDisplayName?.trim();
-  const membershipStatus =
-    membership.membershipStatus === "approved" ? "approved" : "pending-teacher-review";
-  if (!membershipId || !courseId || !classId || !invitationCode || !studentId || !studentDisplayName) {
-    return undefined;
-  }
-
-  return {
-    id: membershipId,
-    courseId,
-    classId,
-    invitationCode,
-    studentId,
-    studentDisplayName,
-    membershipStatus,
-    ...(typeof membership.joinedAt === "string" ? { joinedAt: membership.joinedAt } : {}),
-    ...(typeof membership.approvedAt === "string" ? { approvedAt: membership.approvedAt } : {}),
-  };
-}
-
-function mergeTeacherCoursesById(
-  persistedCourses: TeacherCourse[],
-  currentCourses: TeacherCourse[],
-) {
-  const persistedCourseIds = new Set(persistedCourses.map((course) => course.id));
-  return [
-    ...persistedCourses,
-    ...currentCourses.filter((course) => !persistedCourseIds.has(course.id)),
-  ];
-}
-
-function mergeTeacherClassesByCourseId(
-  persistedClasses: Record<string, TeacherClassItem[]>,
-  currentClasses: Record<string, TeacherClassItem[]>,
-) {
-  return Object.entries(persistedClasses).reduce<Record<string, TeacherClassItem[]>>(
-    (classesByCourse, [courseId, classes]) => {
-      const persistedClassIds = new Set(classes.map((classItem) => classItem.id));
-      return {
-        ...classesByCourse,
-        [courseId]: [
-          ...classes,
-          ...(classesByCourse[courseId] ?? []).filter(
-            (classItem) => !persistedClassIds.has(classItem.id),
-          ),
-        ],
-      };
-    },
-    { ...currentClasses },
-  );
-}
-
-function mergeTeacherMembershipsByClassId(
-  persistedMemberships: Record<string, TeacherClassMembershipItem[]>,
-  currentMemberships: Record<string, TeacherClassMembershipItem[]>,
-) {
-  return Object.entries(persistedMemberships).reduce<Record<string, TeacherClassMembershipItem[]>>(
-    (membershipsByClass, [classId, memberships]) => {
-      const persistedMembershipIds = new Set(memberships.map((membership) => membership.id));
-      return {
-        ...membershipsByClass,
-        [classId]: [
-          ...memberships,
-          ...(membershipsByClass[classId] ?? []).filter(
-            (membership) => !persistedMembershipIds.has(membership.id),
-          ),
-        ],
-      };
-    },
-    { ...currentMemberships },
-  );
-}
-
-function isMatchingMembershipApprovalResult(input: {
-  approvedMembership: TeacherClassMembershipItem;
-  requestedMembership: TeacherClassMembershipItem;
-  requestedClass: TeacherClassItem;
-}) {
-  return (
-    input.approvedMembership.id === input.requestedMembership.id &&
-    input.approvedMembership.classId === input.requestedClass.id &&
-    input.approvedMembership.courseId === input.requestedClass.courseId &&
-    input.approvedMembership.invitationCode === input.requestedClass.invitationCode &&
-    input.approvedMembership.membershipStatus === "approved"
-  );
-}
-
-function isPersistedMembershipApprovalReceipt(
-  receipt: TeachingClassMembershipApproveResponse["receipt"] | undefined,
-  requestedClass: TeacherClassItem,
-) {
-  return (
-    receipt?.action === "approve-class-membership" &&
-    receipt.status === "persisted" &&
-    typeof receipt.actorId === "string" &&
-    receipt.actorId.trim().length > 0 &&
-    receipt.courseId === requestedClass.courseId &&
-    receipt.classId === requestedClass.id
   );
 }
 
