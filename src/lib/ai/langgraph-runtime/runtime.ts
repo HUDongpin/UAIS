@@ -447,10 +447,13 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 const UNSAFE_LANGGRAPH_RUNTIME_PATTERNS = [
-  /sk-[A-Za-z0-9]/,
+  // Real provider keys are `sk-` followed by a long token; require length so
+  // ordinary review text ("risk-based", "task-based") does not trip the guard.
+  /sk-[A-Za-z0-9]{20,}/,
   /(?:DASHSCOPE_API_KEY|DEEPSEEK_API_KEY|UAIS_LIVE_AI_APPROVAL_TOKEN|UAIS_AI_ACCESS_SIGNING_SECRET|UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET|UAIS_TEACHER_AUTH_ISSUER_SECRET)\s*=\s*[^"',}\]\s]+/,
   /voice-qwen-private/,
   /\/Users\/dongpinhu\//,
   /data:audio\/[^"',}\]\s]+base64/i,
-  /audioBase64/i,
+  // Match the serialized field name (`"audioBase64":`), not a prose mention.
+  /"audioBase64"/i,
 ];

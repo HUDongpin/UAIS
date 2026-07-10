@@ -188,5 +188,7 @@ const UNSAFE_PLAYBACK_PATTERNS = [
   /UAIS_LIVE_AI_APPROVAL_TOKEN/,
   /\/Users\//,
   /data:audio\/[^"',}\]\s]+base64/i,
-  /audioBase64/i,
+  // Match the serialized field name (`"audioBase64":`), not a prose mention in
+  // curated slide narration.
+  /"audioBase64"/i,
 ];

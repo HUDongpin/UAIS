@@ -425,9 +425,16 @@ function createLearningGuideMultiAgentCompleter(input: {
 
 function createLearningGuideGraphActor(appSession: {
   account: string;
-  role: "teacher" | "student";
+  role: "teacher" | "student" | "admin";
 }) {
-  const role = appSession.role === "teacher" ? "educator" : "learner";
+  let role: "admin" | "educator" | "learner";
+  if (appSession.role === "teacher") {
+    role = "educator";
+  } else if (appSession.role === "student") {
+    role = "learner";
+  } else {
+    role = "admin";
+  }
   return {
     actorId: `app-session-${role}-${toSafeActorIdSegment(appSession.account)}`,
     role,

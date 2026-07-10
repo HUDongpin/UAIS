@@ -355,4 +355,39 @@ describe("UAIS LangGraph production runtime foundation", () => {
       }),
     ).rejects.toThrow("UAIS LangGraph runtime event contains non-display-safe data.");
   });
+
+  it("allows ordinary review text that merely resembles guarded patterns", async () => {
+    const runtime = createUaisLangGraphRuntime({
+      checkpointer: createUaisLangGraphMemoryCheckpointer(),
+    });
+    const safeGraph = new StateGraph(DemoApprovalStateAnnotation)
+      .addNode("safe-agent", () => ({
+        events: ["I want risk-based and task-based audioBase64 review"],
+      }))
+      .addEdge(START, "safe-agent")
+      .addEdge("safe-agent", END)
+      .compile(runtime.createCompileOptions());
+
+    const result = await runtime.run<DemoApprovalState, DemoApprovalState>({
+      graph: safeGraph,
+      graphId: "safe-provider-output",
+      threadId: "thread-safe-001",
+      actor: {
+        actorId: "learner-001",
+        role: "learner",
+      },
+      input: {
+        question: "safe",
+        events: [],
+        approvals: [],
+      },
+    });
+
+    expect(result.status).toBe("completed");
+    if (result.status === "completed") {
+      expect(result.output.events).toContain(
+        "I want risk-based and task-based audioBase64 review",
+      );
+    }
+  });
 });

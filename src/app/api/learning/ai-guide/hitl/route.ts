@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { Annotation, END, START, StateGraph, interrupt } from "@langchain/langgraph";
 import {
   createUaisLangGraphRuntime,
@@ -81,12 +82,17 @@ export function createLearningAiGuideHitlPostHandler(
       session ??= createLearningGuideHitlSession(env);
       const body = parseLearningGuideHitlRequest(await request.json());
       const actor = createLearningGuideHitlActor(appSession);
+      // Bind the runtime thread to the authenticated actor so one learner cannot
+      // resume or collide with another learner's review thread by reusing a
+      // client-chosen threadId. The client keeps using its own threadId; the
+      // server scopes it deterministically per actor.
+      const scopedThreadId = createScopedHitlThreadId(actor.actorId, body.threadId);
 
       if (body.action === "start-review") {
         const result = await session.runtime.run<LearningGuideHitlState, LearningGuideHitlState>({
           graph: session.graph,
           graphId: learningGuideHitlGraphId,
-          threadId: body.threadId,
+          threadId: scopedThreadId,
           actor,
           input: {
             messageText: body.messageText ?? "",
@@ -107,13 +113,13 @@ export function createLearningAiGuideHitlPostHandler(
           status: "interrupted",
           humanInTheLoop: {
             status: "waiting-human",
-            threadId: result.threadId,
+            threadId: body.threadId,
             resumeMode: "teacher-or-learner-review",
             interrupt: result.interrupts[0],
           },
           runtime: createHitlRuntimeMetadata({
             status: "interrupted",
-            threadId: result.threadId,
+            threadId: body.threadId,
             events: result.events,
           }),
           runtimeEvents: result.events,
@@ -124,7 +130,7 @@ export function createLearningAiGuideHitlPostHandler(
       const resumed = await session.runtime.resume<LearningGuideHitlState>({
         graph: session.graph,
         graphId: learningGuideHitlGraphId,
-        threadId: body.threadId,
+        threadId: scopedThreadId,
         actor,
         resume: {
           decision: body.decision ?? "approved",
@@ -144,13 +150,13 @@ export function createLearningAiGuideHitlPostHandler(
         },
         humanInTheLoop: {
           status: "resumed",
-          threadId: resumed.threadId,
+          threadId: body.threadId,
           decision,
           resumeMode: "teacher-or-learner-review",
         },
         runtime: createHitlRuntimeMetadata({
           status: "completed",
-          threadId: resumed.threadId,
+          threadId: body.threadId,
           events: resumed.events,
         }),
         runtimeEvents: resumed.events,
@@ -253,11 +259,26 @@ function parseLearningGuideHitlRequest(value: unknown): LearningGuideHitlRequest
   throw new PublicLearningGuideHitlError("Learning AI guide HITL action is invalid.", 400);
 }
 
+export function createScopedHitlThreadId(actorId: string, clientThreadId: string) {
+  const digest = createHash("sha256")
+    .update(`${actorId}\n${clientThreadId}`)
+    .digest("hex")
+    .slice(0, 48);
+  return `hitl-${digest}`;
+}
+
 function createLearningGuideHitlActor(appSession: {
   account: string;
-  role: "teacher" | "student";
+  role: "teacher" | "student" | "admin";
 }): UaisLangGraphActor {
-  const role = appSession.role === "teacher" ? "educator" : "learner";
+  let role: UaisLangGraphActor["role"];
+  if (appSession.role === "teacher") {
+    role = "educator";
+  } else if (appSession.role === "student") {
+    role = "learner";
+  } else {
+    role = "admin";
+  }
   return {
     actorId: `app-session-${role}-${toSafeActorIdSegment(appSession.account)}`,
     role,

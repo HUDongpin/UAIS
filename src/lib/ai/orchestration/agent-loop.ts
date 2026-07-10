@@ -160,15 +160,16 @@ export async function runAgentLoop({
       supervisorPathMap,
     )
     .compile(runtime.createCompileOptions());
-  const safeThreadId = threadId ?? createAgentLoopThreadId(messages);
+  const effectiveActor = actor ?? {
+    actorId: "agent-loop-learner",
+    role: "learner" as const,
+  };
+  const safeThreadId = threadId ?? createAgentLoopThreadId(effectiveActor.actorId);
   const runtimeResult = await runtime.run<AgentLoopGraphState, AgentLoopGraphState>({
     graph: compiledGraph,
     graphId: agentLoopGraphId,
     threadId: safeThreadId,
-    actor: actor ?? {
-      actorId: "agent-loop-learner",
-      role: "learner",
-    },
+    actor: effectiveActor,
     input: {
       turns: [],
       events: [],
@@ -380,10 +381,30 @@ function requireCompletedAgentLoopRuntime(
   return result.output;
 }
 
-function createAgentLoopThreadId(messages: UaisChatMessage[]) {
-  return `agent-loop-${hashThreadSeed(
-    messages.map((message) => `${message.id}:${message.role}:${message.content}`).join("|"),
-  )}`;
+function createAgentLoopThreadId(actorId: string) {
+  // The agent loop runs to completion (cue-user/end/max-turns) without resuming,
+  // so each invocation needs a unique, actor-scoped thread. Deriving the thread
+  // from message content made retries and different actors sharing the same
+  // messages collide on one production checkpoint, accumulating turns (and
+  // tripping the max-turns short-circuit so no fresh response was returned).
+  const actorSegment = toSafeAgentLoopThreadSegment(actorId);
+  return `agent-loop-${actorSegment}-${createAgentLoopThreadNonce()}`;
+}
+
+function toSafeAgentLoopThreadSegment(value: string) {
+  const segment = value
+    .replace(/[^A-Za-z0-9._:-]+/g, "-")
+    .replace(/^[^A-Za-z0-9]+/, "")
+    .slice(0, 48);
+  return segment || "learner";
+}
+
+function createAgentLoopThreadNonce() {
+  const uuid = globalThis.crypto?.randomUUID?.();
+  if (uuid) {
+    return uuid.replace(/-/g, "");
+  }
+  return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 12)}`;
 }
 
 function hashThreadSeed(seed: string) {

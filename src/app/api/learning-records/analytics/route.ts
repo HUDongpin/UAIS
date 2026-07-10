@@ -8,6 +8,7 @@ import {
   summarizeLearnerTimeline,
   summarizeTeacherClassInsights,
 } from "@/lib/learning-records/lrs-analytics";
+import { createLearnerProfileFromXapiStatements } from "@/lib/learning-records/learner-profile";
 import {
   createClassActivityId,
   createCourseActivityId,
@@ -27,6 +28,7 @@ import { getUaisAppSessionUserFromCookieString } from "@/lib/server/uais-app-ses
 export const dynamic = "force-dynamic";
 
 type LearningRecordAnalyticsScope =
+  | "learner-profile"
   | "learner-timeline"
   | "teacher-class-insights"
   | "admin-tenant-insights";
@@ -158,9 +160,14 @@ export function createLearningRecordAnalyticsGetHandler(
       query,
     });
     const summary =
-      scope === "learner-timeline"
-        ? summarizeLearnerTimeline(result.statements)
-        : summarizeTeacherClassInsights(result.statements);
+      scope === "learner-profile"
+        ? createLearnerProfileFromXapiStatements({
+            statements: result.statements,
+            ...(courseId ? { courseId } : {}),
+          })
+        : scope === "learner-timeline"
+          ? summarizeLearnerTimeline(result.statements)
+          : summarizeTeacherClassInsights(result.statements);
 
     return createAnalyticsJsonResponse(200, {
       target: "learning-record-analytics",
@@ -222,15 +229,20 @@ async function defaultAuthorizeAnalyticsQuery(input: {
   if (!user) {
     return createDeniedAccess("app-session-required");
   }
-  if (input.scope === "learner-timeline") {
-    if (user.role !== "student" || input.actorId !== user.account) {
+  if (input.scope === "learner-profile" || input.scope === "learner-timeline") {
+    if (user.role === "student" && input.actorId === user.account) {
+      return {
+        status: "authorized",
+        reasonCode: "learner-self-scope-authorized",
+        responsibleSession: "S12",
+      };
+    }
+    if (input.scope === "learner-timeline" || user.role !== "teacher") {
       return createDeniedAccess("learner-self-scope-required");
     }
-    return {
-      status: "authorized",
-      reasonCode: "learner-self-scope-authorized",
-      responsibleSession: "S12",
-    };
+    if (!input.classId || !input.actorId) {
+      return createDeniedAccess("teacher-class-scope-required");
+    }
   }
 
   if (user.role !== "teacher" || !input.classId) {
@@ -259,6 +271,17 @@ async function defaultAuthorizeAnalyticsQuery(input: {
   if (!classRecord) {
     return createDeniedAccess("teacher-class-scope-required");
   }
+  if (
+    input.scope === "learner-profile" &&
+    !database.memberships.some(
+      (membership) =>
+        membership.classId === input.classId &&
+        membership.studentId === input.actorId &&
+        membership.membershipStatus === "approved",
+    )
+  ) {
+    return createDeniedAccess("teacher-class-scope-required");
+  }
   return {
     status: "authorized",
     reasonCode: "teacher-class-scope-authorized",
@@ -272,9 +295,9 @@ function createAnalyticsQuery(input: {
   courseId?: string;
   classId?: string;
 }): XapiStatementsQuery {
-  if (input.scope === "learner-timeline") {
+  if (input.scope === "learner-profile" || input.scope === "learner-timeline") {
     if (!input.actorId) {
-      throw new Error("Learner timeline analytics require an actor id.");
+      throw new Error("Learner analytics require an actor id.");
     }
     return {
       agent: {
@@ -297,7 +320,8 @@ function createAnalyticsQuery(input: {
 }
 
 function readAnalyticsScope(value: string | null): LearningRecordAnalyticsScope | undefined {
-  return value === "learner-timeline" ||
+  return value === "learner-profile" ||
+    value === "learner-timeline" ||
     value === "teacher-class-insights" ||
     value === "admin-tenant-insights"
     ? value

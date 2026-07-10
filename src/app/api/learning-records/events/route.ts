@@ -1,3 +1,4 @@
+import { after } from "next/server";
 import {
   createLearningRecordQueue,
   type LearningRecordQueueResult,
@@ -166,9 +167,22 @@ function createDefaultEnqueue(input: {
     idempotencyKey: string;
   }) => {
     const result = queue.enqueue(item);
-    void queue.flush().catch(() => undefined);
+    scheduleLearningRecordFlush(queue);
     return result;
   };
+}
+
+function scheduleLearningRecordFlush(queue: { flush: () => Promise<unknown> }) {
+  // Keep the async LRS write alive past the response so serverless runtimes do
+  // not freeze the function before the flush completes; fall back to a detached
+  // flush when `after` is unavailable (e.g. outside a request scope).
+  try {
+    after(async () => {
+      await queue.flush().catch(() => undefined);
+    });
+  } catch {
+    void queue.flush().catch(() => undefined);
+  }
 }
 
 async function parseRequestBody(request: Request) {

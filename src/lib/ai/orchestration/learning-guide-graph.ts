@@ -392,18 +392,27 @@ function requireLearningGuideCompletion(
 }
 
 function createLearningGuideThreadId(input: LearningGuideGraphInput) {
-  return `learning-guide-${hashThreadSeed([
-    input.locale,
-    input.courseTitle,
-    input.slideTitle,
-    input.question,
-  ].join("|"))}`;
+  // The multi-agent guide always runs START->END without resuming, so each
+  // invocation needs a unique, actor-scoped thread. Deriving the thread from
+  // request content alone made different learners asking the same question about
+  // the same slide share one production checkpoint, causing cross-learner turn
+  // accumulation and content leakage.
+  const actorSegment = toSafeLearningGuideThreadSegment(input.actor?.actorId ?? "learner");
+  return `learning-guide-${actorSegment}-${createLearningGuideThreadNonce()}`;
 }
 
-function hashThreadSeed(seed: string) {
-  let hash = 0;
-  for (const character of seed) {
-    hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
+function toSafeLearningGuideThreadSegment(value: string) {
+  const segment = value
+    .replace(/[^A-Za-z0-9._:-]+/g, "-")
+    .replace(/^[^A-Za-z0-9]+/, "")
+    .slice(0, 48);
+  return segment || "learner";
+}
+
+function createLearningGuideThreadNonce() {
+  const uuid = globalThis.crypto?.randomUUID?.();
+  if (uuid) {
+    return uuid.replace(/-/g, "");
   }
-  return hash.toString(36);
+  return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 12)}`;
 }

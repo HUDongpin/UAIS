@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { runAgentLoop, selectNextAgent } from "@/lib/ai/orchestration/agent-loop";
 import { runLearningGuideMultiAgentGraph } from "@/lib/ai/orchestration/learning-guide-graph";
+import {
+  createUaisLangGraphMemoryCheckpointer,
+  createUaisLangGraphRuntime,
+} from "@/lib/ai/langgraph-runtime/runtime";
 import type { UaisAgentConfig, UaisChatMessage } from "@/lib/ai/orchestration/types";
 
 const agents: UaisAgentConfig[] = [
@@ -220,6 +224,90 @@ describe("UAIS multi-agent orchestration", () => {
     expect(result.messageText).toContain("学习顾问 live fixture");
     expect(result.messageText).toContain("LangGraph 多智能体导学已完成");
     expect(result.progress[0].progressText).toContain("S07 LangGraph learning guide completed");
+  });
+
+  it("isolates multi-agent guide threads per learner even when persistence is shared", async () => {
+    // A single runtime/checkpointer reused across two runs models the shared
+    // production external checkpointer that is keyed by thread id.
+    const runtime = createUaisLangGraphRuntime({
+      checkpointer: createUaisLangGraphMemoryCheckpointer(),
+    });
+    const sharedRequest = {
+      locale: "en-US" as const,
+      question: "What is variance?",
+      courseTitle: "Research Methods",
+      slideTitle: "Slide 1",
+      runtime,
+    };
+
+    const learnerA = await runLearningGuideMultiAgentGraph({
+      ...sharedRequest,
+      actor: { actorId: "learner-A", role: "learner" },
+      completeAgent: async ({ agent }) => ({
+        provider: agent.providerRole === "multimodal" ? "qwen" : "deepseek",
+        role: agent.providerRole,
+        model: `${agent.id}-model`,
+        content: "fixture",
+      }),
+    });
+    const learnerB = await runLearningGuideMultiAgentGraph({
+      ...sharedRequest,
+      actor: { actorId: "learner-B", role: "learner" },
+      completeAgent: async ({ agent }) => ({
+        provider: agent.providerRole === "multimodal" ? "qwen" : "deepseek",
+        role: agent.providerRole,
+        model: `${agent.id}-model`,
+        content: "fixture",
+      }),
+    });
+
+    // Each learner sees exactly their own three turns; no cross-learner bleed.
+    expect(learnerA.turns).toHaveLength(3);
+    expect(learnerB.turns).toHaveLength(3);
+    expect(learnerA.runtime.threadId).not.toBe(learnerB.runtime.threadId);
+  });
+
+  it("gives each agent-loop invocation a unique, actor-scoped thread id", async () => {
+    const messages: UaisChatMessage[] = [
+      { id: "m1", role: "student", content: "same question" },
+    ];
+    const respond = async (agent: UaisAgentConfig) => ({
+      agentId: agent.id,
+      content: `${agent.name} response`,
+      actions: [],
+    });
+
+    const first = await runAgentLoop({
+      agents,
+      messages,
+      maxAgentTurns: 2,
+      actor: { actorId: "learner-A", role: "learner" },
+      respond,
+    });
+    const second = await runAgentLoop({
+      agents,
+      messages,
+      maxAgentTurns: 2,
+      actor: { actorId: "learner-A", role: "learner" },
+      respond,
+    });
+    const otherActor = await runAgentLoop({
+      agents,
+      messages,
+      maxAgentTurns: 2,
+      actor: { actorId: "learner-B", role: "learner" },
+      respond,
+    });
+
+    // Identical messages no longer collapse to one shared thread (the production
+    // turn-accumulation / max-turns short-circuit bug).
+    expect(first.runtime.threadId).not.toBe(second.runtime.threadId);
+    // Threads are namespaced per actor.
+    expect(first.runtime.threadId.startsWith("agent-loop-learner-A-")).toBe(true);
+    expect(otherActor.runtime.threadId.startsWith("agent-loop-learner-B-")).toBe(true);
+    // Each invocation returns exactly its own turn, with no accumulation.
+    expect(first.turns).toHaveLength(1);
+    expect(second.turns).toHaveLength(1);
   });
 
   it("runs the learning guide through the UAIS production runtime foundation", async () => {
