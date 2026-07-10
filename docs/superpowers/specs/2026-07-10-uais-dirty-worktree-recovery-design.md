@@ -20,7 +20,7 @@ Worktrees prevent future sessions from colliding, but they do not automatically 
 
 ### In scope
 
-- Preserve the current 116-path dirty inventory from the source checkout.
+- Give all 116 current status paths an explicit disposition: 115 commit candidates and one local-generated quarantine path.
 - Create and use one sibling compose worktree because local disk space is constrained.
 - Assign every source path to an owner package.
 - Transfer the source paths into the compose worktree with explicit manifests.
@@ -37,7 +37,7 @@ Worktrees prevent future sessions from colliding, but they do not automatically 
 - Adding a Git remote, pushing branches, or opening pull requests.
 - Changing Vercel projects, deployments, aliases, domains, or environment values.
 - Inspecting, copying, staging, or committing ignored/local-only or secret-like files.
-- Feature changes beyond what is already present in the 116-path source inventory.
+- Feature changes beyond what is already present in the 115 commit-candidate source paths.
 
 The original root cleanup and local `main` update require a separate owner approval after compose verification.
 
@@ -51,6 +51,8 @@ The recovery baseline was refreshed immediately before this design was written:
 - `main` is an ancestor of the source branch; the source branch is 18 commits ahead.
 - Committed delta from `main` to the source branch: 1,258 files.
 - Dirty source inventory: 44 tracked modifications, 72 untracked files, 0 staged files.
+- Commit-candidate inventory: 44 tracked modifications and 71 untracked files.
+- Local-generated quarantine inventory: `docs/technical-advisory/.Rhistory`; do not inspect, hash, copy, stage, or commit it.
 - Existing owner map coverage: 97 of 116 paths.
 - Unmapped paths: 19.
 - Git remotes: none.
@@ -65,7 +67,7 @@ The source checkout remains the authoritative copy of the uncommitted work until
 1. Freeze the source root. No feature session may write to `/Users/dongpinhu/Desktop/UAIS` during recovery.
 2. Never use `git add .`, broad staging, shared stash, `git reset --hard`, or broad `git clean -fd` in the recovery phase.
 3. Use explicit path manifests for every transfer and commit.
-4. Keep ignored/local-only and secret-like paths outside all manifests and commits.
+4. Keep ignored/local-only and secret-like paths outside content/hash and commit manifests. A disposition manifest may record only their relative path and redacted category.
 5. Keep one compose worktree only. Do not create one worktree per package during recovery.
 6. Do not prune existing worktree metadata until final cleanup approval.
 7. Do not update `main` until the compose branch is clean, content-equivalent, and fully verified.
@@ -100,7 +102,7 @@ An external, non-Git backup will be created under:
 
 - `/Users/dongpinhu/Desktop/UAIS-dirty-worktree-backups/2026-07-10-recovery-source`
 
-The external backup will contain only recovery evidence needed to restore the 44 tracked modifications and 72 untracked source paths. It must not include ignored/local-only or secret-like paths. The backup manifest will store relative paths, status classes, sizes, and SHA-256 hashes, but no secret values.
+The external backup will contain only recovery evidence needed to restore the 44 tracked modifications and 71 untracked commit-candidate source paths. It must not include ignored/local-only or secret-like content. The backup manifest will store relative paths, status classes, sizes, and SHA-256 hashes for commit candidates, but no secret values. The local-generated quarantine path is recorded only by relative path and redacted category.
 
 ## Owner Mapping Completion
 
@@ -119,8 +121,9 @@ Before transferring source files, the 19 currently unmapped paths must be assign
 | `src/lib/release/env-surface.ts` | S19/S22 | R1 |
 | `src/lib/adaptive-learning/recommendations.ts` | S15 | R4 |
 | `src/lib/teaching/course-readback.ts` | S05/S12 | R2 |
+| `docs/technical-advisory/.Rhistory` | local-archive-only | Q0 — exclude from Git and content backup |
 
-The owner map must finish with 116 mapped source paths and zero unmapped or overlapping final packages. Shared reviewers may be recorded, but every path must have one final commit package.
+The disposition map must finish with 116 classified paths: 115 mapped to exactly one R1-R5 commit package and one mapped to Q0. Shared reviewers may be recorded, but every commit candidate must have one final commit package. Q0 must never be staged.
 
 ## Recovery Packages
 
@@ -138,9 +141,10 @@ Contents:
 
 Checks:
 
-- All 116 source paths appear exactly once.
+- All 116 source status paths appear exactly once in the disposition inventory.
+- The inventory resolves to 115 commit candidates plus one Q0 local-generated path.
 - 44 tracked and 72 untracked counts match the frozen source status.
-- No staged, ignored, local-only, or secret-like path appears.
+- No staged, ignored, local-only, or secret-like path appears in a commit package or content/hash backup manifest.
 - Recovery scripts and JSON parse successfully.
 
 ### R1 — Platform, release, configuration, and observability
@@ -299,8 +303,9 @@ Exclude it from Git operations, do not inspect its value, and record only a reda
 The compose branch is ready for owner review only when all of the following are true:
 
 - The frozen source fingerprint is unchanged.
-- All 116 source paths are mapped to exactly one package.
-- Source-to-compose SHA-256 parity passes for all 116 paths.
+- All 116 source status paths have exactly one disposition: 115 in R1-R5 and one in Q0.
+- Source-to-compose SHA-256 parity passes for all 115 commit candidates.
+- The Q0 path remains absent from the compose worktree and unchanged in the frozen source root.
 - Additional recovery artifacts are intentional and separately listed.
 - Every R0-R5 commit uses explicit pathspecs.
 - No ignored/local-only or secret-like path is tracked.
@@ -320,13 +325,14 @@ After the compose completion gates pass, S25 will present the compose commit and
 
 1. Update local `main` by fast-forward only; do not force-move it.
 2. Verify the updated `main` in a clean checkout with lint, test, build, and release-clean gates.
-3. Reconfirm the source backup and 116-path parity evidence.
+3. Reconfirm the source backup, 115-path compose parity evidence, and one-path Q0 disposition.
 4. Restore the 44 tracked source paths to their committed state using their explicit manifest.
-5. Remove only the 72 manifest-listed untracked source paths.
-6. Confirm ignored/local-only paths remain untouched.
-7. Remove the temporary compose worktree after integration.
-8. Prune only the two already-missing stale worktree records.
-9. Return the root checkout to a clean `main` integration surface.
+5. Remove only the 71 manifest-listed untracked commit-candidate source paths.
+6. Apply the separately approved Q0 disposition to the local-generated path; do not delete or retain it by assumption.
+7. Confirm all other ignored/local-only paths remain untouched.
+8. Remove the temporary compose worktree after integration.
+9. Prune only the two already-missing stale worktree records.
+10. Return the root checkout to a clean `main` integration surface.
 
 No broad reset or clean command is permitted without an additional, command-specific owner approval.
 
@@ -350,7 +356,7 @@ After recovery:
 Recovery is complete only when:
 
 1. No source work is lost.
-2. All 116 paths are preserved in reviewable owner-scoped commits.
+2. All 115 commit-candidate paths are preserved in reviewable owner-scoped commits, and the one Q0 path has an explicit non-Git disposition.
 3. The compose branch is clean and passes parity, lint, test, and build gates.
 4. The owner has reviewed the compose verification evidence.
 5. A separately approved `main` fast-forward succeeds.
