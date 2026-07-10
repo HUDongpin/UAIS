@@ -20,6 +20,18 @@ export function isUaisAppProductionRuntime(
   );
 }
 
+export function isUaisAppDeployedRuntime(
+  env: Record<string, string | undefined>,
+) {
+  const deploymentEnv = env.UAIS_DEPLOYMENT_ENV?.trim().toLowerCase();
+  return (
+    isUaisAppProductionRuntime(env) ||
+    env.VERCEL_ENV === "preview" ||
+    deploymentEnv === "preview" ||
+    deploymentEnv === "staging"
+  );
+}
+
 export type UaisAppSessionClaims = UaisAppSessionUser & {
   sessionId: string;
   authenticatedAt: string;
@@ -214,7 +226,7 @@ export function resolveUaisAppSessionSigningSecret(
   if (configured) {
     return configured;
   }
-  return isUaisAppProductionRuntime(env)
+  return isUaisAppDeployedRuntime(env)
     ? undefined
     : developmentAppSessionSigningSecret;
 }
@@ -227,7 +239,7 @@ function parseClaims(claimsValue: string): UaisAppSessionClaims | undefined {
     if (
       !claims ||
       typeof claims.account !== "string" ||
-      (claims.role !== "teacher" && claims.role !== "student") ||
+      (claims.role !== "teacher" && claims.role !== "student" && claims.role !== "admin") ||
       typeof claims.displayName !== "string" ||
       typeof claims.department !== "string" ||
       typeof claims.sessionId !== "string" ||

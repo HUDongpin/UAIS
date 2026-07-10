@@ -104,6 +104,34 @@ describe("UAIS enterprise app sessions", () => {
     expect(JSON.stringify(body)).not.toContain("12345");
   });
 
+  it("returns a redacted validation error for malformed login JSON", async () => {
+    const post = createUaisAppSessionPostHandler({
+      env: {
+        NODE_ENV: "development",
+        UAIS_APP_AUTH_PROVIDER: "local-demo",
+        UAIS_APP_SESSION_SIGNING_SECRET: "test-app-session-signing-secret",
+      },
+    });
+
+    const response = await post(
+      new Request("http://localhost/api/auth/app-session", {
+        method: "POST",
+        body: "{not-json",
+      }),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(body.error).toBe("Enter an account and password.");
+    expect(body.redaction).toEqual({
+      secrets: "omitted",
+      passwords: "omitted",
+      cookies: "headers-only",
+      sessionIds: "omitted",
+    });
+    expect(JSON.stringify(body)).not.toContain("not-json");
+  });
+
   it("blocks local demo auth and development session secrets in UAIS production deployments", async () => {
     expect(
       resolveUaisAppSessionSigningSecret({
@@ -120,6 +148,22 @@ describe("UAIS enterprise app sessions", () => {
         NODE_ENV: "development",
       }),
     ).toEqual(expect.any(String));
+    expect(
+      resolveUaisAppSessionSigningSecret({
+        VERCEL_ENV: "preview",
+      }),
+    ).toBeUndefined();
+    expect(
+      resolveUaisAppSessionSigningSecret({
+        UAIS_DEPLOYMENT_ENV: "staging",
+      }),
+    ).toBeUndefined();
+    expect(
+      resolveUaisAppSessionSigningSecret({
+        VERCEL_ENV: "preview",
+        UAIS_APP_SESSION_SIGNING_SECRET: "test-app-session-signing-secret",
+      }),
+    ).toBe("test-app-session-signing-secret");
 
     const post = createUaisAppSessionPostHandler({
       env: {
@@ -142,6 +186,42 @@ describe("UAIS enterprise app sessions", () => {
     const body = await response.json();
 
     expect(response.status).toBe(503);
+    expect(body.authProviderContract).toEqual(
+      expect.objectContaining({
+        providerKind: "local-demo",
+        productionStatus: "blocked",
+        blockedReason: "local-demo-not-production",
+      }),
+    );
+    expect(JSON.stringify(body)).not.toContain("12345");
+  });
+
+  it("blocks local demo account-password auth in production even when a legacy demo-auth flag is present", async () => {
+    const env = {
+      NODE_ENV: "production",
+      UAIS_APP_AUTH_PROVIDER: "local-demo",
+      UAIS_APP_ALLOW_PRODUCTION_DEMO_AUTH: "true",
+      UAIS_APP_SESSION_SIGNING_SECRET: "test-app-session-signing-secret",
+    };
+    const post = createUaisAppSessionPostHandler({
+      env,
+      now: new Date("2099-01-01T00:00:00.000Z"),
+      createSessionId: () => "production-demo-app-session-id",
+    });
+
+    const response = await post(
+      new Request("https://www.uais.top/api/auth/app-session", {
+        method: "POST",
+        body: JSON.stringify({
+          account: "Phoebe",
+          password: "12345",
+        }),
+      }),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(503);
+    expect(body.error).toBe("UAIS app auth provider is not production-ready.");
     expect(body.authProviderContract).toEqual(
       expect.objectContaining({
         providerKind: "local-demo",
@@ -335,9 +415,60 @@ describe("UAIS enterprise app sessions", () => {
   it("keeps role home and route permissions explicit", () => {
     expect(getUaisHomeHrefForRole("teacher")).toBe("/teaching");
     expect(getUaisHomeHrefForRole("student")).toBe("/student-dashboard");
+    expect(getUaisHomeHrefForRole("admin")).toBe("/teaching");
     expect(isUaisRouteAllowedForRole("/teaching", "teacher")).toBe(true);
     expect(isUaisRouteAllowedForRole("/teaching", "student")).toBe(false);
+    expect(isUaisRouteAllowedForRole("/teaching", "admin")).toBe(true);
     expect(isUaisRouteAllowedForRole("/student-dashboard", "student")).toBe(true);
+    expect(isUaisRouteAllowedForRole("/student-dashboard", "admin")).toBe(false);
+  });
+
+  it("accepts admin from the trusted account provider as a signed app role", async () => {
+    const post = createUaisAppSessionPostHandler({
+      env: {
+        NODE_ENV: "production",
+        UAIS_APP_AUTH_PROVIDER: "trusted-account-provider",
+        UAIS_APP_SESSION_SIGNING_SECRET: "test-app-session-signing-secret",
+      },
+      now: new Date("2099-01-01T00:00:00.000Z"),
+      createSessionId: () => "app-session-admin-test-id",
+      authenticateAccount: () => ({
+        account: "Admin",
+        role: "admin",
+        displayName: "Admin",
+        department: "Admin Office",
+      }),
+    });
+
+    const response = await post(
+      new Request("https://www.uais.top/api/auth/app-session", {
+        method: "POST",
+        body: JSON.stringify({
+          account: "Admin",
+          password: "trusted-provider-password",
+        }),
+      }),
+    );
+    const body = await response.json();
+    const cookieHeader = createCookieHeaderFromSetCookies(readSetCookieHeaders(response));
+
+    expect(response.status).toBe(200);
+    expect(body.redirectTarget).toBe("/teaching");
+    expect(body.appSession.actor).toEqual({
+      account: "Admin",
+      role: "admin",
+    });
+    expect(
+      getUaisAppSessionUserFromCookieString(cookieHeader, {
+        secret: "test-app-session-signing-secret",
+        now: new Date("2099-01-01T00:01:00.000Z"),
+      }),
+    ).toEqual(
+      expect.objectContaining({
+        displayName: "Admin",
+        role: "admin",
+      }),
+    );
   });
 });
 

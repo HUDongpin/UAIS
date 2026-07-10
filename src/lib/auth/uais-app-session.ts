@@ -1,7 +1,7 @@
 export const UAIS_APP_SESSION_COOKIE = "uais_app_session";
 export const UAIS_APP_SESSION_SIGNATURE_COOKIE = "uais_app_session_signature";
 
-export type UaisAppRole = "teacher" | "student";
+export type UaisAppRole = "teacher" | "student" | "admin";
 
 export type UaisAppSessionUser = {
   account: string;
@@ -11,7 +11,7 @@ export type UaisAppSessionUser = {
 };
 
 export function getUaisHomeHrefForRole(role: UaisAppRole) {
-  return role === "teacher" ? "/teaching" : "/student-dashboard";
+  return role === "student" ? "/student-dashboard" : "/teaching";
 }
 
 export function isUaisRouteAllowedForRole(pathname: string, role: UaisAppRole) {
@@ -28,7 +28,7 @@ export function isUaisRouteAllowedForRole(pathname: string, role: UaisAppRole) {
     return true;
   }
 
-  if (role === "teacher") {
+  if (role === "teacher" || role === "admin") {
     return pathname === "/teaching" || pathname.startsWith("/teaching/");
   }
 

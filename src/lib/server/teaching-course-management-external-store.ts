@@ -14,6 +14,10 @@ import {
   isUaisProductionDatabaseAdapterEvidence,
   isUaisProductionRuntime,
 } from "@/lib/server/production-database-adapter-evidence";
+import {
+  createUaisTeachingCourseManagementPostgresRepository,
+  isUaisTeachingCourseManagementPostgresSelector,
+} from "@/lib/server/teaching-course-management-postgres-store";
 
 const externalTeachingCourseManagementStorage: TeachingCourseManagementStorageDescriptor = {
   recordStoragePolicy: "external-redacted-teaching-course-management-snapshot",
@@ -25,6 +29,14 @@ export function createUaisTeachingCourseManagementRepository(input: {
   env: Record<string, string | undefined>;
   fetch?: typeof fetch;
 }): TeachingCourseManagementRepository | undefined {
+  if (
+    isUaisTeachingCourseManagementPostgresSelector(
+      input.env.UAIS_TEACHING_COURSE_MANAGEMENT_BACKEND,
+    )
+  ) {
+    return createUaisTeachingCourseManagementPostgresRepository({ env: input.env });
+  }
+
   const backendContract = resolveUaisStorageBackendContract({
     envName: "UAIS_TEACHING_COURSE_MANAGEMENT_BACKEND",
     value: input.env.UAIS_TEACHING_COURSE_MANAGEMENT_BACKEND,

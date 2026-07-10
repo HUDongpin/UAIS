@@ -3,7 +3,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import * as teachingCoursesRoute from "@/app/api/teaching/courses/route";
-import { createTeachingCoursePostHandler } from "@/app/api/teaching/courses/route";
+import {
+  createTeachingCourseGetHandler,
+  createTeachingCoursePostHandler,
+} from "@/app/api/teaching/courses/route";
 import {
   createTeachingCourseClassPostHandler,
 } from "@/app/api/teaching/courses/[courseId]/classes/route";
@@ -145,6 +148,93 @@ function expectNoLocalOrSecretValues(value: unknown, dataDir: string) {
 }
 
 describe("teaching course management API", () => {
+  it("lists courses for a teacher app-session on the dashboard readback path", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "uais-teaching-course-app-teacher-list-"));
+    const getCourses = createTeachingCourseGetHandler({
+      env: {
+        UAIS_TEACHING_COURSES_DATA_DIR: dataDir,
+        UAIS_APP_AUTH_PROVIDER: "local-demo",
+        UAIS_APP_SESSION_SIGNING_SECRET: appSessionSecret,
+      },
+      now: new Date("2026-06-22T11:10:00.000Z"),
+    });
+
+    try {
+      const response = await getCourses(
+        new Request("https://www.uais.top/api/teaching/courses", {
+          headers: {
+            cookie: createStudentCookie(
+              {
+                account: "Phoebe",
+                department: "教师账号",
+                displayName: "Phoebe",
+                role: "teacher",
+              },
+              appSessionSecret,
+            ),
+          },
+        }),
+      );
+      const body = await response.json();
+
+      expect(response.status, JSON.stringify(body)).toBe(200);
+      expect(body.courses).toEqual([]);
+      expect(body.receipt).toEqual(
+        expect.objectContaining({
+          action: "list-courses",
+          actorId: "Phoebe",
+          status: "read",
+        }),
+      );
+    } finally {
+      await rm(dataDir, { recursive: true, force: true });
+    }
+  });
+
+  it("blocks production demo teacher dashboard readback even when the legacy demo-auth flag is present", async () => {
+    const getCourses = createTeachingCourseGetHandler({
+      env: {
+        NODE_ENV: "production",
+        UAIS_TEACHING_COURSE_MANAGEMENT_BACKEND: "external",
+        UAIS_EXTERNAL_STORAGE_BASE_URL: "https://storage.example.test/uais",
+        UAIS_EXTERNAL_STORAGE_ACCESS_TOKEN: externalStorageAccessToken,
+        UAIS_APP_AUTH_PROVIDER: "local-demo",
+        UAIS_APP_ALLOW_PRODUCTION_DEMO_AUTH: "true",
+        UAIS_APP_SESSION_SIGNING_SECRET: appSessionSecret,
+      },
+      fetch: async () => Response.json({ error: "upstream unavailable" }, { status: 502 }),
+      now: new Date("2026-06-22T11:10:00.000Z"),
+    });
+
+    const response = await getCourses(
+      new Request("https://www.uais.top/api/teaching/courses", {
+        headers: {
+          cookie: createStudentCookie(
+            {
+              account: "Phoebe",
+              department: "教师账号",
+              displayName: "Phoebe",
+              role: "teacher",
+            },
+            appSessionSecret,
+          ),
+        },
+      }),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(503);
+    expect(body.error).toBe("UAIS teacher auth provider is not production-ready.");
+    expect(body.authProviderContract).toEqual(
+      expect.objectContaining({
+        providerKind: "local-demo",
+        productionStatus: "blocked",
+        blockedReason: "local-demo-not-production",
+      }),
+    );
+    expectNoLocalOrSecretValues(body, "storage.example.test");
+  });
+
   it("lists only the signed teacher's persisted courses and classes", async () => {
     const dataDir = await mkdtemp(join(tmpdir(), "uais-teaching-course-list-"));
     const courseManagementEnv = {
@@ -1277,6 +1367,144 @@ describe("teaching course management API", () => {
       );
       expectNoLocalOrSecretValues(body, dataDir);
       expectNoLocalOrSecretValues(database, dataDir);
+    } finally {
+      await rm(dataDir, { recursive: true, force: true });
+    }
+  });
+
+  it("returns a structured redacted validation error for malformed course-create JSON before writes", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "uais-teaching-courses-invalid-json-"));
+    const ownershipMerges: Array<Record<string, unknown>> = [];
+    const postCourse = createTeachingCoursePostHandler({
+      env: {
+        UAIS_TEACHING_COURSES_DATA_DIR: dataDir,
+        UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET: teacherAuthSecret,
+      },
+      now: new Date("2026-06-22T11:20:00.000Z"),
+      mergeTeacherAiOwnershipRecord: async (input) => {
+        ownershipMerges.push(input as unknown as Record<string, unknown>);
+        return {
+          teacherId: "teacher-kang",
+          status: "merged",
+          storagePolicy: "external-redacted-teacher-ai-ownership-merge",
+          storageWritePolicy: "external-atomic-merge",
+          responsibleSession: "S12",
+          updatedAt: "2026-06-22T11:20:00.000Z",
+          redaction: {
+            secrets: "omitted",
+            localFiles: "omitted",
+            assets: "ids-only",
+          },
+        };
+      },
+    });
+
+    try {
+      const response = await postCourse(
+        new Request("https://www.uais.top/api/teaching/courses", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            cookie: createTeacherCookie(),
+            "x-uais-trace-id": "trace-course-create-invalid-json",
+          },
+          body: '{"name":"/Users/example/secret-token-course"',
+        }),
+      );
+      const body = await response.json();
+
+      expect(response.status, JSON.stringify(body)).toBe(400);
+      expect(body).toEqual(
+        expect.objectContaining({
+          error: "Course request body must be JSON.",
+          traceId: "trace-course-create-invalid-json",
+          validation: {
+            target: "teaching-course-create",
+            status: "invalid",
+            reasonCode: "body-malformed-json",
+            field: "body",
+            responsibleSession: "S12",
+            redaction: {
+              secrets: "omitted",
+              localFiles: "omitted",
+              assets: "ids-only",
+            },
+          },
+        }),
+      );
+      expect(ownershipMerges).toEqual([]);
+      expect(await readdir(dataDir)).toEqual([]);
+      expect(JSON.stringify(body)).not.toContain("/Users/example");
+      expect(JSON.stringify(body)).not.toContain("secret-token");
+      expectNoLocalOrSecretValues(body, dataDir);
+    } finally {
+      await rm(dataDir, { recursive: true, force: true });
+    }
+  });
+
+  it("returns a structured redacted validation error for missing course-create fields", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "uais-teaching-courses-missing-field-"));
+    const ownershipMerges: Array<Record<string, unknown>> = [];
+    const postCourse = createTeachingCoursePostHandler({
+      env: {
+        UAIS_TEACHING_COURSES_DATA_DIR: dataDir,
+        UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET: teacherAuthSecret,
+      },
+      now: new Date("2026-06-22T11:20:00.000Z"),
+      mergeTeacherAiOwnershipRecord: async (input) => {
+        ownershipMerges.push(input as unknown as Record<string, unknown>);
+        return {
+          teacherId: "teacher-kang",
+          status: "merged",
+          storagePolicy: "external-redacted-teacher-ai-ownership-merge",
+          storageWritePolicy: "external-atomic-merge",
+          responsibleSession: "S12",
+          updatedAt: "2026-06-22T11:20:00.000Z",
+          redaction: {
+            secrets: "omitted",
+            localFiles: "omitted",
+            assets: "ids-only",
+          },
+        };
+      },
+    });
+
+    try {
+      const response = await postCourse(
+        new Request("https://www.uais.top/api/teaching/courses", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            cookie: createTeacherCookie(),
+            "x-uais-trace-id": "trace-course-create-missing-field",
+          },
+          body: JSON.stringify({
+            instructor: "Kang Xia",
+            unit: "Guangzhou University 404",
+            department: "Experimental Teaching Center",
+            semester: "2026 Spring",
+          }),
+        }),
+      );
+      const body = await response.json();
+
+      expect(response.status, JSON.stringify(body)).toBe(400);
+      expect(body).toEqual(
+        expect.objectContaining({
+          error: "Course name is required.",
+          traceId: "trace-course-create-missing-field",
+          validation: expect.objectContaining({
+            target: "teaching-course-create",
+            status: "invalid",
+            reasonCode: "missing-field",
+            field: "name",
+            responsibleSession: "S12",
+          }),
+        }),
+      );
+      expect(ownershipMerges).toEqual([]);
+      expect(await readdir(dataDir)).toEqual([]);
+      expectNoLocalOrSecretValues(body, dataDir);
     } finally {
       await rm(dataDir, { recursive: true, force: true });
     }

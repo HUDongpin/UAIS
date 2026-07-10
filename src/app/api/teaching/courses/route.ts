@@ -6,6 +6,7 @@ import {
   resolveTeachingCourseManagementDataDir,
   rollbackTeachingCourseCreation,
   TeachingCourseManagementStoreError,
+  type TeachingCourseManagementDatabase,
   type TeachingCourseDraftInput,
   type TeachingCourseManagementAuthSessionSummary,
   type TeachingCourseManagementRepository,
@@ -50,12 +51,30 @@ type TeachingCourseGetHandlerDeps = {
 type AuthenticatedTeacher = {
   actorId: string;
   role: "teacher";
+  authSource: "signed-teacher-session" | "app-session";
   authSession: TeachingCourseManagementAuthSessionSummary;
 };
 
 type AuthenticatedStudent = {
   actorId: string;
   role: "student";
+};
+
+type TeachingCourseCreateValidationReason =
+  | "body-required"
+  | "body-too-large"
+  | "body-malformed-json"
+  | "body-not-object"
+  | "missing-field";
+
+type TeachingCourseCreateValidation = {
+  target: "teaching-course-create";
+  status: "invalid";
+  reasonCode: TeachingCourseCreateValidationReason;
+  field: string;
+  maxBytes?: number;
+  responsibleSession: "S12";
+  redaction: ReturnType<typeof createRedaction>;
 };
 
 const maxBodyBytes = 50_000;
@@ -80,6 +99,11 @@ export function createTeachingCourseGetHandler(deps: TeachingCourseGetHandlerDep
             request,
             env,
             now: deps.now,
+          }) ??
+          readAuthenticatedAppSessionTeacher({
+            request,
+            env,
+            now: deps.now,
           });
       if (!authenticatedTeacher && !authenticatedStudent) {
         return jsonResponse(401, {
@@ -90,7 +114,13 @@ export function createTeachingCourseGetHandler(deps: TeachingCourseGetHandlerDep
         }, traceId);
       }
       if (authenticatedTeacher) {
-        const authProviderContract = resolveUaisTeacherAuthProviderContract({ env });
+        const authProviderContract =
+          authenticatedTeacher.authSource === "signed-teacher-session"
+            ? resolveUaisTeacherAuthProviderContract({ env })
+            : resolveUaisAppAuthProviderContract({
+                env,
+                hasTrustedAccountProvider: Boolean(deps.hasTrustedAccountProvider),
+              });
         if (
           isTeachingCourseApiProductionRuntime(env) &&
           authProviderContract.productionStatus !== "ready"
@@ -136,10 +166,37 @@ export function createTeachingCourseGetHandler(deps: TeachingCourseGetHandlerDep
         assertTeachingCourseManagementLocalJsonRuntimeAllowed(env);
       }
 
-      const { database } = await readTeachingCourseManagementSnapshot({
-        dataDir: resolveTeachingCourseManagementDataDir(env.UAIS_TEACHING_COURSES_DATA_DIR),
-        repository: courseManagementRepository,
-      });
+      let database: TeachingCourseManagementDatabase;
+      try {
+        ({ database } = await readTeachingCourseManagementSnapshot({
+          dataDir: resolveTeachingCourseManagementDataDir(env.UAIS_TEACHING_COURSES_DATA_DIR),
+          repository: courseManagementRepository,
+        }));
+      } catch (error) {
+        if (
+          authenticatedTeacher?.authSource === "app-session" &&
+          isRecoverableTeachingCourseDemoReadbackError(error)
+        ) {
+          return jsonResponse(200, {
+            courses: [],
+            classes: [],
+            memberships: [],
+            traceId,
+            receipt: {
+              action: "list-courses",
+              actorId: authenticatedTeacher.actorId,
+              traceId,
+              status: "read",
+              responsibleSession: "S12",
+              createdAt: (deps.now ?? new Date()).toISOString(),
+              storageFallback: "demo-app-session-empty-readback",
+              redaction: createRedaction(),
+            },
+            redaction: createRedaction(),
+          }, traceId);
+        }
+        throw error;
+      }
       if (authenticatedStudent) {
         const memberships = database.memberships.filter(
           (membership) =>
@@ -497,15 +554,19 @@ function isTeachingCourseApiProductionRuntime(env: Record<string, string | undef
 
 function parseCourseDraft(value: unknown): TeachingCourseDraftInput {
   if (!isRecord(value)) {
-    throw new TeachingCourseManagementStoreError(400, "Course request body must be an object.");
+    throw new TeachingCourseManagementStoreError(
+      400,
+      "Course request body must be an object.",
+      { validation: createCourseValidation("body-not-object", "body") },
+    );
   }
   return {
     ...(typeof value.courseId === "string" ? { courseId: value.courseId } : {}),
-    name: requireString(value.name, "Course name is required."),
-    instructor: requireString(value.instructor, "Course instructor is required."),
-    unit: requireString(value.unit, "Course unit is required."),
-    department: requireString(value.department, "Course department is required."),
-    semester: requireString(value.semester, "Course semester is required."),
+    name: requireString(value.name, "name", "Course name is required."),
+    instructor: requireString(value.instructor, "instructor", "Course instructor is required."),
+    unit: requireString(value.unit, "unit", "Course unit is required."),
+    department: requireString(value.department, "department", "Course department is required."),
+    semester: requireString(value.semester, "semester", "Course semester is required."),
     ...(typeof value.description === "string" ? { description: value.description } : {}),
     ...(typeof value.coverAssetId === "string" ? { coverAssetId: value.coverAssetId } : {}),
   };
@@ -514,15 +575,21 @@ function parseCourseDraft(value: unknown): TeachingCourseDraftInput {
 async function readJsonBody(request: Request) {
   const text = await request.text();
   if (Buffer.byteLength(text, "utf8") > maxBodyBytes) {
-    throw new TeachingCourseManagementStoreError(413, "Course request body is too large.");
+    throw new TeachingCourseManagementStoreError(413, "Course request body is too large.", {
+      validation: createCourseValidation("body-too-large", "body", { maxBytes: maxBodyBytes }),
+    });
   }
   if (!text.trim()) {
-    throw new TeachingCourseManagementStoreError(400, "Course request body is required.");
+    throw new TeachingCourseManagementStoreError(400, "Course request body is required.", {
+      validation: createCourseValidation("body-required", "body"),
+    });
   }
   try {
     return JSON.parse(text);
   } catch {
-    throw new TeachingCourseManagementStoreError(400, "Course request body must be JSON.");
+    throw new TeachingCourseManagementStoreError(400, "Course request body must be JSON.", {
+      validation: createCourseValidation("body-malformed-json", "body"),
+    });
   }
 }
 
@@ -551,10 +618,40 @@ function readAuthenticatedTeacher(input: {
   return {
     actorId: session.actorId,
     role: "teacher",
+    authSource: "signed-teacher-session",
     authSession: {
       sessionId: session.sessionId,
       authenticatedAt: session.authenticatedAt,
       expiresAt: session.expiresAt,
+    },
+  };
+}
+
+function readAuthenticatedAppSessionTeacher(input: {
+  request: Request;
+  env: Record<string, string | undefined>;
+  now?: Date;
+}): AuthenticatedTeacher | undefined {
+  const claims = getUaisAppSessionClaimsFromCookieString(
+    input.request.headers.get("cookie"),
+    { env: input.env, now: input.now },
+  );
+  if (
+    !claims ||
+    claims.role !== "teacher" ||
+    !isSafeTeachingCourseActorId(claims.account) ||
+    !isSafeTeachingCourseActorId(claims.sessionId)
+  ) {
+    return undefined;
+  }
+  return {
+    actorId: claims.account,
+    role: "teacher",
+    authSource: "app-session",
+    authSession: {
+      sessionId: claims.sessionId,
+      authenticatedAt: claims.authenticatedAt,
+      expiresAt: claims.expiresAt,
     },
   };
 }
@@ -612,9 +709,11 @@ function sanitizeRequestSourceHeader(value: string | null) {
   return normalized;
 }
 
-function requireString(value: unknown, message: string) {
+function requireString(value: unknown, field: string, message: string) {
   if (typeof value !== "string" || !value.trim()) {
-    throw new TeachingCourseManagementStoreError(400, message);
+    throw new TeachingCourseManagementStoreError(400, message, {
+      validation: createCourseValidation("missing-field", field),
+    });
   }
   return value;
 }
@@ -624,9 +723,11 @@ function createErrorResponse(error: unknown, traceId: string) {
     error instanceof TeachingCourseManagementStoreError ||
     error instanceof TeachingCourseAssetsStoreError
   ) {
+    const validation = readCourseValidation(error);
     return jsonResponse(error.status, {
       error: error.message,
       traceId,
+      ...(validation ? { validation } : {}),
       redaction: createRedaction(),
     }, traceId);
   }
@@ -681,12 +782,57 @@ function isTeachingCourseCoverAssetReadbackFailure(error: unknown) {
   return error instanceof TeachingCourseAssetsStoreError && error.status >= 500;
 }
 
+function isRecoverableTeachingCourseDemoReadbackError(error: unknown) {
+  return error instanceof TeachingCourseManagementStoreError && error.status >= 500;
+}
+
 function createRedaction() {
   return {
     secrets: "omitted",
     localFiles: "omitted",
     assets: "ids-only",
   };
+}
+
+function createCourseValidation(
+  reasonCode: TeachingCourseCreateValidationReason,
+  field: string,
+  options: { maxBytes?: number } = {},
+): TeachingCourseCreateValidation {
+  return {
+    target: "teaching-course-create",
+    status: "invalid",
+    reasonCode,
+    field,
+    ...(options.maxBytes === undefined ? {} : { maxBytes: options.maxBytes }),
+    responsibleSession: "S12",
+    redaction: createRedaction(),
+  };
+}
+
+function readCourseValidation(error: TeachingCourseManagementStoreError | TeachingCourseAssetsStoreError) {
+  if (!(error instanceof TeachingCourseManagementStoreError)) {
+    return undefined;
+  }
+  const validation = error.diagnostics?.validation;
+  if (!isCourseValidation(validation)) {
+    return undefined;
+  }
+  return validation;
+}
+
+function isCourseValidation(value: unknown): value is TeachingCourseCreateValidation {
+  if (!isRecord(value)) {
+    return false;
+  }
+  return (
+    value.target === "teaching-course-create" &&
+    value.status === "invalid" &&
+    typeof value.reasonCode === "string" &&
+    typeof value.field === "string" &&
+    value.responsibleSession === "S12" &&
+    isRecord(value.redaction)
+  );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

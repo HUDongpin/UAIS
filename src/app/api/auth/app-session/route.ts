@@ -76,7 +76,7 @@ export function createUaisAppSessionPostHandler(
       );
     }
 
-    const body = parseLoginBody(await request.json());
+    const body = await readLoginBody(request);
     if (!body.account || !body.password) {
       return Response.json(
         {
@@ -191,6 +191,14 @@ export function createUaisAppSessionDeleteHandler(
       headers,
     });
   };
+}
+
+async function readLoginBody(request: Request): Promise<UaisAppSessionLoginBody> {
+  try {
+    return parseLoginBody(await request.json());
+  } catch {
+    return {};
+  }
 }
 
 function parseLoginBody(value: unknown): UaisAppSessionLoginBody {

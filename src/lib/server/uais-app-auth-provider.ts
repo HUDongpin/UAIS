@@ -153,7 +153,7 @@ export function authenticateUaisLocalDemoAccount(input: {
 }
 
 export function isValidUaisAppRole(value: unknown): value is UaisAppRole {
-  return value === "teacher" || value === "student";
+  return value === "teacher" || value === "student" || value === "admin";
 }
 
 function normalizeProviderSelector(value: string | undefined) {

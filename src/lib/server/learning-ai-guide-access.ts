@@ -8,13 +8,14 @@ import {
 
 type LearningAiGuideCourseAccessReason =
   | "course-context-required"
+  | "student-or-teacher-role-required"
   | "student-course-membership-required"
   | "student-course-membership-not-approved"
   | "teacher-course-ownership-required";
 
 type LearningAiGuideCourseAccessActor = {
   actorId: string;
-  role: "student" | "teacher";
+  role: "student" | "teacher" | "admin";
 };
 
 type LearningAiGuideCourseAccessResource = {
@@ -45,7 +46,7 @@ export type LearningAiGuideCourseAccessDecision =
 export async function authorizeLearningAiGuideCourseAccess(input: {
   appSession: {
     account: string;
-    role: "teacher" | "student";
+    role: "teacher" | "student" | "admin";
   };
   env: Record<string, string | undefined>;
   courseId: string;
@@ -57,6 +58,10 @@ export async function authorizeLearningAiGuideCourseAccess(input: {
     role: input.appSession.role,
   };
   const resource = { courseId: input.courseId };
+  if (actor.role === "admin") {
+    return createDeniedAccess("student-or-teacher-role-required", actor, resource);
+  }
+
   const repository =
     input.repository ??
     createUaisTeachingCourseManagementRepository({
@@ -140,13 +145,16 @@ export function createLearningAiGuideAccessDeniedMessage(
   if (reasonCode === "teacher-course-ownership-required") {
     return "UAIS learning AI guide requires teaching course ownership.";
   }
+  if (reasonCode === "student-or-teacher-role-required") {
+    return "UAIS learning AI guide requires a learner or teacher role.";
+  }
   return "UAIS learning AI guide requires approved course membership.";
 }
 
 export function createLearningAiGuideCourseContextRequiredAccessDecision(input: {
   appSession: {
     account: string;
-    role: "teacher" | "student";
+    role: "teacher" | "student" | "admin";
   };
 }): Extract<LearningAiGuideCourseAccessDecision, { status: "denied" }> {
   return createDeniedAccess(

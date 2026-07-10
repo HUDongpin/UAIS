@@ -9,13 +9,14 @@ import { getUaisAppSessionUserFromCookieString } from "@/lib/server/uais-app-ses
 
 type LearningPptPlaybackAccessReason =
   | "student-session-required"
+  | "student-or-teacher-role-required"
   | "student-course-membership-required"
   | "student-course-membership-not-approved"
   | "teacher-course-ownership-required";
 
 type LearningPptPlaybackActor = {
   actorId: string;
-  role: "student" | "teacher";
+  role: "student" | "teacher" | "admin";
 };
 
 type LearningPptPlaybackAccessResource = {
@@ -70,6 +71,10 @@ export async function authorizeLearningPptPlaybackAccess(input: {
     actorId: user.account,
     role: user.role,
   };
+  if (actor.role === "admin") {
+    return createDeniedAccess("student-or-teacher-role-required", resource, actor);
+  }
+
   const repository = createUaisTeachingCourseManagementRepository({
     env: input.env,
     fetch: input.fetch,
@@ -201,6 +206,9 @@ function createAccessDeniedMessage(reasonCode: LearningPptPlaybackAccessReason) 
   }
   if (reasonCode === "teacher-course-ownership-required") {
     return "UAIS learning PPT playback requires teaching course ownership.";
+  }
+  if (reasonCode === "student-or-teacher-role-required") {
+    return "UAIS learning PPT playback requires a learner or teacher role.";
   }
   return "UAIS learning PPT playback course membership is required.";
 }

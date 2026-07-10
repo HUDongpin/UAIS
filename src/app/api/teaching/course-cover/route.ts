@@ -55,6 +55,14 @@ type AuthenticatedTeacher = {
   expiresAt: string;
 };
 
+type AuthenticatedStudent = {
+  sessionId: string;
+  account: string;
+  role: "student";
+  authenticatedAt: string;
+  expiresAt: string;
+};
+
 type CourseCoverRequestBody = {
   courseId?: string;
   name: string;
@@ -508,16 +516,25 @@ function readAuthenticatedStudent(input: {
   request: Request;
   env: Record<string, string | undefined>;
   now?: Date;
-}) {
+}): AuthenticatedStudent | undefined {
   const claims = getUaisAppSessionClaimsFromCookieString(input.request.headers.get("cookie"), {
     env: input.env,
     now: input.now,
   });
-  return claims?.role === "student" &&
+  if (
+    claims?.role === "student" &&
     isSafeTeachingCourseCoverActorId(claims.account) &&
     isSafeTeachingCourseCoverActorId(claims.sessionId)
-    ? claims
-    : undefined;
+  ) {
+    return {
+      sessionId: claims.sessionId,
+      account: claims.account,
+      role: "student",
+      authenticatedAt: claims.authenticatedAt,
+      expiresAt: claims.expiresAt,
+    };
+  }
+  return undefined;
 }
 
 function isSafeTeachingCourseCoverActorId(value: string) {
