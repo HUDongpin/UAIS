@@ -158,6 +158,7 @@ Contents:
 - Critical-flow GitHub workflow.
 - `/healthz`, instrumentation, Sentry configuration, observability helpers.
 - Deployment-lane and environment-surface contracts.
+- `README.md`, the architecture map, environment-surface documentation, and release/observability runbooks read by the focused R1 tests.
 - Focused tests whose sole purpose is to verify this package's contracts.
 
 Checks:
@@ -178,6 +179,7 @@ Contents:
 - Core database schema and migration manifest.
 - Postgres teaching-course repository and migration runner.
 - Course readback contract.
+- API and core-schema documentation read by focused R2 tests.
 - Focused auth, database, backend-flow, and course-management tests.
 
 Checks:
@@ -198,6 +200,7 @@ Contents:
 - Layout/header and page shells.
 - Course, learning, login, student-dashboard, and teaching components.
 - Global CSS change.
+- Performance/accessibility baseline documentation read by the focused R3 test.
 - Focused route, page, accessibility, and privacy tests owned by this package.
 
 Checks:
@@ -216,6 +219,7 @@ Contents:
 - App-auth and learning playback helpers owned by the AI/learning boundary.
 - Adaptive recommendation implementation.
 - Learner-profile and related learning helper additions.
+- Adaptive-recommendation and learner-profile documentation read by focused R4 tests.
 - Focused AI, LangGraph, adaptive-learning, learner-profile, and HITL tests.
 
 Checks:
@@ -232,7 +236,7 @@ Owners: S10 and S11, with contributing session logs retained as evidence.
 Contents:
 
 - Remaining cross-package and release-regression tests not committed with R1-R4.
-- README, CONTRIBUTING, SCOPE, API/architecture/runbook documents.
+- CONTRIBUTING, SCOPE, the privacy baseline, and remaining cross-package documentation not committed with R1-R4.
 - Technical-advisory documents already present in the source inventory.
 - Current coordination reports and session logs.
 
