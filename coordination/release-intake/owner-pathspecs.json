@@ -5,7 +5,9 @@
     "S10-docs-tooling": [
       ".gitignore",
       "AGENTS.md",
+      "CONTRIBUTING.md",
       "README.md",
+      "SCOPE.md",
       "package.json",
       "package-lock.json",
       "vitest.config.mts",
@@ -17,12 +19,22 @@
     "S22-release-config": [
       ".dockerignore",
       ".vercelignore",
+      ".github/workflows/critical-flow.yml",
       "Dockerfile.external-storage",
       "next.config.ts",
+      "src/app/healthz/",
+      "src/instrumentation-client.ts",
+      "src/instrumentation.ts",
+      "src/lib/observability/",
+      "src/lib/release/deployment-lanes.ts",
+      "src/sentry.edge.config.ts",
+      "src/sentry.server.config.ts",
+      "tsconfig.json",
       "vercel.json"
     ],
     "S19-env-example": [
-      ".env.local.example"
+      ".env.local.example",
+      "src/lib/release/env-surface.ts"
     ],
     "S01-shell": [
       "src/app/layout.tsx",
@@ -52,9 +64,16 @@
       "src/i18n/"
     ],
     "S12-backend-api": [
+      "migrations/",
+      "scripts/apply-core-migrations.mjs",
       "src/app/api/",
+      "src/lib/db/",
       "src/lib/server/",
+      "src/lib/teaching/",
       "src/proxy.ts"
+    ],
+    "S15-adaptive-learning": [
+      "src/lib/adaptive-learning/"
     ],
     "S07-ai-lrs": [
       "src/lib/ai/",
@@ -73,6 +92,7 @@
       "public/login/"
     ],
     "local-archive-only": [
+      "docs/technical-advisory/.Rhistory",
       "output/",
       "OpenMAIC-main.zip"
     ]
