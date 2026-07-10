@@ -75,13 +75,15 @@ Expected: two staged paths before commit; clean compose status afterward.
 
 **Files:**
 - Create: `scripts/recovery/uais-recovery-compose.mjs`
-- Create: `scripts/recovery/uais-recovery-compose.test.mjs`
+- Create: `scripts/recovery/uais-recovery-compose.node-test.mjs`
 - Create: `coordination/release-intake/recovery-owner-packages.json`
 - Modify: `coordination/release-intake/owner-pathspecs.json`
 
 - [ ] **Step 1: Write failing unit tests**
 
-Create `scripts/recovery/uais-recovery-compose.test.mjs`:
+Create `scripts/recovery/uais-recovery-compose.node-test.mjs`. The `node-test` suffix keeps this
+Node-native suite outside Vitest's default `*.test.*` collection while retaining explicit
+`node --test` execution:
 
 ```js
 import assert from "node:assert/strict";
@@ -146,7 +148,7 @@ test("fingerprints exact nul-delimited bytes", () => {
 - [ ] **Step 2: Verify the test fails**
 
 ```bash
-node --test scripts/recovery/uais-recovery-compose.test.mjs
+node --test scripts/recovery/uais-recovery-compose.node-test.mjs
 ```
 
 Expected: FAIL because `uais-recovery-compose.mjs` does not exist.
@@ -690,14 +692,14 @@ local-archive-only: docs/technical-advisory/.Rhistory
 - [ ] **Step 6: Run and commit R0 tooling checks**
 
 ```bash
-node --test scripts/recovery/uais-recovery-compose.test.mjs
+node --test scripts/recovery/uais-recovery-compose.node-test.mjs
 node --check scripts/recovery/uais-recovery-compose.mjs
 jq -e '([.packages[] | length] | add) == 115 and (.quarantine | length) == 1' \
   coordination/release-intake/recovery-owner-packages.json
 git diff --check
 git add -- \
   scripts/recovery/uais-recovery-compose.mjs \
-  scripts/recovery/uais-recovery-compose.test.mjs \
+  scripts/recovery/uais-recovery-compose.node-test.mjs \
   coordination/release-intake/recovery-owner-packages.json \
   coordination/release-intake/owner-pathspecs.json
 git diff --cached --check
