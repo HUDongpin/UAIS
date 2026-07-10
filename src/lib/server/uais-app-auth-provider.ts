@@ -11,6 +11,11 @@ export type UaisAppAuthProviderContract = {
     credential: "configured" | "injected";
     valueRedacted: true;
   };
+  demoProductionAccess?: {
+    enabled: true;
+    env: "UAIS_APP_ALLOW_PRODUCTION_DEMO_AUTH";
+    valueRedacted: true;
+  };
   responsibleSession: "S12/S19";
   redaction: {
     secrets: "omitted";
@@ -56,15 +61,25 @@ export function resolveUaisAppAuthProviderContract(input: {
   const selector = normalizeProviderSelector(input.env.UAIS_APP_AUTH_PROVIDER);
 
   if (selector === "local-demo") {
-    const productionStatus = isUaisAppProductionRuntime(input.env)
-      ? "blocked"
-      : "ready";
+    const productionRuntime = isUaisAppProductionRuntime(input.env);
+    const productionDemoAccess = isUaisProductionDemoAuthEnabled(input.env);
+    const productionStatus =
+      productionRuntime && !productionDemoAccess ? "blocked" : "ready";
     return {
       selector,
       providerKind: "local-demo",
       productionStatus,
       ...(productionStatus === "blocked"
         ? { blockedReason: "local-demo-not-production" as const }
+        : {}),
+      ...(productionRuntime && productionDemoAccess
+        ? {
+            demoProductionAccess: {
+              enabled: true,
+              env: "UAIS_APP_ALLOW_PRODUCTION_DEMO_AUTH",
+              valueRedacted: true,
+            } as const,
+          }
         : {}),
       responsibleSession: "S12/S19",
       redaction: createRedaction(),
@@ -158,6 +173,11 @@ export function isValidUaisAppRole(value: unknown): value is UaisAppRole {
 
 function normalizeProviderSelector(value: string | undefined) {
   return value?.trim().toLowerCase() || "local-demo";
+}
+
+function isUaisProductionDemoAuthEnabled(env: Record<string, string | undefined>) {
+  const value = env.UAIS_APP_ALLOW_PRODUCTION_DEMO_AUTH?.trim().toLowerCase();
+  return value === "1" || value === "true" || value === "yes";
 }
 
 function resolveUaisTrustedAccountProviderConfig(

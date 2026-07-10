@@ -191,7 +191,7 @@ describe("teaching course management API", () => {
     }
   });
 
-  it("blocks production demo teacher dashboard readback even when the legacy demo-auth flag is present", async () => {
+  it("keeps production demo teacher dashboard readback usable when external course storage is unavailable", async () => {
     const getCourses = createTeachingCourseGetHandler({
       env: {
         NODE_ENV: "production",
@@ -223,13 +223,16 @@ describe("teaching course management API", () => {
     );
     const body = await response.json();
 
-    expect(response.status).toBe(503);
-    expect(body.error).toBe("UAIS teacher auth provider is not production-ready.");
-    expect(body.authProviderContract).toEqual(
+    expect(response.status, JSON.stringify(body)).toBe(200);
+    expect(body.courses).toEqual([]);
+    expect(body.classes).toEqual([]);
+    expect(body.memberships).toEqual([]);
+    expect(body.receipt).toEqual(
       expect.objectContaining({
-        providerKind: "local-demo",
-        productionStatus: "blocked",
-        blockedReason: "local-demo-not-production",
+        action: "list-courses",
+        actorId: "Phoebe",
+        status: "read",
+        storageFallback: "demo-app-session-empty-readback",
       }),
     );
     expectNoLocalOrSecretValues(body, "storage.example.test");

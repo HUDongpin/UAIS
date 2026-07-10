@@ -2,6 +2,8 @@ import { NextResponse, type NextRequest } from "next/server";
 import {
   getUaisHomeHrefForRole,
   isUaisRouteAllowedForRole,
+  UAIS_APP_SESSION_COOKIE,
+  UAIS_APP_SESSION_SIGNATURE_COOKIE,
   type UaisAppRole,
 } from "@/lib/auth/uais-app-session";
 import { getUaisAppSessionUserFromCookieString } from "@/lib/server/uais-app-session";
@@ -19,13 +21,15 @@ export function proxy(
     request.headers.get("cookie"),
     { env },
   );
+  const appSessionCookiePair = hasUaisAppSessionCookiePair(request);
   const trustedTeacherSession = hasVerifiedTrustedTeacherSession(request, env);
   const role: UaisAppRole | undefined =
     appSessionUser?.role ?? (trustedTeacherSession ? "teacher" : undefined);
-  const authenticated = Boolean(appSessionUser) || trustedTeacherSession;
+  const authenticated =
+    Boolean(appSessionUser) || trustedTeacherSession || appSessionCookiePair;
 
-  if (isLoginRoute && authenticated) {
-    return NextResponse.redirect(new URL(getUaisHomeHrefForRole(role ?? "teacher"), request.url));
+  if (isLoginRoute && role) {
+    return NextResponse.redirect(new URL(getUaisHomeHrefForRole(role), request.url));
   }
 
   if (!authenticated && isProtectedAppRoute(pathname)) {
@@ -76,5 +80,11 @@ function hasVerifiedTrustedTeacherSession(
   }
   return Boolean(
     readUaisAuthenticatedTeacherSessionFromSignedCookies({ request, secret }),
+  );
+}
+
+function hasUaisAppSessionCookiePair(request: NextRequest) {
+  return [UAIS_APP_SESSION_COOKIE, UAIS_APP_SESSION_SIGNATURE_COOKIE].every((name) =>
+    Boolean(request.cookies.get(name)?.value),
   );
 }

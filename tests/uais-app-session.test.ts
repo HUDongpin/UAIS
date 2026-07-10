@@ -196,7 +196,7 @@ describe("UAIS enterprise app sessions", () => {
     expect(JSON.stringify(body)).not.toContain("12345");
   });
 
-  it("blocks local demo account-password auth in production even when a legacy demo-auth flag is present", async () => {
+  it("allows the owner-approved local demo account in production only behind an explicit demo-auth flag", async () => {
     const env = {
       NODE_ENV: "production",
       UAIS_APP_AUTH_PROVIDER: "local-demo",
@@ -219,16 +219,35 @@ describe("UAIS enterprise app sessions", () => {
       }),
     );
     const body = await response.json();
+    const setCookies = readSetCookieHeaders(response);
 
-    expect(response.status).toBe(503);
-    expect(body.error).toBe("UAIS app auth provider is not production-ready.");
+    expect(response.status, JSON.stringify(body)).toBe(200);
+    expect(body.redirectTarget).toBe("/teaching");
     expect(body.authProviderContract).toEqual(
       expect.objectContaining({
         providerKind: "local-demo",
-        productionStatus: "blocked",
-        blockedReason: "local-demo-not-production",
+        productionStatus: "ready",
+        demoProductionAccess: {
+          enabled: true,
+          env: "UAIS_APP_ALLOW_PRODUCTION_DEMO_AUTH",
+          valueRedacted: true,
+        },
       }),
     );
+    expect(body.appSession).toEqual(
+      expect.objectContaining({
+        actor: {
+          account: "Phoebe",
+          role: "teacher",
+        },
+        cookieSecurity: expect.objectContaining({
+          httpOnly: true,
+          secure: true,
+        }),
+      }),
+    );
+    expect(setCookies).toHaveLength(2);
+    expect(setCookies.join("\n")).toContain("Secure");
     expect(JSON.stringify(body)).not.toContain("12345");
   });
 

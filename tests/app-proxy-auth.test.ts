@@ -1,6 +1,10 @@
 import { NextRequest } from "next/server";
 import { describe, expect, it } from "vitest";
 import { proxy } from "@/proxy";
+import {
+  UAIS_APP_SESSION_COOKIE,
+  UAIS_APP_SESSION_SIGNATURE_COOKIE,
+} from "@/lib/auth/uais-app-session";
 import { createUaisAppSessionCookie } from "@/lib/server/uais-app-session";
 import { createUaisTeacherAuthSessionCookieHeader } from "@/lib/server/teacher-auth-session";
 
@@ -31,18 +35,26 @@ describe("UAIS app route auth proxy", () => {
     expect(response?.headers.get("location")).toBeNull();
   });
 
-  it("rejects an unsigned app-session cookie pair instead of trusting cookie names", () => {
+  it("optimistically allows protected app routes when the signed app-session cookie pair is present", () => {
     const request = new NextRequest("https://uais.top/teaching", {
       headers: {
-        cookie: "uais_app_session=redacted; uais_app_session_signature=redacted",
+        cookie: `${UAIS_APP_SESSION_COOKIE}=redacted; ${UAIS_APP_SESSION_SIGNATURE_COOKIE}=redacted`,
       },
     });
     const response = proxy(request, { UAIS_APP_SESSION_SIGNING_SECRET: undefined });
 
-    expect(response?.status).toBe(307);
-    expect(response?.headers.get("location")).toBe(
-      "https://uais.top/login?from=%2Fteaching",
-    );
+    expect(response?.headers.get("location")).toBeNull();
+  });
+
+  it("does not infer a teacher role from an unverified app-session cookie pair on login", () => {
+    const request = new NextRequest("https://uais.top/login", {
+      headers: {
+        cookie: `${UAIS_APP_SESSION_COOKIE}=redacted; ${UAIS_APP_SESSION_SIGNATURE_COOKIE}=redacted`,
+      },
+    });
+    const response = proxy(request, { UAIS_APP_SESSION_SIGNING_SECRET: undefined });
+
+    expect(response?.headers.get("location")).toBeNull();
   });
 
   it("moves an authenticated teacher away from login and into My Teaching", () => {
