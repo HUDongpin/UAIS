@@ -2129,6 +2129,7 @@ function LearningCompanionPanel({
   const [expandedCheckpointId, setExpandedCheckpointId] = useState<string>();
   const guideRequestCounterRef = useRef(0);
   const guideInputRef = useRef<HTMLInputElement | null>(null);
+  const guideTranscriptRef = useRef<HTMLDivElement | null>(null);
   const guideCopy = getAiGuideCopy(locale, playback, publishedPlayback, activePublishedSlide);
   const activeGuideAgent =
     guideCopy.agentCards.find((agent) => agent.id === activeGuideAgentId) ??
@@ -2205,6 +2206,17 @@ function LearningCompanionPanel({
     guideInputRef.current?.focus();
   }, [guideFocusSequence]);
 
+  useEffect(() => {
+    if (guideMessages.length === 0) {
+      return;
+    }
+
+    const transcript = guideTranscriptRef.current;
+    if (transcript) {
+      transcript.scrollTop = transcript.scrollHeight;
+    }
+  }, [guideMessages]);
+
   function handleGuideSend(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const question = guideDraft.trim();
@@ -2226,27 +2238,16 @@ function LearningCompanionPanel({
     const requestId = String(guideRequestCounterRef.current);
     const assistantMessageId = `guide-assistant-${requestId}`;
     const pendingId = mode === "multi-agent" ? "multi-agent" : agent.id;
-    const responseLabel = mode === "multi-agent" ? guideCopy.multiAgentLabel : agent.label;
     setActiveGuideAgentId(agent.id);
     setPendingGuideAgentId(pendingId);
-    setGuideMessages((current) => {
-      return [
-        ...current,
-        {
-          id: `guide-user-${requestId}`,
-          kind: "user",
-          text: question,
-        },
-        {
-          id: assistantMessageId,
-          kind: "assistant",
-          text:
-            mode === "multi-agent"
-              ? `${responseLabel} · ${guideCopy.buildMultiAgentReceipt(question)}`
-              : `${responseLabel} · ${guideCopy.buildReceipt(question)}`,
-        },
-      ];
-    });
+    setGuideMessages((current) => [
+      ...current,
+      {
+        id: `guide-user-${requestId}`,
+        kind: "user",
+        text: question,
+      },
+    ]);
     onGuideDraftChange("");
     setGuideError("");
 
@@ -2259,40 +2260,26 @@ function LearningCompanionPanel({
         body: JSON.stringify(createLearningAiGuidePayload(agent.id, question, mode)),
       });
       const body = (await response.json()) as LearningAiGuideApiResponse;
-      if (!response.ok || !body.message?.text) {
+      const assistantText = body.message?.text?.trim();
+      if (!response.ok || !assistantText) {
         throw new Error(body.error ?? "Learning AI guide request failed.");
       }
 
-      setGuideMessages((current) =>
-        current.map((message) =>
-          message.id === assistantMessageId
+      setGuideMessages((current) => [
+        ...current,
+        {
+          id: assistantMessageId,
+          kind: "assistant",
+          text: assistantText,
+          orchestration: body.orchestration,
+          hitl: body.orchestration?.trace?.humanInTheLoop
             ? {
-                ...message,
-                text: body.message?.text ?? "",
-                orchestration: body.orchestration,
-                hitl: body.orchestration?.trace?.humanInTheLoop
-                  ? {
-                      status: "ready",
-                    }
-                  : undefined,
+                status: "ready",
               }
-            : message,
-        ),
-      );
+            : undefined,
+        },
+      ]);
     } catch {
-      setGuideMessages((current) =>
-        current.map((message) =>
-          message.id === assistantMessageId
-            ? {
-                ...message,
-                text:
-                  locale === "zh-CN"
-                    ? `${responseLabel} 暂时没有连上服务端智能服务。请稍后再试，或检查登录状态与接口配置。`
-                    : `${responseLabel} could not reach the server AI yet. Please retry after checking login and API configuration.`,
-              }
-            : message,
-        ),
-      );
       setGuideError(
         locale === "zh-CN"
           ? "智能服务暂时不可用，已保留你的问题。"
@@ -2460,7 +2447,15 @@ function LearningCompanionPanel({
           </div>
         </div>
 
-        <div className={studyToolsOpen ? "min-h-0 xl:overflow-y-auto xl:p-4" : "overflow-y-auto p-4"}>
+        <div
+          className={
+            studyToolsOpen
+              ? "min-h-0 xl:overflow-y-auto xl:p-4"
+              : activeView === "ai"
+                ? "min-h-0 overflow-hidden p-4"
+                : "overflow-y-auto p-4"
+          }
+        >
           {studyToolsOpen ? (
             <StudyToolsPanel
               locale={locale}
@@ -2481,36 +2476,44 @@ function LearningCompanionPanel({
           ) : null}
 
           {!studyToolsOpen && activeView === "ai" ? (
-          <div>
-            <div className="flex gap-3">
-              <span className="grid size-10 shrink-0 place-items-center rounded-full bg-[#dbeafe] text-[#1f6feb]">
-                <Robot size={22} weight="duotone" />
-              </span>
-              <div className="rounded-xl bg-[#f0f1f7] px-4 py-3 text-sm leading-6 text-[#303650]">
-                <p>{guideCopy.greeting}</p>
-                <p className="mt-2 text-xs leading-5 text-[#68708a]">{guideCopy.contextHint}</p>
+            <div className="flex h-full min-h-0 flex-col">
+              <div className="flex gap-3">
+                <span className="grid size-10 shrink-0 place-items-center rounded-full bg-[#dbeafe] text-[#1f6feb]">
+                  <Robot size={22} weight="duotone" />
+                </span>
+                <div className="rounded-xl bg-[#f0f1f7] px-4 py-3 text-sm leading-6 text-[#303650]">
+                  <p>{guideCopy.greeting}</p>
+                  <p className="mt-2 text-xs leading-5 text-[#68708a]">
+                    {guideCopy.contextHint}
+                  </p>
+                </div>
               </div>
-            </div>
 
-            <div className="mt-4 grid gap-2">
-              {guideCopy.prompts.map((prompt) => (
-                <button
-                  key={prompt}
-                  type="button"
-                  onClick={() => {
-                    onGuideDraftChange(prompt);
-                    setGuideError("");
-                    guideInputRef.current?.focus();
-                  }}
-                  className="w-fit rounded-lg border border-[#dfe4ef] bg-white px-4 py-2 text-left text-sm font-medium text-[#444b66] shadow-[0_4px_12px_rgba(46,58,91,0.04)]"
-                >
-                  {prompt}
-                </button>
-              ))}
-            </div>
+              <div className="mt-4 grid gap-2">
+                {guideCopy.prompts.map((prompt) => (
+                  <button
+                    key={prompt}
+                    type="button"
+                    onClick={() => {
+                      onGuideDraftChange(prompt);
+                      setGuideError("");
+                      guideInputRef.current?.focus();
+                    }}
+                    className="w-fit rounded-lg border border-[#dfe4ef] bg-white px-4 py-2 text-left text-sm font-medium text-[#444b66] shadow-[0_4px_12px_rgba(46,58,91,0.04)]"
+                  >
+                    {prompt}
+                  </button>
+                ))}
+              </div>
 
-            {guideMessages.length > 0 ? (
-              <div className="mt-4 space-y-2" aria-live="polite">
+              <div
+                ref={guideTranscriptRef}
+                role="log"
+                tabIndex={0}
+                aria-label={locale === "zh-CN" ? "智能导学对话" : "AI guide conversation"}
+                aria-live="polite"
+                className="mt-4 min-h-0 flex-1 space-y-2 overflow-y-auto pr-1 outline-none focus-visible:ring-2 focus-visible:ring-[#1f6feb]"
+              >
                 {guideMessages.map((message) => (
                   <div
                     key={message.id}
@@ -2536,9 +2539,8 @@ function LearningCompanionPanel({
                   </div>
                 ))}
               </div>
-            ) : null}
 
-            <div className="mt-5 grid grid-cols-3 gap-2">
+              <div className="mt-5 grid shrink-0 grid-cols-3 gap-2">
               {guideCopy.agentCards.map((agent) => {
                 const Icon = agent.icon;
                 const active = activeGuideAgentId === agent.id;
@@ -2570,12 +2572,12 @@ function LearningCompanionPanel({
                   </button>
                 );
               })}
-            </div>
+              </div>
 
-            <form
-              onSubmit={handleGuideSend}
-              className="mt-4 rounded-xl border border-[#dfe4ef] bg-white p-3 shadow-[0_8px_18px_rgba(46,58,91,0.05)]"
-            >
+              <form
+                onSubmit={handleGuideSend}
+                className="mt-4 shrink-0 rounded-xl border border-[#dfe4ef] bg-white p-3 shadow-[0_8px_18px_rgba(46,58,91,0.05)]"
+              >
               <div className="flex items-center gap-2">
                 <input
                   ref={guideInputRef}
@@ -2598,11 +2600,14 @@ function LearningCompanionPanel({
                   <PaperPlaneTilt size={18} weight="fill" />
                 </button>
               </div>
-              {guideError ? (
-                <p className="mt-2 text-xs font-medium text-[var(--danger)]">{guideError}</p>
-              ) : null}
-            </form>
-          </div>
+              <p
+                aria-live="polite"
+                className="mt-2 min-h-4 text-xs font-medium text-[var(--danger)]"
+              >
+                {guideError}
+              </p>
+              </form>
+            </div>
           ) : null}
 
           {!studyToolsOpen && activeView === "subtitles" ? (

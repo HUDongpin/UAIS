@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import LearningRoutePage from "@/app/learning/page";
@@ -291,7 +291,7 @@ describe("LearningPage", () => {
     });
   });
 
-  it("sends a question from the AI guide panel", () => {
+  it("keeps the learner question visible without a premature AI bubble", () => {
     vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => {})));
     render(<LearningPage />);
 
@@ -302,9 +302,84 @@ describe("LearningPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "发送" }));
 
     expect(screen.getByText("什么是导数？")).toBeTruthy();
-    expect(screen.getByText(/智能导学已收到/)).toBeTruthy();
+    expect(screen.queryByText(/智能导学已收到/)).toBeNull();
     expect(screen.getAllByText(/大学研究方法/).length).toBeGreaterThan(0);
     expect(input.value).toBe("");
+  });
+
+  it("keeps a failed AI request out of the assistant transcript without shifting the form", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL) =>
+        String(input) === "/api/learning/ai-guide"
+          ? Promise.resolve(
+              Response.json(
+                { error: "DEEPSEEK_API_KEY is required for learning multi-agent AI guide." },
+                { status: 503 },
+              ),
+            )
+          : new Promise<Response>(() => {}),
+      ),
+    );
+    render(<LearningPage />);
+
+    const question = "为什么梯度下降会失败？";
+    const input = screen.getByRole("textbox", { name: "向智能助教提问" });
+    const sendButton = screen.getByRole("button", { name: "发送" });
+    const form = input.closest("form");
+    if (!form) {
+      throw new Error("AI guide form not found.");
+    }
+    const initialLayoutBlockCount = form.childElementCount;
+
+    fireEvent.change(input, { target: { value: question } });
+    fireEvent.click(sendButton);
+
+    await waitFor(() => expect(sendButton.hasAttribute("disabled")).toBe(false));
+
+    const transcript = screen.getByRole("log", { name: "智能导学对话" });
+    const agentRail = screen.getByRole("button", { name: /学习顾问/ }).parentElement;
+    expect(transcript).toBeTruthy();
+    expect(transcript.getAttribute("tabindex")).toBe("0");
+    expect(transcript.textContent).toBe(question);
+    expect(transcript.contains(form)).toBe(false);
+    expect(transcript.className).toContain("flex-1");
+    expect(transcript.className).toContain("overflow-y-auto");
+    expect(agentRail?.className).toContain("shrink-0");
+    expect(form.className).toContain("shrink-0");
+    expect(form.childElementCount).toBe(initialLayoutBlockCount);
+    expect(screen.getByText("智能服务暂时不可用，已保留你的问题。")).toBeTruthy();
+  });
+
+  it("scrolls the transcript to the real answer after it arrives", async () => {
+    let resolveGuideRequest: ((response: Response) => void) | undefined;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL) =>
+        String(input) === "/api/learning/ai-guide"
+          ? new Promise<Response>((resolve) => {
+              resolveGuideRequest = resolve;
+            })
+          : new Promise<Response>(() => {}),
+      ),
+    );
+    render(<LearningPage />);
+
+    const transcript = screen.getByRole("log", { name: "智能导学对话" });
+    Object.defineProperty(transcript, "scrollHeight", { configurable: true, value: 640 });
+    const input = screen.getByRole("textbox", { name: "向智能助教提问" });
+    fireEvent.change(input, { target: { value: "请解释学习率" } });
+    fireEvent.click(screen.getByRole("button", { name: "发送" }));
+
+    await waitFor(() => expect(transcript.scrollTop).toBe(640));
+    resolveGuideRequest?.(
+      Response.json({
+        message: { text: "学习率控制每一步的更新幅度。" },
+      }),
+    );
+
+    await screen.findByText("学习率控制每一步的更新幅度。");
+    expect(transcript.scrollTop).toBe(640);
   });
 
   it("calls the learning AI guide API when an assistant card is selected", async () => {
