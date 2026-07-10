@@ -566,12 +566,15 @@ describe("enterprise closed-loop regression guards", () => {
     );
   });
 
-  it("keeps app auth sessions production-gated by UAIS_DEPLOYMENT_ENV", () => {
+  it("keeps app auth sessions deployment-gated by UAIS_DEPLOYMENT_ENV", () => {
     const appSession = source("src/lib/server/uais-app-session.ts");
     const appAuthProvider = source("src/lib/server/uais-app-auth-provider.ts");
     const appSessionRoute = source("src/app/api/auth/app-session/route.ts");
     const productionRuntimeSection = appSession.slice(
       appSession.indexOf("export function isUaisAppProductionRuntime"),
+    );
+    const deployedRuntimeSection = appSession.slice(
+      appSession.indexOf("export function isUaisAppDeployedRuntime"),
     );
 
     expect(productionRuntimeSection).toContain("env.VERCEL_ENV === \"production\"");
@@ -579,7 +582,11 @@ describe("enterprise closed-loop regression guards", () => {
     expect(productionRuntimeSection).toContain(
       "env.UAIS_DEPLOYMENT_ENV === \"production\"",
     );
-    expect(appSession).toContain("return isUaisAppProductionRuntime(env)");
+    expect(deployedRuntimeSection).toContain("isUaisAppProductionRuntime(env)");
+    expect(deployedRuntimeSection).toContain("env.VERCEL_ENV === \"preview\"");
+    expect(deployedRuntimeSection).toContain("deploymentEnv === \"preview\"");
+    expect(deployedRuntimeSection).toContain("deploymentEnv === \"staging\"");
+    expect(appSession).toContain("return isUaisAppDeployedRuntime(env)");
     expect(appAuthProvider).toContain("isUaisAppProductionRuntime(input.env)");
     expect(appSessionRoute).toContain("const isProductionRuntime = isUaisAppProductionRuntime(env)");
     expect(appSessionRoute).toContain("secure: isProductionRuntime");
