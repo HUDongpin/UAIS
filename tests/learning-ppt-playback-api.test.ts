@@ -471,6 +471,150 @@ describe("student PPT playback API", () => {
     }
   });
 
+  it("restores the published Kang Xia PPT for the local demo teacher without seeded course ownership", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "uais-learning-ppt-local-demo-"));
+    const handler = createLearningPptPlaybackManifestGetHandler({
+      env: {
+        NODE_ENV: "development",
+        UAIS_APP_AUTH_PROVIDER: "local-demo",
+        UAIS_APP_SESSION_SIGNING_SECRET: appSessionSigningSecret,
+        UAIS_TEACHING_COURSES_DATA_DIR: dataDir,
+      },
+    });
+
+    try {
+      const response = await handler(
+        new Request("http://localhost/api/learning/ppt-playback/elementary-math-research", {
+          headers: { cookie: createTeacherCookie("Phoebe") },
+        }),
+        { params: { courseId: "elementary-math-research" } },
+      );
+      const body = await response.json();
+
+      expect(response.status, JSON.stringify(body)).toBe(200);
+      expect(body.access).toEqual(
+        expect.objectContaining({
+          status: "authorized",
+          reasonCode: "teacher-demo-published-playback-approved",
+          actor: { actorId: "Phoebe", role: "teacher" },
+        }),
+      );
+      expect(body.playback).toEqual(
+        expect.objectContaining({
+          courseId: "elementary-math-research",
+          teacherName: "康霞博士",
+          voiceLabel: "康霞博士克隆声音",
+          slideCount: 19,
+        }),
+      );
+    } finally {
+      await rm(dataDir, { recursive: true, force: true });
+    }
+  });
+
+  it("restores the published Kang Xia PPT for the explicitly opted-in Production demo teacher", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "uais-learning-ppt-production-demo-"));
+    const handler = createLearningPptPlaybackManifestGetHandler({
+      env: {
+        NODE_ENV: "production",
+        UAIS_APP_AUTH_PROVIDER: "local-demo",
+        UAIS_APP_ALLOW_PRODUCTION_DEMO_AUTH: "true",
+        UAIS_APP_SESSION_SIGNING_SECRET: appSessionSigningSecret,
+        UAIS_TEACHING_COURSES_DATA_DIR: dataDir,
+      },
+    });
+
+    try {
+      const response = await handler(
+        new Request("https://www.uais.top/api/learning/ppt-playback/elementary-math-research", {
+          headers: { cookie: createTeacherCookie("Phoebe") },
+        }),
+        { params: { courseId: "elementary-math-research" } },
+      );
+      const body = await response.json();
+
+      expect(response.status, JSON.stringify(body)).toBe(200);
+      expect(body.access).toEqual(
+        expect.objectContaining({
+          status: "authorized",
+          reasonCode: "teacher-demo-published-playback-approved",
+          actor: { actorId: "Phoebe", role: "teacher" },
+        }),
+      );
+      expect(body.playback).toEqual(
+        expect.objectContaining({
+          courseId: "elementary-math-research",
+          teacherName: "康霞博士",
+          slideCount: 19,
+        }),
+      );
+    } finally {
+      await rm(dataDir, { recursive: true, force: true });
+    }
+  });
+
+  it("does not enable Production demo playback without the explicit opt-in", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "uais-learning-ppt-production-blocked-"));
+    const handler = createLearningPptPlaybackManifestGetHandler({
+      env: {
+        NODE_ENV: "production",
+        UAIS_APP_AUTH_PROVIDER: "local-demo",
+        UAIS_APP_SESSION_SIGNING_SECRET: appSessionSigningSecret,
+        UAIS_TEACHING_COURSES_DATA_DIR: dataDir,
+      },
+    });
+
+    try {
+      const response = await handler(
+        new Request("https://www.uais.top/api/learning/ppt-playback/elementary-math-research", {
+          headers: { cookie: createTeacherCookie("Phoebe") },
+        }),
+        { params: { courseId: "elementary-math-research" } },
+      );
+      const body = await response.json();
+
+      expect(response.status).toBe(503);
+      expect(body).not.toHaveProperty("playback");
+    } finally {
+      await rm(dataDir, { recursive: true, force: true });
+    }
+  });
+
+  it("does not enable demo playback on a deployed preview even when the Production opt-in name is present", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "uais-learning-ppt-preview-blocked-"));
+    const handler = createLearningPptPlaybackManifestGetHandler({
+      env: {
+        NODE_ENV: "development",
+        UAIS_DEPLOYMENT_ENV: "preview",
+        UAIS_APP_AUTH_PROVIDER: "local-demo",
+        UAIS_APP_ALLOW_PRODUCTION_DEMO_AUTH: "true",
+        UAIS_APP_SESSION_SIGNING_SECRET: appSessionSigningSecret,
+        UAIS_TEACHING_COURSES_DATA_DIR: dataDir,
+      },
+    });
+
+    try {
+      const response = await handler(
+        new Request("https://preview.uais.top/api/learning/ppt-playback/elementary-math-research", {
+          headers: { cookie: createTeacherCookie("Phoebe") },
+        }),
+        { params: { courseId: "elementary-math-research" } },
+      );
+      const body = await response.json();
+
+      expect(response.status).toBe(403);
+      expect(body.access).toEqual(
+        expect.objectContaining({
+          status: "denied",
+          reasonCode: "teacher-course-ownership-required",
+        }),
+      );
+      expect(body).not.toHaveProperty("playback");
+    } finally {
+      await rm(dataDir, { recursive: true, force: true });
+    }
+  });
+
   it("blocks a signed teacher who does not own the Kang Xia playback course", async () => {
     const fixture = await createApprovedLearningPptPlaybackFixture();
     const handler = createLearningPptPlaybackManifestGetHandler({

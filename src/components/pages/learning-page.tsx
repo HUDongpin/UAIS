@@ -87,6 +87,8 @@ type StudyToolView = "notes" | "checkpoint" | "concepts";
 
 type CompanionView = PrimaryCompanionView | StudyToolView;
 
+type PublishedPlaybackError = "auth-required" | "access-denied" | "unavailable";
+
 type AiGuideMessage = {
   id: string;
   kind: "user" | "assistant";
@@ -878,6 +880,35 @@ function getValidatedCourseId(courseId: string | undefined) {
     : fallbackCourseId;
 }
 
+function getPublishedPlaybackError(status: number): PublishedPlaybackError {
+  if (status === 401) {
+    return "auth-required";
+  }
+  if (status === 403) {
+    return "access-denied";
+  }
+  return "unavailable";
+}
+
+function getPublishedPlaybackErrorLabel(
+  locale: Locale,
+  error: PublishedPlaybackError,
+) {
+  if (error === "auth-required") {
+    return locale === "zh-CN"
+      ? "请重新登录后访问数学课件"
+      : "Sign in again to access the mathematics PPT";
+  }
+  if (error === "access-denied") {
+    return locale === "zh-CN"
+      ? "当前账号无权访问此数学课件"
+      : "This account cannot access the mathematics PPT";
+  }
+  return locale === "zh-CN"
+    ? "数学课件资源暂时不可用"
+    : "Mathematics PPT resources are temporarily unavailable";
+}
+
 function getStringValue(value: unknown) {
   return typeof value === "string" && value.trim().length > 0 ? value : undefined;
 }
@@ -930,7 +961,8 @@ export function LearningPage({ initialCourseId, initialClassId }: LearningPagePr
     useState<LearningPptPlaybackManifest>();
   const [approvedInviteLearningContext, setApprovedInviteLearningContext] =
     useState<ApprovedInviteLearningContext>();
-  const [publishedPlaybackUnavailable, setPublishedPlaybackUnavailable] = useState(false);
+  const [publishedPlaybackError, setPublishedPlaybackError] =
+    useState<PublishedPlaybackError>();
   const [activePublishedSlideIndex, setActivePublishedSlideIndex] = useState(0);
   const [activeCompanionView, setActiveCompanionView] = useState<CompanionView>("ai");
   const [studyToolsOpen, setStudyToolsOpen] = useState(false);
@@ -1031,12 +1063,16 @@ export function LearningPage({ initialCourseId, initialClassId }: LearningPagePr
 
     async function loadPublishedPlayback() {
       try {
-        setPublishedPlaybackUnavailable(false);
+        setPublishedPlaybackError(undefined);
         const response = await fetch(
           `/api/learning/ppt-playback/${publishedLearningPptCourseId}?locale=${encodeURIComponent(locale)}`,
         );
         if (!response.ok) {
-          throw new Error("Learning PPT playback manifest is not ready.");
+          if (!cancelled) {
+            setPublishedPlayback(undefined);
+            setPublishedPlaybackError(getPublishedPlaybackError(response.status));
+          }
+          return;
         }
         const body = (await response.json()) as {
           playback?: LearningPptPlaybackManifest;
@@ -1044,10 +1080,17 @@ export function LearningPage({ initialCourseId, initialClassId }: LearningPagePr
         if (!cancelled && body.playback && body.playback.slides.length > 0) {
           setPublishedPlayback(body.playback);
           setActivePublishedSlideIndex(0);
+          setPublishedPlaybackError(undefined);
+          return;
+        }
+        if (!cancelled) {
+          setPublishedPlayback(undefined);
+          setPublishedPlaybackError("unavailable");
         }
       } catch {
         if (!cancelled) {
-          setPublishedPlaybackUnavailable(true);
+          setPublishedPlayback(undefined);
+          setPublishedPlaybackError("unavailable");
         }
       }
     }
@@ -1119,7 +1162,7 @@ export function LearningPage({ initialCourseId, initialClassId }: LearningPagePr
             locale={locale}
             publishedPlayback={publishedPlayback}
             activePublishedSlide={activePublishedSlide}
-            publishedPlaybackUnavailable={publishedPlaybackUnavailable}
+            publishedPlaybackError={publishedPlaybackError}
             conceptCount={studyContent.concepts.length}
             onStudyAction={handleStudyAction}
           />
@@ -1256,14 +1299,14 @@ function PptStage({
   locale,
   publishedPlayback,
   activePublishedSlide,
-  publishedPlaybackUnavailable,
+  publishedPlaybackError,
   conceptCount,
   onStudyAction,
 }: {
   locale: Locale;
   publishedPlayback?: LearningPptPlaybackManifest;
   activePublishedSlide?: LearningPptPlaybackSlide;
-  publishedPlaybackUnavailable: boolean;
+  publishedPlaybackError?: PublishedPlaybackError;
   conceptCount: number;
   onStudyAction: (action: StudyAction) => void;
 }) {
@@ -1427,9 +1470,17 @@ function PptStage({
   return (
     <section className="overflow-hidden rounded-2xl border border-[#e2e6f0] bg-white shadow-[0_18px_44px_rgba(46,58,91,0.08)]">
       <div className="relative min-h-[470px] p-7 lg:p-9 xl:min-h-[555px]">
-        {publishedPlaybackUnavailable ? (
-          <div className="absolute right-7 top-7 rounded-full border border-[#bfdbfe] bg-[#eff6ff] px-3 py-1 text-sm font-semibold text-[#1f6feb]">
-            {locale === "zh-CN" ? "配音资源准备中" : "Narration assets preparing"}
+        {publishedPlaybackError ? (
+          <div
+            data-uais-learning-ppt-error={publishedPlaybackError}
+            className={[
+              "absolute right-7 top-7 rounded-full border px-3 py-1 text-sm font-semibold",
+              publishedPlaybackError === "unavailable"
+                ? "border-[#bfdbfe] bg-[#eff6ff] text-[#1f6feb]"
+                : "border-[#fed7aa] bg-[#fff7ed] text-[#c2410c]",
+            ].join(" ")}
+          >
+            {getPublishedPlaybackErrorLabel(locale, publishedPlaybackError)}
           </div>
         ) : null}
         <div className="grid gap-6 lg:grid-cols-[minmax(0,0.92fr)_minmax(310px,0.9fr)] lg:items-center">

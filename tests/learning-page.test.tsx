@@ -78,6 +78,29 @@ describe("LearningPage", () => {
     expect(screen.queryByText("当前课程：大学研究方法")).toBeNull();
   });
 
+  it("explains a published PPT access denial instead of reporting that narration is preparing", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json(
+          {
+            error: "UAIS learning PPT playback requires teaching course ownership.",
+            access: {
+              status: "denied",
+              reasonCode: "teacher-course-ownership-required",
+            },
+          },
+          { status: 403 },
+        ),
+      ),
+    );
+
+    render(<LearningPage />);
+
+    expect(await screen.findByText("当前账号无权访问此数学课件")).toBeTruthy();
+    expect(screen.queryByText("配音资源准备中")).toBeNull();
+  });
+
   it("hydrates an approved invite-code course context when opened from the student dashboard", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       if (String(input) === "/api/teaching/courses") {

@@ -5,7 +5,12 @@ import {
   resolveTeachingCourseManagementDataDir,
   TeachingCourseManagementStoreError,
 } from "@/lib/server/teaching-course-management-store";
-import { getUaisAppSessionUserFromCookieString } from "@/lib/server/uais-app-session";
+import { findPublishedPlaybackByCourseId } from "@/lib/learning/ppt-playback-catalog";
+import { resolveUaisAppAuthProviderContract } from "@/lib/server/uais-app-auth-provider";
+import {
+  getUaisAppSessionUserFromCookieString,
+  isUaisAppDeployedRuntime,
+} from "@/lib/server/uais-app-session";
 
 type LearningPptPlaybackAccessReason =
   | "student-session-required"
@@ -36,7 +41,9 @@ export type LearningPptPlaybackAccessDecision =
     }
   | {
       status: "authorized";
-      reasonCode: "teacher-course-ownership-approved";
+      reasonCode:
+        | "teacher-course-ownership-approved"
+        | "teacher-demo-published-playback-approved";
       actor: LearningPptPlaybackActor;
       resource: LearningPptPlaybackAccessResource;
       responsibleSession: "S12";
@@ -73,6 +80,24 @@ export async function authorizeLearningPptPlaybackAccess(input: {
   };
   if (actor.role === "admin") {
     return createDeniedAccess("student-or-teacher-role-required", resource, actor);
+  }
+
+  if (
+    actor.role === "teacher" &&
+    isDemoPublishedTeacherAccess({
+      actor,
+      courseId: input.courseId,
+      env: input.env,
+    })
+  ) {
+    return {
+      status: "authorized",
+      reasonCode: "teacher-demo-published-playback-approved",
+      actor,
+      resource,
+      responsibleSession: "S12",
+      redaction: createRedaction(),
+    };
   }
 
   const repository = createUaisTeachingCourseManagementRepository({
@@ -195,6 +220,29 @@ function createDeniedAccess(
     responsibleSession: "S12",
     redaction: createRedaction(),
   };
+}
+
+function isDemoPublishedTeacherAccess(input: {
+  actor: LearningPptPlaybackActor;
+  courseId: string;
+  env: Record<string, string | undefined>;
+}) {
+  if (
+    input.actor.actorId !== "Phoebe" ||
+    !findPublishedPlaybackByCourseId(input.courseId)
+  ) {
+    return false;
+  }
+
+  const authProviderContract = resolveUaisAppAuthProviderContract({ env: input.env });
+  if (authProviderContract.providerKind !== "local-demo") {
+    return false;
+  }
+
+  return (
+    !isUaisAppDeployedRuntime(input.env) ||
+    authProviderContract.demoProductionAccess?.enabled === true
+  );
 }
 
 function createAccessDeniedMessage(reasonCode: LearningPptPlaybackAccessReason) {
