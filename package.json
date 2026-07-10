@@ -8,16 +8,21 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
+    "test:critical": "vitest run tests/critical-user-flows-backend.test.ts tests/critical-user-flow-matrix.test.ts tests/app-proxy-auth.test.ts tests/uais-app-session.test.ts tests/teaching-course-management-api.test.ts tests/learner-profile.test.ts",
+    "db:migrate": "node scripts/apply-core-migrations.mjs",
     "release:dirty-map": "node scripts/release-dirty-map.mjs",
     "release:clean-check": "node scripts/release-clean-check.mjs",
     "release:package-gate": "node scripts/enterprise-runthrough-package-gate.mjs",
     "ai:provider:smoke": "node scripts/ai-provider-smoke.mjs --dry-run"
   },
   "dependencies": {
-    "@langchain/langgraph": "^1.4.4",
+    "@langchain/langgraph": "^1.4.7",
     "@phosphor-icons/react": "^2.1.10",
+    "@sentry/nextjs": "^10.64.0",
     "@vercel/analytics": "^2.0.1",
+    "drizzle-orm": "^0.45.2",
     "next": "16.2.9",
+    "postgres": "^3.4.9",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "ws": "^8.21.0"

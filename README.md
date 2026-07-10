@@ -44,6 +44,51 @@ without changing the chatroom UI.
 ```bash
 npm run dev
 npm run test
+npm run test:critical
 npm run lint
 npm run build
+npm run db:migrate
 ```
+
+## Operator Docs
+
+- `CONTRIBUTING.md` - small-team setup, coding, review, and safety rules.
+- `SCOPE.md` - B-07 core POC boundary and parked experimental surface.
+- `docs/architecture-map.md` - current and near-term architecture map.
+- `docs/core-schema-design.md` - B-10 core database schema draft and migration
+  order.
+- `docs/adaptive-recommendations.md` - B-18 deterministic recommendation rules
+  and privacy boundary.
+- `docs/learner-profiles.md` - B-17 learner-profile projection from persisted
+  xAPI evidence.
+- `docs/env-surface.md` - B-21 active, optional, and quarantined env surface.
+- `docs/API.md` - core POC API contracts only.
+- `docs/privacy-baseline.md` - B-22 minimum student PII, role access,
+  retention, and production stop conditions.
+- `docs/performance-accessibility-baseline.md` - B-19/B-20 dynamic-shell,
+  route-title, and remaining Lighthouse/a11y audit contract.
+- `docs/runbooks/observability.md` - B-05 Sentry, uptime, and health-check
+  operating contract.
+- `docs/runbooks/staging-preview.md` - B-09 preview, staging, and production
+  promotion contract.
+- `docs/runbooks/pre-deploy-checklist.md` - checks before promoting a deployment.
+- `docs/runbooks/production-rollback.md` - two-minute rollback procedure.
+
+## Database
+
+B-11 now has a provider-neutral Drizzle/Postgres foundation:
+`src/lib/db/schema.ts`, `migrations/0001_core_poc.sql`, and
+`npm run db:migrate`. The runner requires a server-only
+`UAIS_CORE_DATABASE_URL` or compatible Postgres URL and prints only redacted
+status. `UAIS_TEACHING_COURSE_MANAGEMENT_BACKEND=postgres` selects the
+transitional teaching-course Postgres repository. Live provisioning,
+credentials, staging migration proof, and normalized-table read/write cutover
+are still deployment-owner work.
+
+## CI Gate
+
+`.github/workflows/critical-flow.yml` runs the current B-16 gate for pull
+requests and pushes to `main`: install, lint, `npm run test:critical`,
+advisory-governance checks, and a compile-only Next route build. Repository
+branch protection still needs to require this workflow before it can block
+merges on GitHub.

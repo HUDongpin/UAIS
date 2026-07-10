@@ -1,0 +1,38 @@
+name: UAIS Critical Flow
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  critical-flow:
+    name: Critical flow gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Critical journeys
+        run: npm run test:critical
+
+      - name: Advisory governance checks
+        run: npm run test -- tests/critical-flow-gate-script.test.ts tests/advisory-recovery-governance.test.ts tests/core-database-foundation.test.ts tests/core-schema-design.test.ts tests/env-surface.test.ts
+
+      - name: Compile app routes
+        run: NEXT_TELEMETRY_DISABLED=1 ./node_modules/.bin/next build --debug --experimental-app-only --experimental-build-mode compile
