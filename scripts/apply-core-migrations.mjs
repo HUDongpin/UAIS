@@ -2,6 +2,8 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { cwd, env, exit } from "node:process";
+import { PostgresSaver } from "@langchain/langgraph-checkpoint-postgres";
+import { PostgresStore } from "@langchain/langgraph-checkpoint-postgres/store";
 import postgres from "postgres";
 
 const migrations = [
@@ -32,6 +34,13 @@ if (!databaseUrl) {
 const sql = postgres(databaseUrl.value, {
   max: 1,
   prepare: false,
+});
+const checkpointer = PostgresSaver.fromConnString(databaseUrl.value, {
+  schema: "uais_langgraph",
+});
+const store = PostgresStore.fromConnString(databaseUrl.value, {
+  schema: "uais_langgraph",
+  ensureTables: false,
 });
 
 try {
@@ -65,6 +74,8 @@ try {
       `;
     }
   });
+  await checkpointer.setup();
+  await store.setup();
 
   console.log(
     JSON.stringify({
@@ -72,9 +83,17 @@ try {
       status: "applied",
       selectedEnvName: databaseUrl.name,
       migrations: migrations.map((migration) => migration.version),
+      langGraphPersistence: {
+        checkpointer: "PostgresSaver",
+        store: "PostgresStore",
+        schema: "uais_langgraph",
+        status: "applied",
+      },
       valueRedacted: true,
     }),
   );
 } finally {
+  await checkpointer.end();
+  await store.stop();
   await sql.end({ timeout: 5 });
 }

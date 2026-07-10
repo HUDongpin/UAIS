@@ -77,6 +77,10 @@ export function createUaisCoreDatabase(input: {
   };
 }
 
+export function readUaisCoreDatabaseUrl(env: Record<string, string | undefined>) {
+  return readSelectedDatabaseUrl(env);
+}
+
 function readSelectedDatabaseEnvName(
   env: Record<string, string | undefined>,
 ): UaisCoreDatabaseEnvName | undefined {

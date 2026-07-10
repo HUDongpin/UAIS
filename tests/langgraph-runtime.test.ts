@@ -326,6 +326,37 @@ describe("UAIS LangGraph production runtime foundation", () => {
     );
   });
 
+  it("creates managed Postgres persistence adapters from the UAIS core database", () => {
+    const runtime = createUaisLangGraphRuntime({
+      env: {
+        NODE_ENV: "production",
+        UAIS_LANGGRAPH_PERSISTENCE_BACKEND: "postgres",
+        UAIS_CORE_DATABASE_URL: "postgresql://uais:test@example.test/uais",
+      },
+    });
+
+    expect(runtime.getPersistenceStatus()).toEqual({
+      mode: "external",
+      checkpointer: "PostgresSaver",
+      store: "PostgresStore",
+    });
+  });
+
+  it("reuses managed Postgres persistence pools across runtime instances", () => {
+    const env = {
+      NODE_ENV: "production",
+      UAIS_LANGGRAPH_PERSISTENCE_BACKEND: "postgres",
+      UAIS_CORE_DATABASE_URL: "postgresql://uais:test@example.test/uais-pool-reuse",
+    };
+    const firstRuntime = createUaisLangGraphRuntime({ env });
+    const secondRuntime = createUaisLangGraphRuntime({ env });
+    const firstOptions = firstRuntime.createCompileOptions();
+    const secondOptions = secondRuntime.createCompileOptions();
+
+    expect(secondOptions.checkpointer).toBe(firstOptions.checkpointer);
+    expect(secondOptions.store).toBe(firstOptions.store);
+  });
+
   it("rejects graph updates that contain non-display-safe data", async () => {
     const runtime = createUaisLangGraphRuntime({
       checkpointer: createUaisLangGraphMemoryCheckpointer(),

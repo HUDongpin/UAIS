@@ -256,12 +256,15 @@ not store provider secrets, raw cookies, local paths, or raw student content.
 - Migration manifest: `src/lib/db/migrations.ts`.
 - SQL migration: `migrations/0001_core_poc.sql`.
 - Migration runner: `npm run db:migrate`.
+- Vercel build gate: `npm run vercel-build` applies migrations before `next build`.
+- Production LangGraph persistence: official `PostgresSaver` and
+  `PostgresStore` in the isolated `uais_langgraph` schema.
 
 The migration runner requires `UAIS_CORE_DATABASE_URL`, `DATABASE_URL`, or
-`POSTGRES_URL`. The teaching-course route can select the transitional adapter
-with `UAIS_TEACHING_COURSE_MANAGEMENT_BACKEND=postgres`, but it must not be run
-against production until the owner approves the managed Postgres provider,
-backup policy, and rollback target.
+`POSTGRES_URL`. The teaching-course route selects the managed adapter with
+`UAIS_TEACHING_COURSE_MANAGEMENT_BACKEND=postgres`; production LangGraph uses
+the same database with `UAIS_LANGGRAPH_PERSISTENCE_BACKEND=postgres`. The
+runner also applies the official LangGraph checkpointer/store migrations.
 
 ## Migration Order
 

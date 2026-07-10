@@ -85,6 +85,15 @@ export const uaisEnvSurfaceCatalog = [
     purpose: "Managed Postgres connection URL for the core UAIS database adapter.",
   },
   {
+    name: "UAIS_LANGGRAPH_PERSISTENCE_BACKEND",
+    tier: "active-production",
+    owner: "S19/S12",
+    valueKind: "storage-backend",
+    serverOnly: true,
+    productionDefault: "required",
+    purpose: "Selects managed Postgres persistence for production LangGraph checkpoints and store.",
+  },
+  {
     name: "UAIS_LRS_ENDPOINT",
     tier: "active-production",
     owner: "S19/S12",

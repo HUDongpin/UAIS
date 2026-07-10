@@ -108,13 +108,32 @@ describe("B-11 core database foundation", () => {
       dependencies?: Record<string, string>;
       scripts?: Record<string, string>;
     };
+    const vercelConfig = JSON.parse(readProjectFile("vercel.json")) as {
+      buildCommand?: string;
+    };
 
     expect(packageJson.dependencies).toMatchObject({
+      "@langchain/langgraph-checkpoint-postgres": expect.any(String),
       "drizzle-orm": expect.any(String),
       postgres: expect.any(String),
     });
     expect(packageJson.scripts?.["db:migrate"]).toBe("node scripts/apply-core-migrations.mjs");
+    expect(packageJson.scripts?.["vercel-build"]).toBe("npm run db:migrate && next build");
+    expect(vercelConfig.buildCommand).toBe("npm run vercel-build");
+    const migrationScript = readProjectFile("scripts/apply-core-migrations.mjs");
+    expect(migrationScript).toContain("PostgresSaver.fromConnString");
+    expect(migrationScript).toContain("PostgresStore.fromConnString");
+    expect(migrationScript).toContain("await checkpointer.setup()");
+    expect(migrationScript).toContain("await store.setup()");
+    expect(migrationScript).toContain('schema: "uais_langgraph"');
     expect(readProjectFile(".env.local.example")).toContain("UAIS_CORE_DATABASE_URL=");
     expect(readProjectFile("docs/core-schema-design.md")).toContain("migrations/0001_core_poc.sql");
+  });
+
+  it("documents the provisioned Neon production path and migration-gated Vercel build", () => {
+    const readme = readProjectFile("README.md");
+
+    expect(readme).toContain("dedicated Neon Launch resource is provisioned");
+    expect(readme).toContain("`npm run vercel-build` applies");
   });
 });

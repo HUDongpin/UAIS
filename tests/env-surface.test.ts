@@ -30,12 +30,13 @@ describe("B-21 environment surface", () => {
         nextPublicSecretsForbidden: true,
       },
     });
-    expect(summary.counts["active-production"]).toBeLessThanOrEqual(20);
+    expect(summary.counts["active-production"]).toBeLessThanOrEqual(21);
     expect(summary.activeProductionNames).toEqual(
       expect.arrayContaining([
         "UAIS_APP_SESSION_SIGNING_SECRET",
         "UAIS_APP_AUTH_PROVIDER",
         "UAIS_CORE_DATABASE_URL",
+        "UAIS_LANGGRAPH_PERSISTENCE_BACKEND",
         "UAIS_LRS_ENDPOINT",
         "SENTRY_DSN",
         "NEXT_PUBLIC_SENTRY_DSN",

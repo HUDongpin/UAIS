@@ -81,9 +81,13 @@ B-11 now has a provider-neutral Drizzle/Postgres foundation:
 `npm run db:migrate`. The runner requires a server-only
 `UAIS_CORE_DATABASE_URL` or compatible Postgres URL and prints only redacted
 status. `UAIS_TEACHING_COURSE_MANAGEMENT_BACKEND=postgres` selects the
-transitional teaching-course Postgres repository. Live provisioning,
-credentials, staging migration proof, and normalized-table read/write cutover
-are still deployment-owner work.
+transitional teaching-course Postgres repository, while
+`UAIS_LANGGRAPH_PERSISTENCE_BACKEND=postgres` selects the official LangGraph
+Postgres checkpointer and store. The same migration command creates both the
+core schema and the isolated `uais_langgraph` schema; a
+dedicated Neon Launch resource is provisioned for UAIS Production.
+`npm run vercel-build` applies the idempotent migrations before `next build`.
+Credential values remain deployment-owner work and must stay server-only.
 
 ## CI Gate
 

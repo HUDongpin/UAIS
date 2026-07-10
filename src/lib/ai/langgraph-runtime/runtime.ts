@@ -7,6 +7,7 @@ import {
   type Item,
 } from "@langchain/langgraph";
 import { createUaisLangGraphExternalPersistence } from "@/lib/ai/langgraph-runtime/external-persistence";
+import { createUaisLangGraphPostgresPersistence } from "@/lib/ai/langgraph-runtime/postgres-persistence";
 
 export type UaisLangGraphActor = {
   actorId: string;
@@ -136,24 +137,32 @@ export function createUaisLangGraphMemoryCheckpointer() {
 }
 
 export function createUaisLangGraphRuntime(input: CreateRuntimeInput = {}) {
-  const externalPersistence =
+  const env = input.env ?? process.env;
+  const postgresPersistence =
     !input.checkpointer && !input.store && !input.persistence
+      ? createUaisLangGraphPostgresPersistence({ env })
+      : undefined;
+  const externalPersistence =
+    !postgresPersistence && !input.checkpointer && !input.store && !input.persistence
       ? createUaisLangGraphExternalPersistence({
-          env: input.env ?? process.env,
+          env,
           fetch: input.fetch,
         })
       : undefined;
+  const configuredPersistence = postgresPersistence ?? externalPersistence;
   const persistence =
-    input.persistence ?? externalPersistence?.persistence ?? createMemoryPersistenceStatus();
+    input.persistence ?? configuredPersistence?.persistence ?? createMemoryPersistenceStatus();
   assertProductionPersistence({
-    env: input.env ?? process.env,
+    env,
     persistence,
-    hasInjectedCheckpointer: Boolean(input.checkpointer ?? externalPersistence?.checkpointer),
-    hasInjectedStore: Boolean(input.store ?? externalPersistence?.store),
+    hasInjectedCheckpointer: Boolean(input.checkpointer ?? configuredPersistence?.checkpointer),
+    hasInjectedStore: Boolean(input.store ?? configuredPersistence?.store),
   });
   const checkpointer =
-    input.checkpointer ?? externalPersistence?.checkpointer ?? createUaisLangGraphMemoryCheckpointer();
-  const store = input.store ?? externalPersistence?.store ?? new InMemoryStore();
+    input.checkpointer ??
+    configuredPersistence?.checkpointer ??
+    createUaisLangGraphMemoryCheckpointer();
+  const store = input.store ?? configuredPersistence?.store ?? new InMemoryStore();
 
   return {
     getPersistenceStatus(): UaisLangGraphPersistenceStatus {
