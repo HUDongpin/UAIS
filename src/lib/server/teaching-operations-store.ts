@@ -13,10 +13,12 @@ import {
   resolveUaisStorageBackendContract,
 } from "@/lib/ai/storage-backend-contract";
 import { resolveTeachingOperationDataDir } from "./teaching-operation-data-dir";
+import { TeachingOperationStoreError } from "./teaching-operations-error";
 
 // Re-exported so existing consumers importing from this store keep working after
-// the helper was extracted to its own module (Phase 3 decomposition).
+// these were extracted to their own modules (Phase 3 decomposition).
 export { resolveTeachingOperationDataDir };
+export { TeachingOperationStoreError };
 
 export type TeachingOperationActionSlot = "primary" | "secondary";
 
@@ -1159,16 +1161,6 @@ const actionDefinitions: Record<
     ),
   },
 };
-
-export class TeachingOperationStoreError extends Error {
-  status: number;
-
-  constructor(status: number, message: string) {
-    super(message);
-    this.name = "TeachingOperationStoreError";
-    this.status = status;
-  }
-}
 
 export async function executeTeachingOperationAction(
   input: ExecuteTeachingOperationActionInput,
