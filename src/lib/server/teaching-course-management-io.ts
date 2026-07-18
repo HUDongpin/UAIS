@@ -11,12 +11,21 @@ import type {
   TeachingCourseManagementDatabase,
   TeachingCourseManagementRepository,
   TeachingCourseManagementRepositorySnapshot,
+  TeachingCourseManagementStorageDescriptor,
 } from "@/lib/server/teaching-course-management-types";
 
 // Persistence IO for the teaching-course-management store (Phase 3
-// decomposition): data-dir/path resolution, atomic JSON file writes, and the
-// repository snapshot read/write layer. Cycle-free: runtime deps are node:* and
-// the extracted guards + database-normalizer modules; store types are type-only.
+// decomposition): the default local storage descriptor, data-dir/path resolution,
+// atomic JSON file writes, and the repository snapshot read/write layer. Cycle-free:
+// runtime deps are node:* and the extracted guards + database-normalizer modules;
+// store types are type-only.
+
+export const localTeachingCourseManagementStorage: TeachingCourseManagementStorageDescriptor =
+  {
+    recordStoragePolicy: "local-json-teaching-course-management",
+    auditStoragePolicy: "local-json-teaching-course-management-audit-log",
+    storageWritePolicy: "atomic-json-file-replace",
+  };
 
 export async function readTeachingCourseManagementDatabase(input: {
   dataDir?: string;

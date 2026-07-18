@@ -1,7 +1,3 @@
-import { randomUUID } from "node:crypto";
-import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
-import { cwd } from "node:process";
 import {
   createTeachingCourseId,
   isProvisionalTeachingCourseIdForActor,
@@ -106,6 +102,7 @@ import {
   normalizeTeachingCourseManagementDatabase,
 } from "./teaching-course-management-database-normalizer";
 import {
+  localTeachingCourseManagementStorage,
   readTeachingCourseManagementSnapshot,
   resolveTeachingCourseManagementDataDir,
   writeTeachingCourseManagementSnapshot,
@@ -167,11 +164,6 @@ export type {
   TeachingStudentRosterSyncRecord,
 } from "@/lib/server/teaching-course-management-types";
 
-const localTeachingCourseManagementStorage: TeachingCourseManagementStorageDescriptor = {
-  recordStoragePolicy: "local-json-teaching-course-management",
-  auditStoragePolicy: "local-json-teaching-course-management-audit-log",
-  storageWritePolicy: "atomic-json-file-replace",
-};
 
 export function assertTeachingCourseManagementLocalJsonRuntimeAllowed(
   env: Record<string, string | undefined>,
