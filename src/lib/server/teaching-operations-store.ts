@@ -14,6 +14,14 @@ import {
 } from "@/lib/ai/storage-backend-contract";
 import { resolveTeachingOperationDataDir } from "./teaching-operation-data-dir";
 import { TeachingOperationStoreError } from "./teaching-operations-error";
+import {
+  isRecord,
+  requireInviteCode,
+  requireIsoDate,
+  requireSafeAuditSourceText,
+  requireSafeId,
+  requireSafeUrlPath,
+} from "./teaching-operations-guards";
 
 // Re-exported so existing consumers importing from this store keep working after
 // these were extracted to their own modules (Phase 3 decomposition).
@@ -999,7 +1007,6 @@ type ReadTeachingOperationExportInput = {
 };
 
 const firstInviteCode = "55395057";
-const maxSafeIdLength = 120;
 const localTeachingOperationWriteQueues = new Map<string, Promise<void>>();
 
 const actionDefinitions: Record<
@@ -4774,39 +4781,6 @@ function requireActionSlot(value: unknown): TeachingOperationActionSlot {
   throw new TeachingOperationStoreError(500, "Teaching operation action slot is invalid.");
 }
 
-function requireInviteCode(value: unknown) {
-  if (typeof value !== "string" || !/^\d{8}$/.test(value)) {
-    throw new TeachingOperationStoreError(500, "Invite code is invalid.");
-  }
-  return value;
-}
-
-function requireSafeId(value: unknown, label: string) {
-  if (
-    typeof value !== "string" ||
-    value.length < 1 ||
-    value.length > maxSafeIdLength ||
-    !/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(value)
-  ) {
-    throw new TeachingOperationStoreError(400, `Invalid ${label}.`);
-  }
-  return value;
-}
-
-function requireSafeUrlPath(value: unknown, label: string) {
-  if (typeof value !== "string" || !value.startsWith("/") || value.includes("/Users/")) {
-    throw new TeachingOperationStoreError(500, `Invalid ${label}.`);
-  }
-  return value;
-}
-
-function requireIsoDate(value: unknown, label: string) {
-  if (typeof value !== "string" || Number.isNaN(Date.parse(value))) {
-    throw new TeachingOperationStoreError(500, `Invalid ${label}.`);
-  }
-  return value;
-}
-
 function normalizeAuditRequestSource(value: unknown): TeachingOperationAuditRequestSource {
   if (!isRecord(value)) {
     return {
@@ -4901,17 +4875,6 @@ function normalizeCourseSettingsProjectionText(value: unknown) {
   return text.slice(0, 500);
 }
 
-function requireSafeAuditSourceText(value: unknown, label: string) {
-  if (typeof value !== "string" || !value.trim()) {
-    return "unknown";
-  }
-  const normalized = value.trim().slice(0, 160);
-  if (/\/Users\/|secret|api[_-]?key|token/i.test(normalized)) {
-    throw new TeachingOperationStoreError(400, `Invalid ${label}.`);
-  }
-  return normalized;
-}
-
 function isTeachingOperationIdempotencyStatus(
   value: unknown,
 ): value is TeachingOperationIdempotencyStatus {
@@ -4961,8 +4924,4 @@ function createRedaction(): TeachingOperationRedaction {
     localFiles: "omitted",
     assets: "ids-only",
   };
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
