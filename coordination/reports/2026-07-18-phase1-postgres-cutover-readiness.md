@@ -92,11 +92,19 @@ credentials) to actually exercise the cutover path, not just describe it:
   file is never mutated). A DB-backed integration test drives the whole cycle — seed JSON →
   backfill+parity → read-only gate → Postgres read-switch → JSON rollback → drift detection — and
   passes against local Postgres 16.
-- **Still blocked (needs §1 owner input):** running this cycle against the **live Neon** DB
-  (place `UAIS_CORE_DATABASE_URL` via S19, `npm run db:migrate`, run the backfill, confirm
-  parity, set the backend flag), staging parity sign-off, and building the equivalent adapter for
-  the file-based `teaching_operations` store. Local verification does not substitute for staged
-  production parity; these need the owner's migration-path decision + credentials + go-ahead.
+- **Implemented + verified the full cycle for `teaching_operations` too (commit).** New
+  `migrations/0002_teaching_operations.sql` (`uais_teaching_operations_snapshots`, applied by the
+  runner), `teaching-operations-postgres-store.ts` (managed adapter, same `::text::jsonb` write),
+  and `teaching-operations-cutover.ts` (backfill + parity). Reads switch via
+  `UAIS_TEACHING_OPERATIONS_BACKEND=postgres`, rollback by unsetting it. A DB-backed integration
+  test drives the whole cycle and passes against local Postgres 16 (migrate applied 0001+0002).
+  Both file-based entities now have a complete, verified cutover mechanism.
+- **Still blocked (needs §1 owner input):** running these cycles against the **live Neon** DB
+  (place `UAIS_CORE_DATABASE_URL` via S19, `npm run db:migrate`, run each backfill, confirm
+  parity, set the backend flag), and staging parity sign-off. Local verification does not
+  substitute for staged production parity; these need the migration-path decision + credentials +
+  go-ahead. Remaining entities (users/enrolments/submissions/learning-events) are new builds, not
+  migrations (no existing durable store), and follow the same pattern.
 
 ### Live cutover procedure for `teaching_course_management` (once §1 clears)
 
