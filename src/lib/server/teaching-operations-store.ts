@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import {
@@ -15,6 +15,11 @@ import {
 import { resolveTeachingOperationDataDir } from "./teaching-operation-data-dir";
 import { actionDefinitions } from "./teaching-operations-action-catalog";
 import { TeachingOperationStoreError } from "./teaching-operations-error";
+import {
+  createIdempotentRecordId,
+  createRecordId,
+  formatTimestampId,
+} from "./teaching-operations-record-ids";
 import {
   createRedaction,
   isRecord,
@@ -4688,29 +4693,6 @@ function normalizeCourseSettingsProjectionText(value: unknown) {
 function createNextInviteCode(database: TeachingOperationDatabase) {
   const previous = database.inviteCodes.at(-1)?.code ?? firstInviteCode;
   return String(Number(previous) + 1).padStart(8, "0");
-}
-
-function createIdempotentRecordId(actorId: string, idempotencyKey: string) {
-  const digest = createHash("sha256")
-    .update(actorId)
-    .update("\0")
-    .update(idempotencyKey)
-    .digest("hex")
-    .slice(0, 24);
-  return `teaching-operation-idempotent-${digest}`;
-}
-
-function createRecordId(
-  operationId: TeachingOperationId,
-  actionId: TeachingOperationActionId,
-  now: Date,
-) {
-  return `${operationId}-${actionId}-${formatTimestampId(now)}-${randomUUID().slice(0, 8)}`;
-}
-
-function formatTimestampId(now: Date) {
-  const [datePart, timePart = ""] = now.toISOString().split("T");
-  return `${datePart.replace(/-/g, "")}-${timePart.slice(0, 8).replace(/:/g, "")}`;
 }
 
 function ensureWithinBase(baseDir: string, targetPath: string) {
