@@ -11,9 +11,20 @@ import { readUaisAuthenticatedTeacherSessionFromSignedCookies } from "@/lib/serv
 
 const protectedRoutePrefixes = ["/courses", "/learning", "/teaching", "/student-dashboard"];
 
-export function proxy(
+export function proxy(request: NextRequest) {
+  // Next.js invokes the proxy as `(request, event: NextFetchEvent)` — the second
+  // argument is NOT `process.env`. Read `process.env` explicitly here: accepting the
+  // env positionally (as this function used to) let Next's event object shadow it,
+  // so `UAIS_APP_SESSION_SIGNING_SECRET` read as undefined at runtime, the
+  // signature check silently degraded to the optimistic fallback, and forged cookie
+  // pairs passed the navigation gate. The pure gate logic lives in evaluateUaisProxy
+  // so tests can inject a controlled env.
+  return evaluateUaisProxy(request, process.env);
+}
+
+export function evaluateUaisProxy(
   request: NextRequest,
-  env: Record<string, string | undefined> = process.env,
+  env: Record<string, string | undefined>,
 ) {
   const pathname = request.nextUrl.pathname;
   const isLoginRoute = pathname === "/login";

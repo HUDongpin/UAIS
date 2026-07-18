@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { describe, expect, it } from "vitest";
-import { proxy } from "@/proxy";
+import { evaluateUaisProxy, proxy } from "@/proxy";
 import {
   UAIS_APP_SESSION_COOKIE,
   UAIS_APP_SESSION_SIGNATURE_COOKIE,
@@ -30,7 +30,7 @@ describe("UAIS app route auth proxy", () => {
         }),
       },
     });
-    const response = proxy(request, { UAIS_APP_SESSION_SIGNING_SECRET: appSessionSecret });
+    const response = evaluateUaisProxy(request, { UAIS_APP_SESSION_SIGNING_SECRET: appSessionSecret });
 
     expect(response?.headers.get("location")).toBeNull();
   });
@@ -41,7 +41,7 @@ describe("UAIS app route auth proxy", () => {
         cookie: `${UAIS_APP_SESSION_COOKIE}=redacted; ${UAIS_APP_SESSION_SIGNATURE_COOKIE}=redacted`,
       },
     });
-    const response = proxy(request, { UAIS_APP_SESSION_SIGNING_SECRET: undefined });
+    const response = evaluateUaisProxy(request, { UAIS_APP_SESSION_SIGNING_SECRET: undefined });
 
     expect(response?.headers.get("location")).toBeNull();
   });
@@ -56,7 +56,7 @@ describe("UAIS app route auth proxy", () => {
         cookie: `${UAIS_APP_SESSION_COOKIE}=forged; ${UAIS_APP_SESSION_SIGNATURE_COOKIE}=forged`,
       },
     });
-    const response = proxy(request, {
+    const response = evaluateUaisProxy(request, {
       UAIS_APP_SESSION_SIGNING_SECRET: appSessionSecret,
     });
 
@@ -66,13 +66,45 @@ describe("UAIS app route auth proxy", () => {
     );
   });
 
+  it("proxy(request) reads process.env even when Next passes a second (event) argument, so forged cookies are rejected in the deployed runtime", () => {
+    // Regression guard: Next.js invokes the proxy as `proxy(request, event)`. The
+    // proxy entry must read process.env itself, not accept env positionally, or the
+    // NextFetchEvent shadows env and the signing-secret check silently degrades —
+    // exactly the production gate-bypass that let forged cookies through.
+    const previous = process.env.UAIS_APP_SESSION_SIGNING_SECRET;
+    process.env.UAIS_APP_SESSION_SIGNING_SECRET = appSessionSecret;
+    try {
+      const request = new NextRequest("https://uais.top/learning", {
+        headers: {
+          cookie: `${UAIS_APP_SESSION_COOKIE}=forged; ${UAIS_APP_SESSION_SIGNATURE_COOKIE}=forged`,
+        },
+      });
+      const proxyWithEvent = proxy as unknown as (
+        request: NextRequest,
+        event: unknown,
+      ) => Response | undefined;
+      const response = proxyWithEvent(request, { waitUntil() {} });
+
+      expect(response?.status).toBe(307);
+      expect(response?.headers.get("location")).toBe(
+        "https://uais.top/login?from=%2Flearning",
+      );
+    } finally {
+      if (previous === undefined) {
+        delete process.env.UAIS_APP_SESSION_SIGNING_SECRET;
+      } else {
+        process.env.UAIS_APP_SESSION_SIGNING_SECRET = previous;
+      }
+    }
+  });
+
   it("does not infer a teacher role from an unverified app-session cookie pair on login", () => {
     const request = new NextRequest("https://uais.top/login", {
       headers: {
         cookie: `${UAIS_APP_SESSION_COOKIE}=redacted; ${UAIS_APP_SESSION_SIGNATURE_COOKIE}=redacted`,
       },
     });
-    const response = proxy(request, { UAIS_APP_SESSION_SIGNING_SECRET: undefined });
+    const response = evaluateUaisProxy(request, { UAIS_APP_SESSION_SIGNING_SECRET: undefined });
 
     expect(response?.headers.get("location")).toBeNull();
   });
@@ -85,7 +117,7 @@ describe("UAIS app route auth proxy", () => {
         }),
       },
     });
-    const response = proxy(request, { UAIS_APP_SESSION_SIGNING_SECRET: appSessionSecret });
+    const response = evaluateUaisProxy(request, { UAIS_APP_SESSION_SIGNING_SECRET: appSessionSecret });
 
     expect(response?.status).toBe(307);
     expect(response?.headers.get("location")).toBe("https://uais.top/teaching");
@@ -99,7 +131,7 @@ describe("UAIS app route auth proxy", () => {
         }),
       },
     });
-    const response = proxy(request, { UAIS_APP_SESSION_SIGNING_SECRET: appSessionSecret });
+    const response = evaluateUaisProxy(request, { UAIS_APP_SESSION_SIGNING_SECRET: appSessionSecret });
 
     expect(response?.status).toBe(307);
     expect(response?.headers.get("location")).toBe(
@@ -115,7 +147,7 @@ describe("UAIS app route auth proxy", () => {
         }),
       },
     });
-    const response = proxy(request, { UAIS_APP_SESSION_SIGNING_SECRET: appSessionSecret });
+    const response = evaluateUaisProxy(request, { UAIS_APP_SESSION_SIGNING_SECRET: appSessionSecret });
 
     expect(response?.status).toBe(307);
     expect(response?.headers.get("location")).toBe("https://uais.top/teaching");
@@ -129,7 +161,7 @@ describe("UAIS app route auth proxy", () => {
         }),
       },
     });
-    const response = proxy(request, { UAIS_APP_SESSION_SIGNING_SECRET: appSessionSecret });
+    const response = evaluateUaisProxy(request, { UAIS_APP_SESSION_SIGNING_SECRET: appSessionSecret });
 
     expect(response?.status).toBe(307);
     expect(response?.headers.get("location")).toBe(
@@ -143,7 +175,7 @@ describe("UAIS app route auth proxy", () => {
         cookie: "uais_app_session=student:Peter",
       },
     });
-    const response = proxy(request, { UAIS_APP_SESSION_SIGNING_SECRET: appSessionSecret });
+    const response = evaluateUaisProxy(request, { UAIS_APP_SESSION_SIGNING_SECRET: appSessionSecret });
 
     expect(response?.status).toBe(307);
     expect(response?.headers.get("location")).toBe(
@@ -157,7 +189,7 @@ describe("UAIS app route auth proxy", () => {
         cookie: "uais_teacher_auth_claims=forged; uais_teacher_auth_signature=forged",
       },
     });
-    const response = proxy(request, {
+    const response = evaluateUaisProxy(request, {
       UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET: teacherAuthSecret,
     });
 
@@ -173,7 +205,7 @@ describe("UAIS app route auth proxy", () => {
         cookie: createSignedTeacherCookie(teacherAuthSecret),
       },
     });
-    const response = proxy(request, {
+    const response = evaluateUaisProxy(request, {
       UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET: teacherAuthSecret,
     });
 
@@ -186,7 +218,7 @@ describe("UAIS app route auth proxy", () => {
         cookie: createSignedTeacherCookie(teacherAuthSecret),
       },
     });
-    const response = proxy(request, {
+    const response = evaluateUaisProxy(request, {
       UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET: undefined,
     });
 
