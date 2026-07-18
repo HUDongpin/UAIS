@@ -66,7 +66,35 @@ Repeat for each entity; do not batch entities.
 
 ## 7. What was done in this pass (2026-07-18)
 
-- Verified the seam wiring, the file-based operations gap, and the migration runner behavior.
-- Confirmed no local Postgres path exists and no core DB URL is configured (secrets untouched).
-- Produced this runbook so the cutover is mechanical once §1 clears.
-- **Not done (blocked):** any live migration, adapter build for `teaching_operations`, or read cutover — all require the §1 owner decisions + a reachable DB.
+Executed against a **local ephemeral Postgres 16 container** (throwaway, no real data or
+credentials) to actually exercise the cutover path, not just describe it:
+
+- **Ran the real migration locally.** `npm run db:migrate` applied `0001_core_poc` plus the
+  official LangGraph `PostgresSaver`/`PostgresStore` into `uais_langgraph`. Verified 16 core
+  tables + 6 LangGraph tables were created. The "migration times out" note from 2026-07-10 is
+  a **Neon-network-specific** condition, not a code problem — the migration path itself works.
+- **Found and fixed a real adapter bug (committed).** Exercising the `teaching-course-management`
+  Postgres adapter against the live DB surfaced that its `write()` threw against *any* real
+  Postgres: `sql.json(db)` produced a jsonb parameter that postgres v3.4.9 leaves unserialized
+  at Bind inside `sql.begin()`. Fixed with `JSON.stringify(...)::text::jsonb`. The transitional
+  adapter had clearly never been round-tripped against a database.
+- **Verified a genuine round-trip + optimistic concurrency.** Added a DB-backed integration
+  test (`tests/teaching-course-management-postgres-integration.test.ts`, skips without
+  `UAIS_CORE_DATABASE_URL`): snapshot write→read parity and stale-revision (409) rejection both
+  pass against the local Postgres. This proves the *expand* adapter for course-management is now
+  functional and durable.
+- **Still blocked (needs §1 owner input):** the production cutover proper — dual-write/backfill,
+  staging parity, and switching production reads to Postgres against the **live Neon** DB — plus
+  building the equivalent adapter for the file-based `teaching_operations` store. These need the
+  owner's migration-path decision, `UAIS_CORE_DATABASE_URL` placement (S19), and per-entity
+  go-ahead. Local verification does not substitute for staged production parity.
+
+### Reproduce the local verification
+
+```
+docker run -d --name uais-local-pg -e POSTGRES_PASSWORD=<local> -e POSTGRES_DB=uais_core \
+  -p 55432:5432 postgres:16
+UAIS_CORE_DATABASE_URL="postgresql://postgres:<local>@127.0.0.1:55432/uais_core" npm run db:migrate
+UAIS_CORE_DATABASE_URL="postgresql://postgres:<local>@127.0.0.1:55432/uais_core" \
+  npx vitest run tests/teaching-course-management-postgres-integration.test.ts
+```
