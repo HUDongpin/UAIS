@@ -15,7 +15,11 @@ import {
 import { resolveTeachingOperationDataDir } from "./teaching-operation-data-dir";
 import { TeachingOperationStoreError } from "./teaching-operations-error";
 import {
+  createRedaction,
   isRecord,
+  isTeachingOperationIdempotencyStatus,
+  requireActionSlot,
+  requireAuditOriginClass,
   requireInviteCode,
   requireIsoDate,
   requireSafeAuditSourceText,
@@ -30,7 +34,7 @@ export { TeachingOperationStoreError };
 
 export type TeachingOperationActionSlot = "primary" | "secondary";
 
-type TeachingOperationIdempotencyStatus = "created" | "already-persisted";
+export type TeachingOperationIdempotencyStatus = "created" | "already-persisted";
 
 type TeachingOperationActionId =
   | "save-course-settings"
@@ -56,7 +60,7 @@ type TeachingOperationActionId =
   | "generate-invite-code"
   | "publish-invite-code";
 
-type TeachingOperationRedaction = {
+export type TeachingOperationRedaction = {
   secrets: "omitted";
   localFiles: "omitted";
   assets: "ids-only";
@@ -4774,13 +4778,6 @@ function normalizeArtifact(value: unknown): TeachingOperationArtifact {
   throw new TeachingOperationStoreError(500, "Teaching operation artifact kind is invalid.");
 }
 
-function requireActionSlot(value: unknown): TeachingOperationActionSlot {
-  if (value === "primary" || value === "secondary") {
-    return value;
-  }
-  throw new TeachingOperationStoreError(500, "Teaching operation action slot is invalid.");
-}
-
 function normalizeAuditRequestSource(value: unknown): TeachingOperationAuditRequestSource {
   if (!isRecord(value)) {
     return {
@@ -4799,18 +4796,6 @@ function normalizeAuditRequestSource(value: unknown): TeachingOperationAuditRequ
       ? { refererPath: requireSafeAuditSourceText(value.refererPath, "referer path") }
       : {}),
   };
-}
-
-function requireAuditOriginClass(value: string): TeachingOperationAuditRequestSource["originClass"] {
-  if (
-    value === "remote-https" ||
-    value === "local-loopback" ||
-    value === "non-https" ||
-    value === "unknown"
-  ) {
-    return value;
-  }
-  return "unknown";
 }
 
 function normalizeAuditAuthSession(value: unknown): TeachingOperationAuditAuthSession {
@@ -4875,12 +4860,6 @@ function normalizeCourseSettingsProjectionText(value: unknown) {
   return text.slice(0, 500);
 }
 
-function isTeachingOperationIdempotencyStatus(
-  value: unknown,
-): value is TeachingOperationIdempotencyStatus {
-  return value === "created" || value === "already-persisted";
-}
-
 function createNextInviteCode(database: TeachingOperationDatabase) {
   const previous = database.inviteCodes.at(-1)?.code ?? firstInviteCode;
   return String(Number(previous) + 1).padStart(8, "0");
@@ -4916,12 +4895,4 @@ function ensureWithinBase(baseDir: string, targetPath: string) {
       "Resolved teaching operation path escapes the configured data directory.",
     );
   }
-}
-
-function createRedaction(): TeachingOperationRedaction {
-  return {
-    secrets: "omitted",
-    localFiles: "omitted",
-    assets: "ids-only",
-  };
 }
