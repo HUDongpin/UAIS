@@ -83,11 +83,32 @@ credentials) to actually exercise the cutover path, not just describe it:
   `UAIS_CORE_DATABASE_URL`): snapshot write→read parity and stale-revision (409) rejection both
   pass against the local Postgres. This proves the *expand* adapter for course-management is now
   functional and durable.
-- **Still blocked (needs §1 owner input):** the production cutover proper — dual-write/backfill,
-  staging parity, and switching production reads to Postgres against the **live Neon** DB — plus
-  building the equivalent adapter for the file-based `teaching_operations` store. These need the
-  owner's migration-path decision, `UAIS_CORE_DATABASE_URL` placement (S19), and per-entity
-  go-ahead. Local verification does not substitute for staged production parity.
+- **Implemented + verified the full expand→migrate→contract cycle for `teaching_course_management`
+  (commit).** New `teaching-course-management-cutover.ts`:
+  `backfillTeachingCourseManagementToPostgres()` (copy JSON-file snapshot → Postgres, verify
+  parity) and `verifyTeachingCourseManagementParity()` (read-only dual-source gate, results
+  redacted to counts). Reads switch via `UAIS_TEACHING_COURSE_MANAGEMENT_BACKEND=postgres` (the
+  store resolver already returns the Postgres repo) and roll back by unsetting the flag (the JSON
+  file is never mutated). A DB-backed integration test drives the whole cycle — seed JSON →
+  backfill+parity → read-only gate → Postgres read-switch → JSON rollback → drift detection — and
+  passes against local Postgres 16.
+- **Still blocked (needs §1 owner input):** running this cycle against the **live Neon** DB
+  (place `UAIS_CORE_DATABASE_URL` via S19, `npm run db:migrate`, run the backfill, confirm
+  parity, set the backend flag), staging parity sign-off, and building the equivalent adapter for
+  the file-based `teaching_operations` store. Local verification does not substitute for staged
+  production parity; these need the owner's migration-path decision + credentials + go-ahead.
+
+### Live cutover procedure for `teaching_course_management` (once §1 clears)
+
+```
+# 1. Place UAIS_CORE_DATABASE_URL (S19, server-only) and migrate:
+npm run db:migrate
+# 2. Backfill + verify parity (returns status:"parity" and entity counts):
+#    call backfillTeachingCourseManagementToPostgres({ env, sourceDataDir })
+# 3. Re-check parity as a gate: verifyTeachingCourseManagementParity(...) -> "parity"
+# 4. Switch reads: set UAIS_TEACHING_COURSE_MANAGEMENT_BACKEND=postgres
+# 5. Rollback if needed: unset the flag (reads return to the untouched JSON file)
+```
 
 ### Reproduce the local verification
 
