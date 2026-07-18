@@ -3,11 +3,16 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { createUaisAppSessionPostHandler } from "@/app/api/auth/app-session/route";
+import { createLearningRecordEventPostHandler } from "@/app/api/learning-records/events/route";
 import { createTeachingClassMembershipApprovePostHandler } from "@/app/api/teaching/classes/[classId]/memberships/[membershipId]/approve/route";
 import { createTeachingCourseClassPostHandler } from "@/app/api/teaching/courses/[courseId]/classes/route";
 import { createTeachingCoursePostHandler } from "@/app/api/teaching/courses/route";
 import { createTeachingInviteCodeJoinPostHandler } from "@/app/api/teaching/invite-codes/[code]/join/route";
 import { type UaisAppSessionUser } from "@/lib/auth/uais-app-session";
+import type {
+  LearningRecordActor,
+  LearningRecordEventInput,
+} from "@/lib/learning-records/xapi-events";
 import { createUaisAppSessionCookie } from "@/lib/server/uais-app-session";
 import { createUaisTeacherAuthSessionCookieHeader } from "@/lib/server/teacher-auth-session";
 
@@ -255,5 +260,103 @@ describe("critical UAIS backend user flows", () => {
     } finally {
       await rm(dataDir, { recursive: true, force: true });
     }
+  });
+
+  it("learner evidence: records a playback progress event for the signed student and rejects spoofed actors", async () => {
+    const enqueued: Array<{
+      actor: LearningRecordActor;
+      event: LearningRecordEventInput;
+      idempotencyKey: string;
+    }> = [];
+    const postEvent = createLearningRecordEventPostHandler({
+      env: { UAIS_APP_SESSION_SIGNING_SECRET: appSessionSecret },
+      // Authorize deterministically so the journey does not depend on the live
+      // PPT-playback membership fetch (covered separately). This test exercises
+      // the route's own contract: the student-session gate, the self-scope
+      // check, the enqueue call, and the response status.
+      authorizeLearnerEvent: () => ({
+        status: "authorized",
+        reasonCode: "learner-course-membership-approved",
+        responsibleSession: "S12",
+      }),
+      enqueue: (item) => {
+        enqueued.push(item);
+        return {
+          target: "learning-record-store",
+          status: "queued",
+          idempotencyKey: item.idempotencyKey,
+          writeMode: "async-queued",
+          redaction: {
+            endpoint: "fingerprinted",
+            credentials: "omitted",
+            rawStatement: "omitted",
+          },
+        };
+      },
+    });
+
+    // Mint at the current time (no fixed `now`): the events route verifies the
+    // session's expiry against the real clock and is not given a `now` dep, so a
+    // back-dated cookie would read as expired.
+    const studentCookie = createUaisAppSessionCookie(studentUser, {
+      secret: appSessionSecret,
+      sessionId: "critical-flow-learner-evidence-session",
+    });
+    const lessonId = `${courseId}-lesson-1`;
+    const playbackEvent: LearningRecordEventInput = {
+      type: "lesson.viewed",
+      object: { id: lessonId, name: "Research Methods Lesson 1" },
+      result: { completion: true, duration: "PT12M" },
+      context: { courseId, lessonId },
+    };
+    const recordRequest = (body: unknown, cookie?: string) =>
+      new Request("https://www.uais.top/api/learning-records/events", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          ...(cookie ? { cookie } : {}),
+        },
+        body: JSON.stringify(body),
+      });
+
+    // 1) Happy path: the signed student's own playback event is accepted + queued.
+    const acceptedResponse = await postEvent(
+      recordRequest({ actorId: "Peter", event: playbackEvent }, studentCookie),
+    );
+    const acceptedBody = await acceptedResponse.json();
+    expect(acceptedResponse.status, JSON.stringify(acceptedBody)).toBe(202);
+    expect(acceptedBody.status).toBe("queued");
+    expect(acceptedBody.queue.idempotencyKey).toBe(
+      `Peter:lesson.viewed:${courseId}:${lessonId}`,
+    );
+    expect(enqueued).toHaveLength(1);
+    expect(enqueued[0].actor).toEqual({
+      id: "Peter",
+      role: "learner",
+      displayName: "Peter",
+    });
+    expect(enqueued[0].event.type).toBe("lesson.viewed");
+    expect(JSON.stringify(acceptedBody)).not.toContain(appSessionSecret);
+
+    // 2) No signed session -> 401 (unauthenticated cannot record evidence).
+    const anonymousResponse = await postEvent(
+      recordRequest({ actorId: "Peter", event: playbackEvent }),
+    );
+    expect(anonymousResponse.status).toBe(401);
+
+    // 3) Spoofed actor (session is Peter, body claims another learner) -> 403.
+    const spoofedResponse = await postEvent(
+      recordRequest({ actorId: "Mallory", event: playbackEvent }, studentCookie),
+    );
+    expect(spoofedResponse.status).toBe(403);
+
+    // 4) Malformed event body -> 400.
+    const invalidResponse = await postEvent(
+      recordRequest({ actorId: "Peter", event: { type: "lesson.viewed" } }, studentCookie),
+    );
+    expect(invalidResponse.status).toBe(400);
+
+    // Only the authorized happy-path event reached the queue.
+    expect(enqueued).toHaveLength(1);
   });
 });

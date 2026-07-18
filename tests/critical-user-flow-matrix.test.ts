@@ -26,6 +26,9 @@ describe("critical-flow regression matrix", () => {
 
     expect(learningTests).toContain("shows the selected course workspace");
     expect(learningTests).toContain("keeps study tools behind the narration dock");
+    expect(backendFlows).toContain(
+      "learner evidence: records a playback progress event",
+    );
 
     expect(chatActions).toContain("exportChatToPdf");
     expect(chatActions).toContain("createShareLink");
