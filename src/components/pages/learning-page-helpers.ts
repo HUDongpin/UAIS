@@ -230,3 +230,5 @@ export function getPublishedPlaybackErrorLabel(
     ? "数学课件资源暂时不可用"
     : "Mathematics PPT resources are temporarily unavailable";
 }
+
+export type StudyAction = "ask" | "notes" | "checkpoint" | "concepts" | "export";
