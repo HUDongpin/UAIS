@@ -2,10 +2,8 @@ import type { Metadata } from "next";
 import { Analytics } from "@vercel/analytics/next";
 import { cookies } from "next/headers";
 import { AppShell } from "@/components/layout/app-shell";
-import {
-  AppPreferencesProvider,
-  resolveThemeMode,
-} from "@/components/providers/app-preferences";
+import { AppPreferencesProvider } from "@/components/providers/app-preferences";
+import { resolveThemeMode } from "@/components/providers/theme-mode";
 import { defaultLocale, supportedLocales, type Locale } from "@/i18n/copy";
 import { getUaisAppSessionUserFromCookieString } from "@/lib/server/uais-app-session";
 import "./globals.css";

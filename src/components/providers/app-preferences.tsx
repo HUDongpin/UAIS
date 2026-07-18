@@ -10,8 +10,7 @@ import {
   type ReactNode,
 } from "react";
 import { defaultLocale, type Locale } from "@/i18n/copy";
-
-type ThemeMode = "light" | "dark";
+import { defaultThemeMode, type ThemeMode } from "./theme-mode";
 
 type AppPreferences = {
   locale: Locale;
@@ -26,8 +25,6 @@ const localeCookieName = "uais-locale";
 const themeCookieName = "uais-theme";
 const themeStorageKey = "uais-theme";
 const preferenceCookieMaxAgeSeconds = 60 * 60 * 24 * 365;
-
-export const defaultThemeMode: ThemeMode = "light";
 
 export function AppPreferencesProvider({
   children,
@@ -89,10 +86,6 @@ export function AppPreferencesProvider({
       {children}
     </AppPreferencesContext.Provider>
   );
-}
-
-export function resolveThemeMode(value: string | undefined | null): ThemeMode {
-  return value === "dark" ? "dark" : "light";
 }
 
 export function useAppPreferences() {
