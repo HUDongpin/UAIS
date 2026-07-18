@@ -82,7 +82,10 @@ describe("enterprise closed-loop regression guards", () => {
   });
 
   it("keeps main teaching inline operation receipts gated by signed teacher-session evidence", () => {
-    const page = source("src/components/pages/teaching-page.tsx");
+    // Workspace state + handlers were lifted into the useTeachingWorkspace hook and the
+    // receipt guards into their own module (Phase 3 decomposition of teaching-page.tsx).
+    const page = source("src/components/pages/use-teaching-workspace.tsx");
+    const receiptGuards = source("src/components/pages/teaching-page-inline-receipt-guards.ts");
     const pageTest = source("tests/teaching-page.test.tsx");
     const inlineActionSection = sliceRequiredSection(
       page,
@@ -90,9 +93,9 @@ describe("enterprise closed-loop regression guards", () => {
       "async function readInlineWorkspaceAuditEvidence",
     );
 
-    expect(page).toContain("function hasSignedInlineTeachingOperationReceiptAudit");
-    expect(page).toContain('receipt?.audit?.authMode === "signed-teacher-session"');
-    expect(page).toContain("hasCompleteInlineTeachingAuthSession(receipt.audit.authSession)");
+    expect(receiptGuards).toContain("function hasSignedInlineTeachingOperationReceiptAudit");
+    expect(receiptGuards).toContain('receipt?.audit?.authMode === "signed-teacher-session"');
+    expect(receiptGuards).toContain("hasCompleteInlineTeachingAuthSession(receipt.audit.authSession)");
     expect(
       inlineActionSection.indexOf("!hasSignedInlineTeachingOperationReceiptAudit(payload.receipt)"),
     ).toBeLessThan(inlineActionSection.indexOf("void readInlineWorkspaceAuditEvidence"));
@@ -103,7 +106,8 @@ describe("enterprise closed-loop regression guards", () => {
   });
 
   it("keeps main invite publication gated by persisted class invitation readback", () => {
-    const page = source("src/components/pages/teaching-page.tsx");
+    // Workspace handlers moved into the useTeachingWorkspace hook (Phase 3 decomposition).
+    const page = source("src/components/pages/use-teaching-workspace.tsx");
     const pageTest = source("tests/teaching-page.test.tsx");
     const inviteActionSection = sliceRequiredSection(
       page,
@@ -130,7 +134,8 @@ describe("enterprise closed-loop regression guards", () => {
   });
 
   it("keeps teaching membership approval UI gated by persisted course-state readback", () => {
-    const page = source("src/components/pages/teaching-page.tsx");
+    // Workspace handlers moved into the useTeachingWorkspace hook (Phase 3 decomposition).
+    const page = source("src/components/pages/use-teaching-workspace.tsx");
     const pageTest = source("tests/teaching-page.test.tsx");
     const approvalSection = sliceRequiredSection(
       page,
@@ -677,28 +682,34 @@ describe("enterprise closed-loop regression guards", () => {
     // Course-cover verification helpers and their required-message copy moved into
     // the extracted pure-helpers module (Phase 3 decomposition of teaching-page.tsx).
     const teachingPageHelpers = source("src/components/pages/teaching-page-helpers.ts");
+    // Workspace state + handlers moved into the useTeachingWorkspace hook; the agent panel
+    // (which threads teacherActorId) into its own module (Phase 3 decomposition).
+    const workspaceHook = source("src/components/pages/use-teaching-workspace.tsx");
+    const agentWorkspace = source("src/components/pages/teaching-page-agent-workspace.tsx");
 
-    expect(page).toContain("const [authenticatedTeacherActorId, setAuthenticatedTeacherActorId]");
-    expect(page).toContain("useState<string>();");
-    expect(page).toContain('fetch("/api/teaching/operations"');
-    expect(page).toContain("createTeachingOperationIdempotencyKey");
-    expect(page).toContain("readInlineWorkspaceAuditEvidence");
-    expect(page).toContain("createInlineDomainPersistenceFailureStatus");
-    expect(page).toContain("TEACHING_OPERATION_SAVE_FAILED_MESSAGE");
+    expect(workspaceHook).toContain(
+      "const [authenticatedTeacherActorId, setAuthenticatedTeacherActorId]",
+    );
+    expect(workspaceHook).toContain("useState<string>();");
+    expect(workspaceHook).toContain('fetch("/api/teaching/operations"');
+    expect(workspaceHook).toContain("createTeachingOperationIdempotencyKey");
+    expect(workspaceHook).toContain("readInlineWorkspaceAuditEvidence");
+    expect(workspaceHook).toContain("createInlineDomainPersistenceFailureStatus");
+    expect(workspaceHook).toContain("TEACHING_OPERATION_SAVE_FAILED_MESSAGE");
     expect(teachingPageHelpers).toContain("function verifyCourseCoverAssetPersistence");
     expect(teachingPageHelpers).toContain("TEACHING_COURSE_COVER_ASSET_PERSISTENCE_REQUIRED_MESSAGE");
     expect(teachingPageHelpers).toContain("TEACHING_COURSE_COVER_AUDIT_REQUIRED_MESSAGE");
     expect(teachingPageHelpers).toContain('payload.assetPersistence?.status !== "persisted"');
     expect(teachingPageHelpers).toContain('payload.audit.authMode === "signed-teacher-session"');
-    expect(page).toContain("teacherActorId={authenticatedTeacherActorId}");
+    expect(agentWorkspace).toContain("teacherActorId={authenticatedTeacherActorId}");
     expect(teacherPptWorkflowFormat).toContain("function requireTeacherWorkflowActorId");
-    expect(page).not.toContain("DEFAULT_TEACHER_ID");
-    expect(page).not.toContain("?? DEFAULT_TEACHER_ID");
-    expect(page).not.toContain("teacherId: DEFAULT_TEACHER_ID");
+    expect(workspaceHook).not.toContain("DEFAULT_TEACHER_ID");
+    expect(workspaceHook).not.toContain("?? DEFAULT_TEACHER_ID");
+    expect(workspaceHook).not.toContain("teacherId: DEFAULT_TEACHER_ID");
     expect(teacherPptWorkflowFormat).not.toContain("DEFAULT_TEACHER_ID");
 
-    expect(page.indexOf('fetch("/api/teaching/operations"')).toBeLessThan(
-      page.indexOf("applyVerifiedCourseSettingsPatch(courseId"),
+    expect(workspaceHook.indexOf('fetch("/api/teaching/operations"')).toBeLessThan(
+      workspaceHook.indexOf("applyVerifiedCourseSettingsPatch(courseId"),
     );
   });
 
@@ -1289,9 +1300,9 @@ describe("enterprise closed-loop regression guards", () => {
   });
 
   it("keeps main teaching course and class creation gated by persisted readback before local success", () => {
-    const page = source("src/components/pages/teaching-page.tsx");
-    // The course-create receipt-missing message moved into the extracted pure-helpers
-    // module (Phase 3 decomposition of teaching-page.tsx).
+    // Workspace create/class handlers moved into the useTeachingWorkspace hook; the
+    // course-create receipt-missing message into the pure-helpers module (Phase 3).
+    const page = source("src/components/pages/use-teaching-workspace.tsx");
     const teachingPageHelpers = source("src/components/pages/teaching-page-helpers.ts");
     const browserSmoke = source("scripts/teaching-operation-detail-browser-smoke.mjs");
     const releaseGate = source("scripts/production-e2e-release-gate.mjs");
@@ -1329,9 +1340,9 @@ describe("enterprise closed-loop regression guards", () => {
     expect(createClassSection).toContain('method: "POST"');
     expect(createClassSection).toContain("isPersistedTeachingClassCreateReceipt");
     expect(teachingPageHelpers).toContain("function isVerifiedTeachingCreateAuthSession");
-    expect(page).toContain('typeof authSession?.sessionId === "string"');
-    expect(page).toContain('typeof authSession.authenticatedAt === "string"');
-    expect(page).toContain('typeof authSession.expiresAt === "string"');
+    expect(teachingPageHelpers).toContain('typeof authSession?.sessionId === "string"');
+    expect(teachingPageHelpers).toContain('typeof authSession.authenticatedAt === "string"');
+    expect(teachingPageHelpers).toContain('typeof authSession.expiresAt === "string"');
     expect(createClassSection).toContain("const readback = await readPersistedTeachingCourseState()");
     expect(createClassSection).toContain("TEACHING_CLASS_CREATE_READBACK_MISSING_MESSAGE");
     expect(createClassSection).toContain("TEACHING_CLASS_CREATE_READBACK_MISMATCH_MESSAGE");

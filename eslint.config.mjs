@@ -9,11 +9,6 @@ import nextTs from "eslint-config-next/typescript";
 // split below the cap; do not add new files to it.
 const maxSourceFileLines = 1500;
 const decompositionDebtFiles = [
-  // ~3.0k (was 7.3k) — S05. Leaf clusters extracted into teaching-page-{messages,
-  // types,workspace-config,helpers,dialogs}.ts(x) and teacher-ppt-narration-workflow*.
-  // Remaining bulk is the TeachingPage component's stateful nested handlers; next
-  // step is lifting those into custom hooks.
-  "src/components/pages/teaching-page.tsx",
   // ~3.7k (was 4.1k) — S12 (parked surface). error/guards/paths modules extracted;
   // remaining normalizer/IO clusters are deeply interleaved (follow-up).
   "src/lib/server/external-storage-route-service.ts",
