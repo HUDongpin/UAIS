@@ -7,6 +7,7 @@ import {
   createInlineWorkspaceActionConfig,
 } from "./teaching-page-workspace-config";
 import { InlineWorkspaceStatus } from "./teaching-page-inline-workspace-status";
+import { WorkspaceContext } from "./teaching-page-workspace-context";
 import {
   doesInlineCourseSettingsProjectionMatchPatch,
   doesInlineDomainProjectionMatchBusinessSemantics,
@@ -1511,39 +1512,6 @@ export function TeachingPage() {
     }
   }
 
-  function renderWorkspaceContext() {
-    return (
-      <div
-        id="teacher-workspace-entry-panel"
-        className="rounded-2xl border border-[var(--accent-border)] bg-[var(--accent-soft)] p-4"
-      >
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <p className="text-sm font-semibold text-[var(--accent)]">
-              {locale === "zh-CN" ? "当前入口" : "Current entry"}：
-              {localizedText(activeWorkspaceItem.title, locale)}
-            </p>
-            <p className="mt-2 text-sm leading-6 text-[var(--muted)]">
-              {localizedText(activeWorkspaceItem.description, locale)}
-            </p>
-          </div>
-          {selectedCourseAction && selectedActionCourse && selectedCourseActionLabel ? (
-            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-sm text-[var(--foreground)]">
-              <p className="font-semibold">
-                {locale === "zh-CN" ? "已选择课程" : "Selected course"}：
-                {localizedText(selectedActionCourse.title, locale)}
-              </p>
-              <p className="mt-1 text-[var(--muted)]">
-                {locale === "zh-CN" ? "课程操作" : "Course action"}：
-                {selectedCourseActionLabel}
-              </p>
-            </div>
-          ) : null}
-        </div>
-      </div>
-    );
-  }
-
   function renderInlineWorkspaceActionButtons(operationId: TeachingOperationId) {
     const actionConfig = createInlineWorkspaceActionConfig(operationId, locale);
     const isSaving =
@@ -1609,7 +1577,13 @@ export function TeachingPage() {
             </div>
           </div>
 
-          {renderWorkspaceContext()}
+          {<WorkspaceContext
+            locale={locale}
+            activeWorkspaceItem={activeWorkspaceItem}
+            selectedCourseAction={selectedCourseAction}
+            selectedActionCourse={selectedActionCourse}
+            selectedCourseActionLabel={selectedCourseActionLabel}
+          />}
           {activeCourseSettingsCourse && activeCourseSettingsDraft ? (
             <div
               className="mt-5 rounded-2xl border border-[var(--border)] bg-[var(--surface-elevated)] p-4"
@@ -1773,7 +1747,13 @@ export function TeachingPage() {
           </div>
 
           <div className="mt-5">
-            {renderWorkspaceContext()}
+            {<WorkspaceContext
+            locale={locale}
+            activeWorkspaceItem={activeWorkspaceItem}
+            selectedCourseAction={selectedCourseAction}
+            selectedActionCourse={selectedActionCourse}
+            selectedCourseActionLabel={selectedCourseActionLabel}
+          />}
           </div>
           {<InlineWorkspaceStatus
             operationId="agents"
@@ -1936,7 +1916,13 @@ export function TeachingPage() {
           </div>
 
           <div className="mt-5">
-            {renderWorkspaceContext()}
+            {<WorkspaceContext
+            locale={locale}
+            activeWorkspaceItem={activeWorkspaceItem}
+            selectedCourseAction={selectedCourseAction}
+            selectedActionCourse={selectedActionCourse}
+            selectedCourseActionLabel={selectedCourseActionLabel}
+          />}
           </div>
           {config.id === "invite-code" ? null : <InlineWorkspaceStatus
               operationId={config.id}
