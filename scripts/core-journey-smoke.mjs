@@ -108,8 +108,9 @@ async function run() {
     record("auth-gate: unauthenticated /teaching redirects to /login", false, String(error));
   }
 
-  // Journey 2: login issues a signed session cookie pair.
+  // Journey 2: login issues a signed session cookie pair (and reports the role).
   let cookieHeader = "";
+  let loggedInRole = "";
   try {
     const login = await fetch(`${baseUrl}/api/auth/app-session`, {
       method: "POST",
@@ -118,6 +119,8 @@ async function run() {
       redirect: "manual",
     });
     const cookies = extractSessionCookies(login);
+    const body = await login.json().catch(() => ({}));
+    loggedInRole = body?.appSession?.actor?.role ?? "";
     const ok =
       login.status === 200 &&
       Boolean(cookies[SESSION_COOKIE]) &&
@@ -128,15 +131,18 @@ async function run() {
     record(
       "login: POST /api/auth/app-session issues session cookies",
       ok,
-      `status ${login.status}${ok ? " + signed cookie pair" : ""}`,
+      `status ${login.status}${ok ? ` + signed cookie pair (role ${loggedInRole || "?"})` : ""}`,
     );
   } catch (error) {
     record("login: POST /api/auth/app-session issues session cookies", false, String(error));
   }
 
-  // Journey 3: authenticated access to the core routes.
+  // Journey 3: authenticated access to the role-appropriate core routes.
+  const isStudent = loggedInRole === "student";
+  const ownRoleRoute = isStudent ? "/student-dashboard" : "/teaching";
+  const crossRoleRoute = isStudent ? "/teaching" : "/student-dashboard";
   if (cookieHeader) {
-    for (const path of ["/courses", "/learning", "/teaching"]) {
+    for (const path of ["/courses", "/learning", ownRoleRoute]) {
       try {
         const res = await fetch(`${baseUrl}${path}`, {
           headers: { cookie: cookieHeader },
@@ -146,6 +152,26 @@ async function run() {
       } catch (error) {
         record(`authenticated GET ${path} -> 200`, false, String(error));
       }
+    }
+
+    // Journey 3b: role isolation — the session must NOT reach the other role's
+    // route; the proxy redirects it away (never 200). Ties the Phase 2 auth
+    // hardening into the promotion gate.
+    try {
+      const crossRole = await fetch(`${baseUrl}${crossRoleRoute}`, {
+        headers: { cookie: cookieHeader },
+        redirect: "manual",
+      });
+      const location = crossRole.headers.get("location") ?? "";
+      const denied =
+        crossRole.status >= 300 && crossRole.status < 400 && !location.includes(crossRoleRoute);
+      record(
+        `role isolation: ${loggedInRole || "session"} is denied ${crossRoleRoute}`,
+        denied,
+        `status ${crossRole.status} -> ${location || "(no location)"}`,
+      );
+    } catch (error) {
+      record(`role isolation: session is denied ${crossRoleRoute}`, false, String(error));
     }
   } else {
     record("authenticated core-route access", false, "skipped — no session cookie");
