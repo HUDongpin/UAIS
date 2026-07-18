@@ -16,6 +16,11 @@ import { resolveTeachingOperationDataDir } from "./teaching-operation-data-dir";
 import { actionDefinitions } from "./teaching-operations-action-catalog";
 import { TeachingOperationStoreError } from "./teaching-operations-error";
 import {
+  normalizeAuditAuthSession,
+  normalizeAuditRequestSource,
+  normalizeCourseSettingsPatchProjectionSnapshot,
+} from "./teaching-operations-input-normalizers";
+import {
   createIdempotentRecordId,
   createRecordId,
   formatTimestampId,
@@ -25,10 +30,8 @@ import {
   isRecord,
   isTeachingOperationIdempotencyStatus,
   requireActionSlot,
-  requireAuditOriginClass,
   requireInviteCode,
   requireIsoDate,
-  requireSafeAuditSourceText,
   requireSafeId,
   requireSafeUrlPath,
 } from "./teaching-operations-guards";
@@ -4606,88 +4609,6 @@ function normalizeArtifact(value: unknown): TeachingOperationArtifact {
   }
 
   throw new TeachingOperationStoreError(500, "Teaching operation artifact kind is invalid.");
-}
-
-function normalizeAuditRequestSource(value: unknown): TeachingOperationAuditRequestSource {
-  if (!isRecord(value)) {
-    return {
-      userAgent: "unknown",
-      ipAddress: "redacted",
-    };
-  }
-
-  return {
-    userAgent: requireSafeAuditSourceText(value.userAgent, "user agent"),
-    ipAddress: "redacted",
-    ...(typeof value.originClass === "string"
-      ? { originClass: requireAuditOriginClass(value.originClass) }
-      : {}),
-    ...(typeof value.refererPath === "string"
-      ? { refererPath: requireSafeAuditSourceText(value.refererPath, "referer path") }
-      : {}),
-  };
-}
-
-function normalizeAuditAuthSession(value: unknown): TeachingOperationAuditAuthSession {
-  if (!isRecord(value)) {
-    throw new TeachingOperationStoreError(500, "Teaching operation audit auth session is invalid.");
-  }
-
-  return {
-    sessionId: requireSafeId(value.sessionId, "auth session id"),
-    authenticatedAt: requireIsoDate(value.authenticatedAt, "authenticatedAt"),
-    expiresAt: requireIsoDate(value.expiresAt, "expiresAt"),
-  };
-}
-
-function normalizeCourseSettingsPatchProjectionSnapshot(value: unknown) {
-  if (!isRecord(value)) {
-    return {};
-  }
-
-  const snapshot: Partial<
-    Pick<
-      TeachingOperationCourseSettingsProjection,
-      | "appliedFields"
-      | "courseName"
-      | "instructor"
-      | "unit"
-      | "department"
-      | "semester"
-      | "description"
-    >
-  > = {};
-  const appliedFields: TeachingOperationCourseSettingsAppliedField[] = [];
-  for (const field of [
-    "courseName",
-    "instructor",
-    "unit",
-    "department",
-    "semester",
-    "description",
-  ] as const) {
-    const text = normalizeCourseSettingsProjectionText(value[field]);
-    if (!text) {
-      continue;
-    }
-    snapshot[field] = text;
-    appliedFields.push(field);
-  }
-  if (appliedFields.length > 0) {
-    snapshot.appliedFields = appliedFields;
-  }
-  return snapshot;
-}
-
-function normalizeCourseSettingsProjectionText(value: unknown) {
-  if (typeof value !== "string") {
-    return undefined;
-  }
-  const text = value.trim();
-  if (!text) {
-    return undefined;
-  }
-  return text.slice(0, 500);
 }
 
 function createNextInviteCode(database: TeachingOperationDatabase) {
