@@ -8,7 +8,9 @@ import {
 } from "@/lib/server/teaching-operations-cutover";
 import { createUaisTeachingOperationRepository } from "@/lib/server/teaching-operations-postgres-store";
 import {
+  loadTeachingOperationDatabase,
   normalizeTeachingOperationDatabase,
+  persistTeachingOperationDatabase,
   readTeachingOperationDatabase,
   type TeachingOperationDatabase,
 } from "@/lib/server/teaching-operations-store";
@@ -84,7 +86,7 @@ describe.skipIf(!databaseUrl)(
         // when the backend flag is set, and it serves the same data.
         const postgresRepository = createUaisTeachingOperationRepository({
           env: {
-            UAIS_TEACHING_OPERATIONS_BACKEND: "postgres",
+            UAIS_TEACHING_OPERATIONS_SNAPSHOT_BACKEND: "postgres",
             UAIS_CORE_DATABASE_URL: databaseUrl,
           },
         });
@@ -105,6 +107,34 @@ describe.skipIf(!databaseUrl)(
         expect(drift.status).toBe("mismatch");
       } finally {
         await rm(dataDir, { recursive: true, force: true });
+      }
+    });
+
+    it("routes the store's backend-aware read/write helpers through Postgres under the dedicated flag", async () => {
+      const postgresEnv = {
+        UAIS_TEACHING_OPERATIONS_SNAPSHOT_BACKEND: "postgres",
+        UAIS_CORE_DATABASE_URL: databaseUrl,
+      };
+      // Persist via the same store helper the operational functions now call...
+      await persistTeachingOperationDatabase({
+        database: buildDatabase(["invite-store-helper"]),
+        env: postgresEnv,
+      });
+      // ...and read it back via the store helper — proving the read-switch routes
+      // to Postgres (not the JSON file) when the dedicated backend var is set.
+      const readBack = await loadTeachingOperationDatabase({ env: postgresEnv });
+      expect(readBack.inviteCodes.map((code) => code.inviteId)).toEqual([
+        "invite-store-helper",
+      ]);
+
+      // Without the flag, the same helper reads the file backend (byte-identical
+      // to the pre-cutover behavior), confirming the switch is fully gated.
+      const fileDataDir = await mkdtemp(join(tmpdir(), "uais-ops-file-"));
+      try {
+        const viaFile = await loadTeachingOperationDatabase({ dataDir: fileDataDir, env: {} });
+        expect(viaFile.inviteCodes).toHaveLength(0);
+      } finally {
+        await rm(fileDataDir, { recursive: true, force: true });
       }
     });
   },

@@ -14,9 +14,11 @@ import { createUaisTeachingOperationPostgresRepository } from "@/lib/server/teac
 //  - migrate:  backfillTeachingOperationsToPostgres() copies the JSON-file snapshot
 //              into Postgres and verifies parity; verifyTeachingOperationsParity() is
 //              the read-only dual-source gate.
-//  - contract: reads switch by setting UAIS_TEACHING_OPERATIONS_BACKEND=postgres (see
-//              createUaisTeachingOperationRepository) and roll back by unsetting it
-//              (the JSON file is never mutated by backfill).
+//  - contract: reads/writes switch by setting
+//              UAIS_TEACHING_OPERATIONS_SNAPSHOT_BACKEND=postgres — the store's
+//              loadTeachingOperationDatabase/persistTeachingOperationDatabase
+//              helpers then route through the managed repository. Roll back by
+//              unsetting it (the JSON file is never mutated by backfill).
 //
 // Results are redacted to entity counts only — no record contents, no secrets.
 

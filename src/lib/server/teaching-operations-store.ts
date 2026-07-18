@@ -1222,7 +1222,7 @@ async function executeValidatedTeachingOperationAction(input: {
   const { dataDir, usingExternalPersistence } = input;
   const database = usingExternalPersistence
     ? createEmptyDatabase()
-    : await readTeachingOperationDatabase({ dataDir });
+    : await loadTeachingOperationDatabase({ dataDir });
   const now = input.input.now ?? new Date();
   const createdAt = now.toISOString();
   if (!input.input.actorId) {
@@ -1373,7 +1373,7 @@ async function executeValidatedTeachingOperationAction(input: {
     : undefined;
 
   if (!input.input.appendExternalTeachingOperation) {
-    await writeTeachingOperationDatabase({ dataDir, database });
+    await persistTeachingOperationDatabase({ dataDir, database });
   }
 
   return createTeachingOperationReceiptFromRecord({
@@ -1580,6 +1580,54 @@ export function normalizeTeachingOperationDatabase(
   return normalizeDatabase(value);
 }
 
+// Phase 1 durable-data cutover — backend-aware snapshot access (the "contract"
+// read-switch). When UAIS_TEACHING_OPERATIONS_SNAPSHOT_BACKEND selects Postgres,
+// the store's operational reads/writes route through the managed repository;
+// otherwise they use the JSON file. This uses a DEDICATED var — not the
+// external-append UAIS_TEACHING_OPERATIONS_BACKEND — so it cannot collide with
+// the external storage-backend contract (which throws under `postgres`). Unset,
+// it is byte-identical to the file path, so existing operations are unchanged.
+// The postgres-store is imported dynamically to avoid a static import cycle.
+function usesPostgresOperationSnapshot(env: Record<string, string | undefined>) {
+  const selector = env.UAIS_TEACHING_OPERATIONS_SNAPSHOT_BACKEND?.trim().toLowerCase();
+  return selector === "postgres" || selector === "managed";
+}
+
+export async function loadTeachingOperationDatabase(
+  input: { dataDir?: string; env?: Record<string, string | undefined> } = {},
+): Promise<TeachingOperationDatabase> {
+  const env = input.env ?? process.env;
+  if (usesPostgresOperationSnapshot(env)) {
+    const { createUaisTeachingOperationPostgresRepository } = await import(
+      "./teaching-operations-postgres-store"
+    );
+    const snapshot = await createUaisTeachingOperationPostgresRepository({ env }).read();
+    return normalizeDatabase(snapshot.database);
+  }
+  return readTeachingOperationDatabase({ dataDir: input.dataDir });
+}
+
+export async function persistTeachingOperationDatabase(input: {
+  dataDir?: string;
+  database: TeachingOperationDatabase;
+  env?: Record<string, string | undefined>;
+}): Promise<void> {
+  const env = input.env ?? process.env;
+  if (usesPostgresOperationSnapshot(env)) {
+    const { createUaisTeachingOperationPostgresRepository } = await import(
+      "./teaching-operations-postgres-store"
+    );
+    await createUaisTeachingOperationPostgresRepository({ env }).write({
+      database: input.database,
+    });
+    return;
+  }
+  await writeTeachingOperationDatabase({
+    dataDir: resolveTeachingOperationDataDir(input.dataDir),
+    database: input.database,
+  });
+}
+
 export async function readTeachingOperationDatabaseBackup(input: {
   dataDir?: string;
   backupId: string;
@@ -1623,7 +1671,7 @@ export async function readTeachingGradebookUpdate(input: {
   dataDir?: string;
   objectId: string;
 }): Promise<TeachingOperationGradebookUpdateProjection | undefined> {
-  const database = await readTeachingOperationDatabase({ dataDir: input.dataDir });
+  const database = await loadTeachingOperationDatabase({ dataDir: input.dataDir });
   const objectId = requireSafeId(input.objectId, "gradebook update id");
   const projection = database.domainProjections.find(
     (item): item is TeachingOperationGradebookUpdateProjection =>
@@ -1682,7 +1730,7 @@ export async function restoreTeachingOperationDatabaseBackup(input: {
       redaction: createRedaction(),
     };
 
-    await writeTeachingOperationDatabase({ dataDir, database: restoredDatabase });
+    await persistTeachingOperationDatabase({ dataDir, database: restoredDatabase });
     return {
       receipt,
       database: restoredDatabase,
@@ -1706,7 +1754,7 @@ export async function rollbackTeachingOperationRecord(input: {
     const recordId = requireSafeId(input.recordId, "teaching operation record id");
     const actorId = requireSafeId(input.actorId, "actor id");
     const rollbackReason = requireSafeId(input.rollbackReason, "rollback reason");
-    const database = await readTeachingOperationDatabase({ dataDir });
+    const database = await loadTeachingOperationDatabase({ dataDir });
     const record = database.records.find((item) => item.recordId === recordId);
     if (!record) {
       throw new TeachingOperationStoreError(404, "Teaching operation record was not found.");
@@ -1777,7 +1825,7 @@ export async function rollbackTeachingOperationRecord(input: {
       redaction: createRedaction(),
     };
 
-    await writeTeachingOperationDatabase({ dataDir, database: nextDatabase });
+    await persistTeachingOperationDatabase({ dataDir, database: nextDatabase });
     return {
       receipt,
       database: nextDatabase,
@@ -1798,7 +1846,7 @@ export async function releaseTeachingGradebookUpdate(input: {
   receipt: TeachingGradebookReleaseReceipt;
 }> {
   const dataDir = resolveTeachingOperationDataDir(input.dataDir);
-  const database = await readTeachingOperationDatabase({ dataDir });
+  const database = await loadTeachingOperationDatabase({ dataDir });
   const objectId = requireSafeId(input.objectId, "gradebook update id");
   const actorId = requireSafeId(input.actorId, "actor id");
   const providerRelease = input.providerRelease
@@ -1874,7 +1922,7 @@ export async function releaseTeachingGradebookUpdate(input: {
   }
   database.auditEvents.push(auditEvent);
   database.updatedAt = releasedAt;
-  await writeTeachingOperationDatabase({ dataDir, database });
+  await persistTeachingOperationDatabase({ dataDir, database });
   return {
     gradebookUpdate,
     notification,
@@ -1895,7 +1943,7 @@ export async function rollbackTeachingGradebookRelease(input: {
   receipt: TeachingGradebookReleaseRollbackReceipt;
 }> {
   const dataDir = resolveTeachingOperationDataDir(input.dataDir);
-  const database = await readTeachingOperationDatabase({ dataDir });
+  const database = await loadTeachingOperationDatabase({ dataDir });
   const objectId = requireSafeId(input.objectId, "gradebook update id");
   const actorId = requireSafeId(input.actorId, "actor id");
   const projectionIndex = database.domainProjections.findIndex(
@@ -1978,7 +2026,7 @@ export async function rollbackTeachingGradebookRelease(input: {
   }
   database.auditEvents.push(auditEvent);
   database.updatedAt = rolledBackAt;
-  await writeTeachingOperationDatabase({ dataDir, database });
+  await persistTeachingOperationDatabase({ dataDir, database });
   return {
     gradebookUpdate,
     notification,

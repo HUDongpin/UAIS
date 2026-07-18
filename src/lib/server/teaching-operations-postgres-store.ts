@@ -28,14 +28,21 @@ export function isUaisTeachingOperationPostgresSelector(value: string | undefine
 }
 
 /**
- * Resolve the managed teaching-operations repository, or `undefined` for the
- * default file backend. Only the Postgres selector is handled here — the
- * store's external append adapters remain a separate concern.
+ * Resolve the managed teaching-operations snapshot repository, or `undefined`
+ * for the default file backend. Keyed on the DEDICATED
+ * `UAIS_TEACHING_OPERATIONS_SNAPSHOT_BACKEND` var, NOT the external-append
+ * `UAIS_TEACHING_OPERATIONS_BACKEND` (which the external storage-backend contract
+ * rejects under `postgres`). This is the resolver the store's backend-aware
+ * `loadTeachingOperationDatabase`/`persistTeachingOperationDatabase` helpers use.
  */
 export function createUaisTeachingOperationRepository(input: {
   env: Record<string, string | undefined>;
 }): TeachingOperationRepository | undefined {
-  if (isUaisTeachingOperationPostgresSelector(input.env.UAIS_TEACHING_OPERATIONS_BACKEND)) {
+  if (
+    isUaisTeachingOperationPostgresSelector(
+      input.env.UAIS_TEACHING_OPERATIONS_SNAPSHOT_BACKEND,
+    )
+  ) {
     return createUaisTeachingOperationPostgresRepository({ env: input.env });
   }
   return undefined;
