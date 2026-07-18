@@ -23,28 +23,42 @@ type AppPreferences = {
 
 const AppPreferencesContext = createContext<AppPreferences | null>(null);
 const localeCookieName = "uais-locale";
-const localeCookieMaxAgeSeconds = 60 * 60 * 24 * 365;
+const themeCookieName = "uais-theme";
+const themeStorageKey = "uais-theme";
+const preferenceCookieMaxAgeSeconds = 60 * 60 * 24 * 365;
+
+export const defaultThemeMode: ThemeMode = "light";
 
 export function AppPreferencesProvider({
   children,
   initialLocale = defaultLocale,
+  initialTheme = defaultThemeMode,
 }: {
   children: ReactNode;
   initialLocale?: Locale;
+  initialTheme?: ThemeMode;
 }) {
   const [locale, setLocaleState] = useState<Locale>(initialLocale);
-  const [theme, setTheme] = useState<ThemeMode>(getInitialTheme);
+  // Theme is seeded from the server-resolved value (the `uais-theme` cookie,
+  // read in `layout.tsx`), exactly like locale. Seeding from the prop rather
+  // than from `localStorage`/`matchMedia` keeps the first client render equal
+  // to the server render, so the header toggle icon and the `<html>` `dark`
+  // class no longer produce a hydration mismatch or a theme flash.
+  const [theme, setTheme] = useState<ThemeMode>(initialTheme);
 
   useEffect(() => {
     document.documentElement.lang = locale;
     window.localStorage.setItem(localeCookieName, locale);
-    document.cookie = `${localeCookieName}=${locale}; path=/; max-age=${localeCookieMaxAgeSeconds}; SameSite=Lax`;
+    document.cookie = `${localeCookieName}=${locale}; path=/; max-age=${preferenceCookieMaxAgeSeconds}; SameSite=Lax`;
   }, [locale]);
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", theme === "dark");
     document.documentElement.dataset.theme = theme;
-    window.localStorage.setItem("uais-theme", theme);
+    window.localStorage.setItem(themeStorageKey, theme);
+    // Persist the choice to a route-readable cookie so the next server render
+    // resolves the same theme (mirrors the locale cookie).
+    document.cookie = `${themeCookieName}=${theme}; path=/; max-age=${preferenceCookieMaxAgeSeconds}; SameSite=Lax`;
   }, [theme]);
 
   const setLocale = useCallback((nextLocale: Locale) => {
@@ -77,17 +91,8 @@ export function AppPreferencesProvider({
   );
 }
 
-function getInitialTheme(): ThemeMode {
-  if (typeof window === "undefined") {
-    return "light";
-  }
-
-  const storedTheme = window.localStorage.getItem("uais-theme");
-  if (storedTheme === "light" || storedTheme === "dark") {
-    return storedTheme;
-  }
-
-  return window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+export function resolveThemeMode(value: string | undefined | null): ThemeMode {
+  return value === "dark" ? "dark" : "light";
 }
 
 export function useAppPreferences() {

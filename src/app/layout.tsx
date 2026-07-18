@@ -2,7 +2,10 @@ import type { Metadata } from "next";
 import { Analytics } from "@vercel/analytics/next";
 import { cookies } from "next/headers";
 import { AppShell } from "@/components/layout/app-shell";
-import { AppPreferencesProvider } from "@/components/providers/app-preferences";
+import {
+  AppPreferencesProvider,
+  resolveThemeMode,
+} from "@/components/providers/app-preferences";
 import { defaultLocale, supportedLocales, type Locale } from "@/i18n/copy";
 import { getUaisAppSessionUserFromCookieString } from "@/lib/server/uais-app-session";
 import "./globals.css";
@@ -33,6 +36,7 @@ export default async function RootLayout({
 }>) {
   const cookieStore = await cookies();
   const initialLocale = getSupportedLocale(cookieStore.get("uais-locale")?.value);
+  const initialTheme = resolveThemeMode(cookieStore.get("uais-theme")?.value);
   const initialSessionUser = getUaisAppSessionUserFromCookieString(
     cookieStore.toString(),
   );
@@ -40,11 +44,15 @@ export default async function RootLayout({
   return (
     <html
       lang={initialLocale}
+      data-theme={initialTheme}
       suppressHydrationWarning
-      className="h-full antialiased"
+      className={`h-full antialiased${initialTheme === "dark" ? " dark" : ""}`}
     >
       <body className="min-h-full">
-        <AppPreferencesProvider initialLocale={initialLocale}>
+        <AppPreferencesProvider
+          initialLocale={initialLocale}
+          initialTheme={initialTheme}
+        >
           <AppShell initialSessionUser={initialSessionUser}>{children}</AppShell>
         </AppPreferencesProvider>
         <Analytics />
