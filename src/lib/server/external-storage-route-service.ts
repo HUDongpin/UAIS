@@ -11,8 +11,46 @@ import {
   normalizeTeachingCourseAssetsDatabase,
   type TeachingCourseAssetsDatabase,
 } from "@/lib/server/teaching-course-assets-store";
+import { HttpError } from "./external-storage-http-error";
+import {
+  arrayOrEmpty,
+  createErrorResponse,
+  createRedaction,
+  formatTimestampId,
+  isPositiveInteger,
+  isRecord,
+  jsonResponse,
+  mergeById,
+  mergeIdList,
+  requireAlertSeverity,
+  requireIsoDate,
+  requireNonNegativeInteger,
+  requireRecord,
+  requireSafeId,
+  requireSafeRole,
+  requireTeachingOperationActionSlot,
+  requireTeachingOperationAlertReason,
+  uniqueSafeIds,
+} from "./external-storage-route-guards";
+import {
+  ensureWithinBase,
+  resolveLifecycleAuditPath,
+  resolveTeacherOwnershipPath,
+  resolveTeachingCourseAssetsBackupPath,
+  resolveTeachingCourseAssetsRestoreDrillLogPath,
+  resolveTeachingCourseAssetsSnapshotPath,
+  resolveTeachingCourseManagementBackupPath,
+  resolveTeachingCourseManagementRestoreDrillLogPath,
+  resolveTeachingCourseManagementSnapshotPath,
+  resolveTeachingOperationAlertNotificationLogPath,
+  resolveTeachingOperationAlertWebhookDeliveryLogPath,
+  resolveTeachingOperationAuditLogPath,
+  resolveTeachingOperationBackupPath,
+  resolveTeachingOperationLogPath,
+  resolveTeachingOperationRestoreDrillLogPath,
+  resolveTeachingOperationRollbackLogPath,
+} from "./external-storage-route-paths";
 
-const qwenVoiceLifecycleAuditFilename = "qwen-voice-lifecycle-audit.jsonl";
 const externalStorageApiContractVersion = "uais-external-storage-v1";
 const maxBodyBytes = 1_000_000;
 const minProductionAccessTokenLength = 32;
@@ -3862,159 +3900,6 @@ async function readJsonBody(request: Request) {
   }
 }
 
-function resolveTeacherOwnershipPath(dataDir: string, teacherId: string) {
-  const filePath = resolve(dataDir, "teacher-ai-ownership", `${teacherId}.json`);
-  ensureWithinBase(dataDir, filePath);
-  return filePath;
-}
-
-function resolveLifecycleAuditPath(dataDir: string) {
-  const filePath = resolve(dataDir, qwenVoiceLifecycleAuditFilename);
-  ensureWithinBase(dataDir, filePath);
-  return filePath;
-}
-
-function resolveTeachingCourseManagementSnapshotPath(dataDir: string) {
-  const filePath = resolve(dataDir, "teaching-course-management", "database.json");
-  ensureWithinBase(dataDir, filePath);
-  return filePath;
-}
-
-function resolveTeachingCourseAssetsSnapshotPath(dataDir: string) {
-  const filePath = resolve(dataDir, "teaching-course-assets", "database.json");
-  ensureWithinBase(dataDir, filePath);
-  return filePath;
-}
-
-function resolveTeachingCourseManagementBackupPath(dataDir: string, backupId: string) {
-  const filePath = resolve(
-    dataDir,
-    "teaching-course-management-backups",
-    `${backupId}.json`,
-  );
-  ensureWithinBase(dataDir, filePath);
-  return filePath;
-}
-
-function resolveTeachingCourseManagementRestoreDrillLogPath(dataDir: string) {
-  const filePath = resolve(dataDir, "teaching-course-management-restore-drills.jsonl");
-  ensureWithinBase(dataDir, filePath);
-  return filePath;
-}
-
-function resolveTeachingCourseAssetsBackupPath(dataDir: string, backupId: string) {
-  const filePath = resolve(dataDir, "teaching-course-assets-backups", `${backupId}.json`);
-  ensureWithinBase(dataDir, filePath);
-  return filePath;
-}
-
-function resolveTeachingCourseAssetsRestoreDrillLogPath(dataDir: string) {
-  const filePath = resolve(dataDir, "teaching-course-assets-restore-drills.jsonl");
-  ensureWithinBase(dataDir, filePath);
-  return filePath;
-}
-
-function resolveTeachingOperationLogPath(dataDir: string, teacherId: string) {
-  const filePath = resolve(dataDir, "teaching-operations", `${teacherId}.jsonl`);
-  ensureWithinBase(dataDir, filePath);
-  return filePath;
-}
-
-function resolveTeachingOperationAuditLogPath(dataDir: string, teacherId: string) {
-  const filePath = resolve(dataDir, "teaching-operations-audit", `${teacherId}.jsonl`);
-  ensureWithinBase(dataDir, filePath);
-  return filePath;
-}
-
-function resolveTeachingOperationAlertNotificationLogPath(
-  dataDir: string,
-  teacherId: string,
-) {
-  const filePath = resolve(
-    dataDir,
-    "teaching-operation-alert-notifications",
-    `${teacherId}.jsonl`,
-  );
-  ensureWithinBase(dataDir, filePath);
-  return filePath;
-}
-
-function resolveTeachingOperationAlertWebhookDeliveryLogPath(
-  dataDir: string,
-  teacherId: string,
-) {
-  const filePath = resolve(
-    dataDir,
-    "teaching-operation-alert-webhook-deliveries",
-    `${teacherId}.jsonl`,
-  );
-  ensureWithinBase(dataDir, filePath);
-  return filePath;
-}
-
-function resolveTeachingOperationRollbackLogPath(dataDir: string, teacherId: string) {
-  const filePath = resolve(
-    dataDir,
-    "teaching-operation-rollbacks",
-    `${teacherId}.jsonl`,
-  );
-  ensureWithinBase(dataDir, filePath);
-  return filePath;
-}
-
-function resolveTeachingOperationBackupPath(
-  dataDir: string,
-  teacherId: string,
-  backupId: string,
-) {
-  const filePath = resolve(
-    dataDir,
-    "teaching-operation-backups",
-    teacherId,
-    `${backupId}.json`,
-  );
-  ensureWithinBase(dataDir, filePath);
-  return filePath;
-}
-
-function resolveTeachingOperationRestoreDrillLogPath(
-  dataDir: string,
-  teacherId: string,
-) {
-  const filePath = resolve(
-    dataDir,
-    "teaching-operation-restore-drills",
-    `${teacherId}.jsonl`,
-  );
-  ensureWithinBase(dataDir, filePath);
-  return filePath;
-}
-
-function ensureWithinBase(baseDir: string, targetPath: string) {
-  if (targetPath !== baseDir && !targetPath.startsWith(`${baseDir}/`)) {
-    throw new Error("Resolved external storage path escapes the configured data directory.");
-  }
-}
-
-function jsonResponse(status: number, body: unknown) {
-  return Response.json(body, {
-    status,
-    headers: {
-      "cache-control": "no-store",
-    },
-  });
-}
-
-function createErrorResponse(error: unknown) {
-  const status = error instanceof HttpError ? error.status : 500;
-  return jsonResponse(status, {
-    error:
-      error instanceof HttpError
-        ? error.message
-        : "External storage service request failed.",
-    redaction: createRedaction(),
-  });
-}
 
 function createProductionServiceIdentity(config: ExternalStorageRouteConfig) {
   return {
@@ -4023,122 +3908,4 @@ function createProductionServiceIdentity(config: ExternalStorageRouteConfig) {
     serviceTarget: config.serviceTarget,
     valueRedacted: true,
   };
-}
-
-function createRedaction() {
-  return {
-    secrets: "omitted",
-    localFiles: "omitted",
-    assets: "ids-only",
-  } as const;
-}
-
-function mergeIdList(left: string[] = [], right: string[] = []) {
-  return Array.from(new Set([...left, ...right]));
-}
-
-function mergeById<T extends Record<K, string>, K extends keyof T>(
-  left: T[] = [],
-  right: T[] = [],
-  key: K,
-) {
-  const merged = new Map<string, T>();
-  for (const item of [...left, ...right]) {
-    const previous = merged.get(item[key]);
-    merged.set(item[key], {
-      ...(previous ?? {}),
-      ...item,
-    });
-  }
-  return Array.from(merged.values());
-}
-
-function arrayOrEmpty(value: unknown) {
-  return Array.isArray(value) ? value : [];
-}
-
-function uniqueSafeIds(value: unknown, label: string) {
-  return Array.from(new Set(arrayOrEmpty(value).map((entry) => requireSafeId(entry, label))));
-}
-
-function requireRecord(value: unknown, label: string): asserts value is Record<string, unknown> {
-  if (!isRecord(value)) {
-    throw new HttpError(400, `${label} must be an object.`);
-  }
-}
-
-function requireSafeId(value: unknown, label: string) {
-  if (typeof value !== "string" || !/^[A-Za-z0-9_-]+$/.test(value)) {
-    throw new HttpError(400, `Invalid ${label}.`);
-  }
-  return value;
-}
-
-function requireSafeRole(value: unknown): UaisAiActorRole {
-  if (value !== "teacher" && value !== "admin") {
-    throw new HttpError(400, "Invalid actor role.");
-  }
-  return value;
-}
-
-function requireTeachingOperationActionSlot(value: unknown): "primary" | "secondary" {
-  if (value !== "primary" && value !== "secondary") {
-    throw new HttpError(400, "Invalid teaching operation action slot.");
-  }
-  return value;
-}
-
-function requireAlertSeverity(value: unknown): "high" {
-  if (value !== "high") {
-    throw new HttpError(400, "Invalid teaching operation alert severity.");
-  }
-  return value;
-}
-
-function requireTeachingOperationAlertReason(
-  value: unknown,
-): "missing-course-context" {
-  if (value !== "missing-course-context") {
-    throw new HttpError(400, "Invalid teaching operation alert reason.");
-  }
-  return value;
-}
-
-function requireNonNegativeInteger(value: unknown, label: string) {
-  if (!Number.isInteger(value) || Number(value) < 0) {
-    throw new HttpError(400, `Invalid ${label}.`);
-  }
-  return Number(value);
-}
-
-function isPositiveInteger(value: unknown): value is number {
-  return typeof value === "number" && Number.isInteger(value) && value > 0;
-}
-
-function requireIsoDate(value: unknown, label: string) {
-  if (typeof value !== "string" || !Number.isFinite(Date.parse(value))) {
-    throw new HttpError(400, `${label} must be an ISO date.`);
-  }
-  return new Date(Date.parse(value)).toISOString();
-}
-
-function formatTimestampId(value: string) {
-  const iso = requireIsoDate(value, "timestamp");
-  return iso
-    .replace(/[-:]/g, "")
-    .replace(/\.\d{3}Z$/, "")
-    .replace("T", "-");
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-class HttpError extends Error {
-  constructor(
-    public readonly status: number,
-    message: string,
-  ) {
-    super(message);
-  }
 }
