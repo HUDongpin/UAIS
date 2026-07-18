@@ -2,6 +2,7 @@ import { TeachingCourseManagementStoreError } from "@/lib/server/teaching-course
 import {
   TeachingOperationStoreError,
   type TeachingOperationActionSlot,
+  type TeachingOperationReceipt,
 } from "@/lib/server/teaching-operations-store";
 
 // Pure leaf utilities for the teaching-operations route handler (Phase 3
@@ -19,6 +20,37 @@ export type TeachingOperationAuthenticatedTeacher = {
 
 export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+export function readTargetClassId(body: Record<string, unknown>) {
+  const rawValue =
+    typeof body.targetClassId === "string"
+      ? body.targetClassId
+      : typeof body.classId === "string"
+        ? body.classId
+        : undefined;
+  const normalized = rawValue?.trim();
+  return normalized || undefined;
+}
+
+export function readGeneratedInviteCode(receipt: TeachingOperationReceipt) {
+  const artifact = receipt.artifacts.find(
+    (
+      value,
+    ): value is Extract<TeachingOperationReceipt["artifacts"][number], { kind: "invite-code" }> =>
+      value.kind === "invite-code" && value.status === "generated",
+  );
+  return artifact?.code;
+}
+
+export function readPublishedInviteCode(receipt: TeachingOperationReceipt) {
+  const artifact = receipt.artifacts.find(
+    (
+      value,
+    ): value is Extract<TeachingOperationReceipt["artifacts"][number], { kind: "invite-code" }> =>
+      value.kind === "invite-code" && value.status === "published",
+  );
+  return artifact?.code;
 }
 
 export function createRedaction() {
