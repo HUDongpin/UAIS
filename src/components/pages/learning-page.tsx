@@ -53,7 +53,10 @@ import {
   createSlideStudyContent,
   exportSlideStudyNotes,
   getPlaybackContent,
+  getPublishedPlaybackError,
+  getPublishedPlaybackErrorLabel,
   type SlideStudyContent,
+  type PublishedPlaybackError,
 } from "./learning-page-helpers";
 
 type StudyAction = "ask" | "notes" | "checkpoint" | "concepts" | "export";
@@ -64,7 +67,6 @@ type StudyToolView = "notes" | "checkpoint" | "concepts";
 
 type CompanionView = PrimaryCompanionView | StudyToolView;
 
-type PublishedPlaybackError = "auth-required" | "access-denied" | "unavailable";
 
 type AiGuideMessage = {
   id: string;
@@ -411,35 +413,6 @@ function getValidatedCourseId(courseId: string | undefined) {
   return courseId && Object.hasOwn(playbackByCourseId, courseId)
     ? courseId
     : fallbackCourseId;
-}
-
-function getPublishedPlaybackError(status: number): PublishedPlaybackError {
-  if (status === 401) {
-    return "auth-required";
-  }
-  if (status === 403) {
-    return "access-denied";
-  }
-  return "unavailable";
-}
-
-function getPublishedPlaybackErrorLabel(
-  locale: Locale,
-  error: PublishedPlaybackError,
-) {
-  if (error === "auth-required") {
-    return locale === "zh-CN"
-      ? "请重新登录后访问数学课件"
-      : "Sign in again to access the mathematics PPT";
-  }
-  if (error === "access-denied") {
-    return locale === "zh-CN"
-      ? "当前账号无权访问此数学课件"
-      : "This account cannot access the mathematics PPT";
-  }
-  return locale === "zh-CN"
-    ? "数学课件资源暂时不可用"
-    : "Mathematics PPT resources are temporarily unavailable";
 }
 
 function getStringValue(value: unknown) {
