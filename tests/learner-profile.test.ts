@@ -144,6 +144,40 @@ describe("B-17 learner profile projection", () => {
     expect(serialized).not.toContain("student-001");
   });
 
+  it("ignores non-finite scaled scores instead of poisoning aggregates with NaN", () => {
+    const profile = createLearnerProfileFromXapiStatements({
+      statements: [
+        createLearningEventStatement({
+          actor: { id: "student-002", role: "learner" },
+          event: {
+            type: "question.answered",
+            object: {
+              id: "research-methods/unit-9/question-1",
+              name: "Corrupt score check",
+              type: "assessment-question",
+            },
+            result: { score: { scaled: Number.POSITIVE_INFINITY } },
+            context: {
+              courseId: "research-methods",
+              lessonId: "unit-9",
+              locale: "en-US",
+            },
+          },
+          statementId: "statement-unit-9-corrupt-score",
+          timestamp: "2026-07-08T08:30:00.000Z",
+        }),
+      ],
+      courseId: "research-methods",
+      generatedAt: "2026-07-08T09:00:00.000Z",
+    });
+
+    const lesson = profile.lessons.find((item) => item.lessonId === "unit-9");
+    expect(lesson).toBeTruthy();
+    expect(lesson?.bestScore).toBeNull();
+    expect(lesson?.averageScore).toBeNull();
+    expect(profile.progress.averageScore).toBeNull();
+  });
+
   it("feeds the deterministic recommendation service from the same profile evidence path", () => {
     const lessons: AdaptiveLesson[] = [
       { id: "unit-1", courseId: "research-methods", position: 1, title: "Research questions" },

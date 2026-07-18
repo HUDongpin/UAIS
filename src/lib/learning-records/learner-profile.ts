@@ -289,12 +289,14 @@ function readCompetencyIds(statement: XapiStatement) {
 
 function readScaledScore(statement: XapiStatement) {
   const score = statement.result?.score;
-  if (typeof score?.scaled === "number") {
+  if (typeof score?.scaled === "number" && Number.isFinite(score.scaled)) {
     return score.scaled;
   }
   if (
     typeof score?.raw === "number" &&
+    Number.isFinite(score.raw) &&
     typeof score.max === "number" &&
+    Number.isFinite(score.max) &&
     score.max > 0
   ) {
     return score.raw / score.max;
