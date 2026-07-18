@@ -72,6 +72,90 @@ import {
 } from "@/lib/teaching/course-readback";
 import { createProvisionalTeachingCourseId } from "@/lib/teaching-course-id";
 import { createTeachingOperationIdempotencyKey } from "@/lib/teaching-operation-idempotency";
+import {
+  INVITE_CLASS_INVITATION_READBACK_MISMATCH_MESSAGE,
+  INVITE_CODE_COPIED_MESSAGE,
+  INVITE_CODE_DRAFT_READBACK_MISMATCH_MESSAGE,
+  INVITE_COPY_FAILED_MESSAGE,
+  INVITE_ENROLLMENT_ACCESS_READBACK_MISMATCH_MESSAGE,
+  INVITE_GENERATED_MESSAGE,
+  INVITE_LINK_COPIED_MESSAGE,
+  INVITE_PUBLICATION_RECEIPT_MISSING_MESSAGE,
+  INVITE_PUBLISHED_MESSAGE,
+  INVITE_READY_MESSAGE,
+  MEMBERSHIP_APPROVAL_FAILED_MESSAGE,
+  MEMBERSHIP_APPROVAL_PENDING_MESSAGE,
+  MEMBERSHIP_APPROVAL_READBACK_MISMATCH_MESSAGE,
+  MEMBERSHIP_APPROVAL_READBACK_MISSING_MESSAGE,
+  MEMBERSHIP_APPROVAL_RECEIPT_MISSING_MESSAGE,
+  TEACHING_ADMIN_SETTINGS_READBACK_MISMATCH_MESSAGE,
+  TEACHING_AGENT_PLAN_READBACK_MISMATCH_MESSAGE,
+  TEACHING_AI_FEEDBACK_DRAFT_READBACK_MISMATCH_MESSAGE,
+  TEACHING_CLASS_CREATE_READBACK_MISMATCH_MESSAGE,
+  TEACHING_CLASS_CREATE_READBACK_MISSING_MESSAGE,
+  TEACHING_CLASS_CREATE_RECEIPT_MISSING_MESSAGE,
+  TEACHING_COLLABORATION_INVITE_NOTIFICATION_READBACK_MISMATCH_MESSAGE,
+  TEACHING_COURSE_CONTENT_READBACK_MISMATCH_MESSAGE,
+  TEACHING_COURSE_COVER_ASSET_PERSISTENCE_REQUIRED_MESSAGE,
+  TEACHING_COURSE_COVER_AUDIT_REQUIRED_MESSAGE,
+  TEACHING_COURSE_COVER_TEACHER_READBACK_REQUIRED_MESSAGE,
+  TEACHING_COURSE_CREATE_OWNERSHIP_EVIDENCE_MISSING_MESSAGE,
+  TEACHING_COURSE_CREATE_READBACK_MISMATCH_MESSAGE,
+  TEACHING_COURSE_CREATE_READBACK_MISSING_MESSAGE,
+  TEACHING_COURSE_CREATE_RECEIPT_MISSING_MESSAGE,
+  TEACHING_COURSE_LOAD_FAILED_MESSAGE,
+  TEACHING_COURSE_SETTINGS_READBACK_MISMATCH_MESSAGE,
+  TEACHING_DASHBOARD_SNAPSHOT_READBACK_MISMATCH_MESSAGE,
+  TEACHING_DASHBOARD_STATE_READBACK_MISMATCH_MESSAGE,
+  TEACHING_EXPORT_MANIFEST_READBACK_MISMATCH_MESSAGE,
+  TEACHING_GRADING_QUEUE_READBACK_MISMATCH_MESSAGE,
+  TEACHING_GROUP_SUGGESTIONS_READBACK_MISMATCH_MESSAGE,
+  TEACHING_KNOWLEDGE_INDEX_READBACK_MISMATCH_MESSAGE,
+  TEACHING_OPERATION_ALERT_FAILED_MESSAGE,
+  TEACHING_OPERATION_ALERT_NOTIFICATION_FAILED_MESSAGE,
+  TEACHING_OPERATION_ALERT_NOTIFICATION_PENDING_MESSAGE,
+  TEACHING_OPERATION_ALERT_PENDING_MESSAGE,
+  TEACHING_OPERATION_AUDIT_FAILED_MESSAGE,
+  TEACHING_OPERATION_AUDIT_PENDING_MESSAGE,
+  TEACHING_OPERATION_RECEIPT_MISMATCH_MESSAGE,
+  TEACHING_OPERATION_ROLLBACK_FAILED_MESSAGE,
+  TEACHING_OPERATION_ROLLBACK_PENDING_MESSAGE,
+  TEACHING_OPERATION_SAVE_FAILED_MESSAGE,
+  TEACHING_OPERATION_SAVE_PENDING_MESSAGE,
+  TEACHING_PERMISSION_PREFLIGHT_READBACK_MISMATCH_MESSAGE,
+  TEACHING_QUIZ_BOARD_STATE_READBACK_MISMATCH_MESSAGE,
+  TEACHING_QUIZ_ITEM_REVIEW_READBACK_MISMATCH_MESSAGE,
+  TEACHING_REDACTION_VALIDATION_READBACK_MISMATCH_MESSAGE,
+  TEACHING_RESOURCE_REVIEW_ITEM_READBACK_MISMATCH_MESSAGE,
+  TEACHING_STUDENT_PREVIEW_SESSION_READBACK_MISMATCH_MESSAGE,
+  TEACHING_STUDENT_ROSTER_READBACK_MISMATCH_MESSAGE,
+  TEACHING_UNIT_DRAFT_READBACK_MISMATCH_MESSAGE,
+} from "./teaching-page-messages";
+import {
+  INLINE_OPERATION_EXPECTED_DOMAIN_OBJECT_TYPES,
+  type CourseCoverGenerationResponse,
+  type EnterpriseWorkspaceConfig,
+  type GeneratedCourseCover,
+  type InlineInviteBackendArtifact,
+  type InlineInviteOperationResponse,
+  type InlineInvitePartialFailure,
+  type InlineInvitePublicationReceipt,
+  type InlineTeachingOperationAuditAlertNotificationResponse,
+  type InlineTeachingOperationAuditAlertSummaryResponse,
+  type InlineTeachingOperationAuditAuthSession,
+  type InlineTeachingOperationAuditReadbackResponse,
+  type InlineTeachingOperationBackendReceipt,
+  type InlineTeachingOperationDomainPersistenceSummary,
+  type InlineTeachingOperationDomainProjection,
+  type InlineTeachingOperationErrorResponse,
+  type InlineTeachingOperationRecord,
+  type InlineWorkspaceActionConfig,
+  type InlineWorkspaceAlertNotificationStatus,
+  type InlineWorkspaceAlertStatus,
+  type InlineWorkspaceAuditStatus,
+  type InlineWorkspaceRollbackStatus,
+  type TeacherCourseAction,
+} from "./teaching-page-types";
 
 const dashboardIcons = {
   courses: BookOpen,
@@ -88,638 +172,9 @@ const dashboardIcons = {
   "invite-code": QrCode,
 };
 
-type GeneratedCourseCover = {
-  imageUrl: string;
-  assetId?: string;
-  provider?: string;
-  model?: string;
-  requestId?: string;
-};
-
-type CourseCoverGenerationResponse = {
-  cover?: {
-    imageUrl?: string;
-    model?: string;
-    requestId?: string;
-  };
-  asset?: {
-    assetId?: string;
-    courseId?: string;
-  };
-  assetPersistence?: {
-    status?: string;
-    responsibleSession?: string;
-  };
-  audit?: {
-    eventType?: string;
-    assetId?: string;
-    courseId?: string;
-    authMode?: string;
-    authSession?: {
-      sessionId?: string;
-      authenticatedAt?: string;
-      expiresAt?: string;
-    };
-  };
-  partialFailure?: {
-    status?: string;
-    failedStep?: string;
-    courseId?: string;
-    assetId?: string;
-    recoveryAction?: string;
-  };
-  error?: string;
-  traceId?: string;
-  access?: {
-    reasonCode?: string;
-  };
-};
-
-type TeacherCourseAction = "manage" | "continue";
-
-type WorkspaceMetric = {
-  label: string;
-  value: string;
-  note: string;
-};
-
-type WorkspaceLane = {
-  title: string;
-  items: string[];
-};
-
-type EnterpriseWorkspaceConfig = {
-  id: TeachingOperationId;
-  title: string;
-  subtitle: string;
-  description: string;
-  metrics: WorkspaceMetric[];
-  lanes: WorkspaceLane[];
-  records: string[];
-};
-
-type InlineWorkspaceActionConfig = {
-  readyMessage: string;
-  primaryAction: string;
-  primaryMessage: string;
-  secondaryAction: string;
-  secondaryMessage: string;
-};
-
-type InlineInviteBackendArtifact = {
-  kind?: string;
-  code?: string;
-  joinUrl?: string;
-};
-
-type InlineInviteBackendReceipt = {
-  displayMessage?: LocalizedText;
-  receiptId?: string;
-  courseId?: string;
-  artifacts?: InlineInviteBackendArtifact[];
-};
-
-type InlineInvitePublicationReceipt = {
-  action?: string;
-  actorId?: string;
-  courseId?: string;
-  classId?: string;
-  status?: string;
-  traceId?: string;
-};
-
-type InlineInvitePartialFailure = {
-  operationReceiptId?: string;
-  rollbackRoute?: string;
-  compensation?: {
-    status?: string;
-    rollbackReason?: string;
-    receipt?: {
-      receiptId?: string;
-      targetRecordId?: string;
-      status?: string;
-    };
-  };
-};
-
-type InlineInviteOperationResponse = {
-  receipt?: InlineInviteBackendReceipt;
-  classInvitePublicationReceipt?: InlineInvitePublicationReceipt;
-  partialFailure?: InlineInvitePartialFailure;
-  error?: string;
-  traceId?: string;
-  access?: {
-    reasonCode?: string;
-  };
-};
-
-type InlineTeachingOperationAuditAuthSession = {
-  sessionId?: string;
-  authenticatedAt?: string;
-  expiresAt?: string;
-};
-
-type InlineTeachingOperationBackendReceipt = {
-  displayMessage?: LocalizedText;
-  receiptId?: string;
-  operationId?: string;
-  actionSlot?: "primary" | "secondary";
-  courseId?: string;
-  status?: string;
-  audit?: {
-    authMode?: string;
-    authSession?: InlineTeachingOperationAuditAuthSession;
-  };
-};
-
-type InlineTeachingOperationDomainPersistenceSummary = {
-  status?: "persisted" | "missing-domain-objects" | "not-required";
-  required?: boolean;
-  operationReceiptId?: string;
-  expectedObjectTypes?: string[];
-  persistedObjectTypes?: string[];
-  missingObjectTypes?: string[];
-};
-
-type InlineTeachingOperationErrorResponse = {
-  error?: string;
-  traceId?: string;
-  access?: {
-    reasonCode?: string;
-  };
-  partialFailure?: InlineInvitePartialFailure;
-};
-
-type InlineTeachingOperationAuditEvent = {
-  traceId?: string;
-  actorId?: string;
-  authSession?: InlineTeachingOperationAuditAuthSession;
-  courseId?: string;
-};
-
-type InlineTeachingOperationRecord = {
-  recordId?: string;
-  courseId?: string;
-  operationId?: TeachingOperationId;
-  actionSlot?: "primary" | "secondary";
-};
-
-type InlineTeachingOperationDomainProjection = {
-  objectId?: string;
-  objectType?: string;
-  courseId?: string;
-  operationRecordId?: string;
-  status?: string;
-  inviteCode?: string;
-  joinUrl?: string;
-  previewedBy?: string;
-  previewStatus?: string;
-  previewId?: string;
-  previewUrl?: string;
-  previewScope?: string;
-  previewPolicy?: string;
-  courseName?: string;
-  semester?: string;
-  description?: string;
-  syncedBy?: string;
-  syncStatus?: string;
-  sourceSystems?: string[];
-  pendingTeacherReviewCount?: number;
-  syncedAt?: string;
-  suggestionStatus?: string;
-  groupingBasis?: string[];
-  feedbackStatus?: string;
-  feedbackScope?: string;
-  refreshedBy?: string;
-  refreshStatus?: string;
-  visibleMetrics?: string[];
-  refreshedAt?: string;
-  flaggedBy?: string;
-  flaggedSignals?: string[];
-  flaggedAt?: string;
-  lockedBy?: string;
-  snapshotStatus?: string;
-  snapshotId?: string;
-  snapshotScope?: string;
-  retentionPolicy?: string;
-  lockedAt?: string;
-  publishedBy?: string;
-  publicationStatus?: string;
-  releaseScope?: string;
-  publishedAt?: string;
-  generatedBy?: string;
-  draftStatus?: string;
-  artifactId?: string;
-  generatedAt?: string;
-  savedBy?: string;
-  planStatus?: string;
-  enabledAgents?: string[];
-  governancePolicy?: string;
-  savedAt?: string;
-  checkedBy?: string;
-  preflightStatus?: string;
-  checkedPermissions?: string[];
-  preflightPolicy?: string;
-  checkedAt?: string;
-  settingsStatus?: string;
-  adminScopes?: string[];
-  queueStatus?: string;
-  queuedBy?: string;
-  notificationStatus?: string;
-  deliveryChannel?: string;
-  outboxId?: string;
-  deliveryPolicy?: string;
-  reviewStatus?: string;
-  resourceSource?: string;
-  reviewPolicy?: string;
-  queuedAt?: string;
-  updateStatus?: string;
-  updatedBy?: string;
-  releasePolicy?: string;
-  updatedAt?: string;
-  createdBy?: string;
-  exportStatus?: string;
-  manifestId?: string;
-  datasetScopes?: string[];
-  exportPolicy?: string;
-  createdAt?: string;
-  validatedBy?: string;
-  validationStatus?: string;
-  checkedScopes?: string[];
-  validationPolicy?: string;
-  validatedAt?: string;
-  invitePolicy?: string;
-  enrollmentPolicy?: string;
-};
-
-const INLINE_OPERATION_EXPECTED_DOMAIN_OBJECT_TYPES = {
-  "course-settings": {
-    primary: ["course-settings"],
-    secondary: ["student-preview-session"],
-  },
-  agents: {
-    primary: ["agent-plan"],
-    secondary: ["permission-preflight"],
-  },
-  "knowledge-base": {
-    primary: ["knowledge-index"],
-    secondary: ["resource-review-item"],
-  },
-  content: {
-    primary: ["course-content"],
-    secondary: ["unit-draft"],
-  },
-  admins: {
-    primary: ["admin-settings"],
-    secondary: ["email-notification"],
-  },
-  students: {
-    primary: ["student-roster"],
-    secondary: ["group-suggestions"],
-  },
-  "data-export": {
-    primary: ["export-manifest"],
-    secondary: ["redaction-validation"],
-  },
-  dashboard: {
-    primary: ["dashboard-state"],
-    secondary: ["dashboard-snapshot"],
-  },
-  "quiz-board": {
-    primary: ["quiz-board-state"],
-    secondary: ["quiz-item-review"],
-  },
-  grading: {
-    primary: ["grading-queue", "gradebook-update"],
-    secondary: ["ai-feedback-draft"],
-  },
-  "invite-code": {
-    primary: ["invite-code-draft"],
-    secondary: ["enrollment-access"],
-  },
-} satisfies Record<TeachingOperationId, Record<"primary" | "secondary", readonly string[]>>;
-
-type InlineTeachingOperationAuditReadbackResponse = {
-  actorId?: string;
-  auditEventCount?: number;
-  records?: InlineTeachingOperationRecord[];
-  auditEvents?: InlineTeachingOperationAuditEvent[];
-  domainProjections?: InlineTeachingOperationDomainProjection[];
-};
-
-type InlineTeachingOperationAuditAlert = {
-  alertId?: string;
-  severity?: "high";
-  reason?: "missing-course-context";
-  traceId?: string;
-  actorId?: string;
-  operationId?: string;
-  actionSlot?: "primary" | "secondary";
-  actionId?: string;
-};
-
-type InlineTeachingOperationAuditAlertSummaryResponse = {
-  traceId?: string;
-  status?: "attention-required" | "clear";
-  alertCount?: number;
-  alerts?: InlineTeachingOperationAuditAlert[];
-  notificationRoute?: string;
-};
-
-type InlineTeachingOperationAuditAlertNotificationResponse = {
-  traceId?: string;
-  status?: "queued" | "clear";
-  notificationCount?: number;
-  recordCount?: number;
-  notifications?: {
-    notificationId?: string;
-    deliveryStatus?: "queued";
-    alertId?: string;
-  }[];
-};
-
-type InlineWorkspaceAuditStatus = {
-  status: "pending" | "verified" | "failed";
-  traceId?: string;
-  actorId?: string;
-  authSession?: InlineTeachingOperationAuditAuthSession;
-  auditEventCount?: number;
-  recordId?: string;
-  courseId?: string;
-  domainObjectId?: string;
-  domainObjectType?: string;
-};
-
-type InlineWorkspaceAlertStatus = {
-  status: "pending" | "attention-required" | "clear" | "failed";
-  traceId?: string;
-  alertCount?: number;
-  alerts?: InlineTeachingOperationAuditAlert[];
-  notificationRoute?: string;
-};
-
-type InlineWorkspaceAlertNotificationStatus = {
-  status: "pending" | "queued" | "verified" | "clear" | "failed";
-  notificationCount?: number;
-  message?: string;
-};
-
-type InlineWorkspaceRollbackStatus = {
-  status: "pending" | "rolled-back" | "failed";
-  targetRecordId: string;
-  message?: string;
-};
-
 const DEFAULT_INVITE_CODE = "55395057";
 const INVITE_VALID_UNTIL = "2026-12-17";
 const INVITE_JOIN_LIMIT = 60;
-const INVITE_READY_MESSAGE: LocalizedText = {
-  "zh-CN": "当前邀请码可用于班级加入预览。",
-  "en-US": "Current invite code is ready for class join preview.",
-};
-const INVITE_GENERATED_MESSAGE: LocalizedText = {
-  "zh-CN": "邀请码已更新并等待教师确认发布。",
-  "en-US": "Invite code updated and waiting for teacher publish confirmation.",
-};
-const INVITE_PUBLISHED_MESSAGE: LocalizedText = {
-  "zh-CN": "邀请码已发布到班级加入入口。",
-  "en-US": "Invite code published to the class join entry.",
-};
-const INVITE_PUBLICATION_RECEIPT_MISSING_MESSAGE: LocalizedText = {
-  "zh-CN": "邀请码发布回执缺失，请稍后刷新。",
-  "en-US": "Invite publication receipt is missing. Please refresh shortly.",
-};
-const INVITE_CODE_DRAFT_READBACK_MISMATCH_MESSAGE: LocalizedText = {
-  "zh-CN": "邀请码草稿读回未匹配生成结果，请稍后刷新。",
-  "en-US":
-    "Invite code draft readback did not match the generation result. Please refresh shortly.",
-};
-const INVITE_ENROLLMENT_ACCESS_READBACK_MISMATCH_MESSAGE: LocalizedText = {
-  "zh-CN": "邀请码发布读回未匹配发布结果，请稍后刷新。",
-  "en-US":
-    "Invite enrollment access readback did not match the publication result. Please refresh shortly.",
-};
-const INVITE_CLASS_INVITATION_READBACK_MISMATCH_MESSAGE: LocalizedText = {
-  "zh-CN": "班级邀请码读回未匹配发布结果，请稍后刷新。",
-  "en-US": "Class invite-code readback did not match the publication result. Please refresh shortly.",
-};
-const INVITE_CODE_COPIED_MESSAGE: LocalizedText = {
-  "zh-CN": "邀请码已复制。",
-  "en-US": "Invite code copied.",
-};
-const INVITE_LINK_COPIED_MESSAGE: LocalizedText = {
-  "zh-CN": "加入链接已复制。",
-  "en-US": "Join link copied.",
-};
-const INVITE_COPY_FAILED_MESSAGE: LocalizedText = {
-  "zh-CN": "复制不可用，请手动复制页面中的邀请码或链接。",
-  "en-US": "Copy is unavailable. Please copy the code or link manually.",
-};
-const TEACHING_OPERATION_SAVE_FAILED_MESSAGE: LocalizedText = {
-  "zh-CN": "未保存到服务器，请重新登录或检查课程权限。",
-  "en-US": "Not saved to the server. Please sign in again or check course access.",
-};
-const TEACHING_OPERATION_RECEIPT_MISMATCH_MESSAGE: LocalizedText = {
-  "zh-CN": "服务端回执未匹配当前操作，请稍后重试。",
-  "en-US": "The server receipt did not match the current operation. Please retry later.",
-};
-const TEACHING_OPERATION_SAVE_PENDING_MESSAGE: LocalizedText = {
-  "zh-CN": "正在保存到服务器，请稍候。",
-  "en-US": "Saving to the server. Please wait.",
-};
-const TEACHING_COURSE_LOAD_FAILED_MESSAGE: LocalizedText = {
-  "zh-CN": "服务端课程数据未读回。当前显示本地演示课程，请重新登录或检查课程权限。",
-  "en-US":
-    "Server course data was not read back. Local demo courses remain visible; sign in again or check course access.",
-};
-const TEACHING_COURSE_COVER_TEACHER_READBACK_REQUIRED_MESSAGE: LocalizedText = {
-  "zh-CN": "教师身份未读回，请重新登录或等待课程数据读回后再生成封面。",
-  "en-US":
-    "Teacher identity was not read back. Please sign in again or wait for course data readback before generating a cover.",
-};
-const TEACHING_COURSE_COVER_ASSET_PERSISTENCE_REQUIRED_MESSAGE: LocalizedText = {
-  "zh-CN": "封面未保存到课程资产库，请稍后重试。",
-  "en-US": "The cover was not persisted to the course asset library. Please retry shortly.",
-};
-const TEACHING_COURSE_COVER_AUDIT_REQUIRED_MESSAGE: LocalizedText = {
-  "zh-CN": "封面审计回执缺失，请稍后重试。",
-  "en-US": "The cover audit receipt is missing. Please retry shortly.",
-};
-const TEACHING_COURSE_CREATE_READBACK_MISSING_MESSAGE: LocalizedText = {
-  "zh-CN": "新课程已提交，但服务端列表尚未读回该课程，请稍后刷新。",
-  "en-US":
-    "The new course was submitted, but the server list has not read it back yet. Please refresh shortly.",
-};
-const TEACHING_COURSE_CREATE_READBACK_MISMATCH_MESSAGE: LocalizedText = {
-  "zh-CN": "新课程已提交，但服务端读回的课程内容与本次提交不一致，请稍后刷新。",
-  "en-US":
-    "The new course was submitted, but the server readback does not match this submission. Please refresh shortly.",
-};
-const TEACHING_COURSE_CREATE_OWNERSHIP_EVIDENCE_MISSING_MESSAGE: LocalizedText = {
-  "zh-CN": "课程所有权合并证据缺失，请稍后刷新。",
-  "en-US": "Course ownership merge evidence is missing. Please refresh shortly.",
-};
-const TEACHING_COURSE_CREATE_RECEIPT_MISSING_MESSAGE: LocalizedText = {
-  "zh-CN": "课程服务端回执缺失，请稍后刷新。",
-  "en-US": "Course server receipt is missing. Please refresh shortly.",
-};
-const TEACHING_CLASS_CREATE_READBACK_MISSING_MESSAGE: LocalizedText = {
-  "zh-CN": "新班级已提交，但服务端列表尚未读回该班级，请稍后刷新。",
-  "en-US":
-    "The new class was submitted, but the server list has not read it back yet. Please refresh shortly.",
-};
-const TEACHING_CLASS_CREATE_READBACK_MISMATCH_MESSAGE: LocalizedText = {
-  "zh-CN": "新班级已提交，但服务端读回的班级内容与本次提交不一致，请稍后刷新。",
-  "en-US":
-    "The new class was submitted, but the server readback does not match this submission. Please refresh shortly.",
-};
-const TEACHING_CLASS_CREATE_RECEIPT_MISSING_MESSAGE: LocalizedText = {
-  "zh-CN": "班级服务端回执缺失，请稍后刷新。",
-  "en-US": "Class server receipt is missing. Please refresh shortly.",
-};
-const TEACHING_OPERATION_AUDIT_PENDING_MESSAGE: LocalizedText = {
-  "zh-CN": "正在读取审计证据。",
-  "en-US": "Reading audit evidence.",
-};
-const TEACHING_OPERATION_AUDIT_FAILED_MESSAGE: LocalizedText = {
-  "zh-CN": "审计读回未完成，请稍后刷新。",
-  "en-US": "Audit readback is not complete. Please refresh later.",
-};
-const TEACHING_COURSE_SETTINGS_READBACK_MISMATCH_MESSAGE: LocalizedText = {
-  "zh-CN": "课程设置读回未匹配本次提交，请稍后刷新。",
-  "en-US": "Course settings readback did not match this submission. Please refresh shortly.",
-};
-const TEACHING_STUDENT_PREVIEW_SESSION_READBACK_MISMATCH_MESSAGE: LocalizedText = {
-  "zh-CN": "学生端预览读回未匹配生成结果，请稍后刷新。",
-  "en-US":
-    "Student preview readback did not match the generation result. Please refresh shortly.",
-};
-const TEACHING_STUDENT_ROSTER_READBACK_MISMATCH_MESSAGE: LocalizedText = {
-  "zh-CN": "学生名单读回未匹配同步结果，请稍后刷新。",
-  "en-US": "Student roster readback did not match the sync result. Please refresh shortly.",
-};
-const TEACHING_GROUP_SUGGESTIONS_READBACK_MISMATCH_MESSAGE: LocalizedText = {
-  "zh-CN": "分组建议读回未匹配生成结果，请稍后刷新。",
-  "en-US": "Group suggestions readback did not match the generation result. Please refresh shortly.",
-};
-const TEACHING_KNOWLEDGE_INDEX_READBACK_MISMATCH_MESSAGE: LocalizedText = {
-  "zh-CN": "知识库索引读回未匹配同步结果，请稍后刷新。",
-  "en-US": "Knowledge index readback did not match the sync result. Please refresh shortly.",
-};
-const TEACHING_RESOURCE_REVIEW_ITEM_READBACK_MISMATCH_MESSAGE: LocalizedText = {
-  "zh-CN": "资源复核项读回未匹配入队结果，请稍后刷新。",
-  "en-US":
-    "Resource review item readback did not match the queue result. Please refresh shortly.",
-};
-const TEACHING_DASHBOARD_STATE_READBACK_MISMATCH_MESSAGE: LocalizedText = {
-  "zh-CN": "数据看板读回未匹配刷新结果，请稍后刷新。",
-  "en-US": "Dashboard readback did not match the refresh result. Please refresh shortly.",
-};
-const TEACHING_DASHBOARD_SNAPSHOT_READBACK_MISMATCH_MESSAGE: LocalizedText = {
-  "zh-CN": "日报快照读回未匹配锁定结果，请稍后刷新。",
-  "en-US":
-    "Dashboard snapshot readback did not match the lock result. Please refresh shortly.",
-};
-const TEACHING_COURSE_CONTENT_READBACK_MISMATCH_MESSAGE: LocalizedText = {
-  "zh-CN": "课程内容读回未匹配发布结果，请稍后刷新。",
-  "en-US": "Course content readback did not match the publish result. Please refresh shortly.",
-};
-const TEACHING_UNIT_DRAFT_READBACK_MISMATCH_MESSAGE: LocalizedText = {
-  "zh-CN": "单元草稿读回未匹配生成结果，请稍后刷新。",
-  "en-US": "Unit draft readback did not match the generation result. Please refresh shortly.",
-};
-const TEACHING_AGENT_PLAN_READBACK_MISMATCH_MESSAGE: LocalizedText = {
-  "zh-CN": "智能体方案读回未匹配保存结果，请稍后刷新。",
-  "en-US": "Agent plan readback did not match the save result. Please refresh shortly.",
-};
-const TEACHING_PERMISSION_PREFLIGHT_READBACK_MISMATCH_MESSAGE: LocalizedText = {
-  "zh-CN": "权限预检读回未匹配检查结果，请稍后刷新。",
-  "en-US":
-    "Permission preflight readback did not match the check result. Please refresh shortly.",
-};
-const TEACHING_ADMIN_SETTINGS_READBACK_MISMATCH_MESSAGE: LocalizedText = {
-  "zh-CN": "管理员设置读回未匹配保存结果，请稍后刷新。",
-  "en-US": "Admin settings readback did not match the save result. Please refresh shortly.",
-};
-const TEACHING_COLLABORATION_INVITE_NOTIFICATION_READBACK_MISMATCH_MESSAGE: LocalizedText = {
-  "zh-CN": "协作邀请通知读回未匹配入队结果，请稍后刷新。",
-  "en-US":
-    "Collaboration invite notification readback did not match the queue result. Please refresh shortly.",
-};
-const TEACHING_QUIZ_BOARD_STATE_READBACK_MISMATCH_MESSAGE: LocalizedText = {
-  "zh-CN": "测验看板读回未匹配刷新结果，请稍后刷新。",
-  "en-US": "Quiz board readback did not match the refresh result. Please refresh shortly.",
-};
-const TEACHING_QUIZ_ITEM_REVIEW_READBACK_MISMATCH_MESSAGE: LocalizedText = {
-  "zh-CN": "低质题复核读回未匹配标记结果，请稍后刷新。",
-  "en-US":
-    "Low-quality item review readback did not match the flag result. Please refresh shortly.",
-};
-const TEACHING_GRADING_QUEUE_READBACK_MISMATCH_MESSAGE: LocalizedText = {
-  "zh-CN": "批改队列与成绩册读回未匹配保存结果，请稍后刷新。",
-  "en-US":
-    "Grading queue and gradebook readback did not match the save result. Please refresh shortly.",
-};
-const TEACHING_AI_FEEDBACK_DRAFT_READBACK_MISMATCH_MESSAGE: LocalizedText = {
-  "zh-CN": "AI 反馈草稿读回未匹配生成结果，请稍后刷新。",
-  "en-US":
-    "AI feedback draft readback did not match the generation result. Please refresh shortly.",
-};
-const TEACHING_EXPORT_MANIFEST_READBACK_MISMATCH_MESSAGE: LocalizedText = {
-  "zh-CN": "导出清单读回未匹配生成结果，请稍后刷新。",
-  "en-US": "Export manifest readback did not match the generation result. Please refresh shortly.",
-};
-const TEACHING_REDACTION_VALIDATION_READBACK_MISMATCH_MESSAGE: LocalizedText = {
-  "zh-CN": "脱敏范围读回未匹配校验结果，请稍后刷新。",
-  "en-US":
-    "Redaction scope readback did not match the validation result. Please refresh shortly.",
-};
-const TEACHING_OPERATION_ROLLBACK_PENDING_MESSAGE: LocalizedText = {
-  "zh-CN": "正在撤回本次操作。",
-  "en-US": "Rolling back this operation.",
-};
-const TEACHING_OPERATION_ROLLBACK_FAILED_MESSAGE: LocalizedText = {
-  "zh-CN": "撤回未保存到服务器，请稍后重试。",
-  "en-US": "Rollback was not saved to the server. Please retry later.",
-};
-const TEACHING_OPERATION_ALERT_PENDING_MESSAGE: LocalizedText = {
-  "zh-CN": "正在读取教学操作告警。",
-  "en-US": "Reading teaching operation alerts.",
-};
-const TEACHING_OPERATION_ALERT_FAILED_MESSAGE: LocalizedText = {
-  "zh-CN": "教学操作告警读取失败，请稍后重试。",
-  "en-US": "Teaching operation alert readback failed. Please retry later.",
-};
-const TEACHING_OPERATION_ALERT_NOTIFICATION_PENDING_MESSAGE: LocalizedText = {
-  "zh-CN": "正在通知管理员。",
-  "en-US": "Notifying the administrator.",
-};
-const TEACHING_OPERATION_ALERT_NOTIFICATION_FAILED_MESSAGE: LocalizedText = {
-  "zh-CN": "告警通知未入队，请稍后重试。",
-  "en-US": "Alert notification was not queued. Please retry later.",
-};
-const MEMBERSHIP_APPROVAL_PENDING_MESSAGE: LocalizedText = {
-  "zh-CN": "正在审批加入申请，请稍候。",
-  "en-US": "Approving the join request. Please wait.",
-};
-const MEMBERSHIP_APPROVAL_FAILED_MESSAGE: LocalizedText = {
-  "zh-CN": "审批未保存到服务器，请重新登录或检查班级权限。",
-  "en-US": "Approval was not saved. Please sign in again or check class access.",
-};
-const MEMBERSHIP_APPROVAL_RECEIPT_MISSING_MESSAGE: LocalizedText = {
-  "zh-CN": "审批服务端回执缺失，请稍后重试。",
-  "en-US": "Approval server receipt is missing. Please retry later.",
-};
-const MEMBERSHIP_APPROVAL_READBACK_MISSING_MESSAGE: LocalizedText = {
-  "zh-CN": "成员审批已提交，但服务端列表尚未读回该成员，请稍后刷新。",
-  "en-US":
-    "The membership approval was submitted, but the server list has not read back that member yet. Please refresh shortly.",
-};
-const MEMBERSHIP_APPROVAL_READBACK_MISMATCH_MESSAGE: LocalizedText = {
-  "zh-CN": "成员审批读回未匹配本次提交，请稍后刷新。",
-  "en-US": "Membership approval readback did not match this submission. Please refresh shortly.",
-};
-
 function createInlineWorkspaceActionConfig(
   id: TeachingOperationId,
   locale: Locale,
