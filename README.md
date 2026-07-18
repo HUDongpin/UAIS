@@ -96,3 +96,11 @@ requests and pushes to `main`: install, lint, `npm run test:critical`,
 advisory-governance checks, and a compile-only Next route build. Repository
 branch protection still needs to require this workflow before it can block
 merges on GitHub.
+
+`.github/workflows/promotion-gate.yml` is the staging→production promotion gate:
+it runs the real-journey E2E smoke (`npm run journey:smoke`) against a deployed
+target and must pass before promotion. Trigger it manually with a base URL
+(`workflow_dispatch`) or automatically on a successful `deployment_status`.
+Provide a real test account via the `UAIS_SMOKE_ACCOUNT` / `UAIS_SMOKE_PASSWORD`
+repository secrets; the built-in demo account only authenticates outside
+production. Run it locally with `npm run journey:smoke -- --base-url <url>`.

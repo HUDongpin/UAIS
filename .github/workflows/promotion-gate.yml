@@ -1,0 +1,62 @@
+name: UAIS Promotion Gate
+
+# Phase 4 staging -> production promotion gate. Runs the real-journey E2E smoke
+# (auth gate, login + signed session, protected routes, forged-cookie rejection,
+# sign-out) against a DEPLOYED target and must pass before a deployment is
+# promoted. The staging/production deploy and its Neon branch DB are provisioned
+# by the owner (Vercel); this workflow enforces the journey gate on top of them.
+#
+# Run it manually against any deployed URL, or let it fire automatically when a
+# deployment succeeds. Provide a real test account via the repository secrets
+# UAIS_SMOKE_ACCOUNT / UAIS_SMOKE_PASSWORD — the built-in demo account only
+# authenticates outside production.
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: "Deployed base URL to smoke (e.g. https://staging.uais.top)"
+        required: true
+        type: string
+  deployment_status:
+
+jobs:
+  journey-smoke:
+    name: Core-journey promotion gate
+    # On deployment_status events, only gate successful deployments.
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.deployment_status.state == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Resolve target URL
+        id: target
+        run: |
+          if [ "${{ github.event_name }}" = "deployment_status" ]; then
+            URL="${{ github.event.deployment_status.environment_url }}"
+            if [ -z "$URL" ]; then URL="${{ github.event.deployment_status.target_url }}"; fi
+          else
+            URL="${{ inputs.base_url }}"
+          fi
+          if [ -z "$URL" ]; then
+            echo "No target URL resolved for the promotion gate." >&2
+            exit 1
+          fi
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+
+      - name: Core-journey smoke (signed gate enforced)
+        env:
+          UAIS_SMOKE_ACCOUNT: ${{ secrets.UAIS_SMOKE_ACCOUNT }}
+          UAIS_SMOKE_PASSWORD: ${{ secrets.UAIS_SMOKE_PASSWORD }}
+        run: npm run journey:smoke -- --base-url "${{ steps.target.outputs.url }}" --signed-gate true
