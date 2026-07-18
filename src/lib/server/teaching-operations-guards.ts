@@ -3,6 +3,7 @@ import type {
   TeachingOperationActionSlot,
   TeachingOperationAuditRequestSource,
   TeachingOperationIdempotencyStatus,
+  TeachingOperationProductionDatabaseAdapterEvidence,
   TeachingOperationRedaction,
 } from "./teaching-operations-store";
 
@@ -100,4 +101,18 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
 
 export function isPositiveInteger(value: unknown): value is number {
   return typeof value === "number" && Number.isInteger(value) && value > 0;
+}
+
+export function isTeachingOperationProductionDatabaseAdapterEvidence(
+  value: unknown,
+): value is TeachingOperationProductionDatabaseAdapterEvidence {
+  return (
+    isRecord(value) &&
+    value.status === "ready" &&
+    value.providerClass === "managed-database" &&
+    value.migrationStatus === "up-to-date" &&
+    value.backupPolicy === "point-in-time-restore" &&
+    value.concurrencyControl === "transactional" &&
+    value.valueRedacted === true
+  );
 }

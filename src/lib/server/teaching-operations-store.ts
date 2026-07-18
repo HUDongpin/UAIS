@@ -40,7 +40,6 @@ import type {
   TeachingOperationInviteCodeRecord,
   TeachingOperationOutboxRecord,
   TeachingOperationPersistedAuditEvent,
-  TeachingOperationProductionDatabaseAdapterEvidence,
   TeachingOperationReceipt,
   TeachingOperationReceiptAudit,
   TeachingOperationRecord,
@@ -84,10 +83,15 @@ import {
   normalizeOutboxRecord,
 } from "./teaching-operations-record-normalizers";
 import {
+  normalizeTeachingGradebookReleaseProviderReceipt,
+  normalizeTeachingGradebookReleaseRollbackProviderReceipt,
+} from "./teaching-operations-receipt-normalizers";
+import {
   createRedaction,
   isPositiveInteger,
   isRecord,
   isTeachingOperationIdempotencyStatus,
+  isTeachingOperationProductionDatabaseAdapterEvidence,
   requireIsoDate,
   requireSafeId,
 } from "./teaching-operations-guards";
@@ -96,6 +100,9 @@ import {
 // these were extracted to their own modules (Phase 3 decomposition).
 export { resolveTeachingOperationDataDir };
 export { TeachingOperationStoreError };
+// Re-exported (now defined in the guards module) so the audit routes keep
+// importing this guard from the store unchanged.
+export { isTeachingOperationProductionDatabaseAdapterEvidence };
 // Re-exported so the audit route keeps importing these from the store after the
 // audit/record normalizers moved to teaching-operations-audit-normalizers.ts.
 export {
@@ -451,20 +458,6 @@ function normalizeExternalAppendReceipt(
     responsibleSession: "S12",
     redaction: createRedaction(),
   };
-}
-
-export function isTeachingOperationProductionDatabaseAdapterEvidence(
-  value: unknown,
-): value is TeachingOperationProductionDatabaseAdapterEvidence {
-  return (
-    isRecord(value) &&
-    value.status === "ready" &&
-    value.providerClass === "managed-database" &&
-    value.migrationStatus === "up-to-date" &&
-    value.backupPolicy === "point-in-time-restore" &&
-    value.concurrencyControl === "transactional" &&
-    value.valueRedacted === true
-  );
 }
 
 async function runWithTeachingOperationLocalWriteLock<T>(
@@ -1165,26 +1158,6 @@ function createGradebookReleaseExternalRecord(input: {
     redaction: createRedaction(),
     artifacts: input.domainProjections.map(createDomainProjectionArtifact),
     domainProjections: input.domainProjections,
-  };
-}
-
-function normalizeTeachingGradebookReleaseProviderReceipt(
-  input: TeachingGradebookReleaseProviderReceipt,
-): TeachingGradebookReleaseProviderReceipt {
-  return {
-    providerStatus: "gradebook-provider-released",
-    providerReleaseId: requireSafeId(input.providerReleaseId, "provider release id"),
-    providerReleasedAt: requireIsoDate(input.providerReleasedAt, "providerReleasedAt"),
-  };
-}
-
-function normalizeTeachingGradebookReleaseRollbackProviderReceipt(
-  input: TeachingGradebookReleaseRollbackProviderReceipt,
-): TeachingGradebookReleaseRollbackProviderReceipt {
-  return {
-    providerRollbackStatus: "gradebook-provider-release-rolled-back",
-    providerRollbackId: requireSafeId(input.providerRollbackId, "provider rollback id"),
-    providerRolledBackAt: requireIsoDate(input.providerRolledBackAt, "providerRolledBackAt"),
   };
 }
 
