@@ -25,8 +25,20 @@ export function proxy(
   const trustedTeacherSession = hasVerifiedTrustedTeacherSession(request, env);
   const role: UaisAppRole | undefined =
     appSessionUser?.role ?? (trustedTeacherSession ? "teacher" : undefined);
+  // The unverified app-session cookie pair is only an *optimistic* fallback for
+  // the case where this proxy cannot verify a signature at all — i.e. no signing
+  // secret is configured in its runtime. Whenever a signing secret IS configured
+  // (every production deployment), require a verified signed session so a forged
+  // cookie pair cannot pass the navigation gate. Data-bearing routes verify the
+  // signature server-side regardless; this closes the gate-bypass while keeping
+  // legit users signed in (they always resolve via `appSessionUser`).
+  const appSessionSecretConfigured = Boolean(
+    env.UAIS_APP_SESSION_SIGNING_SECRET?.trim(),
+  );
   const authenticated =
-    Boolean(appSessionUser) || trustedTeacherSession || appSessionCookiePair;
+    Boolean(appSessionUser) ||
+    trustedTeacherSession ||
+    (appSessionCookiePair && !appSessionSecretConfigured);
 
   if (isLoginRoute && role) {
     return NextResponse.redirect(new URL(getUaisHomeHrefForRole(role), request.url));

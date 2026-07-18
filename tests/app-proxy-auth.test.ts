@@ -46,6 +46,26 @@ describe("UAIS app route auth proxy", () => {
     expect(response?.headers.get("location")).toBeNull();
   });
 
+  it("rejects a forged app-session cookie pair once a signing secret is configured", () => {
+    // Security regression: when the proxy CAN verify (a signing secret is
+    // configured, as in every production deployment), an unverified cookie pair
+    // must not pass the gate. The optimistic fallback above only applies when no
+    // secret is available to verify with.
+    const request = new NextRequest("https://uais.top/learning", {
+      headers: {
+        cookie: `${UAIS_APP_SESSION_COOKIE}=forged; ${UAIS_APP_SESSION_SIGNATURE_COOKIE}=forged`,
+      },
+    });
+    const response = proxy(request, {
+      UAIS_APP_SESSION_SIGNING_SECRET: appSessionSecret,
+    });
+
+    expect(response?.status).toBe(307);
+    expect(response?.headers.get("location")).toBe(
+      "https://uais.top/login?from=%2Flearning",
+    );
+  });
+
   it("does not infer a teacher role from an unverified app-session cookie pair on login", () => {
     const request = new NextRequest("https://uais.top/login", {
       headers: {
