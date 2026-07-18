@@ -5,20 +5,17 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { ArrowLeft } from "@phosphor-icons/react/dist/ssr/ArrowLeft";
 import { ArrowRight } from "@phosphor-icons/react/dist/ssr/ArrowRight";
 import { BookOpen } from "@phosphor-icons/react/dist/ssr/BookOpen";
-import { CaretRight } from "@phosphor-icons/react/dist/ssr/CaretRight";
 import { ChatsCircle } from "@phosphor-icons/react/dist/ssr/ChatsCircle";
 import { CheckCircle } from "@phosphor-icons/react/dist/ssr/CheckCircle";
 import { FilePdf } from "@phosphor-icons/react/dist/ssr/FilePdf";
 import { GearSix } from "@phosphor-icons/react/dist/ssr/GearSix";
 import { LinkSimple } from "@phosphor-icons/react/dist/ssr/LinkSimple";
-import { Notebook } from "@phosphor-icons/react/dist/ssr/Notebook";
 import { PaperPlaneTilt } from "@phosphor-icons/react/dist/ssr/PaperPlaneTilt";
 import { PlayCircle } from "@phosphor-icons/react/dist/ssr/PlayCircle";
 import { Robot } from "@phosphor-icons/react/dist/ssr/Robot";
 import { SlidersHorizontal } from "@phosphor-icons/react/dist/ssr/SlidersHorizontal";
 import { Sparkle } from "@phosphor-icons/react/dist/ssr/Sparkle";
 import { Target } from "@phosphor-icons/react/dist/ssr/Target";
-import { X } from "@phosphor-icons/react/dist/ssr/X";
 import { useAppPreferences } from "@/components/providers/app-preferences";
 import { localizedText } from "@/components/ui/localized-text";
 import {
@@ -49,14 +46,15 @@ import {
   type SlideStudyContent,
   type PublishedPlaybackError,
   type StudyAction,
+  type StudyToolView,
 } from "./learning-page-helpers";
 import { PptStage, SlideChapterRail } from "./learning-page-slides";
 import { NarrationDock } from "./learning-page-narration";
+import { StudyToolsPanel } from "./learning-page-study-tools";
 
 
 type PrimaryCompanionView = "ai" | "subtitles" | "outline";
 
-type StudyToolView = "notes" | "checkpoint" | "concepts";
 
 type CompanionView = PrimaryCompanionView | StudyToolView;
 
@@ -1307,264 +1305,6 @@ function LearningCompanionPanel({
   );
 }
 
-function StudyToolsPanel({
-  locale,
-  studyContent,
-  activeView,
-  expandedCheckpointId,
-  onToggleCheckpoint,
-  onActiveViewChange,
-  onClose,
-}: {
-  locale: Locale;
-  studyContent: SlideStudyContent;
-  activeView: StudyToolView;
-  expandedCheckpointId?: string;
-  onToggleCheckpoint: (checkpointId: string) => void;
-  onActiveViewChange: (view: StudyToolView) => void;
-  onClose: () => void;
-}) {
-  const zh = locale === "zh-CN";
-  const toolTabs = [
-    { view: "notes" as const, label: zh ? "本页笔记" : "Slide Notes", icon: Notebook },
-    { view: "checkpoint" as const, label: zh ? "检查点" : "Check", icon: Target },
-    { view: "concepts" as const, label: zh ? "概念卡" : "Concept Cards", icon: Sparkle },
-  ];
-
-  return (
-    <>
-      <button
-        type="button"
-        aria-label={zh ? "关闭学习工具背景" : "Close study tools backdrop"}
-        onClick={onClose}
-        className="fixed inset-0 z-40 bg-[#141833]/35 backdrop-blur-[1px] xl:hidden"
-      />
-      <section
-        id="learning-tools-panel"
-        role="dialog"
-        aria-label={zh ? "学习工具" : "Study Tools"}
-        className="fixed inset-x-0 bottom-0 z-50 max-h-[82dvh] overflow-hidden rounded-t-2xl border border-[#dfe4ef] bg-white shadow-[0_-22px_48px_rgba(20,24,51,0.18)] xl:static xl:z-auto xl:max-h-none xl:rounded-none xl:border-0 xl:bg-transparent xl:shadow-none"
-      >
-        <div className="border-b border-[#e9ecf4] bg-white p-4 xl:bg-transparent xl:px-0 xl:pt-0">
-          <div className="flex items-center justify-between gap-3">
-            <div className="min-w-0">
-              <p className="inline-flex items-center gap-2 text-sm font-semibold text-[#1f6feb]">
-                <GearSix size={17} weight="duotone" />
-                {zh ? "学习工具" : "Study Tools"}
-              </p>
-              <p className="mt-1 truncate text-xs font-medium text-[#7b8399]">
-                {zh ? "记录、检查和复习当前页" : "Capture, check, and review this slide"}
-              </p>
-            </div>
-            <button
-              type="button"
-              aria-label={zh ? "关闭学习工具" : "Close study tools"}
-              onClick={onClose}
-              className="grid size-9 shrink-0 place-items-center rounded-full border border-[#e1e5ef] bg-white text-[#5e667f] outline-none transition hover:border-[#bfdbfe] hover:text-[#1f6feb] focus-visible:ring-2 focus-visible:ring-[#1f6feb]"
-            >
-              <X size={17} weight="bold" />
-            </button>
-          </div>
-
-          <div
-            role="group"
-            aria-label={zh ? "学习工具栏目切换" : "Study tools switcher"}
-            className="mt-3 grid grid-cols-3 gap-2 rounded-lg border border-[#dfe4ef] bg-[#f7f9fd] p-1"
-          >
-            {toolTabs.map((tab) => {
-              const Icon = tab.icon;
-              const active = activeView === tab.view;
-              return (
-                <button
-                  key={tab.view}
-                  type="button"
-                  aria-pressed={active}
-                  onClick={() => onActiveViewChange(tab.view)}
-                  className={[
-                    "inline-flex h-11 min-w-0 items-center justify-center gap-1.5 rounded-md border px-2 text-sm font-semibold outline-none transition focus-visible:ring-2 focus-visible:ring-[#1f6feb]",
-                    active
-                      ? "border-[#1f6feb] bg-[#1f6feb] text-white shadow-[0_8px_18px_rgba(31,111,235,0.2)]"
-                      : "border-transparent bg-white text-[#4f5670] hover:border-[#bfdbfe] hover:text-[#1f6feb]",
-                  ].join(" ")}
-                >
-                  <Icon size={16} weight="duotone" className="shrink-0" />
-                  <span className="truncate">{tab.label}</span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        <div className="max-h-[calc(82dvh-8rem)] overflow-y-auto p-4 xl:max-h-none xl:p-0 xl:pt-4">
-          {activeView === "notes" ? (
-            <SlideNotesView locale={locale} studyContent={studyContent} />
-          ) : null}
-
-          {activeView === "checkpoint" ? (
-            <StudyCheckpointView
-              locale={locale}
-              studyContent={studyContent}
-              expandedCheckpointId={expandedCheckpointId}
-              onToggleCheckpoint={onToggleCheckpoint}
-            />
-          ) : null}
-
-          {activeView === "concepts" ? (
-            <SlideConceptsView locale={locale} studyContent={studyContent} />
-          ) : null}
-        </div>
-      </section>
-    </>
-  );
-}
-
-function SlideNotesView({
-  locale,
-  studyContent,
-}: {
-  locale: Locale;
-  studyContent: SlideStudyContent;
-}) {
-  const zh = locale === "zh-CN";
-
-  return (
-    <section>
-      <div className="rounded-xl border border-[#dfe7f6] bg-[#f8fbff] p-4">
-        <p className="text-xs font-semibold uppercase tracking-wide text-[#1f6feb]">
-          {studyContent.slideLabel}
-        </p>
-        <h2 className="mt-2 text-lg font-semibold text-[#222842]">
-          {zh ? "本页笔记" : "Slide Notes"}
-        </h2>
-        <p className="mt-2 text-sm leading-6 text-[#5d657d]">{studyContent.slideTitle}</p>
-      </div>
-
-      <div className="mt-4 space-y-4">
-        <section className="rounded-xl border border-[#e4e8f2] bg-white p-4">
-          <h3 className="text-sm font-semibold text-[#303650]">
-            {zh ? "学习要点" : "Study Takeaways"}
-          </h3>
-          <ul className="mt-3 space-y-2 text-sm leading-6 text-[#535b76]">
-            {studyContent.takeaways.map((takeaway) => (
-              <li key={takeaway} className="flex gap-2">
-                <CheckCircle size={17} weight="duotone" className="mt-1 shrink-0 text-[#1f6feb]" />
-                <span>{takeaway}</span>
-              </li>
-            ))}
-          </ul>
-        </section>
-
-        <section className="rounded-xl border border-[#e4e8f2] bg-white p-4">
-          <h3 className="text-sm font-semibold text-[#303650]">
-            {zh ? "讲解线索" : "Narration Cue"}
-          </h3>
-          <p className="mt-3 text-sm leading-6 text-[#535b76]">{studyContent.narrationCue}</p>
-        </section>
-      </div>
-    </section>
-  );
-}
-
-function StudyCheckpointView({
-  locale,
-  studyContent,
-  expandedCheckpointId,
-  onToggleCheckpoint,
-}: {
-  locale: Locale;
-  studyContent: SlideStudyContent;
-  expandedCheckpointId?: string;
-  onToggleCheckpoint: (checkpointId: string) => void;
-}) {
-  const zh = locale === "zh-CN";
-
-  return (
-    <section>
-      <h2 className="text-lg font-semibold text-[#222842]">
-        {zh ? "学习检查点" : "Study Checkpoint"}
-      </h2>
-      <p className="mt-2 text-sm leading-6 text-[#697089]">
-        {zh
-          ? `围绕「${studyContent.slideTitle}」完成自检。`
-          : `Check your understanding of "${studyContent.slideTitle}".`}
-      </p>
-      <div className="mt-4 space-y-3">
-        {studyContent.checkpoints.map((checkpoint) => {
-          const expanded = expandedCheckpointId === checkpoint.id;
-          return (
-            <div key={checkpoint.id} className="rounded-xl border border-[#e4e8f2] bg-white">
-              <button
-                type="button"
-                aria-expanded={expanded}
-                onClick={() => onToggleCheckpoint(checkpoint.id)}
-                className="flex w-full items-start justify-between gap-3 rounded-xl px-4 py-3 text-left text-sm font-semibold leading-6 text-[#303650] outline-none transition hover:bg-[#f8fbff] focus-visible:ring-2 focus-visible:ring-[#1f6feb]"
-              >
-                <span>{checkpoint.question}</span>
-                <CaretRight
-                  size={17}
-                  weight="bold"
-                  className={[
-                    "mt-1 shrink-0 text-[#1f6feb] transition",
-                    expanded ? "rotate-90" : "",
-                  ].join(" ")}
-                />
-              </button>
-              {expanded ? (
-                <div className="border-t border-[#edf0f6] px-4 py-3 text-sm leading-6 text-[#535b76]">
-                  <p className="font-semibold text-[#1f6feb]">
-                    {zh ? "参考答案" : "Suggested Answer"}
-                  </p>
-                  <p className="mt-2">{checkpoint.answer}</p>
-                </div>
-              ) : null}
-            </div>
-          );
-        })}
-      </div>
-    </section>
-  );
-}
-
-function SlideConceptsView({
-  locale,
-  studyContent,
-}: {
-  locale: Locale;
-  studyContent: SlideStudyContent;
-}) {
-  const zh = locale === "zh-CN";
-
-  return (
-    <section>
-      <h2 className="text-lg font-semibold text-[#222842]">
-        {zh ? "关键概念" : "Key Concepts"}
-      </h2>
-      <p className="mt-2 text-sm leading-6 text-[#697089]">
-        {zh
-          ? `本页共有 ${studyContent.concepts.length} 个概念需要钉住。`
-          : `${studyContent.concepts.length} concepts are pinned for this slide.`}
-      </p>
-      <div className="mt-4 space-y-3">
-        {studyContent.concepts.map((concept) => (
-          <article
-            key={concept.title}
-            className="rounded-xl border border-[#e4e8f2] bg-white p-4 shadow-[0_8px_18px_rgba(46,58,91,0.04)]"
-          >
-            <div className="flex items-start gap-3">
-              <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-[#dbeafe] text-[#1f6feb]">
-                <Sparkle size={18} weight="duotone" />
-              </span>
-              <div>
-                <h3 className="text-sm font-semibold text-[#303650]">{concept.title}</h3>
-                <p className="mt-2 text-sm leading-6 text-[#535b76]">{concept.description}</p>
-              </div>
-            </div>
-          </article>
-        ))}
-      </div>
-    </section>
-  );
-}
 
 function getAiGuideCopy(
   locale: Locale,

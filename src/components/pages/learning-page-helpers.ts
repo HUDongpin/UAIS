@@ -232,3 +232,5 @@ export function getPublishedPlaybackErrorLabel(
 }
 
 export type StudyAction = "ask" | "notes" | "checkpoint" | "concepts" | "export";
+
+export type StudyToolView = "notes" | "checkpoint" | "concepts";
