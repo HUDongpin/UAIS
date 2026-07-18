@@ -1,3 +1,4 @@
+import { TeachingCourseManagementStoreError } from "@/lib/server/teaching-course-management-store";
 import {
   TeachingOperationStoreError,
   type TeachingOperationActionSlot,
@@ -35,4 +36,24 @@ export function normalizeActionSlot(value: unknown): TeachingOperationActionSlot
     return value;
   }
   throw new TeachingOperationStoreError(400, "Unsupported teaching operation action.");
+}
+
+export function normalizeTeachingOperationRouteError(error: unknown) {
+  if (error instanceof TeachingCourseManagementStoreError) {
+    return {
+      status: error.status,
+      message: error.message,
+      ...(error.diagnostics ? { diagnostics: error.diagnostics } : {}),
+    };
+  }
+  if (error instanceof TeachingOperationStoreError) {
+    return {
+      status: error.status,
+      message: error.message,
+    };
+  }
+  return {
+    status: 500,
+    message: "Teaching operation backend request failed.",
+  };
 }
