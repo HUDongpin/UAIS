@@ -87,6 +87,13 @@ export function createUaisTeachingCourseManagementPostgresRepository(input: {
             );
           }
 
+          // Serialize to a JSON string and cast text -> jsonb. Do NOT pass the
+          // object (via sql.json() or directly): in postgres v3.4.9 a jsonb
+          // parameter that the server describes as type 3802 reaches Bind
+          // unserialized inside sql.begin() and throws "The string argument must
+          // be of type string ... Received an instance of Object". Forcing the
+          // parameter to text ($n::text) sends the raw JSON string, then ::jsonb
+          // parses it server-side. Verified against a real Postgres round-trip.
           await sql`
             INSERT INTO uais_teaching_course_management_snapshots (
               snapshot_key,
@@ -96,7 +103,7 @@ export function createUaisTeachingCourseManagementPostgresRepository(input: {
             )
             VALUES (
               ${snapshotKey},
-              ${sql.json(normalizedDatabase)},
+              ${JSON.stringify(normalizedDatabase)}::text::jsonb,
               ${revision},
               now()
             )
