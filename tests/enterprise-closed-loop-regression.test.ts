@@ -253,9 +253,12 @@ describe("enterprise closed-loop regression guards", () => {
       expect(preflightSection).toContain(requirement.error);
     }
 
-    const providerConfigReaders = route.slice(
-      route.indexOf("function readStudentRosterSyncProviderConfig"),
-      route.indexOf("function readProviderDeliveryId"),
+    const providerConfig = source(
+      "src/app/api/teaching/operations/provider-config.ts",
+    );
+    const providerConfigReaders = providerConfig.slice(
+      providerConfig.indexOf("function readStudentRosterSyncProviderConfig"),
+      providerConfig.indexOf("function readProviderDeliveryId"),
     );
     expect(providerConfigReaders).toContain("token.length < 32");
     expect(providerConfigReaders).toContain("readExternalTeachingProviderUrl");
