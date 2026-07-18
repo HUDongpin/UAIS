@@ -1,0 +1,290 @@
+"use client";
+
+// Course-settings teacher workspace panel (Phase 3 decomposition of teaching-page.tsx).
+// Extracted verbatim from renderCourseSettingsWorkspace; closed-over state, derived
+// values, setters, and handlers are same-named props, so the render body is unchanged.
+
+
+
+import { type Dispatch, type SetStateAction } from "react";
+import Link from "next/link";
+import { ArrowRight } from "@phosphor-icons/react/dist/ssr/ArrowRight";
+import { Plus } from "@phosphor-icons/react/dist/ssr/Plus";
+import {
+  getTeachingCourseActionHref,
+} from "@/components/teaching/teaching-operation-data";
+import type { TeachingOperationId } from "@/components/teaching/teaching-operation-data";
+import { localizedText } from "@/components/ui/localized-text";
+import { teacherSidebarItems } from "@/data/uais";
+import type { TeacherCourse } from "@/data/uais";
+import { copy } from "@/i18n/copy";
+import type { Locale } from "@/i18n/copy";
+import type {
+  CourseSettingsDraft,
+  TeacherClassItem,
+  TeacherClassMembershipItem,
+} from "@/lib/teaching/course-readback";
+import { CourseClassManager } from "./teaching-page-dialogs";
+import { InlineWorkspaceActionButtons } from "./teaching-page-inline-workspace-action-buttons";
+import { InlineWorkspaceStatus } from "./teaching-page-inline-workspace-status";
+import { WorkspaceContext } from "./teaching-page-workspace-context";
+import type {
+  InlineWorkspaceAlertNotificationStatus,
+  InlineWorkspaceAlertStatus,
+  InlineWorkspaceAuditStatus,
+  InlineWorkspaceRollbackStatus,
+  TeacherCourseAction,
+} from "./teaching-page-types";
+
+type CourseSettingsWorkspaceProps = {
+  locale: Locale;
+  t: (typeof copy)[Locale];
+  activeWorkspaceItem: (typeof teacherSidebarItems)[number];
+  activeCourseSettingsCourse: TeacherCourse | undefined;
+  activeCourseSettingsDraft: CourseSettingsDraft | undefined;
+  courseCards: TeacherCourse[];
+  courseClasses: Record<string, TeacherClassItem[]>;
+  classMemberships: Record<string, TeacherClassMembershipItem[]>;
+  membershipApprovalStatuses: Record<string, string>;
+  inlineWorkspaceStatuses: Partial<Record<TeachingOperationId, string>>;
+  inlineWorkspaceAuditStatuses: Partial<Record<TeachingOperationId, InlineWorkspaceAuditStatus>>;
+  inlineWorkspaceAlertStatuses: Partial<Record<TeachingOperationId, InlineWorkspaceAlertStatus>>;
+  inlineWorkspaceAlertNotificationStatuses: Partial<
+    Record<TeachingOperationId, InlineWorkspaceAlertNotificationStatus>
+  >;
+  inlineWorkspaceRollbackStatuses: Partial<Record<TeachingOperationId, InlineWorkspaceRollbackStatus>>;
+  selectedActionCourse: TeacherCourse | undefined;
+  selectedCourseActionLabel: string | undefined;
+  selectedCourseAction: { courseId: string; action: TeacherCourseAction } | undefined;
+  setIsNewCourseOpen: Dispatch<SetStateAction<boolean>>;
+  setNewClassCourseId: Dispatch<SetStateAction<string | undefined>>;
+  setSelectedClassInvitation: Dispatch<SetStateAction<TeacherClassItem | undefined>>;
+  approveClassMembership: (
+    classItem: TeacherClassItem,
+    membership: TeacherClassMembershipItem,
+  ) => void;
+  updateCourseSettingsDraft: (course: TeacherCourse, patch: Partial<CourseSettingsDraft>) => void;
+  queueInlineWorkspaceAuditAlertNotifications: (
+    operationId: TeachingOperationId,
+    notificationRoute?: string,
+  ) => void;
+  runInlineWorkspaceAction: (
+    operationId: TeachingOperationId,
+    actionSlot: "primary" | "secondary",
+  ) => void;
+  runInlineWorkspaceRollback: (input: {
+    operationId: TeachingOperationId;
+    recordId: string;
+    courseId?: string;
+  }) => void;
+};
+
+export function CourseSettingsWorkspace({
+  locale,
+  t,
+  activeWorkspaceItem,
+  activeCourseSettingsCourse,
+  activeCourseSettingsDraft,
+  courseCards,
+  courseClasses,
+  classMemberships,
+  membershipApprovalStatuses,
+  inlineWorkspaceStatuses,
+  inlineWorkspaceAuditStatuses,
+  inlineWorkspaceAlertStatuses,
+  inlineWorkspaceAlertNotificationStatuses,
+  inlineWorkspaceRollbackStatuses,
+  selectedActionCourse,
+  selectedCourseActionLabel,
+  selectedCourseAction,
+  setIsNewCourseOpen,
+  setNewClassCourseId,
+  setSelectedClassInvitation,
+  approveClassMembership,
+  updateCourseSettingsDraft,
+  queueInlineWorkspaceAuditAlertNotifications,
+  runInlineWorkspaceAction,
+  runInlineWorkspaceRollback,
+}: CourseSettingsWorkspaceProps) {
+    return (
+      <div
+        className="space-y-5"
+        data-uais-active-teaching-workspace="course-settings"
+        data-uais-teaching-workspace-panel
+      >
+        <section className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5 shadow-[0_18px_42px_var(--shadow)]">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-xl font-semibold text-[var(--foreground)]">
+                {locale === "zh-CN" ? "课程设置工作台" : "Course Settings Workspace"}
+              </h2>
+              <p className="mt-1 text-sm text-[var(--muted)]">
+                {locale === "zh-CN"
+                  ? "维护课程档案、班级结构、学期节奏和学生端发布前检查。"
+                  : "Maintain course profiles, class structures, term cadence, and student-facing release checks."}
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                className="inline-flex h-10 items-center gap-2 rounded-full bg-[var(--accent)] px-4 text-sm font-semibold text-white outline-none transition hover:bg-[var(--accent-strong)] active:translate-y-px focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]"
+                onClick={() => setIsNewCourseOpen(true)}
+              >
+                <Plus size={17} weight="bold" />
+                {locale === "zh-CN" ? "新增课程" : "New Course"}
+              </button>
+              {<InlineWorkspaceActionButtons
+              operationId={"course-settings"}
+              locale={locale}
+              inlineWorkspaceStatuses={inlineWorkspaceStatuses}
+              runInlineWorkspaceAction={runInlineWorkspaceAction}
+            />}
+            </div>
+          </div>
+
+          {<WorkspaceContext
+            locale={locale}
+            activeWorkspaceItem={activeWorkspaceItem}
+            selectedCourseAction={selectedCourseAction}
+            selectedActionCourse={selectedActionCourse}
+            selectedCourseActionLabel={selectedCourseActionLabel}
+          />}
+          {activeCourseSettingsCourse && activeCourseSettingsDraft ? (
+            <div
+              className="mt-5 rounded-2xl border border-[var(--border)] bg-[var(--surface-elevated)] p-4"
+              data-uais-course-settings-patch-form={activeCourseSettingsCourse.id}
+            >
+              <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_220px]">
+                <div className="min-w-0">
+                  <label
+                    htmlFor={`course-settings-name-${activeCourseSettingsCourse.id}`}
+                    className="block text-sm font-semibold text-[var(--foreground)]"
+                  >
+                    {locale === "zh-CN" ? "课程名称" : "Course Name"}
+                  </label>
+                  <input
+                    id={`course-settings-name-${activeCourseSettingsCourse.id}`}
+                    value={activeCourseSettingsDraft.courseName}
+                    className="mt-2 h-11 w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 text-sm font-medium text-[var(--foreground)] outline-none transition focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent)]/20"
+                    onChange={(event) =>
+                      updateCourseSettingsDraft(activeCourseSettingsCourse, {
+                        courseName: event.target.value,
+                      })
+                    }
+                  />
+                </div>
+                <div className="min-w-0">
+                  <label
+                    htmlFor={`course-settings-semester-${activeCourseSettingsCourse.id}`}
+                    className="block text-sm font-semibold text-[var(--foreground)]"
+                  >
+                    {locale === "zh-CN" ? "学期安排" : "Semester"}
+                  </label>
+                  <input
+                    id={`course-settings-semester-${activeCourseSettingsCourse.id}`}
+                    value={activeCourseSettingsDraft.semester}
+                    className="mt-2 h-11 w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 text-sm font-medium text-[var(--foreground)] outline-none transition focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent)]/20"
+                    onChange={(event) =>
+                      updateCourseSettingsDraft(activeCourseSettingsCourse, {
+                        semester: event.target.value,
+                      })
+                    }
+                  />
+                </div>
+                <div className="min-w-0 lg:col-span-2">
+                  <label
+                    htmlFor={`course-settings-description-${activeCourseSettingsCourse.id}`}
+                    className="block text-sm font-semibold text-[var(--foreground)]"
+                  >
+                    {locale === "zh-CN" ? "课程说明" : "Course Description"}
+                  </label>
+                  <textarea
+                    id={`course-settings-description-${activeCourseSettingsCourse.id}`}
+                    value={activeCourseSettingsDraft.description}
+                    rows={3}
+                    className="mt-2 w-full resize-none rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm font-medium leading-6 text-[var(--foreground)] outline-none transition focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent)]/20"
+                    onChange={(event) =>
+                      updateCourseSettingsDraft(activeCourseSettingsCourse, {
+                        description: event.target.value,
+                      })
+                    }
+                  />
+                </div>
+              </div>
+            </div>
+          ) : null}
+          {<InlineWorkspaceStatus
+            operationId="course-settings"
+            locale={locale}
+            inlineWorkspaceStatuses={inlineWorkspaceStatuses}
+            inlineWorkspaceAuditStatuses={inlineWorkspaceAuditStatuses}
+            inlineWorkspaceAlertStatuses={inlineWorkspaceAlertStatuses}
+            inlineWorkspaceAlertNotificationStatuses={inlineWorkspaceAlertNotificationStatuses}
+            inlineWorkspaceRollbackStatuses={inlineWorkspaceRollbackStatuses}
+            runInlineWorkspaceRollback={runInlineWorkspaceRollback}
+            queueInlineWorkspaceAuditAlertNotifications={queueInlineWorkspaceAuditAlertNotifications}
+          />}
+
+          <div className="mt-5 grid gap-4 md:grid-cols-2">
+            {courseCards.map((course) => (
+              <article
+                key={course.id}
+                className={[
+                  "rounded-2xl border border-[var(--border)] bg-[var(--surface-elevated)] p-4",
+                  course.id.startsWith("teacher-new-") ? "md:col-span-2" : "",
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <h3 className="text-lg font-semibold text-[var(--foreground)]">
+                      {localizedText(course.title, locale)}
+                    </h3>
+                    <p className="mt-1 text-sm font-medium text-[var(--accent)]">
+                      {localizedText(course.status, locale)}
+                    </p>
+                  </div>
+                  <span className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-1 text-sm font-semibold text-[var(--foreground)]">
+                    {course.students}
+                  </span>
+                </div>
+                <p className="mt-4 text-sm leading-6 text-[var(--muted)]">
+                  {localizedText(course.currentFocus, locale)}
+                </p>
+                <div className="mt-5 flex flex-wrap gap-2">
+                  <Link
+                    href={getTeachingCourseActionHref(
+                      "course-settings",
+                      course.id,
+                      "manage",
+                    )}
+                    className="inline-flex h-10 items-center gap-2 rounded-full bg-[var(--accent)] px-4 text-sm font-semibold text-white outline-none transition hover:bg-[var(--accent-strong)] active:translate-y-px focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface-elevated)]"
+                  >
+                    {t.common.manageCourse}
+                    <ArrowRight size={16} weight="bold" />
+                  </Link>
+                  <Link
+                    href={getTeachingCourseActionHref("content", course.id, "continue")}
+                    className="inline-flex h-10 items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface)] px-4 text-sm font-semibold text-[var(--foreground)] outline-none transition hover:bg-[var(--surface-soft)] active:translate-y-px focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+                  >
+                    {t.teaching.continue}
+                  </Link>
+                </div>
+                <CourseClassManager
+                  classes={courseClasses[course.id] ?? []}
+                  membershipsByClass={classMemberships}
+                  membershipApprovalStatuses={membershipApprovalStatuses}
+                  course={course}
+                  locale={locale}
+                  onApproveMembership={approveClassMembership}
+                  onNewClass={() => setNewClassCourseId(course.id)}
+                  onOpenInvitation={setSelectedClassInvitation}
+                />
+              </article>
+            ))}
+          </div>
+        </section>
+      </div>
+    );
+  }
