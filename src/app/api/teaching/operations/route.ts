@@ -58,6 +58,12 @@ import { createUaisTeacherAiOwnershipAdapter } from "@/lib/server/teacher-ai-own
 import { resolveUaisTeacherAuthProviderContract } from "@/lib/server/teacher-auth-provider-contract";
 import { readUaisAuthenticatedTeacherSessionFromSignedCookies } from "@/lib/server/teacher-auth-session";
 import { getUaisAppSessionClaimsFromCookieString } from "@/lib/server/uais-app-session";
+import {
+  createRedaction,
+  isRecord,
+  jsonResponse,
+  normalizeActionSlot,
+} from "./route-utils";
 
 export const dynamic = "force-dynamic";
 
@@ -4066,13 +4072,6 @@ function isTeachingOperationProductionRuntime(env: Record<string, string | undef
   );
 }
 
-function normalizeActionSlot(value: unknown): TeachingOperationActionSlot {
-  if (value === "primary" || value === "secondary") {
-    return value;
-  }
-  throw new TeachingOperationStoreError(400, "Unsupported teaching operation action.");
-}
-
 function createErrorResponse(error: unknown, traceId: string) {
   const routeError = normalizeTeachingOperationRouteError(error);
   return jsonResponse(routeError.status, {
@@ -4081,16 +4080,6 @@ function createErrorResponse(error: unknown, traceId: string) {
     traceId,
     redaction: createRedaction(),
   }, traceId);
-}
-
-function jsonResponse(status: number, body: unknown, traceId?: string) {
-  return Response.json(body, {
-    status,
-    headers: {
-      "cache-control": "no-store",
-      ...(traceId ? { "x-uais-trace-id": traceId } : {}),
-    },
-  });
 }
 
 function createDeniedAccess(
@@ -4108,14 +4097,3 @@ function createDeniedAccess(
   };
 }
 
-function createRedaction() {
-  return {
-    secrets: "omitted",
-    localFiles: "omitted",
-    assets: "ids-only",
-  } as const;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
