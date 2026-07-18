@@ -87,6 +87,20 @@ import {
   normalizeStudentPreviewSessionRecord,
   normalizeStudentRosterSyncRecord,
 } from "./teaching-course-management-record-normalizers";
+import {
+  countApprovedMembershipsForClass,
+  countApprovedStudentsForCourse,
+  createAuditEvent,
+  createClassInvitationCode,
+  createReceipt,
+  formatTimestampId,
+  isTeachingCourseManagementOptimisticSnapshotConflict,
+  isTeachingCourseManagementProductionRuntime,
+  normalizeClassDraft,
+  normalizeClassUniqueValue,
+  normalizeCourseDraft,
+  normalizeCourseSettingsPatch,
+} from "./teaching-course-management-helpers";
 
 // Re-exported so consumers importing the error from the store keep working after
 // it was extracted to its own module (Phase 3 decomposition).
@@ -137,14 +151,6 @@ export type {
   TeachingStudentPreviewSessionRecord,
   TeachingStudentRosterSyncRecord,
 } from "@/lib/server/teaching-course-management-types";
-
-type NormalizedTeachingCourseSettingsPatch = TeachingCourseSettingsPatchInput & {
-  appliedFields: TeachingCourseSettingsAppliedField[];
-};
-
-type NormalizedTeachingCourseDraft = Required<Omit<TeachingCourseDraftInput, "courseId">> & {
-  courseId?: string;
-};
 
 const localTeachingCourseManagementStorage: TeachingCourseManagementStorageDescriptor = {
   recordStoragePolicy: "local-json-teaching-course-management",
@@ -5320,193 +5326,6 @@ export function resolveTeachingCourseManagementDataDir(configuredDataDir?: strin
         ".tmp",
         "uais-teaching-course-management-db",
       );
-}
-
-function isTeachingCourseManagementProductionRuntime(
-  env: Record<string, string | undefined>,
-) {
-  return (
-    env.VERCEL_ENV === "production" ||
-    env.NODE_ENV === "production" ||
-    env.UAIS_DEPLOYMENT_ENV === "production"
-  );
-}
-
-function isTeachingCourseManagementOptimisticSnapshotConflict(error: unknown) {
-  return error instanceof TeachingCourseManagementStoreError && error.status === 409;
-}
-
-function normalizeCourseDraft(input: TeachingCourseDraftInput): NormalizedTeachingCourseDraft {
-  return {
-    ...(input.courseId ? { courseId: requireSafeId(input.courseId, "course id") } : {}),
-    name: requireTrimmedString(input.name, "course name", 200),
-    instructor: requireTrimmedString(input.instructor, "instructor", 120),
-    unit: requireTrimmedString(input.unit, "unit", 160),
-    department: requireTrimmedString(input.department, "department", 160),
-    semester: requireTrimmedString(input.semester, "semester", 120),
-    description: optionalTrimmedString(input.description, 600) ?? "",
-    coverAssetId: input.coverAssetId ? requireSafeId(input.coverAssetId, "cover asset id") : "",
-  };
-}
-
-function normalizeCourseSettingsPatch(
-  input: unknown,
-): NormalizedTeachingCourseSettingsPatch {
-  if (!isRecord(input)) {
-    return { appliedFields: [] };
-  }
-
-  const appliedFields: TeachingCourseSettingsAppliedField[] = [];
-  const patch: TeachingCourseSettingsPatchInput = {};
-  const stringFields = [
-    ["courseName", "course name", 200],
-    ["instructor", "instructor", 120],
-    ["unit", "unit", 160],
-    ["department", "department", 160],
-    ["semester", "semester", 120],
-  ] as const;
-
-  for (const [field, label, maxLength] of stringFields) {
-    if (Object.hasOwn(input, field)) {
-      patch[field] = requireTrimmedString(input[field], label, maxLength);
-      appliedFields.push(field);
-    }
-  }
-  if (Object.hasOwn(input, "description")) {
-    if (typeof input.description !== "string") {
-      throw new TeachingCourseManagementStoreError(400, "Invalid description.");
-    }
-    patch.description = input.description.trim().slice(0, 600);
-    appliedFields.push("description");
-  }
-
-  return {
-    ...patch,
-    appliedFields,
-  };
-}
-
-function normalizeClassDraft(input: TeachingClassDraftInput): TeachingClassDraftInput {
-  return {
-    className: requireTrimmedString(input.className, "class name", 160),
-    ...(input.semester ? { semester: requireTrimmedString(input.semester, "semester", 120) } : {}),
-  };
-}
-
-function normalizeClassUniqueValue(value: string) {
-  return value.trim().replace(/\s+/g, " ").toLocaleLowerCase("en-US");
-}
-
-function countApprovedMembershipsForClass(
-  database: TeachingCourseManagementDatabase,
-  classId: string,
-) {
-  return database.memberships.filter(
-    (membership) => membership.classId === classId && membership.membershipStatus === "approved",
-  ).length;
-}
-
-function countApprovedStudentsForCourse(
-  database: TeachingCourseManagementDatabase,
-  courseId: string,
-) {
-  const classIds = new Set(
-    database.classes.filter((classItem) => classItem.courseId === courseId).map((item) => item.classId),
-  );
-  return new Set(
-    database.memberships
-      .filter(
-        (membership) =>
-          membership.membershipStatus === "approved" && classIds.has(membership.classId),
-      )
-      .map((membership) => membership.studentId),
-  ).size;
-}
-
-function createReceipt(input: {
-  action: TeachingCourseManagementAction;
-  actorId: string;
-  courseId: string;
-  classId?: string;
-  traceId?: string;
-  createdAt: string;
-  authSession?: TeachingCourseManagementAuthSessionSummary;
-  storage: TeachingCourseManagementStorageDescriptor;
-}): TeachingCourseManagementReceipt {
-  return {
-    receiptId: `${input.action}-${input.courseId}-${formatTimestampId(new Date(input.createdAt))}`,
-    action: input.action,
-    actorId: input.actorId,
-    courseId: input.courseId,
-    ...(input.classId ? { classId: input.classId } : {}),
-    traceId: input.traceId ?? `trace-${randomUUID()}`,
-    status: "persisted",
-    ...(input.authSession ? { authSession: normalizeAuthSessionSummary(input.authSession) } : {}),
-    storagePolicy: input.storage.recordStoragePolicy,
-    storageWritePolicy: input.storage.storageWritePolicy,
-    responsibleSession: "S12",
-    createdAt: input.createdAt,
-    redaction: createRedaction(),
-  };
-}
-
-function createAuditEvent(input: {
-  action: TeachingCourseManagementAction;
-  actorId: string;
-  courseId: string;
-  classId?: string;
-  traceId: string;
-  actorRole?: "teacher" | "student";
-  authMode?: "signed-teacher-session" | "app-student-session";
-  authSession?: TeachingCourseManagementAuthSessionSummary;
-  createdAt: string;
-  requestSource?: TeachingCourseManagementAuditRequestSource;
-  storage: TeachingCourseManagementStorageDescriptor;
-}): TeachingCourseManagementAuditEvent {
-  return {
-    auditId: `audit-${input.action}-${formatTimestampId(new Date(input.createdAt))}`,
-    action: input.action,
-    actorId: input.actorId,
-    courseId: input.courseId,
-    ...(input.classId ? { classId: input.classId } : {}),
-    traceId: input.traceId,
-    actorRole: input.actorRole ?? "teacher",
-    authMode: input.authMode ?? "signed-teacher-session",
-    ...(input.authSession ? { authSession: normalizeAuthSessionSummary(input.authSession) } : {}),
-    createdAt: input.createdAt,
-    requestSource: normalizeAuditRequestSource(input.requestSource),
-    storagePolicy: input.storage.auditStoragePolicy,
-    redaction: createRedaction(),
-  };
-}
-
-function createClassInvitationCode(database: TeachingCourseManagementDatabase) {
-  const usedInviteCodes = new Set<string>();
-  for (const classItem of database.classes) {
-    usedInviteCodes.add(classItem.invitationCode);
-  }
-  for (const inviteCodeDraft of database.inviteCodeDrafts ?? []) {
-    usedInviteCodes.add(inviteCodeDraft.inviteCode);
-  }
-  for (const membership of database.memberships) {
-    usedInviteCodes.add(membership.invitationCode);
-  }
-
-  for (let code = 55395057; code <= 99999999; code += 1) {
-    const invitationCode = String(code).padStart(8, "0");
-    if (!usedInviteCodes.has(invitationCode)) {
-      return invitationCode;
-    }
-  }
-
-  throw new TeachingCourseManagementStoreError(
-    409,
-    "Teaching class invite code capacity is exhausted.",
-  );
-}
-
-function formatTimestampId(now: Date) {
-  return now.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "").replace("T", "-");
 }
 
 async function writeTeachingCourseManagementDatabase(input: {
