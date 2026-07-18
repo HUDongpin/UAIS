@@ -685,7 +685,7 @@ describe("enterprise closed-loop regression guards", () => {
     expect(page).toContain("readInlineWorkspaceAuditEvidence");
     expect(page).toContain("createInlineDomainPersistenceFailureStatus");
     expect(page).toContain("TEACHING_OPERATION_SAVE_FAILED_MESSAGE");
-    expect(page).toContain("verifyCourseCoverAssetPersistence");
+    expect(teachingPageHelpers).toContain("function verifyCourseCoverAssetPersistence");
     expect(teachingPageHelpers).toContain("TEACHING_COURSE_COVER_ASSET_PERSISTENCE_REQUIRED_MESSAGE");
     expect(teachingPageHelpers).toContain("TEACHING_COURSE_COVER_AUDIT_REQUIRED_MESSAGE");
     expect(teachingPageHelpers).toContain('payload.assetPersistence?.status !== "persisted"');
