@@ -674,6 +674,9 @@ describe("enterprise closed-loop regression guards", () => {
     const teacherPptWorkflowFormat = source(
       "src/components/pages/teacher-ppt-narration-workflow-format.ts",
     );
+    // Course-cover verification helpers and their required-message copy moved into
+    // the extracted pure-helpers module (Phase 3 decomposition of teaching-page.tsx).
+    const teachingPageHelpers = source("src/components/pages/teaching-page-helpers.ts");
 
     expect(page).toContain("const [authenticatedTeacherActorId, setAuthenticatedTeacherActorId]");
     expect(page).toContain("useState<string>();");
@@ -683,10 +686,10 @@ describe("enterprise closed-loop regression guards", () => {
     expect(page).toContain("createInlineDomainPersistenceFailureStatus");
     expect(page).toContain("TEACHING_OPERATION_SAVE_FAILED_MESSAGE");
     expect(page).toContain("verifyCourseCoverAssetPersistence");
-    expect(page).toContain("TEACHING_COURSE_COVER_ASSET_PERSISTENCE_REQUIRED_MESSAGE");
-    expect(page).toContain("TEACHING_COURSE_COVER_AUDIT_REQUIRED_MESSAGE");
-    expect(page).toContain('payload.assetPersistence?.status !== "persisted"');
-    expect(page).toContain('payload.audit.authMode === "signed-teacher-session"');
+    expect(teachingPageHelpers).toContain("TEACHING_COURSE_COVER_ASSET_PERSISTENCE_REQUIRED_MESSAGE");
+    expect(teachingPageHelpers).toContain("TEACHING_COURSE_COVER_AUDIT_REQUIRED_MESSAGE");
+    expect(teachingPageHelpers).toContain('payload.assetPersistence?.status !== "persisted"');
+    expect(teachingPageHelpers).toContain('payload.audit.authMode === "signed-teacher-session"');
     expect(page).toContain("teacherActorId={authenticatedTeacherActorId}");
     expect(teacherPptWorkflowFormat).toContain("function requireTeacherWorkflowActorId");
     expect(page).not.toContain("DEFAULT_TEACHER_ID");
@@ -1287,6 +1290,9 @@ describe("enterprise closed-loop regression guards", () => {
 
   it("keeps main teaching course and class creation gated by persisted readback before local success", () => {
     const page = source("src/components/pages/teaching-page.tsx");
+    // The course-create receipt-missing message moved into the extracted pure-helpers
+    // module (Phase 3 decomposition of teaching-page.tsx).
+    const teachingPageHelpers = source("src/components/pages/teaching-page-helpers.ts");
     const browserSmoke = source("scripts/teaching-operation-detail-browser-smoke.mjs");
     const releaseGate = source("scripts/production-e2e-release-gate.mjs");
     const acceptancePacket = source(
@@ -1306,7 +1312,7 @@ describe("enterprise closed-loop regression guards", () => {
     expect(createCourseSection).toContain("isMergedCourseOwnershipReceipt");
     expect(createCourseSection).toContain("isPersistedTeachingCourseCreateReceipt");
     expect(createCourseSection).toContain("const readback = await readPersistedTeachingCourseState()");
-    expect(page).toContain("TEACHING_COURSE_CREATE_RECEIPT_MISSING_MESSAGE");
+    expect(teachingPageHelpers).toContain("TEACHING_COURSE_CREATE_RECEIPT_MISSING_MESSAGE");
     expect(createCourseSection).toContain("TEACHING_COURSE_CREATE_READBACK_MISSING_MESSAGE");
     expect(createCourseSection).toContain("TEACHING_COURSE_CREATE_READBACK_MISMATCH_MESSAGE");
     expect(createCourseSection.indexOf("const readback = await readPersistedTeachingCourseState()")).toBeLessThan(
@@ -1322,7 +1328,7 @@ describe("enterprise closed-loop regression guards", () => {
     );
     expect(createClassSection).toContain('method: "POST"');
     expect(createClassSection).toContain("isPersistedTeachingClassCreateReceipt");
-    expect(page).toContain("function isVerifiedTeachingCreateAuthSession");
+    expect(teachingPageHelpers).toContain("function isVerifiedTeachingCreateAuthSession");
     expect(page).toContain('typeof authSession?.sessionId === "string"');
     expect(page).toContain('typeof authSession.authenticatedAt === "string"');
     expect(page).toContain('typeof authSession.expiresAt === "string"');
