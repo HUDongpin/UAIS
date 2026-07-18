@@ -21,6 +21,11 @@ import {
 
 export const dynamic = "force-dynamic";
 
+// Upper bound on client-supplied agent turns. The director already returns
+// `cue-user` after the first turn, so this is defense-in-depth: it keeps a
+// large client value from being honored if that bound ever changes.
+const maxAllowedAgentTurns = 8;
+
 type ChatRequestBody = {
   executionMode?: "contract" | "live";
   liveProviderApproved?: boolean;
@@ -246,7 +251,7 @@ function parseChatRequest(value: unknown): ChatRequestBody {
   const messages = value.messages.map(parseMessage);
   const maxAgentTurns =
     typeof value.maxAgentTurns === "number" && value.maxAgentTurns > 0
-      ? Math.floor(value.maxAgentTurns)
+      ? Math.min(Math.floor(value.maxAgentTurns), maxAllowedAgentTurns)
       : undefined;
 
   const executionMode =
