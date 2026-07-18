@@ -9,6 +9,14 @@ import {
 // check, and action-slot validation. No route-internal dependencies, so feature
 // clusters can import these without a cycle.
 
+export type TeachingOperationAuthenticatedTeacher = {
+  sessionId: string;
+  actorId: string;
+  role: "teacher";
+  authenticatedAt: string;
+  expiresAt: string;
+};
+
 export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -36,6 +44,23 @@ export function normalizeActionSlot(value: unknown): TeachingOperationActionSlot
     return value;
   }
   throw new TeachingOperationStoreError(400, "Unsupported teaching operation action.");
+}
+
+export function isTeachingOperationProductionRuntime(env: Record<string, string | undefined>) {
+  return (
+    env.VERCEL_ENV === "production" ||
+    env.NODE_ENV === "production" ||
+    env.UAIS_DEPLOYMENT_ENV === "production"
+  );
+}
+
+export function isTeachingCourseManagementPersistenceConfigured(
+  env: Record<string, string | undefined>,
+) {
+  return Boolean(
+    env.UAIS_TEACHING_COURSES_DATA_DIR?.trim() ||
+      env.UAIS_TEACHING_COURSE_MANAGEMENT_BACKEND?.trim(),
+  );
 }
 
 export function normalizeTeachingOperationRouteError(error: unknown) {

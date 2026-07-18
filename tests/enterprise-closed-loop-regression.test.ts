@@ -286,7 +286,13 @@ describe("enterprise closed-loop regression guards", () => {
     ];
 
     for (const routeFile of teachingOperationRouteFiles) {
-      const route = source(routeFile);
+      // The operations route's production-runtime gate lives in its route-utils
+      // module after the Phase 3 decomposition; the property is unchanged.
+      const gateFile =
+        routeFile === "src/app/api/teaching/operations/route.ts"
+          ? "src/app/api/teaching/operations/route-utils.ts"
+          : routeFile;
+      const route = source(gateFile);
       const productionRuntimeSection = route.slice(
         route.indexOf("function isTeachingOperationProductionRuntime"),
       );
