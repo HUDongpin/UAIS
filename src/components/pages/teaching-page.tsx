@@ -8,6 +8,7 @@ import {
 } from "./teaching-page-workspace-config";
 import { InlineWorkspaceStatus } from "./teaching-page-inline-workspace-status";
 import { WorkspaceContext } from "./teaching-page-workspace-context";
+import { InlineWorkspaceActionButtons } from "./teaching-page-inline-workspace-action-buttons";
 import {
   doesInlineCourseSettingsProjectionMatchPatch,
   doesInlineDomainProjectionMatchBusinessSemantics,
@@ -1512,39 +1513,6 @@ export function TeachingPage() {
     }
   }
 
-  function renderInlineWorkspaceActionButtons(operationId: TeachingOperationId) {
-    const actionConfig = createInlineWorkspaceActionConfig(operationId, locale);
-    const isSaving =
-      inlineWorkspaceStatuses[operationId] ===
-      localizedText(TEACHING_OPERATION_SAVE_PENDING_MESSAGE, locale);
-
-    return (
-      <div
-        className="flex flex-wrap gap-2"
-        data-uais-inline-workspace-actions={operationId}
-      >
-        <button
-          type="button"
-          className="inline-flex h-10 items-center gap-2 rounded-full bg-[var(--accent)] px-4 text-sm font-semibold text-white outline-none transition hover:bg-[var(--accent-strong)] active:translate-y-px focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[var(--accent)] disabled:active:translate-y-0"
-          disabled={isSaving}
-          onClick={() => runInlineWorkspaceAction(operationId, "primary")}
-        >
-          <ClipboardText size={17} weight="bold" />
-          {actionConfig.primaryAction}
-        </button>
-        <button
-          type="button"
-          className="inline-flex h-10 items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface)] px-4 text-sm font-semibold text-[var(--foreground)] outline-none transition hover:bg-[var(--surface-soft)] active:translate-y-px focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[var(--surface)] disabled:active:translate-y-0"
-          disabled={isSaving}
-          onClick={() => runInlineWorkspaceAction(operationId, "secondary")}
-        >
-          <ArrowRight size={16} weight="bold" />
-          {actionConfig.secondaryAction}
-        </button>
-      </div>
-    );
-  }
-
   function renderCourseSettingsWorkspace() {
     return (
       <div
@@ -1573,7 +1541,12 @@ export function TeachingPage() {
                 <Plus size={17} weight="bold" />
                 {locale === "zh-CN" ? "新增课程" : "New Course"}
               </button>
-              {renderInlineWorkspaceActionButtons("course-settings")}
+              {<InlineWorkspaceActionButtons
+              operationId={"course-settings"}
+              locale={locale}
+              inlineWorkspaceStatuses={inlineWorkspaceStatuses}
+              runInlineWorkspaceAction={runInlineWorkspaceAction}
+            />}
             </div>
           </div>
 
@@ -1743,7 +1716,12 @@ export function TeachingPage() {
                   : "Configure course agents, server permissions, teacher voice samples, and PPT narration workflows."}
               </p>
             </div>
-            {renderInlineWorkspaceActionButtons("agents")}
+            {<InlineWorkspaceActionButtons
+              operationId={"agents"}
+              locale={locale}
+              inlineWorkspaceStatuses={inlineWorkspaceStatuses}
+              runInlineWorkspaceAction={runInlineWorkspaceAction}
+            />}
           </div>
 
           <div className="mt-5">
@@ -1911,7 +1889,12 @@ export function TeachingPage() {
                 {locale === "zh-CN" ? "当前页可操作" : "Operable here"}
               </span>
             ) : (
-              renderInlineWorkspaceActionButtons(config.id)
+              <InlineWorkspaceActionButtons
+                operationId={config.id}
+                locale={locale}
+                inlineWorkspaceStatuses={inlineWorkspaceStatuses}
+                runInlineWorkspaceAction={runInlineWorkspaceAction}
+              />
             )}
           </div>
 
