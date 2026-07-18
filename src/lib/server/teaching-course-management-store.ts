@@ -51,6 +51,27 @@ import type {
   TeachingStudentPreviewSessionRecord,
   TeachingStudentRosterSyncRecord,
 } from "@/lib/server/teaching-course-management-types";
+import { TeachingCourseManagementStoreError } from "./teaching-course-management-error";
+import {
+  createRedaction,
+  ensureWithinBase,
+  isRecord,
+  normalizeAuditRequestSource,
+  normalizeAuditStoragePolicy,
+  normalizeRecordStoragePolicy,
+  normalizeStorageWritePolicy,
+  optionalTrimmedString,
+  requireInviteCode,
+  requireIsoDate,
+  requireNonnegativeInteger,
+  requireSafeId,
+  requireSafeUrlPath,
+  requireTrimmedString,
+} from "./teaching-course-management-guards";
+
+// Re-exported so consumers importing the error from the store keep working after
+// it was extracted to its own module (Phase 3 decomposition).
+export { TeachingCourseManagementStoreError };
 
 export type {
   TeachingClassDraftInput,
@@ -111,16 +132,6 @@ const localTeachingCourseManagementStorage: TeachingCourseManagementStorageDescr
   auditStoragePolicy: "local-json-teaching-course-management-audit-log",
   storageWritePolicy: "atomic-json-file-replace",
 };
-
-export class TeachingCourseManagementStoreError extends Error {
-  constructor(
-    readonly status: number,
-    message: string,
-    readonly diagnostics?: Record<string, unknown>,
-  ) {
-    super(message);
-  }
-}
 
 export function assertTeachingCourseManagementLocalJsonRuntimeAllowed(
   env: Record<string, string | undefined>,
@@ -6606,141 +6617,4 @@ async function writeAtomicJsonFile(input: {
     await rm(tempPath, { force: true }).catch(() => undefined);
     throw error;
   }
-}
-
-function ensureWithinBase(baseDir: string, filePath: string) {
-  const normalizedBase = resolve(baseDir);
-  const normalizedPath = resolve(filePath);
-  if (normalizedPath !== normalizedBase && !normalizedPath.startsWith(`${normalizedBase}/`)) {
-    throw new TeachingCourseManagementStoreError(
-      400,
-      "Teaching course management path escapes the configured data directory.",
-    );
-  }
-}
-
-function requireSafeId(value: unknown, label: string) {
-  if (
-    typeof value !== "string" ||
-    value.length < 1 ||
-    value.length > 160 ||
-    !/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(value)
-  ) {
-    throw new TeachingCourseManagementStoreError(400, `Invalid ${label}.`);
-  }
-  return value;
-}
-
-function requireTrimmedString(value: unknown, label: string, maxLength: number) {
-  if (typeof value !== "string" || !value.trim()) {
-    throw new TeachingCourseManagementStoreError(400, `Invalid ${label}.`);
-  }
-  return value.trim().slice(0, maxLength);
-}
-
-function requireNonnegativeInteger(value: unknown, label: string) {
-  if (typeof value !== "number" || !Number.isInteger(value) || value < 0) {
-    throw new TeachingCourseManagementStoreError(500, `Invalid ${label}.`);
-  }
-  return value;
-}
-
-function optionalTrimmedString(value: unknown, maxLength: number) {
-  return typeof value === "string" && value.trim() ? value.trim().slice(0, maxLength) : undefined;
-}
-
-function requireIsoDate(value: unknown, label: string) {
-  if (typeof value !== "string" || Number.isNaN(Date.parse(value))) {
-    throw new TeachingCourseManagementStoreError(500, `Invalid ${label}.`);
-  }
-  return value;
-}
-
-function normalizeAuditRequestSource(
-  value: unknown,
-): TeachingCourseManagementAuditRequestSource {
-  if (!isRecord(value)) {
-    return {
-      userAgent: "unknown",
-      ipAddress: "redacted",
-    };
-  }
-
-  return {
-    userAgent: sanitizeAuditSourceText(value.userAgent),
-    ipAddress: "redacted",
-  };
-}
-
-function sanitizeAuditSourceText(value: unknown) {
-  if (typeof value !== "string" || !value.trim()) {
-    return "unknown";
-  }
-  const normalized = value.trim().slice(0, 160);
-  if (/\/Users\/|secret|api[_-]?key|token/i.test(normalized)) {
-    return "redacted";
-  }
-  return normalized;
-}
-
-function requireInviteCode(value: unknown, status = 500) {
-  if (typeof value !== "string" || !/^\d{8}$/.test(value)) {
-    throw new TeachingCourseManagementStoreError(status, "Invite code is invalid.");
-  }
-  return value;
-}
-
-function requireSafeUrlPath(value: unknown, label: string) {
-  if (typeof value !== "string" || !value.startsWith("/") || value.startsWith("//")) {
-    throw new TeachingCourseManagementStoreError(500, `Invalid ${label}.`);
-  }
-  return value;
-}
-
-function normalizeRecordStoragePolicy(
-  value: unknown,
-): TeachingCourseManagementRecordStoragePolicy {
-  if (
-    value === "external-redacted-teaching-course-management-snapshot" ||
-    value === "postgres-teaching-course-management-snapshot"
-  ) {
-    return value;
-  }
-  return "local-json-teaching-course-management";
-}
-
-function normalizeAuditStoragePolicy(
-  value: unknown,
-): TeachingCourseManagementAuditStoragePolicy {
-  if (
-    value === "external-redacted-teaching-course-management-audit-log" ||
-    value === "postgres-teaching-course-management-audit-log"
-  ) {
-    return value;
-  }
-  return "local-json-teaching-course-management-audit-log";
-}
-
-function normalizeStorageWritePolicy(
-  value: unknown,
-): TeachingCourseManagementStorageWritePolicy {
-  if (
-    value === "external-optimistic-snapshot-replace" ||
-    value === "postgres-transactional-snapshot-replace"
-  ) {
-    return value;
-  }
-  return "atomic-json-file-replace";
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function createRedaction(): TeachingCourseManagementRedaction {
-  return {
-    secrets: "omitted",
-    localFiles: "omitted",
-    assets: "ids-only",
-  };
 }
