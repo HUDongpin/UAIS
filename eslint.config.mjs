@@ -17,7 +17,6 @@ const decompositionDebtFiles = [
   // ~3.7k (was 4.1k) — S12 (parked surface). error/guards/paths modules extracted;
   // remaining normalizer/IO clusters are deeply interleaved (follow-up).
   "src/lib/server/external-storage-route-service.ts",
-  "src/components/pages/learning-page.tsx", // 3.4k — S03/S04
 ];
 
 const eslintConfig = defineConfig([
