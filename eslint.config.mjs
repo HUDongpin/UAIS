@@ -10,7 +10,6 @@ import nextTs from "eslint-config-next/typescript";
 const maxSourceFileLines = 1500;
 const decompositionDebtFiles = [
   "src/components/pages/teaching-page.tsx", // 7.7k — S05 decomposition target
-  "src/lib/server/teaching-course-management-store.ts", // 6.7k — S12
   "src/lib/server/external-storage-route-service.ts", // 4.1k — S12 (parked surface)
   "src/app/api/teaching/operations/route.ts", // 4.1k — S05/S12
   "src/components/pages/learning-page.tsx", // 3.6k — S03/S04
