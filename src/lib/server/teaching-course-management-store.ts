@@ -101,6 +101,14 @@ import {
   normalizeCourseDraft,
   normalizeCourseSettingsPatch,
 } from "./teaching-course-management-helpers";
+import {
+  createEmptyDatabase,
+  normalizeTeachingCourseManagementDatabase,
+} from "./teaching-course-management-database-normalizer";
+
+// Re-exported so consumers importing the DB normalizer from the store keep working
+// after it moved to its own module (Phase 3 decomposition).
+export { normalizeTeachingCourseManagementDatabase };
 
 // Re-exported so consumers importing the error from the store keep working after
 // it was extracted to its own module (Phase 3 decomposition).
@@ -5340,134 +5348,6 @@ async function writeTeachingCourseManagementDatabase(input: {
     fileNamePrefix: "teaching-course-management",
     value: input.database,
   });
-}
-
-function createEmptyDatabase(): TeachingCourseManagementDatabase {
-  return {
-    schemaVersion: "uais-teaching-course-management-v1",
-    updatedAt: "1970-01-01T00:00:00.000Z",
-    courses: [],
-    classes: [],
-    memberships: [],
-    auditEvents: [],
-  };
-}
-
-export function normalizeTeachingCourseManagementDatabase(
-  value: unknown,
-): TeachingCourseManagementDatabase {
-  if (!isRecord(value) || value.schemaVersion !== "uais-teaching-course-management-v1") {
-    throw new TeachingCourseManagementStoreError(
-      500,
-      "Teaching course management database is invalid.",
-    );
-  }
-  return {
-    schemaVersion: "uais-teaching-course-management-v1",
-    updatedAt: typeof value.updatedAt === "string" ? value.updatedAt : new Date(0).toISOString(),
-    courses: Array.isArray(value.courses) ? value.courses.map(normalizeCourseRecord) : [],
-    classes: Array.isArray(value.classes) ? value.classes.map(normalizeClassRecord) : [],
-    memberships: Array.isArray(value.memberships)
-      ? value.memberships.map(normalizeMembershipRecord)
-      : [],
-    ...(Array.isArray(value.inviteCodeDrafts)
-      ? { inviteCodeDrafts: value.inviteCodeDrafts.map(normalizeInviteCodeDraftRecord) }
-      : {}),
-    ...(Array.isArray(value.courseSettings)
-      ? { courseSettings: value.courseSettings.map(normalizeCourseSettingsRecord) }
-      : {}),
-    ...(Array.isArray(value.studentPreviewSessions)
-      ? {
-          studentPreviewSessions: value.studentPreviewSessions.map(
-            normalizeStudentPreviewSessionRecord,
-          ),
-        }
-      : {}),
-    ...(Array.isArray(value.studentRosters)
-      ? { studentRosters: value.studentRosters.map(normalizeStudentRosterSyncRecord) }
-      : {}),
-    ...(Array.isArray(value.studentGroupSuggestions)
-      ? {
-          studentGroupSuggestions: value.studentGroupSuggestions.map(
-            normalizeStudentGroupSuggestionRecord,
-          ),
-        }
-      : {}),
-    ...(Array.isArray(value.knowledgeIndexes)
-      ? { knowledgeIndexes: value.knowledgeIndexes.map(normalizeKnowledgeIndexSyncRecord) }
-      : {}),
-    ...(Array.isArray(value.resourceReviewItems)
-      ? {
-          resourceReviewItems: value.resourceReviewItems.map(
-            normalizeResourceReviewItemRecord,
-          ),
-        }
-      : {}),
-    ...(Array.isArray(value.contentPackages)
-      ? { contentPackages: value.contentPackages.map(normalizeCourseContentPublishRecord) }
-      : {}),
-    ...(Array.isArray(value.courseUnitDrafts)
-      ? { courseUnitDrafts: value.courseUnitDrafts.map(normalizeCourseUnitDraftRecord) }
-      : {}),
-    ...(Array.isArray(value.dashboardStates)
-      ? { dashboardStates: value.dashboardStates.map(normalizeDashboardStateRecord) }
-      : {}),
-    ...(Array.isArray(value.dashboardSnapshots)
-      ? { dashboardSnapshots: value.dashboardSnapshots.map(normalizeDashboardSnapshotRecord) }
-      : {}),
-    ...(Array.isArray(value.quizAssessments)
-      ? { quizAssessments: value.quizAssessments.map(normalizeQuizAssessmentRecord) }
-      : {}),
-    ...(Array.isArray(value.quizItemReviews)
-      ? { quizItemReviews: value.quizItemReviews.map(normalizeQuizItemReviewRecord) }
-      : {}),
-    ...(Array.isArray(value.agentSettings)
-      ? { agentSettings: value.agentSettings.map(normalizeAgentSettingsRecord) }
-      : {}),
-    ...(Array.isArray(value.agentPermissionPreflights)
-      ? {
-          agentPermissionPreflights: value.agentPermissionPreflights.map(
-            normalizeAgentPermissionPreflightRecord,
-          ),
-        }
-      : {}),
-    ...(Array.isArray(value.adminSettings)
-      ? { adminSettings: value.adminSettings.map(normalizeAdminSettingsRecord) }
-      : {}),
-    ...(Array.isArray(value.collaborationInviteNotifications)
-      ? {
-          collaborationInviteNotifications: value.collaborationInviteNotifications.map(
-            normalizeCollaborationInviteNotificationRecord,
-          ),
-        }
-      : {}),
-    ...(Array.isArray(value.exportManifests)
-      ? { exportManifests: value.exportManifests.map(normalizeExportManifestRecord) }
-      : {}),
-    ...(Array.isArray(value.exportRedactionValidations)
-      ? {
-          exportRedactionValidations: value.exportRedactionValidations.map(
-            normalizeExportRedactionValidationRecord,
-          ),
-        }
-      : {}),
-    ...(Array.isArray(value.gradingQueues)
-      ? { gradingQueues: value.gradingQueues.map(normalizeGradingQueueRecord) }
-      : {}),
-    ...(Array.isArray(value.gradebookUpdates)
-      ? { gradebookUpdates: value.gradebookUpdates.map(normalizeGradebookUpdateRecord) }
-      : {}),
-    ...(Array.isArray(value.gradingFeedbackDrafts)
-      ? {
-          gradingFeedbackDrafts: value.gradingFeedbackDrafts.map(
-            normalizeGradingFeedbackDraftRecord,
-          ),
-        }
-      : {}),
-    auditEvents: Array.isArray(value.auditEvents)
-      ? value.auditEvents.map(normalizeAuditEvent)
-      : [],
-  };
 }
 
 function resolveDatabasePath(dataDir: string) {
