@@ -8,11 +8,10 @@ import nextTs from "eslint-config-next/typescript";
 // explicit decomposition-debt register — remove a file from it once it is
 // split below the cap; do not add new files to it.
 const maxSourceFileLines = 1500;
-const decompositionDebtFiles = [
-  // ~3.7k (was 4.1k) — S12 (parked surface). error/guards/paths modules extracted;
-  // remaining normalizer/IO clusters are deeply interleaved (follow-up).
-  "src/lib/server/external-storage-route-service.ts",
-];
+// The decomposition-debt register is now empty: all four original giants (teaching-page,
+// learning-page, teaching-operation-page, external-storage-route-service) are decomposed
+// below the cap, so the max-lines rule below enforces every source file with no
+// exemptions. If a file grows past the cap, split it — do not re-add an exemption list.
 
 const eslintConfig = defineConfig([
   ...nextVitals,
@@ -24,13 +23,6 @@ const eslintConfig = defineConfig([
         "error",
         { max: maxSourceFileLines, skipBlankLines: true, skipComments: true },
       ],
-    },
-  },
-  {
-    // Grandfathered legacy giants — exempt until decomposed below the cap.
-    files: decompositionDebtFiles,
-    rules: {
-      "max-lines": "off",
     },
   },
   // Override default ignores of eslint-config-next.

@@ -673,7 +673,6 @@ describe("enterprise closed-loop regression guards", () => {
   });
 
   it("keeps the main teaching workspace API-backed instead of showing local-only success", () => {
-    const page = source("src/components/pages/teaching-page.tsx");
     // requireTeacherWorkflowActorId moved into the extracted workflow-format module
     // (Phase 3 decomposition of teaching-page.tsx).
     const teacherPptWorkflowFormat = source(
@@ -1142,7 +1141,9 @@ describe("enterprise closed-loop regression guards", () => {
 
   it("keeps ordinary teaching operation external appends serialized under concurrent writes", () => {
     const externalStorageService = source("scripts/external-storage-service.mjs");
-    const nextExternalStorageService = source("src/lib/server/external-storage-route-service.ts");
+    // The append/persistence layer moved into external-storage-route-store.ts (Phase 3
+    // decomposition); the append-write-lock serialization lives there now.
+    const nextExternalStorageService = source("src/lib/server/external-storage-route-store.ts");
     const externalStorageSmoke = source("scripts/external-storage-smoke.mjs");
     const releaseGate = source("scripts/production-e2e-release-gate.mjs");
     const orchestrator = source("scripts/production-e2e-orchestrator.mjs");
