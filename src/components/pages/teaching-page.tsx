@@ -3,13 +3,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AiOpsWorkbench, TeacherPptNarrationWorkflow } from "./teacher-ppt-narration-workflow";
 import {
-  createEnterpriseWorkspaceConfig,
   createInlineWorkspaceActionConfig,
 } from "./teaching-page-workspace-config";
 import { InlineWorkspaceStatus } from "./teaching-page-inline-workspace-status";
 import { WorkspaceContext } from "./teaching-page-workspace-context";
 import { InlineWorkspaceActionButtons } from "./teaching-page-inline-workspace-action-buttons";
-import { InviteCodeWorkspaceTools } from "./teaching-page-invite-code-workspace-tools";
+import { EnterpriseWorkspace } from "./teaching-page-enterprise-workspace";
+import { dashboardIcons } from "./teaching-page-dashboard-icons";
 import {
   doesInlineCourseSettingsProjectionMatchPatch,
   doesInlineDomainProjectionMatchBusinessSemantics,
@@ -51,20 +51,8 @@ import {
 } from "./teacher-ppt-narration-workflow-format";
 import Link from "next/link";
 import { ArrowRight } from "@phosphor-icons/react/dist/ssr/ArrowRight";
-import { BookOpen } from "@phosphor-icons/react/dist/ssr/BookOpen";
-import { Books } from "@phosphor-icons/react/dist/ssr/Books";
-import { ChartBar } from "@phosphor-icons/react/dist/ssr/ChartBar";
-import { ClipboardText } from "@phosphor-icons/react/dist/ssr/ClipboardText";
-import { Exam } from "@phosphor-icons/react/dist/ssr/Exam";
-import { Export as ExportIcon } from "@phosphor-icons/react/dist/ssr/Export";
-import { FileText } from "@phosphor-icons/react/dist/ssr/FileText";
-import { GearSix } from "@phosphor-icons/react/dist/ssr/GearSix";
 import { Plus } from "@phosphor-icons/react/dist/ssr/Plus";
-import { QrCode } from "@phosphor-icons/react/dist/ssr/QrCode";
-import { Robot } from "@phosphor-icons/react/dist/ssr/Robot";
 import { SquaresFour } from "@phosphor-icons/react/dist/ssr/SquaresFour";
-import { UserGear } from "@phosphor-icons/react/dist/ssr/UserGear";
-import { UsersThree } from "@phosphor-icons/react/dist/ssr/UsersThree";
 import { useAppPreferences } from "@/components/providers/app-preferences";
 import {
   getTeachingCourseActionHref,
@@ -158,20 +146,6 @@ import {
   type TeacherCourseAction,
 } from "./teaching-page-types";
 
-const dashboardIcons = {
-  courses: BookOpen,
-  "course-settings": GearSix,
-  content: FileText,
-  agents: Robot,
-  "knowledge-base": Books,
-  admins: UserGear,
-  students: UsersThree,
-  "data-export": ExportIcon,
-  dashboard: ChartBar,
-  "quiz-board": Exam,
-  grading: ClipboardText,
-  "invite-code": QrCode,
-};
 
 const DEFAULT_INVITE_CODE = "55395057";
 
@@ -1850,145 +1824,6 @@ export function TeachingPage() {
     );
   }
 
-  function renderEnterpriseWorkspace() {
-    const config = createEnterpriseWorkspaceConfig(
-      activeWorkspaceItemId as TeachingOperationId,
-      locale,
-    );
-    const Icon = dashboardIcons[config.id as keyof typeof dashboardIcons] ?? SquaresFour;
-
-    return (
-      <div
-        className="space-y-5"
-        data-uais-active-teaching-workspace={config.id}
-        data-uais-teaching-workspace-panel
-      >
-        <section className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5 shadow-[0_18px_42px_var(--shadow)]">
-          <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-            <div className="flex items-start gap-3">
-              <span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-[var(--accent-soft)] text-[var(--accent)]">
-                <Icon size={23} weight="duotone" />
-              </span>
-              <div>
-                <p className="text-sm font-semibold text-[var(--accent)]">{config.subtitle}</p>
-                <h2 className="mt-1 text-xl font-semibold text-[var(--foreground)]">
-                  {config.title}
-                </h2>
-                <p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--muted)]">
-                  {config.description}
-                </p>
-              </div>
-            </div>
-            {config.id === "invite-code" ? (
-              <span className="inline-flex h-10 items-center gap-2 rounded-full border border-[var(--accent-border)] bg-[var(--accent-soft)] px-4 text-sm font-semibold text-[var(--accent)]">
-                <QrCode size={17} weight="duotone" />
-                {locale === "zh-CN" ? "当前页可操作" : "Operable here"}
-              </span>
-            ) : (
-              <InlineWorkspaceActionButtons
-                operationId={config.id}
-                locale={locale}
-                inlineWorkspaceStatuses={inlineWorkspaceStatuses}
-                runInlineWorkspaceAction={runInlineWorkspaceAction}
-              />
-            )}
-          </div>
-
-          <div className="mt-5">
-            {<WorkspaceContext
-            locale={locale}
-            activeWorkspaceItem={activeWorkspaceItem}
-            selectedCourseAction={selectedCourseAction}
-            selectedActionCourse={selectedActionCourse}
-            selectedCourseActionLabel={selectedCourseActionLabel}
-          />}
-          </div>
-          {config.id === "invite-code" ? null : <InlineWorkspaceStatus
-              operationId={config.id}
-              locale={locale}
-              inlineWorkspaceStatuses={inlineWorkspaceStatuses}
-              inlineWorkspaceAuditStatuses={inlineWorkspaceAuditStatuses}
-              inlineWorkspaceAlertStatuses={inlineWorkspaceAlertStatuses}
-              inlineWorkspaceAlertNotificationStatuses={inlineWorkspaceAlertNotificationStatuses}
-              inlineWorkspaceRollbackStatuses={inlineWorkspaceRollbackStatuses}
-              runInlineWorkspaceRollback={runInlineWorkspaceRollback}
-              queueInlineWorkspaceAuditAlertNotifications={queueInlineWorkspaceAuditAlertNotifications}
-            />}
-
-          <div className="mt-5 grid gap-3 md:grid-cols-3">
-            {config.metrics.map((metric) => (
-              <article
-                key={metric.label}
-                className="rounded-2xl border border-[var(--border)] bg-[var(--surface-elevated)] p-4"
-              >
-                <p className="text-xs font-semibold uppercase text-[var(--muted)]">
-                  {metric.label}
-                </p>
-                <p className="mt-2 text-2xl font-semibold text-[var(--foreground)]">
-                  {metric.value}
-                </p>
-                <p className="mt-2 text-sm leading-6 text-[var(--muted)]">{metric.note}</p>
-              </article>
-            ))}
-          </div>
-
-          {config.id === "invite-code" ? <InviteCodeWorkspaceTools
-              locale={locale}
-              inviteWorkspaceCode={inviteWorkspaceCode}
-              inviteWorkspaceJoinUrl={inviteWorkspaceJoinUrl}
-              inviteWorkspaceStatus={inviteWorkspaceStatus}
-              copyInviteWorkspaceValue={copyInviteWorkspaceValue}
-              runInviteWorkspaceAction={runInviteWorkspaceAction}
-            /> : null}
-        </section>
-
-        <section className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
-          <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5 shadow-[0_18px_42px_var(--shadow)]">
-            <h3 className="text-lg font-semibold text-[var(--foreground)]">
-              {locale === "zh-CN" ? "业务流程" : "Workflow"}
-            </h3>
-            <div className="mt-4 grid gap-3 md:grid-cols-2">
-              {config.lanes.map((lane) => (
-                <article
-                  key={lane.title}
-                  className="rounded-2xl border border-[var(--border)] bg-[var(--surface-elevated)] p-4"
-                >
-                  <h4 className="font-semibold text-[var(--foreground)]">{lane.title}</h4>
-                  <div className="mt-3 space-y-2">
-                    {lane.items.map((item) => (
-                      <p
-                        key={item}
-                        className="rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] px-3 py-2 text-sm text-[var(--muted)]"
-                      >
-                        {item}
-                      </p>
-                    ))}
-                  </div>
-                </article>
-              ))}
-            </div>
-          </div>
-
-          <aside className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5 shadow-[0_18px_42px_var(--shadow)]">
-            <h3 className="text-lg font-semibold text-[var(--foreground)]">
-              {locale === "zh-CN" ? "最近记录" : "Recent Records"}
-            </h3>
-            <div className="mt-4 space-y-3">
-              {config.records.map((record) => (
-                <p
-                  key={record}
-                  className="rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] px-3 py-3 text-sm leading-6 text-[var(--muted)]"
-                >
-                  {record}
-                </p>
-              ))}
-            </div>
-          </aside>
-        </section>
-      </div>
-    );
-  }
-
   function renderActiveWorkspacePanel() {
     if (activeWorkspaceItemId === "course-settings") {
       return renderCourseSettingsWorkspace();
@@ -1998,7 +1833,29 @@ export function TeachingPage() {
       return renderAgentWorkspace();
     }
 
-    return renderEnterpriseWorkspace();
+    return (
+      <EnterpriseWorkspace
+        locale={locale}
+        activeWorkspaceItem={activeWorkspaceItem}
+        activeWorkspaceItemId={activeWorkspaceItemId}
+        inlineWorkspaceStatuses={inlineWorkspaceStatuses}
+        inlineWorkspaceAuditStatuses={inlineWorkspaceAuditStatuses}
+        inlineWorkspaceAlertStatuses={inlineWorkspaceAlertStatuses}
+        inlineWorkspaceAlertNotificationStatuses={inlineWorkspaceAlertNotificationStatuses}
+        inlineWorkspaceRollbackStatuses={inlineWorkspaceRollbackStatuses}
+        inviteWorkspaceCode={inviteWorkspaceCode}
+        inviteWorkspaceJoinUrl={inviteWorkspaceJoinUrl}
+        inviteWorkspaceStatus={inviteWorkspaceStatus}
+        selectedCourseAction={selectedCourseAction}
+        selectedActionCourse={selectedActionCourse}
+        selectedCourseActionLabel={selectedCourseActionLabel}
+        copyInviteWorkspaceValue={copyInviteWorkspaceValue}
+        queueInlineWorkspaceAuditAlertNotifications={queueInlineWorkspaceAuditAlertNotifications}
+        runInlineWorkspaceAction={runInlineWorkspaceAction}
+        runInlineWorkspaceRollback={runInlineWorkspaceRollback}
+        runInviteWorkspaceAction={runInviteWorkspaceAction}
+      />
+    );
   }
 
   return (
