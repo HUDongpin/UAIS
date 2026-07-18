@@ -669,6 +669,11 @@ describe("enterprise closed-loop regression guards", () => {
 
   it("keeps the main teaching workspace API-backed instead of showing local-only success", () => {
     const page = source("src/components/pages/teaching-page.tsx");
+    // requireTeacherWorkflowActorId moved into the extracted workflow-format module
+    // (Phase 3 decomposition of teaching-page.tsx).
+    const teacherPptWorkflowFormat = source(
+      "src/components/pages/teacher-ppt-narration-workflow-format.ts",
+    );
 
     expect(page).toContain("const [authenticatedTeacherActorId, setAuthenticatedTeacherActorId]");
     expect(page).toContain("useState<string>();");
@@ -683,10 +688,11 @@ describe("enterprise closed-loop regression guards", () => {
     expect(page).toContain('payload.assetPersistence?.status !== "persisted"');
     expect(page).toContain('payload.audit.authMode === "signed-teacher-session"');
     expect(page).toContain("teacherActorId={authenticatedTeacherActorId}");
-    expect(page).toContain("function requireTeacherWorkflowActorId");
+    expect(teacherPptWorkflowFormat).toContain("function requireTeacherWorkflowActorId");
     expect(page).not.toContain("DEFAULT_TEACHER_ID");
     expect(page).not.toContain("?? DEFAULT_TEACHER_ID");
     expect(page).not.toContain("teacherId: DEFAULT_TEACHER_ID");
+    expect(teacherPptWorkflowFormat).not.toContain("DEFAULT_TEACHER_ID");
 
     expect(page.indexOf('fetch("/api/teaching/operations"')).toBeLessThan(
       page.indexOf("applyVerifiedCourseSettingsPatch(courseId"),
@@ -1550,7 +1556,12 @@ describe("enterprise closed-loop regression guards", () => {
     }
 
     const teacherPptWorkflowRoute = source("src/app/api/ai/teacher-ppt-workflow/route.ts");
-    const teachingPage = source("src/components/pages/teaching-page.tsx");
+    // The teacher PPT-narration workflow UI was extracted from teaching-page.tsx into
+    // its own module (Phase 3 decomposition); the workflow-session action markers now
+    // live there.
+    const teacherPptWorkflowUi = source(
+      "src/components/pages/teacher-ppt-narration-workflow.tsx",
+    );
     const sessionRoute = source("src/app/api/ai/session/route.ts");
     const accessControl = source("src/lib/server/ai-access-control.ts");
     const aiRouteSmoke = source("scripts/ai-route-smoke.mjs");
@@ -1561,8 +1572,8 @@ describe("enterprise closed-loop regression guards", () => {
     expect(teacherPptWorkflowRoute.indexOf("assertUaisAiAccess({")).toBeLessThan(
       teacherPptWorkflowRoute.indexOf("const ownership = await ownershipReader"),
     );
-    expect(teachingPage).toContain('action: "teacher-ppt-workflow-read"');
-    expect(teachingPage).toContain(
+    expect(teacherPptWorkflowUi).toContain('action: "teacher-ppt-workflow-read"');
+    expect(teacherPptWorkflowUi).toContain(
       'data-uais-workflow-session-actions="teacher-ppt-workflow-read',
     );
     expect(sessionRoute).toContain('"teacher-ppt-workflow-read"');
