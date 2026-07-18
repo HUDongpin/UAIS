@@ -1572,6 +1572,14 @@ export async function readTeachingOperationDatabase(
   return normalizeDatabase(JSON.parse(raw));
 }
 
+// Exposed so the Postgres cutover adapter and parity checks normalize a snapshot
+// the same way the file reader does (Phase 1 durable-data cutover).
+export function normalizeTeachingOperationDatabase(
+  value: unknown,
+): TeachingOperationDatabase {
+  return normalizeDatabase(value);
+}
+
 export async function readTeachingOperationDatabaseBackup(input: {
   dataDir?: string;
   backupId: string;

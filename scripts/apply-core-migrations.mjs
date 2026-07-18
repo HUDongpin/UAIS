@@ -11,6 +11,10 @@ const migrations = [
     version: "0001_core_poc",
     path: "migrations/0001_core_poc.sql",
   },
+  {
+    version: "0002_teaching_operations",
+    path: "migrations/0002_teaching_operations.sql",
+  },
 ];
 
 const databaseUrlEnvNames = ["UAIS_CORE_DATABASE_URL", "DATABASE_URL", "POSTGRES_URL"];
