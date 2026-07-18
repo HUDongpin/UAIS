@@ -986,7 +986,7 @@ describe("LearningPage", () => {
     expect(workspace).toBeTruthy();
     expect(workspace?.contains(pptStage)).toBe(true);
     expect(workspace?.contains(narrationDock)).toBe(true);
-    expect(workspace?.className).toContain("xl:max-h-[calc(100dvh-7.4rem)]");
+    expect(workspace?.className).toContain("xl:max-h-[calc(100dvh-6.5rem)]");
     expect(pptStage?.className).toContain("min-w-0");
     expect(pptStage?.className).toContain("w-full");
     expect(pptStage?.className).toContain("xl:min-h-[calc(100dvh-13.5rem)]");

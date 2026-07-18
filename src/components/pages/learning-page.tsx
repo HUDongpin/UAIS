@@ -1156,7 +1156,7 @@ export function LearningPage({ initialCourseId, initialClassId }: LearningPagePr
         />
         <div
           data-uais-learning-playback-workspace="single-viewport"
-          className="grid min-w-0 gap-6 xl:max-h-[calc(100dvh-7.4rem)] xl:grid-rows-[minmax(0,1fr)_auto] xl:overflow-hidden"
+          className="grid min-w-0 gap-6 xl:max-h-[calc(100dvh-6.5rem)] xl:grid-rows-[minmax(0,1fr)_auto] xl:overflow-hidden"
         >
           <PptStage
             locale={locale}
