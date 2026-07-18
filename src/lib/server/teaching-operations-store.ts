@@ -1,7 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
-import { cwd } from "node:process";
+import { resolve } from "node:path";
 import {
   isTeachingOperationId,
   type TeachingOperationId,
@@ -13,6 +12,11 @@ import {
   isLocalJsonFileStorageBackendContract,
   resolveUaisStorageBackendContract,
 } from "@/lib/ai/storage-backend-contract";
+import { resolveTeachingOperationDataDir } from "./teaching-operation-data-dir";
+
+// Re-exported so existing consumers importing from this store keep working after
+// the helper was extracted to its own module (Phase 3 decomposition).
+export { resolveTeachingOperationDataDir };
 
 export type TeachingOperationActionSlot = "primary" | "secondary";
 
@@ -2586,16 +2590,6 @@ function normalizeExternalRollbackReceipt(
     responsibleSession: "S12",
     redaction: createRedaction(),
   };
-}
-
-export function resolveTeachingOperationDataDir(configuredDataDir?: string) {
-  return configuredDataDir?.trim()
-    ? resolve(/*turbopackIgnore: true*/ configuredDataDir)
-    : join(
-        /*turbopackIgnore: true*/ cwd(),
-        ".tmp",
-        "uais-teaching-operations-db",
-      );
 }
 
 function action(
