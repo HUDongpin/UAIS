@@ -103,6 +103,16 @@ export function isPositiveInteger(value: unknown): value is number {
   return typeof value === "number" && Number.isInteger(value) && value > 0;
 }
 
+export function isTeachingOperationProductionRuntime(
+  env: Record<string, string | undefined>,
+) {
+  return (
+    env.VERCEL_ENV === "production" ||
+    env.NODE_ENV === "production" ||
+    env.UAIS_DEPLOYMENT_ENV === "production"
+  );
+}
+
 export function isTeachingOperationProductionDatabaseAdapterEvidence(
   value: unknown,
 ): value is TeachingOperationProductionDatabaseAdapterEvidence {
