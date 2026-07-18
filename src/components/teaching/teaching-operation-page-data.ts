@@ -730,3 +730,12 @@ export function localText(zhText: string, enText: string): LocalizedText {
     "en-US": enText,
   };
 }
+
+export type ExportManifestState = {
+  manifestId: string;
+  downloadUrl?: string;
+};
+
+export const defaultExportManifest: ExportManifestState = {
+  manifestId: "export-manifest-teacher-kang-2026",
+};

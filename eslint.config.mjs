@@ -18,7 +18,6 @@ const decompositionDebtFiles = [
   // remaining normalizer/IO clusters are deeply interleaved (follow-up).
   "src/lib/server/external-storage-route-service.ts",
   "src/components/pages/learning-page.tsx", // 3.4k — S03/S04
-  "src/components/teaching/teaching-operation-page.tsx", // 2.5k — S05
 ];
 
 const eslintConfig = defineConfig([
