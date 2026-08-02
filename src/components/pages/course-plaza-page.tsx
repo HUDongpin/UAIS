@@ -5,7 +5,7 @@ import { BookOpen } from "@phosphor-icons/react/dist/ssr/BookOpen";
 import { ChalkboardTeacher } from "@phosphor-icons/react/dist/ssr/ChalkboardTeacher";
 import { Sparkle } from "@phosphor-icons/react/dist/ssr/Sparkle";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAppPreferences } from "@/components/providers/app-preferences";
 import { localizedText } from "@/components/ui/localized-text";
 import { plazaCourses } from "@/data/uais";
@@ -43,17 +43,16 @@ type InviteCodeEntryState =
   | { status: "valid"; inviteCode: string }
   | { status: "invalid" };
 
-function readInitialInviteCodeEntry(): InviteCodeEntryState {
-  if (typeof window === "undefined") {
+// Pure function of the server-provided `invite` search param: the server render
+// and the first client render must resolve to the same state, so this must not
+// read `window.location`.
+function resolveInviteCodeEntry(inviteParam: string | undefined): InviteCodeEntryState {
+  if (inviteParam === undefined) {
     return { status: "absent" };
   }
-  const searchParams = new URLSearchParams(window.location.search);
-  if (!searchParams.has("invite")) {
-    return { status: "absent" };
-  }
-  const inviteParam = searchParams.get("invite")?.trim() ?? "";
-  if (/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$/.test(inviteParam)) {
-    return { status: "valid", inviteCode: inviteParam };
+  const trimmedInviteParam = inviteParam.trim();
+  if (/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$/.test(trimmedInviteParam)) {
+    return { status: "valid", inviteCode: trimmedInviteParam };
   }
 
   return { status: "invalid" };
@@ -103,24 +102,107 @@ type InviteJoinStatus = {
   message?: string;
 };
 
-export function CoursePlazaPage() {
+// The join status belongs to one specific invite param. App Router client
+// navigation swaps the prop without remounting this component, so the status is
+// stored together with the invite param it was produced for and is only shown
+// while that param is still the active one.
+type InviteJoinStatusEntry = {
+  inviteParam: string | undefined;
+  status: InviteJoinStatus;
+};
+
+const idleInviteJoinStatus: InviteJoinStatus = { state: "idle" };
+
+// Only one invite panel is ever mounted, so the status line can carry a stable
+// id for the join button to point at with aria-describedby.
+const inviteJoinStatusMessageId = "invite-join-status-message";
+
+type CoursePlazaPageProps = {
+  inviteParam?: string;
+};
+
+export function CoursePlazaPage({ inviteParam }: CoursePlazaPageProps = {}) {
   const { locale } = useAppPreferences();
   const t = copy[locale];
-  const [inviteCodeEntry] = useState(readInitialInviteCodeEntry);
+  // Derived on every render instead of seeded once: client-side navigation
+  // between /courses?invite=A, /courses?invite=B and /courses reuses this
+  // component instance, so stored state would keep showing a stale invite.
+  const inviteCodeEntry = resolveInviteCodeEntry(inviteParam);
   const inviteCode =
     inviteCodeEntry.status === "valid" ? inviteCodeEntry.inviteCode : undefined;
-  const [inviteJoinStatus, setInviteJoinStatus] = useState<InviteJoinStatus>({ state: "idle" });
+  const [inviteJoinStatusEntry, setInviteJoinStatusEntry] = useState<InviteJoinStatusEntry>({
+    inviteParam,
+    status: idleInviteJoinStatus,
+  });
+  // The displayed status is deliberately collapsed to idle for every param other
+  // than the current one, so it describes the panel on screen and never the work
+  // still running behind it. It must therefore not be used to gate submission.
+  const inviteJoinStatus =
+    inviteJoinStatusEntry.inviteParam === inviteParam
+      ? inviteJoinStatusEntry.status
+      : idleInviteJoinStatus;
+  // Authoritative in-flight tracking, independent of the displayed status: one
+  // join POST at a time across every invite param. Client navigation from an
+  // in-flight invite to another one collapses the displayed status to idle, and
+  // gating on that would re-enable the button and let a second join start while
+  // the first is still open, which the server then rejects as a duplicate.
+  const [isInviteJoinInFlight, setIsInviteJoinInFlight] = useState(false);
+  const isInviteJoinInFlightRef = useRef(false);
+  // Kept in step with the rendered param so an awaited response can ask whether
+  // the invite it belongs to is still the one the student is looking at.
+  const currentInviteParamRef = useRef(inviteParam);
+  useEffect(() => {
+    currentInviteParamRef.current = inviteParam;
+  }, [inviteParam]);
+  // The button is disabled while any join POST is open, including one started
+  // from a different invite param. The displayed status is param-scoped and
+  // collapses to idle across that navigation, so the panel would otherwise show
+  // an ordinary-looking join button that is disabled for no stated reason. This
+  // fills that gap with a neutral explanation, and only that gap: a param whose
+  // own status is pending, successful or failed still shows its own message.
+  const isBlockedByOtherInviteJoin =
+    isInviteJoinInFlight && inviteJoinStatus.state === "idle";
+  const inviteJoinMessage = isBlockedByOtherInviteJoin
+    ? locale === "zh-CN"
+      ? "另一个加入申请仍在提交中，请稍候。"
+      : "Another join request is still in progress. Please wait."
+    : inviteJoinStatus.message;
   const displayedCourses = [...plazaCourses].sort(
     (firstCourse, secondCourse) =>
       courseDisplayOrder[firstCourse.id] - courseDisplayOrder[secondCourse.id],
   );
 
+  // A response may only write the status of the invite param it was submitted
+  // for, and only while that param is still the current one. A superseded
+  // submission resets its own entry to idle instead of recording its outcome:
+  // it is no longer an answer to anything on screen, and leaving its pending
+  // status behind would freeze the panel on a later revisit to that invite.
+  function commitInviteJoinStatus(
+    submissionInviteParam: string | undefined,
+    status: InviteJoinStatus,
+  ) {
+    const isSubmissionStillCurrent = currentInviteParamRef.current === submissionInviteParam;
+    setInviteJoinStatusEntry((currentEntry) => {
+      if (isSubmissionStillCurrent) {
+        return { inviteParam: submissionInviteParam, status };
+      }
+      if (currentEntry.inviteParam !== submissionInviteParam) {
+        return currentEntry;
+      }
+
+      return { inviteParam: submissionInviteParam, status: idleInviteJoinStatus };
+    });
+  }
+
   async function submitInviteJoin() {
-    if (!inviteCode || inviteJoinStatus.state === "pending") {
+    if (!inviteCode || isInviteJoinInFlightRef.current) {
       return;
     }
 
-    setInviteJoinStatus({
+    const submissionInviteParam = inviteParam;
+    isInviteJoinInFlightRef.current = true;
+    setIsInviteJoinInFlight(true);
+    commitInviteJoinStatus(submissionInviteParam, {
       state: "pending",
       message:
         locale === "zh-CN"
@@ -138,7 +220,7 @@ export function CoursePlazaPage() {
       const body = (await response.json().catch(() => undefined)) as InviteJoinResponse | undefined;
       const traceId = body?.traceId ?? response.headers.get("x-uais-trace-id") ?? undefined;
       if (!response.ok || !body?.membership) {
-        setInviteJoinStatus({
+        commitInviteJoinStatus(submissionInviteParam, {
           state: "failed",
           message: createInviteJoinFailureMessage(body, traceId, locale),
         });
@@ -154,7 +236,7 @@ export function CoursePlazaPage() {
           : isPendingReview
             ? "Join request submitted and waiting for teacher review."
             : "Join request submitted and the class membership is active.";
-      setInviteJoinStatus({
+      commitInviteJoinStatus(submissionInviteParam, {
         state: "success",
         message: traceId
           ? locale === "zh-CN"
@@ -163,13 +245,16 @@ export function CoursePlazaPage() {
           : baseMessage,
       });
     } catch {
-      setInviteJoinStatus({
+      commitInviteJoinStatus(submissionInviteParam, {
         state: "failed",
         message:
           locale === "zh-CN"
             ? "加入申请未提交，请稍后重试。"
             : "Join request was not submitted. Please retry later.",
       });
+    } finally {
+      isInviteJoinInFlightRef.current = false;
+      setIsInviteJoinInFlight(false);
     }
   }
 
@@ -220,8 +305,9 @@ export function CoursePlazaPage() {
               <p className="mt-2 text-sm font-semibold text-[var(--accent)]">
                 {locale === "zh-CN" ? `邀请码：${inviteCode}` : `Invite code: ${inviteCode}`}
               </p>
-              {inviteJoinStatus.message ? (
+              {inviteJoinMessage ? (
                 <p
+                  id={inviteJoinStatusMessageId}
                   role={inviteJoinStatus.state === "failed" ? "alert" : "status"}
                   className={[
                     "mt-3 rounded-xl border px-3 py-2 text-sm font-medium",
@@ -230,13 +316,14 @@ export function CoursePlazaPage() {
                       : "border-[var(--border)] bg-[var(--surface)] text-[var(--foreground)]",
                   ].join(" ")}
                 >
-                  {inviteJoinStatus.message}
+                  {inviteJoinMessage}
                 </p>
               ) : null}
             </div>
             <button
               type="button"
-              disabled={inviteJoinStatus.state === "pending"}
+              disabled={isInviteJoinInFlight}
+              aria-describedby={inviteJoinMessage ? inviteJoinStatusMessageId : undefined}
               className="inline-flex min-h-11 w-fit items-center justify-center rounded-full bg-[var(--accent)] px-5 text-sm font-semibold text-white shadow-[0_14px_28px_var(--shadow-accent)] outline-none transition hover:bg-[var(--accent-strong)] active:translate-y-px disabled:cursor-not-allowed disabled:opacity-60 focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]"
               onClick={() => void submitInviteJoin()}
             >
