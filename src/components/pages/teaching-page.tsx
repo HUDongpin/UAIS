@@ -1,23 +1,15 @@
 "use client";
 
 import { useTeachingWorkspace } from "./use-teaching-workspace";
-import {
-} from "./teaching-page-workspace-config";
 import { EnterpriseWorkspace } from "./teaching-page-enterprise-workspace";
 import { AgentWorkspace } from "./teaching-page-agent-workspace";
 import { CourseSettingsWorkspace } from "./teaching-page-course-settings-workspace";
 import { dashboardIcons } from "./teaching-page-dashboard-icons";
 import {
-} from "./teaching-page-projection-verifiers";
-import {
-} from "./teaching-page-helpers";
-import {
   ClassInvitationDialog,
   NewClassDialog,
   NewCourseDialog,
 } from "./teaching-page-dialogs";
-import {
-} from "./teacher-ppt-narration-workflow-format";
 import Link from "next/link";
 import { SquaresFour } from "@phosphor-icons/react/dist/ssr/SquaresFour";
 import {
@@ -26,14 +18,8 @@ import {
 import { localizedText } from "@/components/ui/localized-text";
 import { teacherSidebarItems } from "@/data/uais";
 import {
-} from "@/lib/ai/voice/ppt-narration";
-import {
-} from "@/lib/teaching/course-readback";
-import {
   TEACHING_COURSE_LOAD_FAILED_MESSAGE,
 } from "./teaching-page-messages";
-import {
-} from "./teaching-page-types";
 
 
 

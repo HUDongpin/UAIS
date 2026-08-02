@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import {
   createUaisTeachingOperationExternalRollbackAdapter,
   createUaisTeachingOperationExternalAppendAdapter,
@@ -11,7 +10,6 @@ import {
   type TeachingOperationAuditRequestSource,
   type TeachingOperationExternalAppendAdapter,
   type TeachingOperationExternalRollbackAdapter,
-  type TeachingOperationRollbackReceipt,
 } from "@/lib/server/teaching-operations-store";
 import { createUaisTeachingCourseManagementRepository } from "@/lib/server/teaching-course-management-external-store";
 import {
