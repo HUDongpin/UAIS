@@ -20,7 +20,8 @@ import type { TeacherCourse } from "@/data/uais";
 import { copy } from "@/i18n/copy";
 import type { Locale } from "@/i18n/copy";
 import type {
-  CourseSettingsDraft,
+  CourseSettingsDraftFieldInput,
+  CourseSettingsDraftValues,
   TeacherClassItem,
   TeacherClassMembershipItem,
 } from "@/lib/teaching/course-readback";
@@ -41,7 +42,9 @@ type CourseSettingsWorkspaceProps = {
   t: (typeof copy)[Locale];
   activeWorkspaceItem: (typeof teacherSidebarItems)[number];
   activeCourseSettingsCourse: TeacherCourse | undefined;
-  activeCourseSettingsDraft: CourseSettingsDraft | undefined;
+  // Resolved display values: sparse draft fields backfilled from the persisted
+  // course at the current locale.
+  activeCourseSettingsDraft: CourseSettingsDraftValues | undefined;
   courseCards: TeacherCourse[];
   courseClasses: Record<string, TeacherClassItem[]>;
   classMemberships: Record<string, TeacherClassMembershipItem[]>;
@@ -63,7 +66,8 @@ type CourseSettingsWorkspaceProps = {
     classItem: TeacherClassItem,
     membership: TeacherClassMembershipItem,
   ) => void;
-  updateCourseSettingsDraft: (course: TeacherCourse, patch: Partial<CourseSettingsDraft>) => void;
+  // Raw typed strings: the hook stamps the current locale onto each edited field.
+  updateCourseSettingsDraft: (course: TeacherCourse, patch: CourseSettingsDraftFieldInput) => void;
   queueInlineWorkspaceAuditAlertNotifications: (
     operationId: TeachingOperationId,
     notificationRoute?: string,

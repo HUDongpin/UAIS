@@ -12,13 +12,38 @@ export type NewCourseDraft = {
   coverAssetId?: string;
 };
 
+// Every touched field records the locale it was typed under, so "did the teacher
+// change this?" can always be answered against exactly the string the teacher saw
+// in the input at edit time, regardless of later language toggles.
+export type CourseSettingsDraftEntry = {
+  value: string;
+  locale: Locale;
+};
+
+// Sparse by design: a field is present only after the teacher edits it. Untouched
+// fields stay absent so a locale switch mid-edit cannot turn a stale localized
+// string into a phantom rename patch.
 export type CourseSettingsDraft = {
+  courseName?: CourseSettingsDraftEntry;
+  semester?: CourseSettingsDraftEntry;
+  description?: CourseSettingsDraftEntry;
+};
+
+// Raw field input from the form, before the current locale is stamped onto it.
+export type CourseSettingsDraftFieldInput = Partial<Record<CourseSettingsField, string>>;
+
+export type CourseSettingsDraftValues = {
   courseName: string;
   semester: string;
   description: string;
 };
 
-export type CourseSettingsPatchPayload = Partial<CourseSettingsDraft>;
+// Public save-payload shape: the backend contract stays plain optional strings.
+export type CourseSettingsPatchPayload = {
+  courseName?: string;
+  semester?: string;
+  description?: string;
+};
 
 export type TeacherClassItem = {
   id: string;
@@ -217,15 +242,136 @@ export function extractCourseSemester(course: TeacherCourse, locale: Locale) {
     : createDefaultNewCourseDraft(locale).semester;
 }
 
-export function createCourseSettingsDraft(
+const courseSettingsFields: CourseSettingsField[] = ["courseName", "semester", "description"];
+
+export type CourseSettingsField = "courseName" | "semester" | "description";
+
+function readPersistedCourseSettingsValue(
   course: TeacherCourse,
+  field: CourseSettingsField,
+  locale: Locale,
+) {
+  if (field === "courseName") {
+    return readLocalizedText(course.title, locale).trim();
+  }
+  if (field === "semester") {
+    return extractCourseSemester(course, locale).trim();
+  }
+  // The description field has no persisted baseline: the form opens it empty in
+  // every locale, so it carries no stale-localized-string failure mode.
+  return "";
+}
+
+// Stamps the current locale onto each edited field so the draft records what the
+// teacher saw while typing, not just what they typed.
+export function createCourseSettingsDraftEntries(
+  input: CourseSettingsDraftFieldInput,
   locale: Locale,
 ): CourseSettingsDraft {
+  return courseSettingsFields.reduce<CourseSettingsDraft>((entries, field) => {
+    const value = input[field];
+    return value === undefined ? entries : { ...entries, [field]: { value, locale } };
+  }, {});
+}
+
+// Single source of truth for "did the teacher actually edit this field?", shared by
+// the form display and the save patch so the two cannot diverge.
+//
+// A touched field is effectively untouched once its trimmed value equals the
+// persisted rendering at ITS OWN stamped locale — exactly the string that sat in the
+// input when the teacher typed. That kills the touched-then-reverted phantom rename
+// no matter how many times the language is toggled afterwards, and it stays correct
+// when the baseline is a locale-specific default fallback, because it never compares
+// a value against a rendering the teacher never saw.
+export function isEffectivelyUntouchedCourseSettingsDraftEntry(
+  course: TeacherCourse,
+  field: CourseSettingsField,
+  entry: CourseSettingsDraftEntry | undefined,
+) {
+  if (!entry) {
+    return true;
+  }
+
+  const normalized = entry.value.trim();
+  if (!normalized) {
+    // A cleared field is an edit in progress, not an untouched field: keep the
+    // input empty instead of snapping the persisted value back under the cursor.
+    return false;
+  }
+
+  return readPersistedCourseSettingsValue(course, field, entry.locale) === normalized;
+}
+
+// Display values for the course-settings form: a field being edited under the locale
+// now on screen shows exactly what the teacher typed. An absent field, or one stamped
+// under a different locale and effectively untouched, falls back to the persisted value
+// read at the current locale, so switching language re-renders it in that language
+// instead of freezing the old locale's strings.
+export function resolveCourseSettingsDraftValues(
+  course: TeacherCourse,
+  draft: CourseSettingsDraft | undefined,
+  locale: Locale,
+): CourseSettingsDraftValues {
   return {
-    courseName: readLocalizedText(course.title, locale),
-    semester: extractCourseSemester(course, locale),
-    description: "",
+    courseName: resolveCourseSettingsDraftValue(course, "courseName", draft?.courseName, locale),
+    semester: resolveCourseSettingsDraftValue(course, "semester", draft?.semester, locale),
+    description: resolveCourseSettingsDraftValue(course, "description", draft?.description, locale),
   };
+}
+
+function resolveCourseSettingsDraftValue(
+  course: TeacherCourse,
+  field: CourseSettingsField,
+  entry: CourseSettingsDraftEntry | undefined,
+  locale: Locale,
+) {
+  // An entry stamped with the locale currently on screen is the live edit buffer, so it
+  // is echoed back byte for byte — no untouched check, no trimming. Running the untouched
+  // rule here would compare a TRIMMED value against the persisted rendering, so a value
+  // differing only by leading/trailing whitespace would read as untouched and snap the
+  // controlled input back mid-keystroke, deleting the character just typed (type a
+  // trailing space, then a letter, and the space is eaten).
+  //
+  // The untouched rule still governs the absent and cross-locale cases, where the
+  // question is "should this stale string keep overriding the current locale's
+  // rendering?" rather than "what is the teacher typing right now?".
+  //
+  // Whitespace is only a display concern: createCourseSettingsPatchFromDraft trims
+  // independently, so a whitespace-only difference still never reaches the backend.
+  if (entry && entry.locale === locale) {
+    return entry.value;
+  }
+
+  return isEffectivelyUntouchedCourseSettingsDraftEntry(course, field, entry)
+    ? readPersistedCourseSettingsValue(course, field, locale)
+    : entry?.value ?? "";
+}
+
+// Only fields the teacher actually edited are candidates for the patch. The current
+// locale is deliberately not a parameter: each entry is compared against the persisted
+// rendering at its own stamped locale, so the decision is toggle-invariant and means
+// exactly "the teacher changed this from what they saw".
+export function createCourseSettingsPatchFromDraft(
+  course: TeacherCourse,
+  draft: CourseSettingsDraft | undefined,
+): CourseSettingsPatchPayload | undefined {
+  if (!draft) {
+    return undefined;
+  }
+
+  const patch: CourseSettingsPatchPayload = courseSettingsFields.reduce<CourseSettingsPatchPayload>(
+    (currentPatch, field) => {
+      const entry = draft[field];
+      const value = entry?.value.trim();
+      if (!value || isEffectivelyUntouchedCourseSettingsDraftEntry(course, field, entry)) {
+        return currentPatch;
+      }
+      return { ...currentPatch, [field]: value };
+    },
+    {},
+  );
+
+  return Object.keys(patch).length > 0 ? patch : undefined;
 }
 
 export function applyCourseSettingsPatchToTeacherCourse(
@@ -482,7 +628,11 @@ export function isMatchingMembershipApprovalResult(input: {
     input.approvedMembership.id === input.requestedMembership.id &&
     input.approvedMembership.classId === input.requestedClass.id &&
     input.approvedMembership.courseId === input.requestedClass.courseId &&
-    input.approvedMembership.invitationCode === input.requestedClass.invitationCode &&
+    // Compare against the requested membership's own recorded code, not the class code:
+    // a membership permanently stores the invite code used at join time, while the class
+    // invitation code is mutable (the teacher can republish a fresh code), so a republished
+    // class code would otherwise fail this check for every already-pending membership.
+    input.approvedMembership.invitationCode === input.requestedMembership.invitationCode &&
     input.approvedMembership.membershipStatus === "approved"
   );
 }

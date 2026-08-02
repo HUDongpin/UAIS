@@ -60,7 +60,8 @@ import {
 } from "@/lib/ai/voice/ppt-narration";
 import {
   applyCourseSettingsPatchToTeacherCourse,
-  createCourseSettingsDraft,
+  createCourseSettingsDraftEntries,
+  createCourseSettingsPatchFromDraft,
   createPersistedCourseLoadErrorMessage,
   createTeacherClassesByCourseFromPersistedClasses,
   createTeacherCourseFromPersistedCourse,
@@ -73,8 +74,10 @@ import {
   mergeTeacherCoursesById,
   mergeTeacherMembershipsByClassId,
   readTeachingCourseListTeacherActorId,
+  resolveCourseSettingsDraftValues,
   shouldLoadPersistedTeachingCourses,
   type CourseSettingsDraft,
+  type CourseSettingsDraftFieldInput,
   type CourseSettingsPatchPayload,
   type NewCourseDraft,
   type PersistedTeachingCourseReadback,
@@ -501,8 +504,11 @@ export function useTeachingWorkspace() {
     : undefined;
   const activeCourseSettingsCourse = selectedActionCourse ?? courseCards[0];
   const activeCourseSettingsDraft = activeCourseSettingsCourse
-    ? courseSettingsDrafts[activeCourseSettingsCourse.id] ??
-      createCourseSettingsDraft(activeCourseSettingsCourse, locale)
+    ? resolveCourseSettingsDraftValues(
+        activeCourseSettingsCourse,
+        courseSettingsDrafts[activeCourseSettingsCourse.id],
+        locale,
+      )
     : undefined;
 
   function openWorkspaceItem(itemId: string) {
@@ -511,15 +517,17 @@ export function useTeachingWorkspace() {
     }
   }
 
-  function updateCourseSettingsDraft(
-    course: TeacherCourse,
-    patch: Partial<CourseSettingsDraft>,
-  ) {
+  function updateCourseSettingsDraft(course: TeacherCourse, patch: CourseSettingsDraftFieldInput) {
+    // Merge only the edited field(s): the stored draft stays sparse so untouched
+    // fields keep tracking the persisted value at the current locale. Each written
+    // field is stamped with the locale it was typed under, so a later language
+    // toggle cannot change whether it counts as an edit.
+    const touchedEntries = createCourseSettingsDraftEntries(patch, locale);
     setCourseSettingsDrafts((currentDrafts) => ({
       ...currentDrafts,
       [course.id]: {
-        ...(currentDrafts[course.id] ?? createCourseSettingsDraft(course, locale)),
-        ...patch,
+        ...currentDrafts[course.id],
+        ...touchedEntries,
       },
     }));
   }
@@ -530,23 +538,9 @@ export function useTeachingWorkspace() {
       return undefined;
     }
 
-    const draft = courseSettingsDrafts[course.id] ?? createCourseSettingsDraft(course, locale);
-    const patch: CourseSettingsPatchPayload = {};
-    const courseName = draft.courseName.trim();
-    const semester = draft.semester.trim();
-    const description = draft.description.trim();
-    const persistedCourseName = localizedText(course.title, locale).trim();
-    const persistedSemester = extractCourseSemester(course, locale).trim();
-    if (courseName && courseName !== persistedCourseName) {
-      patch.courseName = courseName;
-    }
-    if (semester && semester !== persistedSemester) {
-      patch.semester = semester;
-    }
-    if (description) {
-      patch.description = description;
-    }
-    return Object.keys(patch).length > 0 ? patch : undefined;
+    // Shares one "is this field actually edited?" rule with the form display, so a
+    // touched-then-reverted field cannot ship the pre-switch locale's string.
+    return createCourseSettingsPatchFromDraft(course, courseSettingsDrafts[course.id]);
   }
 
   function applyVerifiedCourseSettingsPatch(

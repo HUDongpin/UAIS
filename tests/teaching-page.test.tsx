@@ -3,6 +3,10 @@ import type { AnchorHTMLAttributes, ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { TeachingPage } from "@/components/pages/teaching-page";
 
+const mockPreferences = vi.hoisted(() => ({
+  locale: "zh-CN" as "zh-CN" | "en-US",
+}));
+
 vi.mock("next/link", () => ({
   default: ({
     href,
@@ -27,7 +31,7 @@ vi.mock("next/link", () => ({
 
 vi.mock("@/components/providers/app-preferences", () => ({
   useAppPreferences: () => ({
-    locale: "zh-CN",
+    locale: mockPreferences.locale,
     theme: "light",
     toggleLocale: vi.fn(),
     toggleTheme: vi.fn(),
@@ -35,6 +39,7 @@ vi.mock("@/components/providers/app-preferences", () => ({
 }));
 
 afterEach(() => {
+  mockPreferences.locale = "zh-CN";
   window.history.replaceState(null, "", "/");
   vi.restoreAllMocks();
 });
@@ -1559,6 +1564,383 @@ describe("TeachingPage", () => {
         },
       }),
     );
+  });
+
+  it("patches only the course settings fields the teacher edited", async () => {
+    const fetchMock = vi.fn(async () =>
+      Response.json({
+        receipt: {
+          receiptId: "operation-record-course-settings-single-field",
+          operationId: "course-settings",
+          actionSlot: "primary",
+          courseId: "teacher-research-methods",
+          status: "persisted",
+          audit: createSignedInlineOperationReceiptAudit(),
+          displayMessage: {
+            "zh-CN": "课程设置已由服务端持久化。",
+            "en-US": "Course settings persisted by the server.",
+          },
+        },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<TeachingPage />);
+
+    fireEvent.change(screen.getByLabelText("课程名称"), {
+      target: { value: "企业级研究方法" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "保存课程设置" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/teaching/operations",
+        expect.objectContaining({ method: "POST" }),
+      );
+    });
+    const requestBody = JSON.parse(String(fetchMock.mock.calls[0][1]?.body));
+    expect(requestBody.courseSettingsPatch).toEqual({ courseName: "企业级研究方法" });
+  });
+
+  it("keeps a mid-edit locale switch out of the course settings patch", async () => {
+    const fetchMock = vi.fn(async () =>
+      Response.json({
+        receipt: {
+          receiptId: "operation-record-course-settings-locale-switch",
+          operationId: "course-settings",
+          actionSlot: "primary",
+          courseId: "teacher-research-methods",
+          status: "persisted",
+          audit: createSignedInlineOperationReceiptAudit(),
+          displayMessage: {
+            "zh-CN": "课程设置已由服务端持久化。",
+            "en-US": "Course settings persisted by the server.",
+          },
+        },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { rerender } = render(<TeachingPage />);
+
+    fireEvent.change(screen.getByLabelText("课程说明"), {
+      target: { value: "只修改课程说明。" },
+    });
+
+    mockPreferences.locale = "en-US";
+    rerender(<TeachingPage />);
+
+    // Untouched fields follow the new locale instead of freezing the zh-CN strings.
+    expect((screen.getByLabelText("Course Name") as HTMLInputElement).value).toBe(
+      "University Research Methods",
+    );
+    expect((screen.getByLabelText("Semester") as HTMLInputElement).value).toBe("Spring 2026");
+    expect((screen.getByLabelText("Course Description") as HTMLTextAreaElement).value).toBe(
+      "只修改课程说明。",
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Save Course Settings" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/teaching/operations",
+        expect.objectContaining({ method: "POST" }),
+      );
+    });
+    const requestBody = JSON.parse(String(fetchMock.mock.calls[0][1]?.body));
+    expect(requestBody.courseSettingsPatch).toEqual({ description: "只修改课程说明。" });
+    // No phantom rename: the localized title is not collapsed to the zh-CN string.
+    expect(screen.queryAllByText("University Research Methods").length).toBeGreaterThan(0);
+    // Assert on the payload, not on rendered text: once the locale flipped to en-US
+    // the zh-CN title cannot render anyway, so a DOM check here proves nothing. The
+    // load-bearing claim is that the pre-switch locale's strings never left the page.
+    expect(String(fetchMock.mock.calls[0][1]?.body)).not.toContain("大学研究方法");
+    expect(String(fetchMock.mock.calls[0][1]?.body)).not.toContain("2025-2026第二学期");
+  });
+
+  it("keeps a touched-then-reverted field out of the patch after a locale switch", async () => {
+    const fetchMock = vi.fn(async () =>
+      Response.json({
+        receipt: {
+          receiptId: "operation-record-course-settings-reverted-field",
+          operationId: "course-settings",
+          actionSlot: "primary",
+          courseId: "teacher-research-methods",
+          status: "persisted",
+          audit: createSignedInlineOperationReceiptAudit(),
+          displayMessage: {
+            "zh-CN": "课程设置已由服务端持久化。",
+            "en-US": "Course settings persisted by the server.",
+          },
+        },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { rerender } = render(<TeachingPage />);
+
+    // Touch and revert: the sparse draft now holds the zh-CN strings verbatim, which
+    // is indistinguishable from an edit by value alone.
+    fireEvent.change(screen.getByLabelText("课程名称"), {
+      target: { value: "大学研究方法X" },
+    });
+    fireEvent.change(screen.getByLabelText("课程名称"), {
+      target: { value: "大学研究方法" },
+    });
+    fireEvent.change(screen.getByLabelText("学期安排"), {
+      target: { value: "2025-2026第二学期X" },
+    });
+    fireEvent.change(screen.getByLabelText("学期安排"), {
+      target: { value: "2025-2026第二学期" },
+    });
+    fireEvent.change(screen.getByLabelText("课程说明"), {
+      target: { value: "只修改课程说明。" },
+    });
+
+    mockPreferences.locale = "en-US";
+    rerender(<TeachingPage />);
+
+    // Reverted fields are untouched, so they follow the toggle like never-edited ones.
+    expect((screen.getByLabelText("Course Name") as HTMLInputElement).value).toBe(
+      "University Research Methods",
+    );
+    expect((screen.getByLabelText("Semester") as HTMLInputElement).value).toBe("Spring 2026");
+    expect((screen.getByLabelText("Course Description") as HTMLTextAreaElement).value).toBe(
+      "只修改课程说明。",
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Save Course Settings" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/teaching/operations",
+        expect.objectContaining({ method: "POST" }),
+      );
+    });
+    const requestBody = JSON.parse(String(fetchMock.mock.calls[0][1]?.body));
+    expect(requestBody.courseSettingsPatch).toEqual({ description: "只修改课程说明。" });
+  });
+
+  it("keeps a semester typed in the en-US UI that matches the zh-CN rendering", async () => {
+    const fetchMock = vi.fn(async () =>
+      Response.json({
+        receipt: {
+          receiptId: "operation-record-course-settings-cross-locale-semester",
+          operationId: "course-settings",
+          actionSlot: "primary",
+          courseId: "teacher-research-methods",
+          status: "persisted",
+          audit: createSignedInlineOperationReceiptAudit(),
+          displayMessage: {
+            "zh-CN": "课程设置已由服务端持久化。",
+            "en-US": "Course settings persisted by the server.",
+          },
+        },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    mockPreferences.locale = "en-US";
+    render(<TeachingPage />);
+
+    // The demo cards carry no parseable semester, so the persisted rendering is the
+    // locale default: "Spring 2026" here, "2025-2026第二学期" in zh-CN.
+    expect((screen.getByLabelText("Semester") as HTMLInputElement).value).toBe("Spring 2026");
+
+    fireEvent.change(screen.getByLabelText("Semester"), {
+      target: { value: "2025-2026第二学期" },
+    });
+
+    // Typed text is never overwritten by the other locale's rendering.
+    expect((screen.getByLabelText("Semester") as HTMLInputElement).value).toBe(
+      "2025-2026第二学期",
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Save Course Settings" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/teaching/operations",
+        expect.objectContaining({ method: "POST" }),
+      );
+    });
+    const requestBody = JSON.parse(String(fetchMock.mock.calls[0][1]?.body));
+    expect(requestBody.courseSettingsPatch).toEqual({ semester: "2025-2026第二学期" });
+  });
+
+  it("patches a rename typed in the en-US UI that matches the zh-CN course title", async () => {
+    const fetchMock = vi.fn(async () =>
+      Response.json({
+        receipt: {
+          receiptId: "operation-record-course-settings-cross-locale-rename",
+          operationId: "course-settings",
+          actionSlot: "primary",
+          courseId: "teacher-research-methods",
+          status: "persisted",
+          audit: createSignedInlineOperationReceiptAudit(),
+          displayMessage: {
+            "zh-CN": "课程设置已由服务端持久化。",
+            "en-US": "Course settings persisted by the server.",
+          },
+        },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    mockPreferences.locale = "en-US";
+    render(<TeachingPage />);
+
+    fireEvent.change(screen.getByLabelText("Course Name"), {
+      target: { value: "大学研究方法" },
+    });
+
+    expect((screen.getByLabelText("Course Name") as HTMLInputElement).value).toBe("大学研究方法");
+
+    fireEvent.click(screen.getByRole("button", { name: "Save Course Settings" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/teaching/operations",
+        expect.objectContaining({ method: "POST" }),
+      );
+    });
+    const requestBody = JSON.parse(String(fetchMock.mock.calls[0][1]?.body));
+    expect(requestBody.courseSettingsPatch).toEqual({ courseName: "大学研究方法" });
+  });
+
+  it("keeps a space typed into a course settings field instead of eating the next keystroke", async () => {
+    const fetchMock = vi.fn(async () =>
+      Response.json({
+        receipt: {
+          receiptId: "operation-record-course-settings-trailing-space",
+          operationId: "course-settings",
+          actionSlot: "primary",
+          courseId: "teacher-research-methods",
+          status: "persisted",
+          audit: createSignedInlineOperationReceiptAudit(),
+          displayMessage: {
+            "zh-CN": "课程设置已由服务端持久化。",
+            "en-US": "Course settings persisted by the server.",
+          },
+        },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    mockPreferences.locale = "en-US";
+    render(<TeachingPage />);
+
+    const courseNameInput = screen.getByLabelText("Course Name") as HTMLInputElement;
+    expect(courseNameInput.value).toBe("University Research Methods");
+
+    // Type one character at a time, always continuing from what the controlled input
+    // actually shows. A value that differs from the persisted rendering only by
+    // trailing whitespace must survive the re-render: if it snaps back, the space is
+    // swallowed and the next keystroke lands against the un-spaced string.
+    fireEvent.change(courseNameInput, { target: { value: `${courseNameInput.value} ` } });
+    expect(courseNameInput.value).toBe("University Research Methods ");
+
+    fireEvent.change(courseNameInput, { target: { value: `${courseNameInput.value}A` } });
+    expect(courseNameInput.value).toBe("University Research Methods A");
+
+    fireEvent.click(screen.getByRole("button", { name: "Save Course Settings" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/teaching/operations",
+        expect.objectContaining({ method: "POST" }),
+      );
+    });
+    const requestBody = JSON.parse(String(fetchMock.mock.calls[0][1]?.body));
+    // The patch keeps trimming, so what ships is the typed string trimmed.
+    expect(requestBody.courseSettingsPatch).toEqual({
+      courseName: "University Research Methods A",
+    });
+  });
+
+  it("keeps a cleared course settings field cleared and out of the patch", async () => {
+    const fetchMock = vi.fn(async () =>
+      Response.json({
+        receipt: {
+          receiptId: "operation-record-course-settings-cleared-field",
+          operationId: "course-settings",
+          actionSlot: "primary",
+          courseId: "teacher-research-methods",
+          status: "persisted",
+          audit: createSignedInlineOperationReceiptAudit(),
+          displayMessage: {
+            "zh-CN": "课程设置已由服务端持久化。",
+            "en-US": "Course settings persisted by the server.",
+          },
+        },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<TeachingPage />);
+
+    fireEvent.change(screen.getByLabelText("课程名称"), { target: { value: "" } });
+    fireEvent.change(screen.getByLabelText("课程说明"), {
+      target: { value: "只修改课程说明。" },
+    });
+
+    // The emptied input stays empty instead of snapping the persisted value back
+    // under the cursor.
+    expect((screen.getByLabelText("课程名称") as HTMLInputElement).value).toBe("");
+
+    fireEvent.click(screen.getByRole("button", { name: "保存课程设置" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/teaching/operations",
+        expect.objectContaining({ method: "POST" }),
+      );
+    });
+    const requestBody = JSON.parse(String(fetchMock.mock.calls[0][1]?.body));
+    expect(requestBody.courseSettingsPatch).toEqual({ description: "只修改课程说明。" });
+  });
+
+  it("keeps a genuine zh-CN edit visible and patchable after a locale switch", async () => {
+    const fetchMock = vi.fn(async () =>
+      Response.json({
+        receipt: {
+          receiptId: "operation-record-course-settings-cross-locale-edit",
+          operationId: "course-settings",
+          actionSlot: "primary",
+          courseId: "teacher-research-methods",
+          status: "persisted",
+          audit: createSignedInlineOperationReceiptAudit(),
+          displayMessage: {
+            "zh-CN": "课程设置已由服务端持久化。",
+            "en-US": "Course settings persisted by the server.",
+          },
+        },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { rerender } = render(<TeachingPage />);
+
+    fireEvent.change(screen.getByLabelText("课程名称"), {
+      target: { value: "企业级研究方法" },
+    });
+
+    mockPreferences.locale = "en-US";
+    rerender(<TeachingPage />);
+
+    // A real edit survives the toggle instead of being discarded as a stale seed.
+    expect((screen.getByLabelText("Course Name") as HTMLInputElement).value).toBe("企业级研究方法");
+
+    fireEvent.click(screen.getByRole("button", { name: "Save Course Settings" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/teaching/operations",
+        expect.objectContaining({ method: "POST" }),
+      );
+    });
+    const requestBody = JSON.parse(String(fetchMock.mock.calls[0][1]?.body));
+    expect(requestBody.courseSettingsPatch).toEqual({ courseName: "企业级研究方法" });
   });
 
   it("does not claim inline course settings success when domain persistence is missing", async () => {
