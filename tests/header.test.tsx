@@ -5,6 +5,11 @@ import { Header } from "@/components/layout/header";
 
 let mockPathname = "/courses";
 const replace = vi.fn();
+const assign = vi.fn();
+
+function stubLocationAssign() {
+  vi.stubGlobal("location", { ...window.location, assign });
+}
 
 vi.mock("next/link", () => ({
   default: ({
@@ -40,6 +45,7 @@ vi.mock("@/components/providers/app-preferences", () => ({
 describe("Header", () => {
   beforeEach(() => {
     replace.mockClear();
+    assign.mockClear();
     vi.unstubAllGlobals();
     document.cookie = "uais_app_session=; Max-Age=0; path=/";
     document.cookie = "uais_app_session_signature=; Max-Age=0; path=/";
@@ -142,17 +148,23 @@ describe("Header", () => {
     expect(within(menu).queryByText("教师工作台权限")).toBeNull();
   });
 
-  it("asks the server to clear the HttpOnly app session and returns to login", async () => {
+  it("returns to login only after the session-clearing request has settled", async () => {
     const cookieSetter = vi.spyOn(document, "cookie", "set");
-    const fetchMock = vi.fn(async () => Response.json({ status: "signed-out" }));
+    let resolveSignOutRequest: (response: Response) => void = () => undefined;
+    const fetchMock = vi.fn(
+      () =>
+        new Promise<Response>((resolve) => {
+          resolveSignOutRequest = resolve;
+        }),
+    );
     vi.stubGlobal("fetch", fetchMock);
+    stubLocationAssign();
     mockPathname = "/teaching";
     render(<Header />);
 
     fireEvent.click(screen.getByRole("button", { name: "教师账号" }));
     fireEvent.click(screen.getByRole("menuitem", { name: "退出账号" }));
 
-    await waitFor(() => expect(replace).toHaveBeenCalledWith("/login"));
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/auth/app-session",
       expect.objectContaining({
@@ -160,8 +172,32 @@ describe("Header", () => {
         credentials: "same-origin",
       }),
     );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(assign).not.toHaveBeenCalled();
+
+    resolveSignOutRequest(Response.json({ status: "signed-out" }));
+
+    await waitFor(() => expect(assign).toHaveBeenCalledWith("/login"));
+    expect(replace).not.toHaveBeenCalled();
     expect(cookieSetter).not.toHaveBeenCalled();
     cookieSetter.mockRestore();
+  });
+
+  it("still leaves for login when the session-clearing request fails", async () => {
+    const fetchMock = vi.fn(async () => {
+      throw new Error("network down");
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    stubLocationAssign();
+    mockPathname = "/teaching";
+    render(<Header />);
+
+    fireEvent.click(screen.getByRole("button", { name: "教师账号" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "退出账号" }));
+
+    await waitFor(() => expect(assign).toHaveBeenCalledWith("/login"));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(replace).not.toHaveBeenCalled();
   });
 
   it("does not show the global search button in the header", () => {

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { Bell } from "@phosphor-icons/react/dist/ssr/Bell";
 import { BookOpen } from "@phosphor-icons/react/dist/ssr/BookOpen";
 import { CalendarBlank } from "@phosphor-icons/react/dist/ssr/CalendarBlank";
@@ -32,7 +32,6 @@ export function Header({
   initialSessionUser?: UaisAppSessionUser | null;
 }) {
   const pathname = usePathname();
-  const router = useRouter();
   const { locale, theme, toggleLocale, toggleTheme } = useAppPreferences();
   const t = copy[locale];
   const accountMenuRef = useRef<HTMLDivElement>(null);
@@ -150,13 +149,23 @@ export function Header({
     };
   }, [accountMenuOpen]);
 
-  function signOut() {
-    void fetch("/api/auth/app-session", {
-      method: "DELETE",
-      credentials: "same-origin",
-    }).catch(() => undefined);
+  async function signOut() {
     setAccountMenuOpen(false);
-    router.replace("/login");
+    try {
+      await fetch("/api/auth/app-session", {
+        method: "DELETE",
+        credentials: "same-origin",
+      });
+    } catch {
+      // A failed clear request must not trap the user inside the app: the hard
+      // navigation below still leaves the authenticated surface.
+    }
+    // Hard navigation instead of router.replace: the /login request must be
+    // issued only after the sign-out Set-Cookie response has been processed,
+    // otherwise the proxy still sees a valid session and bounces the user back
+    // to their role home. A full reload also resets client state, including the
+    // `sessionUser` snapshot frozen in this component.
+    window.location.assign("/login");
   }
 
   return (
@@ -342,7 +351,7 @@ export function Header({
                   <button
                     type="button"
                     role="menuitem"
-                    onClick={signOut}
+                    onClick={() => void signOut()}
                     className="flex h-11 w-full items-center gap-2 rounded-xl px-3 text-left text-sm font-semibold text-[#b42318] outline-none transition hover:bg-[#fff1f0] active:translate-y-px focus-visible:ring-2 focus-visible:ring-[#b42318]"
                   >
                     <SignOut size={17} weight="duotone" />
