@@ -6,7 +6,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 # AGENTS.md - UAIS Parallel Session Guide
 
-This file is the coordination contract for AI/Codex sessions working in `/Users/dongpinhu/Desktop/UAIS`.
+This file is the coordination contract for AI/Codex sessions working in `/Volumes/Starship/UAIS`.
 
 ## Project Snapshot
 
@@ -323,7 +323,7 @@ The final artifact should be `coordination/reports/YYYY-MM-DD-president-report.d
 If the environment supports recurring Codex automations, ask Codex to create a daily 8:00 AM Asia/Hong_Kong automation for this project with a prompt like:
 
 ```text
-Every day at 8:00 AM Asia/Hong_Kong, inspect /Users/dongpinhu/Desktop/UAIS. Read AGENTS.md, collect the latest session logs and blockers from coordination/, inspect the project status, run safe relevant checks when practical, and produce a concise bilingual DOCX president report for Dr. Peter Hu at coordination/reports/YYYY-MM-DD-president-report.docx. The reporting window is previous calendar day 08:00 through report date 08:00 Asia/Hong_Kong. The report must include a Chinese Executive Summary, English Executive Summary, reporting-window summary, project progress update, S01-S25 session status table, blockers, risks, test/build status, files changed, tomorrow priorities, and owner decisions needed. Use simple business formatting with readable tables and restrained typography. If no assignment or fresh work is found in the reporting window, state "No assigned work in this reporting window" and summarize the latest available project status. Do not edit feature code.
+Every day at 8:00 AM Asia/Hong_Kong, inspect /Volumes/Starship/UAIS. Read AGENTS.md, collect the latest session logs and blockers from coordination/, inspect the project status, run safe relevant checks when practical, and produce a concise bilingual DOCX president report for Dr. Peter Hu at coordination/reports/YYYY-MM-DD-president-report.docx. The reporting window is previous calendar day 08:00 through report date 08:00 Asia/Hong_Kong. The report must include a Chinese Executive Summary, English Executive Summary, reporting-window summary, project progress update, S01-S25 session status table, blockers, risks, test/build status, files changed, tomorrow priorities, and owner decisions needed. Use simple business formatting with readable tables and restrained typography. If no assignment or fresh work is found in the reporting window, state "No assigned work in this reporting window" and summarize the latest available project status. Do not edit feature code.
 ```
 
 Do not ask the automation to edit feature code unless the owner explicitly assigns that work. The morning automation's default job is reporting and triage.
@@ -522,3 +522,5 @@ Owner Decisions Needed
 4. Tell each selected session to create or update its own log in `coordination/session-logs/`.
 5. Tell S10 to act as meeting secretary and prepare `coordination/reports/YYYY-MM-DD-president-report.docx`.
 6. If no assignment is given, the 8:00 AM report should say `No assigned work in this reporting window`.
+
+## Imported Claude Cowork project instructions

@@ -27,6 +27,7 @@ coordination/release-intake/.scratch/
 
 # misc
 .DS_Store
+.Rhistory
 *.pem
 .local/
 .worktrees/
