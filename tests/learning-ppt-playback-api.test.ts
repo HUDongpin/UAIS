@@ -12,6 +12,12 @@ import {
   createLearningPptPlaybackManifestForCourse,
   createPublishedLearningPptPlaybackManifestForCourse,
 } from "@/lib/learning/ppt-playback";
+import { createLearnerProfileFromXapiStatements } from "@/lib/learning-records/learner-profile";
+import type { LearningRecordQueueItem } from "@/lib/learning-records/lrs-recorder";
+import {
+  createIdempotentStatementId,
+  createLearningEventStatement,
+} from "@/lib/learning-records/xapi-events";
 import { createUaisAppSessionCookie } from "@/lib/server/uais-app-session";
 
 const kangXiaManifestId =
@@ -688,10 +694,6 @@ describe("student PPT playback API", () => {
             name: "Elementary Mathematics Research PPT playback",
             type: "lesson",
           },
-          result: {
-            completion: true,
-            success: true,
-          },
           context: {
             courseId: "elementary-math-research",
             classId: "elementary-math-research-class-1",
@@ -703,6 +705,51 @@ describe("student PPT playback API", () => {
         idempotencyKey:
           "Peter:elementary-math-research:audio-manifest-elementary-math-research-natural-number-ordinal-theory-ppt1:manifest-viewed",
       });
+    } finally {
+      await rm(fixture.dataDir, { recursive: true, force: true });
+    }
+  });
+
+  it("does not report a viewed manifest as a completed lesson in the learner profile", async () => {
+    const fixture = await createApprovedLearningPptPlaybackFixture();
+    const queuedItems: LearningRecordQueueItem[] = [];
+    const handler = createLearningPptPlaybackManifestGetHandler({
+      env: fixture.env,
+      readStoredManifest: async () => createStoredKangXiaManifest(),
+      recordLearningEvent: (item) => {
+        queuedItems.push(item);
+      },
+    });
+
+    try {
+      const response = await handler(
+        new Request("http://localhost/api/learning/ppt-playback/elementary-math-research", {
+          headers: {
+            cookie: fixture.cookie,
+          },
+        }),
+        { params: { courseId: "elementary-math-research" } },
+      );
+
+      expect(response.status).toBe(200);
+      expect(queuedItems).toHaveLength(1);
+      expect(queuedItems[0].event.result).toBeUndefined();
+
+      const profile = createLearnerProfileFromXapiStatements({
+        statements: queuedItems.map((item) =>
+          createLearningEventStatement({
+            actor: item.actor,
+            event: item.event,
+            statementId: createIdempotentStatementId(item.idempotencyKey),
+            timestamp: "2026-06-22T12:05:00.000Z",
+          }),
+        ),
+      });
+
+      expect(profile.progress.completedLessonCount).toBe(0);
+      expect(profile.progress.completionRate).toBe(0);
+      expect(profile.completedLessonIds).toEqual([]);
+      expect(profile.progress.activeLessonCount).toBe(1);
     } finally {
       await rm(fixture.dataDir, { recursive: true, force: true });
     }

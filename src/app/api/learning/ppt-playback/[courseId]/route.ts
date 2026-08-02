@@ -160,10 +160,9 @@ function recordPptPlaybackViewed(input: {
         name: `${getStableEnglishPlaybackTitle(input.playback)} PPT playback`,
         type: "lesson",
       },
-      result: {
-        completion: true,
-        success: true,
-      },
+      // Opening the manifest is a view, not a completion. Emitting
+      // `result.completion` here made `isCompletionStatement` treat a single
+      // page load as a finished lesson and pinned completionRate to 1.
       context: {
         courseId: input.playback.courseId,
         classId: input.access.classId,
