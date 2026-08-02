@@ -22,7 +22,10 @@ import {
 import { createUaisAppSessionCookie } from "@/lib/server/uais-app-session";
 import { storeTeachingCourseCoverAsset } from "@/lib/server/teaching-course-assets-store";
 import { createUaisTeacherAuthSessionCookieHeader } from "@/lib/server/teacher-auth-session";
-import { readTeachingCourseManagementDatabase } from "@/lib/server/teaching-course-management-store";
+import {
+  publishTeachingClassInviteCode,
+  readTeachingCourseManagementDatabase,
+} from "@/lib/server/teaching-course-management-store";
 
 const teacherAuthSecret = "test-teaching-course-session-signing-secret";
 const teacherAuthIssuerSecret =
@@ -145,6 +148,78 @@ function expectNoLocalOrSecretValues(value: unknown, dataDir: string) {
   expect(serialized).not.toContain(teacherAuthSecret);
   expect(serialized).not.toContain(teacherAuthIssuerSecret);
   expect(serialized).not.toContain(appAuthProviderToken);
+}
+
+// The student branch of GET /api/teaching/courses must project teacher-owned
+// records down to the fields the student surfaces actually render. Everything else
+// is teacher-only: above all a class's invitationCode/joinUrl, which is the
+// access-granting credential a squatted pending membership must never be able to
+// read, plus ownerTeacherId/approvedByTeacherId actor ids and roster/description/
+// storage metadata.
+const studentVisibleCourseKeys = ["courseId", "courseName", "semester"].sort();
+const studentVisibleClassKeys = ["classId", "courseId", "className", "semester"].sort();
+// Membership rows are projected too. `approvedAt` only exists once a teacher has
+// approved the row, so pending rows carry one key fewer.
+const studentVisiblePendingMembershipKeys = [
+  "membershipId",
+  "courseId",
+  "classId",
+  "membershipStatus",
+  "joinedAt",
+].sort();
+const studentVisibleApprovedMembershipKeys = [
+  ...studentVisiblePendingMembershipKeys,
+  "approvedAt",
+].sort();
+
+async function expectStudentVisibleCourseAndClassProjection(body: unknown, dataDir: string) {
+  const { courses, classes, memberships } = body as {
+    courses: Array<Record<string, unknown>>;
+    classes: Array<Record<string, unknown>>;
+    memberships: Array<Record<string, unknown>>;
+  };
+  for (const course of courses) {
+    expect(Object.keys(course).sort()).toEqual(studentVisibleCourseKeys);
+  }
+  for (const classItem of classes) {
+    expect(Object.keys(classItem).sort()).toEqual(studentVisibleClassKeys);
+  }
+  for (const membership of memberships) {
+    expect(Object.keys(membership).sort()).toEqual(
+      membership.membershipStatus === "approved"
+        ? studentVisibleApprovedMembershipKeys
+        : studentVisiblePendingMembershipKeys,
+    );
+  }
+
+  // Sweep the ENTIRE serialized response, not just courses/classes: the leak this
+  // guards against was membership rows carrying credentials the course/class
+  // projections had already removed.
+  const serializedBody = JSON.stringify(body);
+  const database = await readTeachingCourseManagementDatabase({ dataDir });
+  for (const storedClass of database.classes) {
+    // The class's CURRENT invite code stays teacher-only, so republishing a code
+    // revokes it for students who only ever held a membership under the old one.
+    expect(serializedBody).not.toContain(storedClass.invitationCode);
+    expect(serializedBody).not.toContain(storedClass.ownerTeacherId);
+  }
+  for (const storedMembership of database.memberships) {
+    // A membership's join-time code is a class credential in its own right: it is
+    // the class's live code until the teacher republishes. It is never returned,
+    // so this sweep is unconditional. It also subsumes the previous joinUrl
+    // assertion, since a joinUrl only leaks by embedding one of these codes.
+    // The rotation case is asserted end-to-end by "stops exposing a republished
+    // class invite code to a student holding a pending membership".
+    expect(serializedBody).not.toContain(storedMembership.invitationCode);
+    if (storedMembership.approvedByTeacherId) {
+      // In practice the approving teacher is the course/class owner, so this is
+      // the same actor id the course/class projections exist to remove.
+      expect(serializedBody).not.toContain(storedMembership.approvedByTeacherId);
+    }
+  }
+  for (const storedCourse of database.courses) {
+    expect(serializedBody).not.toContain(storedCourse.ownerTeacherId);
+  }
 }
 
 describe("teaching course management API", () => {
@@ -929,7 +1004,7 @@ describe("teaching course management API", () => {
     }
   });
 
-  it("hides invite-code memberships from students until teacher review approves them", async () => {
+  it("surfaces the signed student's own pending invite-code membership while it waits for teacher review", async () => {
     const dataDir = await mkdtemp(join(tmpdir(), "uais-student-pending-course-memberships-"));
     const courseManagementEnv = {
       UAIS_TEACHING_COURSES_DATA_DIR: dataDir,
@@ -1013,6 +1088,23 @@ describe("teaching course management API", () => {
           params: Promise.resolve({ code: "55395057" }),
         },
       );
+      await postJoin(
+        new Request("https://www.uais.top/api/teaching/invite-codes/55395057/join", {
+          method: "POST",
+          headers: {
+            cookie: createStudentCookie({
+              account: "Eve",
+              department: "学生账号",
+              displayName: "Eve",
+              role: "student",
+            }),
+            "x-uais-trace-id": "trace-student-pending-membership-eve-join",
+          },
+        }),
+        {
+          params: Promise.resolve({ code: "55395057" }),
+        },
+      );
 
       const createGetCourses = courseRoute.createTeachingCourseGetHandler;
       expect(createGetCourses).toEqual(expect.any(Function));
@@ -1032,9 +1124,33 @@ describe("teaching course management API", () => {
       const body = await response?.json();
 
       expect(response?.status, JSON.stringify(body)).toBe(200);
-      expect(body.courses).toEqual([]);
-      expect(body.classes).toEqual([]);
-      expect(body.memberships).toEqual([]);
+      // Exact object, not objectContaining: a pending membership is projected down
+      // to the student-readable fields, so the join-time invitationCode and the
+      // roster/storage metadata must be absent, not merely unasserted.
+      expect(body.memberships).toEqual([
+        {
+          membershipId: `membership-${courseId}-class-1-Peter`,
+          courseId,
+          classId: `${courseId}-class-1`,
+          membershipStatus: "pending-teacher-review",
+          joinedAt: "2026-06-22T11:40:00.000Z",
+        },
+      ]);
+      expect(body.courses).toEqual([
+        {
+          courseId,
+          courseName: "AI Supported Mathematics Research",
+          semester: "2026 Spring",
+        },
+      ]);
+      expect(body.classes).toEqual([
+        {
+          classId: `${courseId}-class-1`,
+          courseId,
+          className: "Research Methods Class 1",
+          semester: "2026 Spring",
+        },
+      ]);
       expect(body.receipt).toMatchObject({
         action: "list-student-courses",
         actorId: "Peter",
@@ -1042,8 +1158,8 @@ describe("teaching course management API", () => {
         traceId: "trace-student-pending-course-list",
         responsibleSession: "S12",
       });
-      expect(JSON.stringify(body)).not.toContain("AI Supported Mathematics Research");
-      expect(JSON.stringify(body)).not.toContain("pending-teacher-review");
+      expect(JSON.stringify(body)).not.toContain("Eve");
+      await expectStudentVisibleCourseAndClassProjection(body, dataDir);
       expectNoLocalOrSecretValues(body, dataDir);
     } finally {
       await rm(dataDir, { recursive: true, force: true });
@@ -1201,29 +1317,35 @@ describe("teaching course management API", () => {
 
         expect(response?.status, JSON.stringify(body)).toBe(200);
         expect(body.courses).toEqual([
-          expect.objectContaining({
+          {
             courseId,
             courseName: "AI Supported Mathematics Research",
-          }),
+            semester: "2026 Spring",
+          },
         ]);
+        // Approved students get the same minimal projection as pending ones: the
+        // class record's live invitationCode/joinUrl is a teacher credential, and an
+        // approved membership already carries the student's own join-time code.
         expect(body.classes).toEqual([
-          expect.objectContaining({
+          {
             classId,
             courseId,
             className: "Research Methods Class 1",
-            invitationCode: "55395057",
-          }),
+            semester: "2026 Spring",
+          },
         ]);
+        // Exact object, not objectContaining: an approved membership keeps
+        // approvedAt but drops approvedByTeacherId, the join-time invitationCode,
+        // and the roster/storage metadata.
         expect(body.memberships).toEqual([
-          expect.objectContaining({
+          {
             membershipId: `membership-${classId}-Peter`,
             courseId,
             classId,
-            studentId: "Peter",
-            studentDisplayName: "Peter",
             membershipStatus: "approved",
+            joinedAt: "2026-06-22T11:40:00.000Z",
             approvedAt: "2026-06-22T11:45:00.000Z",
-          }),
+          },
         ]);
         expect(body.receipt).toMatchObject({
           action: "list-student-courses",
@@ -1233,8 +1355,329 @@ describe("teaching course management API", () => {
           responsibleSession: "S12",
         });
         expect(JSON.stringify(body)).not.toContain("Eve");
+        await expectStudentVisibleCourseAndClassProjection(body, dataDir);
         expectNoLocalOrSecretValues(body, dataDir);
       }
+    } finally {
+      await rm(dataDir, { recursive: true, force: true });
+    }
+  });
+
+  it("returns approved and pending invite-code memberships together with their courses and classes", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "uais-student-mixed-course-memberships-"));
+    const courseManagementEnv = {
+      UAIS_TEACHING_COURSES_DATA_DIR: dataDir,
+      UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET: teacherAuthSecret,
+    };
+    const postCourse = createTeachingCoursePostHandler({
+      env: courseManagementEnv,
+      now: new Date("2026-06-22T11:20:00.000Z"),
+      mergeTeacherAiOwnershipRecord: async (input) => ({
+        teacherId: input.ownership.teacherId,
+        status: "merged",
+        storagePolicy: "external-redacted-teacher-ai-ownership-merge",
+        storageWritePolicy: "external-atomic-merge",
+        responsibleSession: "S12",
+        updatedAt: "2026-06-22T11:20:00.000Z",
+        redaction: {
+          secrets: "omitted",
+          localFiles: "omitted",
+          assets: "ids-only",
+        },
+      }),
+    });
+    const postClass = createTeachingCourseClassPostHandler({
+      env: courseManagementEnv,
+      now: new Date("2026-06-22T11:25:00.000Z"),
+    });
+    const postJoin = createTeachingInviteCodeJoinPostHandler({
+      env: courseManagementEnv,
+      now: new Date("2026-06-22T11:40:00.000Z"),
+    });
+    const postApprove = createTeachingClassMembershipApprovePostHandler({
+      env: courseManagementEnv,
+      now: new Date("2026-06-22T11:45:00.000Z"),
+    });
+    const courseRoute = teachingCoursesRoute as typeof teachingCoursesRoute & {
+      createTeachingCourseGetHandler?: (deps?: {
+        env?: Record<string, string | undefined>;
+        now?: Date;
+      }) => (request: Request) => Promise<Response>;
+    };
+
+    async function createCourseWithClass(courseName: string, className: string) {
+      const courseResponse = await postCourse(
+        new Request("https://www.uais.top/api/teaching/courses", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            cookie: createTeacherCookie(),
+          },
+          body: JSON.stringify({
+            name: courseName,
+            instructor: "Kang Xia",
+            unit: "Guangzhou University 404",
+            department: "Experimental Teaching Center",
+            semester: "2026 Spring",
+          }),
+        }),
+      );
+      const courseBody = await courseResponse.json();
+      expect(courseResponse.status, JSON.stringify(courseBody)).toBe(201);
+      const courseId = courseBody.course.courseId as string;
+
+      const classResponse = await postClass(
+        new Request(`https://www.uais.top/api/teaching/courses/${courseId}/classes`, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            cookie: createTeacherCookie(),
+          },
+          body: JSON.stringify({ className, semester: "2026 Spring" }),
+        }),
+        {
+          params: Promise.resolve({ courseId }),
+        },
+      );
+      const classBody = await classResponse.json();
+      expect(classResponse.status, JSON.stringify(classBody)).toBe(201);
+
+      return {
+        courseId,
+        courseName,
+        classId: classBody.classItem.classId as string,
+        className,
+        invitationCode: classBody.classItem.invitationCode as string,
+      };
+    }
+
+    try {
+      const approvedCourse = await createCourseWithClass(
+        "AI Supported Mathematics Research",
+        "Research Methods Class 1",
+      );
+      const pendingCourse = await createCourseWithClass(
+        "Statistics Writing Studio",
+        "Statistics Writing Cohort",
+      );
+
+      for (const target of [approvedCourse, pendingCourse]) {
+        await postJoin(
+          new Request(
+            `https://www.uais.top/api/teaching/invite-codes/${target.invitationCode}/join`,
+            {
+              method: "POST",
+              headers: {
+                cookie: createStudentCookie(),
+                "x-uais-trace-id": `trace-student-mixed-join-${target.classId}`,
+              },
+            },
+          ),
+          {
+            params: Promise.resolve({ code: target.invitationCode }),
+          },
+        );
+      }
+
+      await postApprove(
+        new Request(
+          `https://www.uais.top/api/teaching/classes/${approvedCourse.classId}/memberships/membership-${approvedCourse.classId}-Peter/approve`,
+          {
+            method: "POST",
+            headers: {
+              cookie: createTeacherCookie(),
+              "x-uais-trace-id": "trace-student-mixed-approve",
+            },
+          },
+        ),
+        {
+          params: Promise.resolve({
+            classId: approvedCourse.classId,
+            membershipId: `membership-${approvedCourse.classId}-Peter`,
+          }),
+        },
+      );
+
+      const createGetCourses = courseRoute.createTeachingCourseGetHandler;
+      expect(createGetCourses).toEqual(expect.any(Function));
+      const getCourses = createGetCourses?.({
+        env: courseManagementEnv,
+        now: new Date("2026-06-22T11:50:00.000Z"),
+      });
+      const response = await getCourses?.(
+        new Request("https://www.uais.top/api/teaching/courses", {
+          method: "GET",
+          headers: {
+            cookie: createStudentCookie(),
+            "x-uais-trace-id": "trace-student-mixed-course-list",
+          },
+        }),
+      );
+      const body = await response?.json();
+
+      expect(response?.status, JSON.stringify(body)).toBe(200);
+      expect(
+        (body.memberships as Array<Record<string, unknown>>).map((membership) => [
+          membership.classId,
+          membership.membershipStatus,
+        ]),
+      ).toEqual([
+        [approvedCourse.classId, "approved"],
+        [pendingCourse.classId, "pending-teacher-review"],
+      ]);
+      expect(
+        (body.courses as Array<Record<string, unknown>>).map((course) => course.courseId),
+      ).toEqual([approvedCourse.courseId, pendingCourse.courseId]);
+      expect(
+        (body.classes as Array<Record<string, unknown>>).map((classItem) => classItem.classId),
+      ).toEqual([approvedCourse.classId, pendingCourse.classId]);
+      expect(body.receipt).toMatchObject({
+        action: "list-student-courses",
+        actorId: "Peter",
+        status: "read",
+        traceId: "trace-student-mixed-course-list",
+        responsibleSession: "S12",
+      });
+      // Neither the approved nor the pending course/class entry may carry the live
+      // invite code of its class.
+      expect(JSON.stringify(body.classes)).not.toContain(approvedCourse.invitationCode);
+      expect(JSON.stringify(body.classes)).not.toContain(pendingCourse.invitationCode);
+      await expectStudentVisibleCourseAndClassProjection(body, dataDir);
+      expectNoLocalOrSecretValues(body, dataDir);
+    } finally {
+      await rm(dataDir, { recursive: true, force: true });
+    }
+  });
+
+  it("stops exposing a republished class invite code to a student holding a pending membership", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "uais-student-rotated-invite-code-"));
+    const courseManagementEnv = {
+      UAIS_TEACHING_COURSES_DATA_DIR: dataDir,
+      UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET: teacherAuthSecret,
+    };
+    const postCourse = createTeachingCoursePostHandler({
+      env: courseManagementEnv,
+      now: new Date("2026-06-22T11:20:00.000Z"),
+      mergeTeacherAiOwnershipRecord: async (input) => ({
+        teacherId: input.ownership.teacherId,
+        status: "merged",
+        storagePolicy: "external-redacted-teacher-ai-ownership-merge",
+        storageWritePolicy: "external-atomic-merge",
+        responsibleSession: "S12",
+        updatedAt: "2026-06-22T11:20:00.000Z",
+        redaction: {
+          secrets: "omitted",
+          localFiles: "omitted",
+          assets: "ids-only",
+        },
+      }),
+    });
+    const postClass = createTeachingCourseClassPostHandler({
+      env: courseManagementEnv,
+      now: new Date("2026-06-22T11:25:00.000Z"),
+    });
+    const postJoin = createTeachingInviteCodeJoinPostHandler({
+      env: courseManagementEnv,
+      now: new Date("2026-06-22T11:40:00.000Z"),
+    });
+    const getCourses = createTeachingCourseGetHandler({
+      env: courseManagementEnv,
+      now: new Date("2026-06-22T11:50:00.000Z"),
+    });
+    const courseId = "teacher-course-ai-supported-mathematics-research-20260622-112000";
+    const classId = `${courseId}-class-1`;
+    const joinedInvitationCode = "55395057";
+    const republishedInvitationCode = "70001234";
+
+    try {
+      await postCourse(
+        new Request("https://www.uais.top/api/teaching/courses", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            cookie: createTeacherCookie(),
+          },
+          body: JSON.stringify({
+            name: "AI Supported Mathematics Research",
+            instructor: "Kang Xia",
+            unit: "Guangzhou University 404",
+            department: "Experimental Teaching Center",
+            semester: "2026 Spring",
+          }),
+        }),
+      );
+      await postClass(
+        new Request(`https://www.uais.top/api/teaching/courses/${courseId}/classes`, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            cookie: createTeacherCookie(),
+          },
+          body: JSON.stringify({
+            className: "Research Methods Class 1",
+            semester: "2026 Spring",
+          }),
+        }),
+        {
+          params: Promise.resolve({ courseId }),
+        },
+      );
+      await postJoin(
+        new Request(
+          `https://www.uais.top/api/teaching/invite-codes/${joinedInvitationCode}/join`,
+          {
+            method: "POST",
+            headers: {
+              cookie: createStudentCookie(),
+              "x-uais-trace-id": "trace-student-rotated-invite-join",
+            },
+          },
+        ),
+        {
+          params: Promise.resolve({ code: joinedInvitationCode }),
+        },
+      );
+      await publishTeachingClassInviteCode({
+        dataDir,
+        actorId: "teacher-kang",
+        courseId,
+        classId,
+        invitationCode: republishedInvitationCode,
+        traceId: "trace-teacher-republish-invite-code",
+        now: new Date("2026-06-22T11:45:00.000Z"),
+      });
+
+      const response = await getCourses(
+        new Request("https://www.uais.top/api/teaching/courses", {
+          method: "GET",
+          headers: {
+            cookie: createStudentCookie(),
+            "x-uais-trace-id": "trace-student-rotated-invite-course-list",
+          },
+        }),
+      );
+      const body = await response.json();
+
+      expect(response.status, JSON.stringify(body)).toBe(200);
+      // The pending membership still renders on the student dashboard, but it no
+      // longer echoes the code it was joined with: a join-time code is the class's
+      // live credential until the teacher republishes, so returning it would let a
+      // squatted pending membership keep a working code alive in the client.
+      expect(body.memberships).toEqual([
+        {
+          membershipId: `membership-${classId}-Peter`,
+          courseId,
+          classId,
+          membershipStatus: "pending-teacher-review",
+          joinedAt: "2026-06-22T11:40:00.000Z",
+        },
+      ]);
+      // Neither the republished class code nor the superseded join-time code is
+      // readable from the pending membership.
+      expect(JSON.stringify(body)).not.toContain(republishedInvitationCode);
+      expect(JSON.stringify(body)).not.toContain(joinedInvitationCode);
+      await expectStudentVisibleCourseAndClassProjection(body, dataDir);
+      expectNoLocalOrSecretValues(body, dataDir);
     } finally {
       await rm(dataDir, { recursive: true, force: true });
     }

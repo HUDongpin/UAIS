@@ -6,10 +6,13 @@ import {
   resolveTeachingCourseManagementDataDir,
   rollbackTeachingCourseCreation,
   TeachingCourseManagementStoreError,
+  type TeachingClassMembershipRecord,
+  type TeachingClassRecord,
   type TeachingCourseManagementDatabase,
   type TeachingCourseDraftInput,
   type TeachingCourseManagementAuthSessionSummary,
   type TeachingCourseManagementRepository,
+  type TeachingCourseRecord,
 } from "@/lib/server/teaching-course-management-store";
 import { createUaisTeachingCourseManagementRepository } from "@/lib/server/teaching-course-management-external-store";
 import {
@@ -78,6 +81,47 @@ type TeachingCourseCreateValidation = {
 };
 
 const maxBodyBytes = 50_000;
+
+const studentVisibleMembershipStatuses = new Set<
+  TeachingClassMembershipRecord["membershipStatus"]
+>(["approved", "pending-teacher-review"]);
+
+// Student-visible projections of the teacher-owned course/class/membership records.
+// Students never receive the raw records: a class's live `invitationCode`/`joinUrl`
+// is the teacher's access-granting credential, and `ownerTeacherId`/roster counts/
+// course description are teacher-only metadata. Applied uniformly to approved AND
+// pending memberships, so squatting a pending membership cannot be used to read a
+// class's current invite code, and republishing a code actually revokes it.
+type StudentVisibleCourse = {
+  courseId: string;
+  courseName: string;
+  semester: string;
+};
+
+type StudentVisibleClass = {
+  classId: string;
+  courseId: string;
+  className: string;
+  semester: string;
+};
+
+// A membership row is projected down to exactly the fields the student surfaces
+// read (student dashboard: membershipId/courseId/classId/membershipStatus/
+// joinedAt/approvedAt; learning page: courseId/classId/membershipStatus). The
+// dropped fields are teacher-side or credential-bearing: `invitationCode` is the
+// join-time class credential, `approvedByTeacherId` is the approving teacher's
+// actor id (in practice the same value as the `ownerTeacherId` the course/class
+// projections exist to remove), and `studentId`/`studentDisplayName`/
+// `storagePolicy`/`storageWritePolicy`/`responsibleSession`/`redaction` are
+// roster and storage metadata no student surface reads.
+type StudentVisibleMembership = {
+  membershipId: string;
+  courseId: string;
+  classId: string;
+  membershipStatus: TeachingClassMembershipRecord["membershipStatus"];
+  joinedAt: string;
+  approvedAt?: string;
+};
 
 export const GET = createTeachingCourseGetHandler();
 export const POST = createTeachingCoursePostHandler();
@@ -198,22 +242,33 @@ export function createTeachingCourseGetHandler(deps: TeachingCourseGetHandlerDep
         throw error;
       }
       if (authenticatedStudent) {
+        // Students see their own approved memberships plus the ones still waiting
+        // for teacher review, so the student dashboard can render the pending
+        // join request. Access-granting surfaces (learning playback, AI guide)
+        // gate on `approved` independently and stay unaffected by this list.
         const memberships = database.memberships.filter(
           (membership) =>
             membership.studentId === authenticatedStudent.actorId &&
-            membership.membershipStatus === "approved",
+            studentVisibleMembershipStatuses.has(membership.membershipStatus),
         );
         const courseIds = new Set(memberships.map((membership) => membership.courseId));
         const classIds = new Set(memberships.map((membership) => membership.classId));
-        const courses = database.courses.filter((course) => courseIds.has(course.courseId));
-        const classes = database.classes.filter(
-          (classItem) => courseIds.has(classItem.courseId) && classIds.has(classItem.classId),
+        const courses: StudentVisibleCourse[] = database.courses
+          .filter((course) => courseIds.has(course.courseId))
+          .map(createStudentVisibleCourse);
+        const classes: StudentVisibleClass[] = database.classes
+          .filter(
+            (classItem) => courseIds.has(classItem.courseId) && classIds.has(classItem.classId),
+          )
+          .map(createStudentVisibleClass);
+        const studentVisibleMemberships: StudentVisibleMembership[] = memberships.map(
+          createStudentVisibleMembership,
         );
 
         return jsonResponse(200, {
           courses,
           classes,
-          memberships,
+          memberships: studentVisibleMemberships,
           traceId,
           receipt: {
             action: "list-student-courses",
@@ -452,6 +507,36 @@ export function createTeachingCoursePostHandler(deps: TeachingCoursePostHandlerD
     } catch (error) {
       return createErrorResponse(error, traceId);
     }
+  };
+}
+
+function createStudentVisibleCourse(course: TeachingCourseRecord): StudentVisibleCourse {
+  return {
+    courseId: course.courseId,
+    courseName: course.courseName,
+    semester: course.semester,
+  };
+}
+
+function createStudentVisibleClass(classItem: TeachingClassRecord): StudentVisibleClass {
+  return {
+    classId: classItem.classId,
+    courseId: classItem.courseId,
+    className: classItem.className,
+    semester: classItem.semester,
+  };
+}
+
+function createStudentVisibleMembership(
+  membership: TeachingClassMembershipRecord,
+): StudentVisibleMembership {
+  return {
+    membershipId: membership.membershipId,
+    courseId: membership.courseId,
+    classId: membership.classId,
+    membershipStatus: membership.membershipStatus,
+    joinedAt: membership.joinedAt,
+    ...(membership.approvedAt === undefined ? {} : { approvedAt: membership.approvedAt }),
   };
 }
 
