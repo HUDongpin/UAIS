@@ -1,0 +1,588 @@
+{
+  "generatedAt": "2026-08-08T13:22:01.509Z",
+  "reason": "chatroom group intake",
+  "branch": "main",
+  "summary": {
+    "totalEntries": 112,
+    "byStatus": {
+      " M": 43,
+      "??": 69
+    },
+    "byTopLevel": {
+      ".env.local.example": 1,
+      "docs": 1,
+      "eslint.config.mjs": 1,
+      "src": 58,
+      "tests": 19,
+      "vitest.config.mts": 1,
+      "\"20260712_UAIS_bug detection_dialogue turns_Claude and Peter.md\"": 1,
+      "\"20260718_UAIS_Next Development Plan implementation_dialogue turns_Claude and Peter.md\"": 1,
+      "\"20260718_UAIS_bug detection_dialogue turns_Claude and Peter.md\"": 1,
+      "\"20260802_UAIS_Bug Report.md\"": 1,
+      "coordination": 25,
+      "scripts": 2
+    }
+  },
+  "entries": [
+    {
+      "status": " M",
+      "path": ".env.local.example",
+      "topLevel": ".env.local.example"
+    },
+    {
+      "status": " M",
+      "path": "docs/env-surface.md",
+      "topLevel": "docs"
+    },
+    {
+      "status": " M",
+      "path": "eslint.config.mjs",
+      "topLevel": "eslint.config.mjs"
+    },
+    {
+      "status": " M",
+      "path": "src/app/api/ai/chat/route.ts",
+      "topLevel": "src"
+    },
+    {
+      "status": " M",
+      "path": "src/app/api/learning/ai-guide/route.ts",
+      "topLevel": "src"
+    },
+    {
+      "status": " M",
+      "path": "src/app/api/teaching/courses/route.ts",
+      "topLevel": "src"
+    },
+    {
+      "status": " M",
+      "path": "src/app/layout.tsx",
+      "topLevel": "src"
+    },
+    {
+      "status": " M",
+      "path": "src/components/pages/learning-page-narration.tsx",
+      "topLevel": "src"
+    },
+    {
+      "status": " M",
+      "path": "src/components/pages/learning-page.tsx",
+      "topLevel": "src"
+    },
+    {
+      "status": " M",
+      "path": "src/components/pages/student-dashboard-page.tsx",
+      "topLevel": "src"
+    },
+    {
+      "status": " M",
+      "path": "src/components/pages/teaching-page-course-settings-workspace.tsx",
+      "topLevel": "src"
+    },
+    {
+      "status": " M",
+      "path": "src/components/pages/teaching-page.tsx",
+      "topLevel": "src"
+    },
+    {
+      "status": " M",
+      "path": "src/components/pages/use-teaching-workspace.tsx",
+      "topLevel": "src"
+    },
+    {
+      "status": " M",
+      "path": "src/components/teaching/teaching-operation-page-data.ts",
+      "topLevel": "src"
+    },
+    {
+      "status": " M",
+      "path": "src/data/uais.ts",
+      "topLevel": "src"
+    },
+    {
+      "status": " M",
+      "path": "src/i18n/copy.ts",
+      "topLevel": "src"
+    },
+    {
+      "status": " M",
+      "path": "src/lib/ai/orchestration/director.ts",
+      "topLevel": "src"
+    },
+    {
+      "status": " M",
+      "path": "src/lib/ai/orchestration/types.ts",
+      "topLevel": "src"
+    },
+    {
+      "status": " M",
+      "path": "src/lib/ai/providers/deepseek-client.ts",
+      "topLevel": "src"
+    },
+    {
+      "status": " M",
+      "path": "src/lib/chat-actions.ts",
+      "topLevel": "src"
+    },
+    {
+      "status": " M",
+      "path": "src/lib/learning-records/learner-profile.ts",
+      "topLevel": "src"
+    },
+    {
+      "status": " M",
+      "path": "src/lib/learning-records/lrs-client.ts",
+      "topLevel": "src"
+    },
+    {
+      "status": " M",
+      "path": "src/lib/learning-records/lrs-recorder.ts",
+      "topLevel": "src"
+    },
+    {
+      "status": " M",
+      "path": "src/lib/learning-records/xapi-events.ts",
+      "topLevel": "src"
+    },
+    {
+      "status": " M",
+      "path": "src/lib/release/env-surface.ts",
+      "topLevel": "src"
+    },
+    {
+      "status": " M",
+      "path": "src/lib/server/external-storage-route-paths.ts",
+      "topLevel": "src"
+    },
+    {
+      "status": " M",
+      "path": "src/lib/server/external-storage-route-service.ts",
+      "topLevel": "src"
+    },
+    {
+      "status": " M",
+      "path": "src/lib/server/external-storage-route-store.ts",
+      "topLevel": "src"
+    },
+    {
+      "status": " M",
+      "path": "src/lib/server/external-storage-serialization.ts",
+      "topLevel": "src"
+    },
+    {
+      "status": " M",
+      "path": "src/lib/server/learning-ai-guide-access.ts",
+      "topLevel": "src"
+    },
+    {
+      "status": " M",
+      "path": "src/lib/server/teaching-course-management-class-handlers.ts",
+      "topLevel": "src"
+    },
+    {
+      "status": " M",
+      "path": "src/lib/server/teaching-course-management-database-normalizer.ts",
+      "topLevel": "src"
+    },
+    {
+      "status": " M",
+      "path": "src/lib/server/teaching-course-management-record-normalizers.ts",
+      "topLevel": "src"
+    },
+    {
+      "status": " M",
+      "path": "src/lib/server/teaching-course-management-store.ts",
+      "topLevel": "src"
+    },
+    {
+      "status": " M",
+      "path": "src/lib/server/teaching-course-management-types.ts",
+      "topLevel": "src"
+    },
+    {
+      "status": " M",
+      "path": "src/lib/teaching/course-readback.ts",
+      "topLevel": "src"
+    },
+    {
+      "status": " M",
+      "path": "tests/ai-api-routes.test.ts",
+      "topLevel": "tests"
+    },
+    {
+      "status": " M",
+      "path": "tests/ai-orchestration.test.ts",
+      "topLevel": "tests"
+    },
+    {
+      "status": " M",
+      "path": "tests/ai-provider-clients.test.ts",
+      "topLevel": "tests"
+    },
+    {
+      "status": " M",
+      "path": "tests/critical-user-flow-matrix.test.ts",
+      "topLevel": "tests"
+    },
+    {
+      "status": " M",
+      "path": "tests/lrs-xapi-client.test.ts",
+      "topLevel": "tests"
+    },
+    {
+      "status": " M",
+      "path": "tests/uais-data.test.ts",
+      "topLevel": "tests"
+    },
+    {
+      "status": " M",
+      "path": "vitest.config.mts",
+      "topLevel": "vitest.config.mts"
+    },
+    {
+      "status": "??",
+      "path": "\"20260712_UAIS_bug detection_dialogue turns_Claude and Peter.md\"",
+      "topLevel": "\"20260712_UAIS_bug detection_dialogue turns_Claude and Peter.md\""
+    },
+    {
+      "status": "??",
+      "path": "\"20260718_UAIS_Next Development Plan implementation_dialogue turns_Claude and Peter.md\"",
+      "topLevel": "\"20260718_UAIS_Next Development Plan implementation_dialogue turns_Claude and Peter.md\""
+    },
+    {
+      "status": "??",
+      "path": "\"20260718_UAIS_bug detection_dialogue turns_Claude and Peter.md\"",
+      "topLevel": "\"20260718_UAIS_bug detection_dialogue turns_Claude and Peter.md\""
+    },
+    {
+      "status": "??",
+      "path": "\"20260802_UAIS_Bug Report.md\"",
+      "topLevel": "\"20260802_UAIS_Bug Report.md\""
+    },
+    {
+      "status": "??",
+      "path": "coordination/release-intake/current-chatroom-groups-dirty-map.json",
+      "topLevel": "coordination"
+    },
+    {
+      "status": "??",
+      "path": "coordination/reports/2026-08-02-lrs-dedicated-instance-runbook.md",
+      "topLevel": "coordination"
+    },
+    {
+      "status": "??",
+      "path": "coordination/reports/2026-08-03-chatroom-transcript-append-budget-assignment.md",
+      "topLevel": "coordination"
+    },
+    {
+      "status": "??",
+      "path": "coordination/reports/2026-08-08-chatroom-groups-cto-execution-log.md",
+      "topLevel": "coordination"
+    },
+    {
+      "status": "??",
+      "path": "coordination/reports/2026-08-08-learning-chatroom-group-implementation-plan.md",
+      "topLevel": "coordination"
+    },
+    {
+      "status": "??",
+      "path": "coordination/reports/2026-08-08-learning-chatroom-group-qa-matrix.md",
+      "topLevel": "coordination"
+    },
+    {
+      "status": "??",
+      "path": "coordination/session-logs/2026-08-02-S12.md",
+      "topLevel": "coordination"
+    },
+    {
+      "status": "??",
+      "path": "coordination/session-logs/2026-08-03-S03.md",
+      "topLevel": "coordination"
+    },
+    {
+      "status": "??",
+      "path": "coordination/session-logs/2026-08-03-S04.md",
+      "topLevel": "coordination"
+    },
+    {
+      "status": "??",
+      "path": "coordination/session-logs/2026-08-03-S07.md",
+      "topLevel": "coordination"
+    },
+    {
+      "status": "??",
+      "path": "coordination/session-logs/2026-08-03-S12-learning-chatroom-transcript-persistence.md",
+      "topLevel": "coordination"
+    },
+    {
+      "status": "??",
+      "path": "coordination/session-logs/2026-08-03-S12.md",
+      "topLevel": "coordination"
+    },
+    {
+      "status": "??",
+      "path": "coordination/session-logs/2026-08-08-S04-p6-ui-fixes.md",
+      "topLevel": "coordination"
+    },
+    {
+      "status": "??",
+      "path": "coordination/session-logs/2026-08-08-S04.md",
+      "topLevel": "coordination"
+    },
+    {
+      "status": "??",
+      "path": "coordination/session-logs/2026-08-08-S11-p6-test-hygiene.md",
+      "topLevel": "coordination"
+    },
+    {
+      "status": "??",
+      "path": "coordination/session-logs/2026-08-08-S11.md",
+      "topLevel": "coordination"
+    },
+    {
+      "status": "??",
+      "path": "coordination/session-logs/2026-08-08-S12-flag-surface.md",
+      "topLevel": "coordination"
+    },
+    {
+      "status": "??",
+      "path": "coordination/session-logs/2026-08-08-S12-learning-groups.md",
+      "topLevel": "coordination"
+    },
+    {
+      "status": "??",
+      "path": "coordination/session-logs/2026-08-08-S12-p2-group-rooms.md",
+      "topLevel": "coordination"
+    },
+    {
+      "status": "??",
+      "path": "coordination/session-logs/2026-08-08-S12-p6-security-fixes.md",
+      "topLevel": "coordination"
+    },
+    {
+      "status": "??",
+      "path": "coordination/session-logs/2026-08-08-S12-share-read-rate-limit.md",
+      "topLevel": "coordination"
+    },
+    {
+      "status": "??",
+      "path": "coordination/session-logs/2026-08-08-S12.md",
+      "topLevel": "coordination"
+    },
+    {
+      "status": "??",
+      "path": "coordination/session-logs/2026-08-08-S13.md",
+      "topLevel": "coordination"
+    },
+    {
+      "status": "??",
+      "path": "coordination/session-logs/2026-08-08-S19.md",
+      "topLevel": "coordination"
+    },
+    {
+      "status": "??",
+      "path": "coordination/session-logs/2026-08-08-S24-p5-export-share.md",
+      "topLevel": "coordination"
+    },
+    {
+      "status": "??",
+      "path": "scripts/lrs-migrate-uais-statements.mjs",
+      "topLevel": "scripts"
+    },
+    {
+      "status": "??",
+      "path": "scripts/lrs-tenant-isolation-audit.mjs",
+      "topLevel": "scripts"
+    },
+    {
+      "status": "??",
+      "path": "src/app/api/external-storage/learning-chatroom-transcripts/database/route.ts",
+      "topLevel": "src"
+    },
+    {
+      "status": "??",
+      "path": "src/app/api/learning/chatroom/route.ts",
+      "topLevel": "src"
+    },
+    {
+      "status": "??",
+      "path": "src/app/api/learning/chatroom/share/[shareId]/route.ts",
+      "topLevel": "src"
+    },
+    {
+      "status": "??",
+      "path": "src/app/api/learning/chatroom/share/route.ts",
+      "topLevel": "src"
+    },
+    {
+      "status": "??",
+      "path": "src/app/api/teaching/courses/[courseId]/groups/[groupId]/route.ts",
+      "topLevel": "src"
+    },
+    {
+      "status": "??",
+      "path": "src/app/api/teaching/courses/[courseId]/groups/route.ts",
+      "topLevel": "src"
+    },
+    {
+      "status": "??",
+      "path": "src/app/learning/chatroom/export/chatroom-print-button.tsx",
+      "topLevel": "src"
+    },
+    {
+      "status": "??",
+      "path": "src/app/learning/chatroom/export/chatroom-transcript-document.tsx",
+      "topLevel": "src"
+    },
+    {
+      "status": "??",
+      "path": "src/app/learning/chatroom/export/page.tsx",
+      "topLevel": "src"
+    },
+    {
+      "status": "??",
+      "path": "src/app/share/[shareId]/page.tsx",
+      "topLevel": "src"
+    },
+    {
+      "status": "??",
+      "path": "src/components/pages/learning-page-chatroom.tsx",
+      "topLevel": "src"
+    },
+    {
+      "status": "??",
+      "path": "src/components/pages/use-learning-chatroom.ts",
+      "topLevel": "src"
+    },
+    {
+      "status": "??",
+      "path": "src/components/providers/session-user.tsx",
+      "topLevel": "src"
+    },
+    {
+      "status": "??",
+      "path": "src/components/teaching/learning-group-workspace.tsx",
+      "topLevel": "src"
+    },
+    {
+      "status": "??",
+      "path": "src/components/teaching/use-teaching-learning-groups.tsx",
+      "topLevel": "src"
+    },
+    {
+      "status": "??",
+      "path": "src/lib/learning-records/client-event-reporter.ts",
+      "topLevel": "src"
+    },
+    {
+      "status": "??",
+      "path": "src/lib/server/ai-request-rate-limit.ts",
+      "topLevel": "src"
+    },
+    {
+      "status": "??",
+      "path": "src/lib/server/learning-chatroom-groups-flag.ts",
+      "topLevel": "src"
+    },
+    {
+      "status": "??",
+      "path": "src/lib/server/learning-chatroom-share-rate-limit.ts",
+      "topLevel": "src"
+    },
+    {
+      "status": "??",
+      "path": "src/lib/server/learning-chatroom-share-store.ts",
+      "topLevel": "src"
+    },
+    {
+      "status": "??",
+      "path": "src/lib/server/learning-chatroom-share-view.ts",
+      "topLevel": "src"
+    },
+    {
+      "status": "??",
+      "path": "src/lib/server/learning-chatroom-transcript-external-store.ts",
+      "topLevel": "src"
+    },
+    {
+      "status": "??",
+      "path": "src/lib/server/learning-chatroom-transcript-runtime.ts",
+      "topLevel": "src"
+    },
+    {
+      "status": "??",
+      "path": "src/lib/server/learning-chatroom-transcript-store.ts",
+      "topLevel": "src"
+    },
+    {
+      "status": "??",
+      "path": "src/lib/server/teaching-course-management-group-handlers.ts",
+      "topLevel": "src"
+    },
+    {
+      "status": "??",
+      "path": "tests/learning-chatroom-api.test.ts",
+      "topLevel": "tests"
+    },
+    {
+      "status": "??",
+      "path": "tests/learning-chatroom-group-api.test.ts",
+      "topLevel": "tests"
+    },
+    {
+      "status": "??",
+      "path": "tests/learning-chatroom-group-live.test.tsx",
+      "topLevel": "tests"
+    },
+    {
+      "status": "??",
+      "path": "tests/learning-chatroom-live.test.tsx",
+      "topLevel": "tests"
+    },
+    {
+      "status": "??",
+      "path": "tests/learning-chatroom-share-api.test.ts",
+      "topLevel": "tests"
+    },
+    {
+      "status": "??",
+      "path": "tests/learning-event-reporter.test.ts",
+      "topLevel": "tests"
+    },
+    {
+      "status": "??",
+      "path": "tests/learning-page-events.test.tsx",
+      "topLevel": "tests"
+    },
+    {
+      "status": "??",
+      "path": "tests/lrs-migrate-uais-statements-cli.test.ts",
+      "topLevel": "tests"
+    },
+    {
+      "status": "??",
+      "path": "tests/lrs-tenant-isolation-audit-cli.test.ts",
+      "topLevel": "tests"
+    },
+    {
+      "status": "??",
+      "path": "tests/lrs-tenant-isolation.test.ts",
+      "topLevel": "tests"
+    },
+    {
+      "status": "??",
+      "path": "tests/student-dashboard-learning-groups.test.tsx",
+      "topLevel": "tests"
+    },
+    {
+      "status": "??",
+      "path": "tests/teaching-learning-groups-api.test.ts",
+      "topLevel": "tests"
+    },
+    {
+      "status": "??",
+      "path": "tests/teaching-learning-groups-workspace.test.tsx",
+      "topLevel": "tests"
+    }
+  ]
+}
