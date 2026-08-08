@@ -88,7 +88,20 @@ export default async function Page({ searchParams }: ChatroomExportRouteProps) {
         tone="print"
         title={t.learning.exportPageTitle}
         notice={t.learning.exportPrintHint}
-        actions={<ChatroomPrintButton label={t.learning.exportPrint} />}
+        actions={
+          <>
+            {/* The download is the primary action now that the server renders a
+                real PDF; printing stays for whoever wants paper or their own
+                page setup. Both carry the same room query. */}
+            <a
+              href={`/learning/chatroom/export/pdf${buildRoomQuery({ courseId, classId, groupId })}`}
+              className="inline-flex h-10 items-center gap-2 rounded-full bg-[var(--accent)] px-4 text-sm font-semibold text-white outline-none transition hover:bg-[var(--accent-strong)] active:translate-y-px focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 print:hidden"
+            >
+              {t.learning.exportDownloadPdf}
+            </a>
+            <ChatroomPrintButton label={t.learning.exportPrint} />
+          </>
+        }
       />
     </div>
   );
@@ -142,4 +155,21 @@ function firstQueryValue(value: string | string[] | undefined) {
 
 function readSupportedLocale(locale: string | undefined): Locale {
   return supportedLocales.includes(locale as Locale) ? (locale as Locale) : defaultLocale;
+}
+
+// Carries the resolved room forward to the PDF route so the download is scoped
+// to exactly the transcript this page is showing.
+function buildRoomQuery(room: { courseId?: string; classId?: string; groupId?: string }) {
+  const params = new URLSearchParams();
+  if (room.courseId) {
+    params.set("courseId", room.courseId);
+  }
+  if (room.classId) {
+    params.set("classId", room.classId);
+  }
+  if (room.groupId) {
+    params.set("groupId", room.groupId);
+  }
+  const query = params.toString();
+  return query ? `?${query}` : "";
 }

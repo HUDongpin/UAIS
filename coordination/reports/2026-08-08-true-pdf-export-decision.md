@@ -3,7 +3,7 @@
 - Date: 2026-08-08
 - Session: S24 (asset and export quality lead)
 - Owner decision being served: implementation plan §10 item 6 — *"Approved — pursue real server-side PDF"*, with the standing rule that any credential or paid-service need returns to the owner as a blocker report.
-- Status: **Decision required.** Investigation complete; no code written, no dependency added.
+- Status: **Decided and implemented 2026-08-09.** Owner approved Option A. Shipped with one forced design change — see §8.
 
 ---
 
@@ -81,3 +81,63 @@ S24 with S12 for the route: a `GET /learning/chatroom/export/pdf` handler reusin
 - Any option that requires a credential or paid service — returns to the owner (already true of Option C).
 - Font licence anything other than OFL/Apache — do not commit.
 - Vercel function size approaching the ceiling — abandon Option B rather than raising limits.
+
+
+---
+
+## 8. Outcome (2026-08-09) — implemented, with one correction to the plan
+
+Owner approved Option A. It shipped, but **not** as written above, because the
+central assumption in §3 turned out to be false when measured.
+
+### What changed and why
+
+The plan said: ship the full ~8–16 MB face and let `pdf-lib` subset at embed
+time, so PDFs stay tens of KB. **pdf-lib's runtime subsetting does not work for
+CJK.** Measured against three separate faces — the 8 MB SC-subset CFF/OTF, the
+17 MB variable TrueType, and a static TrueType instance of it — `subset: true`
+produced files that open cleanly and extract text perfectly while rendering
+blanks and mojibake. `pdftoppm` names the cause: `Couldn't create a font` /
+`non-embedded font using identity encoding` — the emitted font program is
+incomplete. Only `subset: false` renders.
+
+That was caught only because the output was rasterised and looked at. Every
+cheaper signal — no exception, valid `%PDF-` header, correct page count, a
+`/FontFile3` entry, byte-perfect `pdftotext` extraction — said the file was fine.
+
+### What shipped instead
+
+Subsetting moved to **build time**: `public/fonts/NotoSansSC-GB2312-Regular.ttf`,
+2.15 MB, a static TrueType instance of the upstream variable font reduced to the
+GB2312 repertoire plus Latin and punctuation (7,904 characters). It is embedded
+whole. Full derivation, hashes and the regeneration commands are in
+`public/fonts/PROVENANCE.md`; the exact charset is checked in beside the font.
+
+Consequences, stated plainly:
+
+- A generated transcript PDF is about **1.4 MB**, nearly all of it the embedded
+  face — not the "tens of KB" §3 predicted. That is the cost of a document that
+  renders Chinese on any reader with no font installed.
+- Characters outside GB2312 (rare or variant hanzi, non-Latin scripts) have no
+  glyph and will not draw. Widening to GBK was measured at 7.12 MB and would
+  triple every download; GB2312 covers standard modern Simplified Chinese
+  including the common name characters spot-checked (宁, 淼, 昊). The
+  regeneration recipe for GBK is recorded should real usage need it.
+
+### Delivered
+
+- `src/lib/server/learning-chatroom-transcript-pdf.ts` — the renderer: A4,
+  header block, per-message author/time/body, pagination, page numbers, and a
+  width-aware wrap that breaks Chinese by character and Latin at spaces.
+- `GET /learning/chatroom/export/pdf` — reuses `loadLearningChatroomExportDocument`,
+  so the room gate, the groups flag and the display-names-only projection are
+  inherited, not restated. Errors answer as `text/plain` status codes so a
+  browser never saves an error page as a `.pdf`.
+- A **Download PDF** action on the export page beside Print; the print view stays.
+- `next.config.ts` names the font in `outputFileTracingIncludes` — the runtime
+  reads it from disk, which Next's tracer cannot infer on its own.
+- 7 tests, plus a live end-to-end check: a real seeded group room exported
+  through the running route produced a 1.4 MB PDF that renders Chinese, Latin,
+  the teacher's turn and agent replies correctly, with a non-member answered 403.
+
+No credential, no paid service, no external request at runtime.
