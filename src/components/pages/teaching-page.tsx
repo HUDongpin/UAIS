@@ -36,6 +36,7 @@ export function TeachingPage() {
     courseClasses,
     classMemberships,
     authenticatedTeacherActorId,
+    learningChatroomGroupsEnabled,
     persistedCourseLoadError,
     membershipApprovalStatuses,
     selectedClassInvitation,
@@ -80,6 +81,7 @@ export function TeachingPage() {
           courseCards={courseCards}
           courseClasses={courseClasses}
           classMemberships={classMemberships}
+          learningChatroomGroupsEnabled={learningChatroomGroupsEnabled}
           membershipApprovalStatuses={membershipApprovalStatuses}
           inlineWorkspaceStatuses={inlineWorkspaceStatuses}
           inlineWorkspaceAuditStatuses={inlineWorkspaceAuditStatuses}

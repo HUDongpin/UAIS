@@ -163,6 +163,14 @@ export type TeachingCourseListResponse = {
     joinedAt?: string;
     approvedAt?: string;
   }>;
+  // Server-computed feature state (chatroom-groups plan D9).
+  // `UAIS_LEARNING_CHATROOM_GROUPS_MODE` is a server-only name, so the decision
+  // — never the value — rides the course list the workspace already reads. An
+  // absent field is a deployment that predates the flag surface and reads as
+  // off, which is the safe direction for a dark rollout.
+  features?: {
+    learningChatroomGroups?: boolean;
+  };
   receipt?: {
     action?: string;
     actorId?: string;
@@ -175,6 +183,7 @@ export type PersistedTeachingCourseReadback = {
   classesByCourse: Record<string, TeacherClassItem[]>;
   membershipsByClass: Record<string, TeacherClassMembershipItem[]>;
   authenticatedTeacherActorId?: string;
+  learningChatroomGroupsEnabled: boolean;
 };
 
 export type TeachingClassMembershipApproveResponse = {

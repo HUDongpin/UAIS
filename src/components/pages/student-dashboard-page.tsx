@@ -13,9 +13,12 @@ import { Notebook } from "@phosphor-icons/react/dist/ssr/Notebook";
 import { Robot } from "@phosphor-icons/react/dist/ssr/Robot";
 import { Sparkle } from "@phosphor-icons/react/dist/ssr/Sparkle";
 import { Target } from "@phosphor-icons/react/dist/ssr/Target";
+import { UsersThree } from "@phosphor-icons/react/dist/ssr/UsersThree";
 import { useAppPreferences } from "@/components/providers/app-preferences";
 import { localizedText } from "@/components/ui/localized-text";
 import { aiAgents, chatMessages, learningCourses, plazaCourses } from "@/data/uais";
+import { copy } from "@/i18n/copy";
+import type { Locale } from "@/i18n/copy";
 
 const dashboardCopy = {
   "zh-CN": {
@@ -109,6 +112,25 @@ type StudentMembershipCourseResponse = {
     joinedAt?: string;
     approvedAt?: string;
   }>;
+  // Student projection of the teacher-owned learning groups: only groups the
+  // caller belongs to, co-members by display name only, self flagged server-side.
+  learningGroups?: Array<{
+    groupId?: string;
+    courseId?: string;
+    classId?: string;
+    groupName?: string;
+    members?: Array<{
+      displayName?: string;
+      isSelf?: boolean;
+    }>;
+  }>;
+};
+
+type StudentLearningGroupItem = {
+  groupId: string;
+  courseId: string;
+  groupName: string;
+  members: Array<{ displayName: string; isSelf: boolean }>;
 };
 
 type StudentClassMembershipItem = {
@@ -125,6 +147,7 @@ export function StudentDashboardPage() {
   const { locale } = useAppPreferences();
   const t = dashboardCopy[locale];
   const [classMemberships, setClassMemberships] = useState<StudentClassMembershipItem[]>([]);
+  const [learningGroups, setLearningGroups] = useState<StudentLearningGroupItem[]>([]);
   const activeCourse = learningCourses[0];
   const nextCourse = learningCourses[1];
   const recommendedCourse = plazaCourses[0];
@@ -152,6 +175,7 @@ export function StudentDashboardPage() {
         }
 
         setClassMemberships(createStudentClassMembershipItems(body));
+        setLearningGroups(createStudentLearningGroupItems(body));
       } catch {
         // Keep the static learning dashboard usable if the signed student read is unavailable.
       }
@@ -401,14 +425,22 @@ export function StudentDashboardPage() {
             id="student-collaboration"
             className="grid gap-5 xl:grid-cols-2"
           >
-            <StudentWorkflowCard
-              icon={ChatTeardropText}
-              title={t.chatTitle}
-              label={t.groupSignal}
-              body={localizedText(latestGroupMessage.text, locale)}
-              href="/learning/chatroom"
-              hrefLabel={t.openChatroom}
-            />
+            {learningGroups.length > 0 ? (
+              <StudentGroupSignalCard
+                groups={learningGroups}
+                label={t.groupSignal}
+                locale={locale}
+              />
+            ) : (
+              <StudentWorkflowCard
+                icon={ChatTeardropText}
+                title={t.chatTitle}
+                label={t.groupSignal}
+                body={localizedText(latestGroupMessage.text, locale)}
+                href="/learning/chatroom"
+                hrefLabel={t.openChatroom}
+              />
+            )}
             <StudentWorkflowCard
               icon={Notebook}
               title={t.plazaTitle}
@@ -513,6 +545,116 @@ function createStudentClassMembershipItems(
       } satisfies StudentClassMembershipItem;
     })
     .filter((membership): membership is StudentClassMembershipItem => Boolean(membership));
+}
+
+function createStudentLearningGroupItems(
+  response: StudentMembershipCourseResponse,
+): StudentLearningGroupItem[] {
+  return (response.learningGroups ?? [])
+    .map((group) => {
+      const groupId = group.groupId?.trim();
+      const courseId = group.courseId?.trim();
+      const groupName = group.groupName?.trim();
+      if (!groupId || !courseId || !groupName) {
+        return undefined;
+      }
+
+      return {
+        groupId,
+        courseId,
+        groupName,
+        members: (group.members ?? [])
+          .map((member) => {
+            const displayName = member.displayName?.trim();
+            if (!displayName) {
+              return undefined;
+            }
+            return { displayName, isSelf: member.isSelf === true };
+          })
+          .filter((member): member is { displayName: string; isSelf: boolean } =>
+            Boolean(member),
+          ),
+      } satisfies StudentLearningGroupItem;
+    })
+    .filter((group): group is StudentLearningGroupItem => Boolean(group));
+}
+
+// `?groupId=` alone resolves the room server-side (the group record carries its
+// own course/class); `courseId` rides along as a harmless readability hint.
+export function createStudentLearningGroupChatroomHref(group: {
+  courseId: string;
+  groupId: string;
+}) {
+  const params = new URLSearchParams({
+    courseId: group.courseId,
+    groupId: group.groupId,
+  });
+  return `/learning/chatroom?${params.toString()}`;
+}
+
+function StudentGroupSignalCard({
+  groups,
+  label,
+  locale,
+}: {
+  groups: StudentLearningGroupItem[];
+  label: string;
+  locale: Locale;
+}) {
+  const t = copy[locale].learning;
+
+  return (
+    <article
+      data-uais-student-group-signal
+      className="rounded-2xl border border-[var(--border)] bg-[var(--surface-elevated)] p-5"
+    >
+      <div className="flex items-start gap-3">
+        <span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-[var(--accent-soft)] text-[var(--accent)]">
+          <UsersThree size={22} weight="duotone" />
+        </span>
+        <div>
+          <p className="text-sm font-semibold text-[var(--accent)]">{label}</p>
+          <h2 className="mt-1 text-lg font-semibold text-[var(--foreground)]">
+            {t.groupCardTitle}
+          </h2>
+        </div>
+      </div>
+      <div className="mt-4 space-y-4">
+        {groups.map((group) => (
+          <div
+            key={group.groupId}
+            data-uais-student-group={group.groupId}
+            className="rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] px-3 py-3"
+          >
+            <h3 className="text-base font-semibold text-[var(--foreground)]">
+              {group.groupName}
+            </h3>
+            <ul className="mt-2 flex flex-wrap gap-2" aria-label={t.groupMembers}>
+              {group.members.map((member) => (
+                <li
+                  key={`${group.groupId}-${member.displayName}`}
+                  className="inline-flex items-center rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-1 text-sm font-medium text-[var(--foreground)]"
+                >
+                  {member.isSelf
+                    ? locale === "zh-CN"
+                      ? `${member.displayName}（${t.groupYou}）`
+                      : `${member.displayName} (${t.groupYou})`
+                    : member.displayName}
+                </li>
+              ))}
+            </ul>
+            <Link
+              href={createStudentLearningGroupChatroomHref(group)}
+              className="mt-3 inline-flex h-9 items-center gap-2 rounded-full bg-[var(--accent)] px-3 text-sm font-semibold text-white outline-none transition hover:bg-[var(--accent-strong)] focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface-soft)]"
+            >
+              <ChatTeardropText size={16} weight="bold" />
+              {t.openChatroom}
+            </Link>
+          </div>
+        ))}
+      </div>
+    </article>
+  );
 }
 
 function createStudentMembershipLearningHref(membership: StudentClassMembershipItem) {

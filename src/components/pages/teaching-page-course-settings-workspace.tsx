@@ -10,10 +10,12 @@ import { type Dispatch, type SetStateAction } from "react";
 import Link from "next/link";
 import { ArrowRight } from "@phosphor-icons/react/dist/ssr/ArrowRight";
 import { Plus } from "@phosphor-icons/react/dist/ssr/Plus";
+import { LearningGroupManager } from "@/components/teaching/learning-group-workspace";
 import {
   getTeachingCourseActionHref,
 } from "@/components/teaching/teaching-operation-data";
 import type { TeachingOperationId } from "@/components/teaching/teaching-operation-data";
+import { useTeachingLearningGroupsWorkspace } from "@/components/teaching/use-teaching-learning-groups";
 import { localizedText } from "@/components/ui/localized-text";
 import { teacherSidebarItems } from "@/data/uais";
 import type { TeacherCourse } from "@/data/uais";
@@ -48,6 +50,9 @@ type CourseSettingsWorkspaceProps = {
   courseCards: TeacherCourse[];
   courseClasses: Record<string, TeacherClassItem[]>;
   classMemberships: Record<string, TeacherClassMembershipItem[]>;
+  // Server-computed chatroom-groups feature state (plan D9), read off the same
+  // signed teacher course list this workspace already loads.
+  learningChatroomGroupsEnabled: boolean;
   membershipApprovalStatuses: Record<string, string>;
   inlineWorkspaceStatuses: Partial<Record<TeachingOperationId, string>>;
   inlineWorkspaceAuditStatuses: Partial<Record<TeachingOperationId, InlineWorkspaceAuditStatus>>;
@@ -92,6 +97,7 @@ export function CourseSettingsWorkspace({
   courseCards,
   courseClasses,
   classMemberships,
+  learningChatroomGroupsEnabled,
   membershipApprovalStatuses,
   inlineWorkspaceStatuses,
   inlineWorkspaceAuditStatuses,
@@ -110,6 +116,22 @@ export function CourseSettingsWorkspace({
   runInlineWorkspaceAction,
   runInlineWorkspaceRollback,
 }: CourseSettingsWorkspaceProps) {
+    // Learning-group state is owned here rather than threaded from the page shell:
+    // the panel is a course-settings surface, and keeping the hook local means the
+    // group readback only runs once a teacher actually opens a group panel. The
+    // feature gate is the exception — it arrives as a prop off the workspace's
+    // existing course-list read, because a probe of its own would add a request
+    // to every teaching page load.
+    const {
+      learningGroupsByCourse,
+      learningGroupStatuses,
+      openLearningGroupCourseIds,
+      toggleLearningGroupPanel,
+      createLearningGroup,
+      updateLearningGroup,
+      deleteLearningGroup,
+    } = useTeachingLearningGroupsWorkspace();
+
     return (
       <div
         className="space-y-5"
@@ -285,6 +307,29 @@ export function CourseSettingsWorkspace({
                   onNewClass={() => setNewClassCourseId(course.id)}
                   onOpenInvitation={setSelectedClassInvitation}
                 />
+                {/* Plan D9: while `UAIS_LEARNING_CHATROOM_GROUPS_MODE` is off the
+                    whole Group Collaboration surface stays hidden — panel, manage
+                    toggle and the Observe deep links with it — so a dark
+                    deployment never offers a room the chatroom API would refuse.
+                    Only an explicit server `true` renders it; an unanswered or
+                    failed course-list read keeps it hidden. */}
+                {learningChatroomGroupsEnabled ? (
+                  <LearningGroupManager
+                    course={course}
+                    classes={courseClasses[course.id] ?? []}
+                    membershipsByClass={classMemberships}
+                    groups={learningGroupsByCourse[course.id] ?? []}
+                    status={learningGroupStatuses[course.id]}
+                    isOpen={openLearningGroupCourseIds.includes(course.id)}
+                    locale={locale}
+                    onToggle={() => toggleLearningGroupPanel(course.id)}
+                    onCreateGroup={(draft) => createLearningGroup(course.id, draft)}
+                    onUpdateGroup={(groupId, patch) =>
+                      updateLearningGroup(course.id, groupId, patch)
+                    }
+                    onDeleteGroup={(groupId) => deleteLearningGroup(course.id, groupId)}
+                  />
+                ) : null}
               </article>
             ))}
           </div>

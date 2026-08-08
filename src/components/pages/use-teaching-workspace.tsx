@@ -137,6 +137,21 @@ import {
 } from "./teaching-page-types";
 
 
+// Learning-group (chatroom group) workspace handlers. They live in a sibling
+// module because this file already sits at the 1500-code-line source cap; they
+// are re-exported here so the teacher workspace keeps one handler entry point.
+export {
+  createLearningGroupFailureMessage,
+  createLearningGroupsByCourse,
+  learningGroupMaxMembers,
+  learningGroupMinMembers,
+  useTeachingLearningGroupsWorkspace,
+  type TeachingLearningGroupDraft,
+  type TeachingLearningGroupItem,
+  type TeachingLearningGroupMemberItem,
+  type TeachingLearningGroupPatch,
+} from "@/components/teaching/use-teaching-learning-groups";
+
 const DEFAULT_INVITE_CODE = "55395057";
 
 // Teacher-workspace state + operation handlers hook (Phase 3 decomposition of
@@ -161,6 +176,10 @@ export function useTeachingWorkspace() {
   >({});
   const [authenticatedTeacherActorId, setAuthenticatedTeacherActorId] =
     useState<string>();
+  // Chatroom-groups feature gate (plan D9). Starts false so a workspace that has
+  // not heard from the server — or a deployment with the flag off — shows no
+  // group surface at all.
+  const [learningChatroomGroupsEnabled, setLearningChatroomGroupsEnabled] = useState(false);
   const [persistedCourseLoadError, setPersistedCourseLoadError] = useState<string>();
   const [membershipApprovalStatuses, setMembershipApprovalStatuses] = useState<
     Record<string, string>
@@ -236,11 +255,16 @@ export function useTeachingWorkspace() {
           body.memberships ?? [],
         ),
         authenticatedTeacherActorId: readTeachingCourseListTeacherActorId(body.receipt),
+        // Chatroom-groups plan D9: the group surface is hidden until the server
+        // says the feature is live. Only an explicit `true` counts, and it rides
+        // this existing read so the workspace issues no extra request for it.
+        learningChatroomGroupsEnabled: body.features?.learningChatroomGroups === true,
       };
     }, [locale]);
 
   const applyPersistedTeachingCourseReadback = useCallback(
     (readback: PersistedTeachingCourseReadback) => {
+      setLearningChatroomGroupsEnabled(readback.learningChatroomGroupsEnabled);
       if (readback.authenticatedTeacherActorId) {
         setAuthenticatedTeacherActorId(readback.authenticatedTeacherActorId);
       }
@@ -1487,6 +1511,7 @@ export function useTeachingWorkspace() {
     setClassMemberships,
     authenticatedTeacherActorId,
     setAuthenticatedTeacherActorId,
+    learningChatroomGroupsEnabled,
     persistedCourseLoadError,
     setPersistedCourseLoadError,
     membershipApprovalStatuses,

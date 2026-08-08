@@ -448,8 +448,10 @@ export const operationConfigs: Record<TeachingOperationId, OperationConfig> = {
       "en-US": "Students and groups",
     },
     summary: {
-      "zh-CN": "查看学生名单、小组分配、加入状态、学习记录和异常提醒。",
-      "en-US": "Review roster, groups, join status, learning records, and alerts.",
+      "zh-CN":
+        "查看学生名单、小组分配、加入状态、学习记录和异常提醒；小组的创建与编辑在“我的教学 → 课程设置工作台 → 小组协作”面板完成。",
+      "en-US":
+        "Review roster, groups, join status, learning records, and alerts. Groups are created and edited in the Group Collaboration panel of the course-settings workspace.",
     },
     readyMessage: {
       "zh-CN": "学生名单已加载。",
@@ -481,9 +483,24 @@ export const operationConfigs: Record<TeachingOperationId, OperationConfig> = {
       localText("小组分配", "Group assignment"),
       localText("学习记录核对", "Learning-record reconciliation"),
     ],
+    // The "Generate Group Suggestions" secondary action still only produces a
+    // reviewed suggestion receipt. Its student ids are NOT auto-assigned: the
+    // teacher creates the real group in the course-settings Group Collaboration
+    // panel, which posts to /api/teaching/courses/[courseId]/groups.
+    // TODO(S13/S05): pass a reviewed suggestion into `LearningGroupDialog`'s
+    // `suggestedMemberIds` seam once this operation surface can hand the panel a
+    // draft; auto-assignment must stay teacher-reviewed either way.
     records: [
       localText("研究方法课程 36 名学生已加入。", "36 students joined Research Methods."),
       localText("数学教学法有 2 名学生等待邀请码加入。", "2 students await invite-code join."),
+      localText(
+        "聊天室小组在“课程设置工作台 → 小组协作”面板中创建、编辑和删除。",
+        "Chatroom groups are created, edited, and deleted in the Group Collaboration panel of the course-settings workspace.",
+      ),
+      localText(
+        "分组建议仅供教师复核，不会自动分配学生。",
+        "Group suggestions are for teacher review only and never auto-assign students.",
+      ),
     ],
   },
   "data-export": {
