@@ -42,6 +42,8 @@ export type ChatMessage = {
   text: LocalizedText;
   time: string;
   agentHandle?: string;
+  // Marks a message authored by the current viewer, so the chatroom can align it to the right.
+  self?: boolean;
 };
 
 export type TeacherCourse = {
@@ -327,6 +329,21 @@ export const chatMessages: ChatMessage[] = [
         "Frame it through interaction quality: AI tools may change follow-up questioning and student opportunities to explain concepts.",
     },
     time: "09:24",
+  },
+  {
+    id: "m5",
+    kind: "student",
+    author: {
+      "zh-CN": "我",
+      "en-US": "Me",
+    },
+    text: {
+      "zh-CN": "明白了，我先按这个思路整理变量表和研究意义初稿，晚点发到小组里一起修改。",
+      "en-US":
+        "Got it — I'll draft the variable table and rationale along these lines and share them with the group to revise together.",
+    },
+    time: "09:26",
+    self: true,
   },
 ];
 

@@ -48,6 +48,8 @@ export function NarrationDock({
   onNextPublishedSlide,
   studyToolsOpen,
   onOpenStudyTools,
+  onSlideNarrationPlay,
+  onSlideNarrationEnded,
 }: {
   locale: Locale;
   playback: PlaybackContent;
@@ -58,6 +60,8 @@ export function NarrationDock({
   onNextPublishedSlide: () => void;
   studyToolsOpen: boolean;
   onOpenStudyTools: () => void;
+  onSlideNarrationPlay?: (slide: LearningPptPlaybackSlide) => void;
+  onSlideNarrationEnded?: (slide: LearningPptPlaybackSlide) => void;
 }) {
   const publishedSlideCount = publishedPlayback?.slides.length ?? 0;
   const canShowPrevious = publishedSlideCount > 0 && activePublishedSlideIndex > 0;
@@ -288,6 +292,7 @@ export function NarrationDock({
                 src={activePublishedSlide.audioUrl}
                 onPlay={() => {
                   setSpeakingSlideId(activePublishedSlide.slideId);
+                  onSlideNarrationPlay?.(activePublishedSlide);
                 }}
                 onPause={() => {
                   setSpeakingSlideId(undefined);
@@ -295,6 +300,7 @@ export function NarrationDock({
                 onEnded={() => {
                   setSpeakingSlideId(undefined);
                   syncNarrationProgress();
+                  onSlideNarrationEnded?.(activePublishedSlide);
                 }}
                 onTimeUpdate={syncNarrationProgress}
                 onLoadedMetadata={syncNarrationProgress}

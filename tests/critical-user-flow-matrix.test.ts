@@ -30,8 +30,10 @@ describe("critical-flow regression matrix", () => {
       "learner evidence: records a playback progress event",
     );
 
-    expect(chatActions).toContain("exportChatToPdf");
-    expect(chatActions).toContain("createShareLink");
+    // Phase 5: the export/share mocks became the print-view route and a real
+    // minted share record.
+    expect(chatActions).toContain("createLearningChatroomExportUrl");
+    expect(chatActions).toContain("requestLearningChatroomShareLink");
 
     expect(backendFlows).toContain("creates a course/class");
     expect(teachingCourseApiTests).toContain("createTeachingCoursePostHandler");

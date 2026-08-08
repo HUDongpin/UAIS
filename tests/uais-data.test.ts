@@ -10,7 +10,10 @@ import {
   teacherSidebarItems,
 } from "@/data/uais";
 import { copy, defaultLocale, supportedLocales } from "@/i18n/copy";
-import { createShareLink, exportChatToPdf } from "@/lib/chat-actions";
+import {
+  createLearningChatroomExportUrl,
+  createLearningChatroomShareUrl,
+} from "@/lib/chat-actions";
 
 describe("UAIS template data contract", () => {
   it("keeps the top navigation focused on the three teaching areas", () => {
@@ -106,12 +109,25 @@ describe("UAIS template data contract", () => {
     ]);
   });
 
-  it("keeps export and share actions UI-ready without a backend", () => {
-    const pdfResult = exportChatToPdf(chatMessages);
-    expect(pdfResult.status).toBe("mocked");
-    expect(pdfResult.fileName).toBe("uais-human-ai-chat.pdf");
-
-    const shareLink = createShareLink("research-method-group");
-    expect(shareLink).toBe("https://uais.top/share/research-method-group");
+  // Phase 5 replaced the export/share mocks with real room-addressed actions:
+  // export is the print-view route for the room in hand, and a share link is
+  // minted server-side, so the old hard-coded `research-method-group` slug is
+  // gone from both.
+  it("addresses the real room from the export and share actions", () => {
+    expect(
+      createLearningChatroomExportUrl({
+        courseId: "elementary-math-research",
+        classId: "elementary-math-research-class-1",
+        groupId: "group-three",
+      }),
+    ).toBe(
+      "/learning/chatroom/export?courseId=elementary-math-research&classId=elementary-math-research-class-1&groupId=group-three",
+    );
+    expect(createLearningChatroomExportUrl({ courseId: "elementary-math-research" })).toBe(
+      "/learning/chatroom/export?courseId=elementary-math-research",
+    );
+    expect(
+      createLearningChatroomShareUrl("share-abc123", "https://uais.top/"),
+    ).toBe("https://uais.top/share/share-abc123");
   });
 });

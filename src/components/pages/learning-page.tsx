@@ -2,14 +2,12 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
-import { ArrowLeft } from "@phosphor-icons/react/dist/ssr/ArrowLeft";
 import { ArrowRight } from "@phosphor-icons/react/dist/ssr/ArrowRight";
 import { BookOpen } from "@phosphor-icons/react/dist/ssr/BookOpen";
 import { ChatsCircle } from "@phosphor-icons/react/dist/ssr/ChatsCircle";
 import { CheckCircle } from "@phosphor-icons/react/dist/ssr/CheckCircle";
 import { FilePdf } from "@phosphor-icons/react/dist/ssr/FilePdf";
 import { GearSix } from "@phosphor-icons/react/dist/ssr/GearSix";
-import { LinkSimple } from "@phosphor-icons/react/dist/ssr/LinkSimple";
 import { PaperPlaneTilt } from "@phosphor-icons/react/dist/ssr/PaperPlaneTilt";
 import { PlayCircle } from "@phosphor-icons/react/dist/ssr/PlayCircle";
 import { Robot } from "@phosphor-icons/react/dist/ssr/Robot";
@@ -17,14 +15,12 @@ import { SlidersHorizontal } from "@phosphor-icons/react/dist/ssr/SlidersHorizon
 import { Sparkle } from "@phosphor-icons/react/dist/ssr/Sparkle";
 import { Target } from "@phosphor-icons/react/dist/ssr/Target";
 import { useAppPreferences } from "@/components/providers/app-preferences";
-import { localizedText } from "@/components/ui/localized-text";
-import {
-  aiAgents,
-  chatMessages,
-  type ChatMessage,
-} from "@/data/uais";
+import { useSessionUser } from "@/components/providers/session-user";
 import { copy, type Locale } from "@/i18n/copy";
-import { createShareLink, exportChatToPdf } from "@/lib/chat-actions";
+import {
+  createUniqueLearningEventKey,
+  reportLearningEvent,
+} from "@/lib/learning-records/client-event-reporter";
 import type {
   LearningPptPlaybackManifest,
   LearningPptPlaybackSlide,
@@ -247,6 +243,9 @@ function findApprovedInviteLearningContext(
 
 export function LearningPage({ initialCourseId, initialClassId }: LearningPageProps = {}) {
   const { locale } = useAppPreferences();
+  const sessionUser = useSessionUser();
+  const learnerAccount =
+    sessionUser?.role === "student" ? sessionUser.account : undefined;
   const t = copy[locale];
   const selectedCourseId = getValidatedCourseId(initialCourseId);
   const playback = getPlaybackContent(selectedCourseId, locale);
@@ -261,6 +260,7 @@ export function LearningPage({ initialCourseId, initialClassId }: LearningPagePr
   const [studyToolsOpen, setStudyToolsOpen] = useState(false);
   const [guideDraft, setGuideDraft] = useState("");
   const [guideFocusSequence, setGuideFocusSequence] = useState(0);
+  const completedNarrationSlideIdsRef = useRef(new Set<string>());
   const activePublishedSlide =
     publishedPlayback?.slides[activePublishedSlideIndex] ?? publishedPlayback?.slides[0];
   const studyContent = useMemo(
@@ -288,6 +288,25 @@ export function LearningPage({ initialCourseId, initialClassId }: LearningPagePr
   function handleStudyAction(action: StudyAction) {
     if (action === "export") {
       exportSlideStudyNotes(studyContent, locale);
+      if (learnerAccount) {
+        const eventCourseId = publishedPlayback?.courseId ?? selectedCourseId;
+        void reportLearningEvent({
+          actorId: learnerAccount,
+          event: {
+            type: "activity.attempted",
+            object: {
+              id: `${eventCourseId}/slides/${activePublishedSlide?.slideId ?? "overview"}/study-notes-export`,
+              name: `Study notes · ${studyContent.slideTitle}`,
+            },
+            context: {
+              courseId: eventCourseId,
+              classId: approvedClassIdForCourse(eventCourseId),
+              lessonId: publishedPlayback?.audioManifestId,
+              locale,
+            },
+          },
+        });
+      }
       return;
     }
 
@@ -400,6 +419,146 @@ export function LearningPage({ initialCourseId, initialClassId }: LearningPagePr
     approvedInviteLearningContext?.classId === initialClassId
       ? approvedInviteLearningContext
       : undefined;
+
+  function approvedClassIdForCourse(eventCourseId: string) {
+    // The approved invite context belongs to the URL's course; never stamp its
+    // classId onto statements about a different course.
+    return visibleApprovedInviteLearningContext?.courseId === eventCourseId
+      ? visibleApprovedInviteLearningContext.classId
+      : undefined;
+  }
+
+  function createSlideNarrationEventBase(slide: LearningPptPlaybackSlide) {
+    if (!learnerAccount || !publishedPlayback) {
+      return undefined;
+    }
+    return {
+      objectId: `${publishedPlayback.courseId}/ppt-playback/${publishedPlayback.audioManifestId}/slides/${slide.slideId}`,
+      objectName: `${publishedPlayback.courseTitle} · ${slide.slideTitle} narration`,
+      context: {
+        courseId: publishedPlayback.courseId,
+        classId: approvedClassIdForCourse(publishedPlayback.courseId),
+        lessonId: publishedPlayback.audioManifestId,
+        locale,
+      },
+    };
+  }
+
+  function mergeCompletedNarrationSlideIds(slideId: string) {
+    // Completion progress is keyed per learner/course/manifest and persisted in
+    // localStorage so finishing a course across several visits still yields
+    // course.completed (device-scoped; the LRS write itself dedupes globally).
+    if (!learnerAccount || !publishedPlayback) {
+      return completedNarrationSlideIdsRef.current;
+    }
+    const storageKey = [
+      "uais-completed-narration",
+      learnerAccount,
+      publishedPlayback.courseId,
+      publishedPlayback.audioManifestId,
+    ].join(":");
+    const completedSlideIds = new Set(completedNarrationSlideIdsRef.current);
+    try {
+      const stored = JSON.parse(window.localStorage.getItem(storageKey) ?? "[]") as unknown;
+      if (Array.isArray(stored)) {
+        for (const value of stored) {
+          if (typeof value === "string") {
+            completedSlideIds.add(value);
+          }
+        }
+      }
+    } catch {
+      // Storage unavailable or corrupted: fall back to in-memory tracking.
+    }
+    completedSlideIds.add(slideId);
+    completedNarrationSlideIdsRef.current = completedSlideIds;
+    try {
+      window.localStorage.setItem(storageKey, JSON.stringify([...completedSlideIds]));
+    } catch {
+      // Best effort only.
+    }
+    return completedSlideIds;
+  }
+
+  function handleSlideNarrationPlay(slide: LearningPptPlaybackSlide) {
+    const base = createSlideNarrationEventBase(slide);
+    if (!learnerAccount || !base) {
+      return;
+    }
+    void reportLearningEvent({
+      actorId: learnerAccount,
+      event: {
+        type: "activity.attempted",
+        object: { id: base.objectId, name: base.objectName },
+        context: base.context,
+      },
+      idempotencyKey: [
+        learnerAccount,
+        "activity.attempted",
+        base.context.courseId,
+        base.objectId,
+        "narration-started",
+      ].join(":"),
+    });
+  }
+
+  function handleSlideNarrationEnded(slide: LearningPptPlaybackSlide) {
+    const base = createSlideNarrationEventBase(slide);
+    if (!learnerAccount || !base || !publishedPlayback) {
+      return;
+    }
+    const roundedDurationSeconds = Math.round(slide.durationSeconds);
+    void reportLearningEvent({
+      actorId: learnerAccount,
+      event: {
+        type: "activity.attempted",
+        object: { id: base.objectId, name: base.objectName },
+        // No result.completion here: a finished SLIDE narration must not mark
+        // the whole lesson complete in learner profiles (see commit 412a52c);
+        // lesson/course completion is only the all-slides signal below.
+        ...(Number.isFinite(roundedDurationSeconds) && roundedDurationSeconds > 0
+          ? { result: { duration: `PT${roundedDurationSeconds}S` } }
+          : {}),
+        context: base.context,
+      },
+      idempotencyKey: [
+        learnerAccount,
+        "activity.attempted",
+        base.context.courseId,
+        base.objectId,
+        "narration-completed",
+      ].join(":"),
+    });
+
+    // Genuine completion signal: the learner finished the narration of every
+    // slide in the published manifest (a manifest view alone is never enough —
+    // see commit 412a52c).
+    const completedSlideIds = mergeCompletedNarrationSlideIds(slide.slideId);
+    const allSlideNarrationsCompleted = publishedPlayback.slides.every(
+      (manifestSlide) => completedSlideIds.has(manifestSlide.slideId),
+    );
+    if (allSlideNarrationsCompleted) {
+      void reportLearningEvent({
+        actorId: learnerAccount,
+        event: {
+          type: "course.completed",
+          object: {
+            id: publishedPlayback.courseId,
+            name: publishedPlayback.courseTitle,
+          },
+          result: { completion: true },
+          context: {
+            courseId: publishedPlayback.courseId,
+            classId: approvedClassIdForCourse(publishedPlayback.courseId),
+            // Completing every slide narration completes this manifest's
+            // lesson as well, so learner profiles see the lesson close out.
+            lessonId: publishedPlayback.audioManifestId,
+            locale,
+          },
+        },
+      });
+    }
+  }
   const visibleCourseContextTitle = publishedPlayback
     ? `${locale === "zh-CN" ? "当前课程：" : "Current course: "}${publishedPlayback.courseTitle}`
     : playback.liveHint;
@@ -407,9 +566,6 @@ export function LearningPage({ initialCourseId, initialClassId }: LearningPagePr
 
   return (
     <div className="relative left-1/2 -my-6 w-screen -translate-x-1/2 bg-[#f7f8fd] px-3 py-3 text-[#141833] sm:px-4 lg:px-5">
-      <Link href="/learning/chatroom" className="sr-only">
-        {t.learning.openChatroom}
-      </Link>
       <div
         data-uais-learning-course-context="selected-course"
         className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1 px-1 text-sm font-semibold text-[#303650]"
@@ -436,6 +592,13 @@ export function LearningPage({ initialCourseId, initialClassId }: LearningPagePr
             </span>
           </>
         ) : null}
+        <Link
+          href="/learning/chatroom"
+          className="ml-auto inline-flex h-8 items-center gap-1.5 rounded-full border border-[#bfdbfe] bg-[#eff6ff] px-3 text-xs font-semibold text-[#1f6feb] outline-none transition hover:bg-[#dbeafe] active:translate-y-px focus-visible:ring-2 focus-visible:ring-[#1f6feb]"
+        >
+          <ChatsCircle size={15} weight="duotone" aria-hidden="true" />
+          {t.learning.openChatroom}
+        </Link>
       </div>
       <section
         data-uais-learning-layout="page-right-companion"
@@ -469,11 +632,14 @@ export function LearningPage({ initialCourseId, initialClassId }: LearningPagePr
             onNextPublishedSlide={showNextPublishedSlide}
             studyToolsOpen={studyToolsOpen}
             onOpenStudyTools={openStudyToolsFromDock}
+            onSlideNarrationPlay={handleSlideNarrationPlay}
+            onSlideNarrationEnded={handleSlideNarrationEnded}
           />
         </div>
         <LearningCompanionPanel
           locale={locale}
           courseId={selectedCourseId}
+          approvedInviteContext={visibleApprovedInviteLearningContext}
           playback={playback}
           publishedPlayback={publishedPlayback}
           activePublishedSlide={activePublishedSlide}
@@ -492,27 +658,10 @@ export function LearningPage({ initialCourseId, initialClassId }: LearningPagePr
   );
 }
 
-export function LearningChatroomPage() {
-  const { locale } = useAppPreferences();
-  const t = copy[locale];
-
-  return (
-    <div className="space-y-4">
-      <Link
-        href="/learning"
-        className="inline-flex h-10 items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface)] px-4 text-sm font-semibold text-[var(--foreground)] shadow-[0_10px_28px_var(--shadow)] outline-none transition hover:bg-[var(--surface-soft)] active:translate-y-px focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
-      >
-        <ArrowLeft size={17} weight="bold" />
-        {t.learning.backToLearning}
-      </Link>
-      <HumanAiChatroom variant="full" summary={t.learning.fullChatSummary} />
-    </div>
-  );
-}
-
 function LearningCompanionPanel({
   locale,
   courseId,
+  approvedInviteContext,
   playback,
   publishedPlayback,
   activePublishedSlide,
@@ -528,6 +677,7 @@ function LearningCompanionPanel({
 }: {
   locale: Locale;
   courseId: string;
+  approvedInviteContext?: { courseId: string; classId: string };
   playback: PlaybackContent;
   publishedPlayback?: LearningPptPlaybackManifest;
   activePublishedSlide?: LearningPptPlaybackSlide;
@@ -541,6 +691,13 @@ function LearningCompanionPanel({
   onGuideDraftChange: (draft: string) => void;
   guideFocusSequence: number;
 }) {
+  const sessionUser = useSessionUser();
+  const learnerAccount =
+    sessionUser?.role === "student" ? sessionUser.account : undefined;
+  const classIdForCourse = (eventCourseId: string) =>
+    approvedInviteContext?.courseId === eventCourseId
+      ? approvedInviteContext.classId
+      : undefined;
   const [guideMessages, setGuideMessages] = useState<AiGuideMessage[]>([]);
   const [guideError, setGuideError] = useState("");
   const [activeGuideAgentId, setActiveGuideAgentId] =
@@ -671,6 +828,34 @@ function LearningCompanionPanel({
     ]);
     onGuideDraftChange("");
     setGuideError("");
+
+    if (learnerAccount) {
+      const eventCourseId = publishedPlayback?.courseId ?? courseId;
+      void reportLearningEvent({
+        actorId: learnerAccount,
+        event: {
+          type: "ai.feedback.requested",
+          object: {
+            id: `${eventCourseId}/ai-guide/${agent.id}`,
+            name: `AI guide · ${agent.label}`,
+          },
+          context: {
+            courseId: eventCourseId,
+            classId: classIdForCourse(eventCourseId),
+            lessonId: publishedPlayback?.audioManifestId,
+            locale,
+          },
+        },
+        // Every ask is a distinct learning event, so the key must be unique
+        // per request rather than the default per-object dedupe key.
+        idempotencyKey: createUniqueLearningEventKey(
+          learnerAccount,
+          "ai.feedback.requested",
+          eventCourseId,
+          agent.id,
+        ),
+      });
+    }
 
     try {
       const response = await fetch("/api/learning/ai-guide", {
@@ -883,11 +1068,31 @@ function LearningCompanionPanel({
               studyContent={studyContent}
               activeView={selectedStudyToolView}
               expandedCheckpointId={expandedCheckpointId}
-              onToggleCheckpoint={(checkpointId) =>
+              onToggleCheckpoint={(checkpointId) => {
+                const expanding = expandedCheckpointId !== checkpointId;
                 setExpandedCheckpointId((current) =>
                   current === checkpointId ? undefined : checkpointId,
-                )
-              }
+                );
+                if (expanding && learnerAccount) {
+                  const eventCourseId = publishedPlayback?.courseId ?? courseId;
+                  void reportLearningEvent({
+                    actorId: learnerAccount,
+                    event: {
+                      type: "activity.attempted",
+                      object: {
+                        id: `${eventCourseId}/slides/${activePublishedSlide?.slideId ?? "overview"}/checkpoints/${checkpointId}`,
+                        name: `Checkpoint · ${studyContent.slideTitle}`,
+                      },
+                      context: {
+                        courseId: eventCourseId,
+                        classId: classIdForCourse(eventCourseId),
+                        lessonId: publishedPlayback?.audioManifestId,
+                        locale,
+                      },
+                    },
+                  });
+                }
+              }}
               onActiveViewChange={(view) => {
                 onActiveViewChange(view);
                 onStudyToolsOpenChange(true);
@@ -1296,245 +1501,4 @@ function CourseDirectoryView({ locale }: { locale: Locale }) {
   );
 }
 
-type HumanAiChatroomProps = {
-  variant?: "embedded" | "full";
-  summary?: string;
-};
-
-export function HumanAiChatroom({ variant = "embedded", summary }: HumanAiChatroomProps) {
-  const { locale } = useAppPreferences();
-  const t = copy[locale];
-  const [messages, setMessages] = useState<ChatMessage[]>(chatMessages);
-  const [draft, setDraft] = useState("");
-  const [notice, setNotice] = useState("");
-  const [error, setError] = useState("");
-  const isFullPage = variant === "full";
-
-  function mentionAgent(handle: string) {
-    setDraft((current) => `${current.trimEnd()}${current.trim() ? " " : ""}${handle} `);
-    setError("");
-  }
-
-  function handleSend(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const trimmedDraft = draft.trim();
-    if (!trimmedDraft) {
-      setError(t.learning.error);
-      return;
-    }
-
-    setMessages((current) => [
-      ...current,
-      {
-        id: `local-${current.length + 1}`,
-        kind: "student",
-        author: {
-          "zh-CN": "我",
-          "en-US": "Me",
-        },
-        text: {
-          "zh-CN": trimmedDraft,
-          "en-US": trimmedDraft,
-        },
-        time: locale === "zh-CN" ? "刚刚" : "Now",
-      },
-    ]);
-    setDraft("");
-    setError("");
-    setNotice("");
-  }
-
-  function handleExport() {
-    const result = exportChatToPdf(messages);
-    setNotice(`${t.learning.exported} ${result.fileName}`);
-    setError("");
-  }
-
-  async function handleShare() {
-    const link = createShareLink("research-method-group");
-    try {
-      await navigator.clipboard?.writeText(link);
-      setNotice(`${t.learning.copied} ${link}`);
-    } catch {
-      setNotice(`${t.learning.copiedFallback} ${link}`);
-    }
-    setError("");
-  }
-
-  return (
-    <section
-      className={[
-        "rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-[0_18px_48px_var(--shadow)]",
-        isFullPage ? "p-5 md:p-7" : "p-5",
-      ].join(" ")}
-    >
-      <div className="flex flex-col gap-4 border-b border-[var(--border)] pb-4 lg:flex-row lg:items-start lg:justify-between">
-        <div>
-          <div className="flex items-center gap-3">
-            <span className="flex size-10 items-center justify-center rounded-2xl bg-[var(--accent-soft)] text-[var(--accent)]">
-              <ChatsCircle size={22} weight="duotone" />
-            </span>
-            <h2 className="text-xl font-semibold text-[var(--foreground)]">
-              {t.learning.chatTitle}
-            </h2>
-          </div>
-          <p className="mt-3 max-w-2xl text-sm leading-6 text-[var(--muted)]">
-            {summary ?? t.learning.chatSummary}
-          </p>
-        </div>
-        <div className="flex shrink-0 flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={handleExport}
-            className="inline-flex h-10 items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface-elevated)] px-4 text-sm font-semibold text-[var(--foreground)] outline-none transition hover:bg-[var(--surface-soft)] active:translate-y-px focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
-          >
-            <FilePdf size={17} weight="duotone" />
-            {t.learning.exportPdf}
-          </button>
-          <button
-            type="button"
-            onClick={handleShare}
-            className="inline-flex h-10 items-center gap-2 rounded-full bg-[var(--accent)] px-4 text-sm font-semibold text-white outline-none transition hover:bg-[var(--accent-strong)] active:translate-y-px focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]"
-          >
-            <LinkSimple size={17} weight="bold" />
-            {t.learning.shareLink}
-          </button>
-        </div>
-      </div>
-
-      <div
-        className={[
-          "mt-4 grid gap-4",
-          isFullPage ? "xl:grid-cols-[0.72fr_1.28fr]" : "xl:grid-cols-[0.78fr_1.22fr]",
-        ].join(" ")}
-      >
-        <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-elevated)] p-4">
-          <h3 className="mb-3 text-sm font-semibold text-[var(--foreground)]">
-            {locale === "zh-CN" ? "@智能体" : "@AI Agents"}
-          </h3>
-          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
-            {aiAgents.map((agent) => (
-              <button
-                key={agent.id}
-                type="button"
-                onClick={() => mentionAgent(getLocalizedAgentHandle(agent.id, agent.handle, locale))}
-                className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-3 text-left outline-none transition hover:border-[var(--accent)] hover:bg-[var(--accent-soft)] active:translate-y-px focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
-              >
-                <span className="flex items-center gap-2 text-sm font-semibold text-[var(--foreground)]">
-                  <Robot size={17} weight="duotone" className="text-[var(--accent)]" />
-                  {getLocalizedAgentHandle(agent.id, agent.handle, locale)}
-                </span>
-                <span className="mt-1 block text-xs leading-5 text-[var(--muted)]">
-                  {localizedText(agent.specialty, locale)}
-                </span>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div
-          className={[
-            "flex flex-col rounded-2xl border border-[var(--border)] bg-[var(--surface-elevated)]",
-            isFullPage ? "min-h-[620px]" : "min-h-[520px]",
-          ].join(" ")}
-        >
-          <div className="flex-1 space-y-3 overflow-y-auto p-4">
-            {messages.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-[var(--border)] bg-[var(--surface)] p-5 text-sm text-[var(--muted)]">
-                {t.learning.emptyChat}
-              </div>
-            ) : (
-              messages.map((message) => (
-                <article
-                  key={message.id}
-                  className={[
-                    "rounded-2xl border p-4",
-                    message.kind === "agent"
-                      ? "border-[var(--accent-border)] bg-[var(--accent-soft)]"
-                      : "border-[var(--border)] bg-[var(--surface)]",
-                  ].join(" ")}
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="font-semibold text-[var(--foreground)]">
-                      {localizedText(message.author, locale)}
-                    </p>
-                    <span className="text-xs font-medium text-[var(--muted)]">
-                      {message.time}
-                    </span>
-                  </div>
-                  <p className="mt-2 text-sm leading-6 text-[var(--muted)]">
-                    {getLocalizedChatMessageText(message, locale)}
-                  </p>
-                </article>
-              ))
-            )}
-          </div>
-
-          <form
-            onSubmit={handleSend}
-            className="border-t border-[var(--border)] bg-[var(--surface)] p-4"
-          >
-            <label
-              htmlFor="group-message"
-              className="text-sm font-semibold text-[var(--foreground)]"
-            >
-              {t.learning.inputLabel}
-            </label>
-            <div className="mt-2 flex flex-col gap-2 sm:flex-row">
-              <input
-                id="group-message"
-                value={draft}
-                onChange={(event) => setDraft(event.target.value)}
-                placeholder={t.learning.inputPlaceholder}
-                className="min-h-11 flex-1 rounded-2xl border border-[var(--border)] bg-[var(--surface-elevated)] px-4 text-sm text-[var(--foreground)] outline-none transition placeholder:text-[var(--placeholder)] focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-soft)]"
-              />
-              <button
-                type="submit"
-                className="inline-flex h-11 items-center justify-center gap-2 rounded-full bg-[var(--accent)] px-5 text-sm font-semibold text-white outline-none transition hover:bg-[var(--accent-strong)] active:translate-y-px focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]"
-              >
-                <PaperPlaneTilt size={17} weight="bold" />
-                {t.learning.send}
-              </button>
-            </div>
-            {error ? (
-              <p className="mt-2 text-sm font-medium text-[var(--danger)]">{error}</p>
-            ) : null}
-            {notice ? (
-              <p className="mt-2 text-sm font-medium text-[var(--accent)]" aria-live="polite">
-                {notice}
-              </p>
-            ) : null}
-          </form>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function getLocalizedAgentHandle(agentId: string, fallbackHandle: string, locale: Locale) {
-  if (locale === "zh-CN") {
-    return fallbackHandle;
-  }
-
-  return englishAgentHandlesById[agentId] ?? fallbackHandle;
-}
-
-function getLocalizedChatMessageText(message: ChatMessage, locale: Locale) {
-  const text = localizedText(message.text, locale);
-  if (locale === "zh-CN") {
-    return text;
-  }
-
-  return text
-    .replaceAll("@研究助教", englishAgentHandlesById["research-assistant"])
-    .replaceAll("@方法顾问", englishAgentHandlesById["methods-consultant"])
-    .replaceAll("@数学助教", englishAgentHandlesById["math-tutor"])
-    .replaceAll("@写作助手", englishAgentHandlesById["writing-helper"]);
-}
-
-const englishAgentHandlesById: Record<string, string> = {
-  "research-assistant": "@ResearchTA",
-  "methods-consultant": "@MethodsAdvisor",
-  "math-tutor": "@MathTA",
-  "writing-helper": "@WritingHelper",
-};
+export { HumanAiChatroom, LearningChatroomPage } from "./learning-page-chatroom";
