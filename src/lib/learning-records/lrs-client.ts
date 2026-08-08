@@ -127,6 +127,16 @@ export type XapiStatement = {
   timestamp: string;
 };
 
+export class LrsWriteError extends Error {
+  readonly httpStatus: number;
+
+  constructor(message: string, httpStatus: number) {
+    super(message);
+    this.name = "LrsWriteError";
+    this.httpStatus = httpStatus;
+  }
+}
+
 export type LrsPostResult = {
   target: "learning-record-store";
   status: "passed";
@@ -215,7 +225,9 @@ export function createUaisLrsSmokeStatement(input: {
     actor: {
       objectType: "Agent",
       account: {
-        homePage: "https://uais.top",
+        // Canonical UAIS actor homePage so smoke statements classify as
+        // UAIS-produced by the same marker as app statements.
+        homePage: "https://uais.top/xapi/actors",
         name: "uais-local-smoke",
       },
     },
@@ -275,7 +287,10 @@ export async function postXapiStatement(input: {
   const responseText = await response.text();
 
   if (!response.ok) {
-    throw new Error(`LRS statement write failed with HTTP ${response.status}.`);
+    throw new LrsWriteError(
+      `LRS statement write failed with HTTP ${response.status}.`,
+      response.status,
+    );
   }
 
   const parsed = parseJsonResponse(responseText);

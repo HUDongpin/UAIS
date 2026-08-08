@@ -5,6 +5,13 @@ const uaisXapiBase = "https://uais.top/xapi";
 const adlVerbBase = "http://adlnet.gov/expapi/verbs";
 const adlActivityBase = "http://adlnet.gov/expapi/activities";
 
+// Default tenant marker stamped into every UAIS-produced statement so a shared
+// or migrated LRS store can always attribute statements to this application.
+export const uaisLrsTenantId = "uais";
+
+export const uaisActorHomePage = `${uaisXapiBase}/actors`;
+export const uaisEventTypeExtensionKey = `${uaisXapiBase}/extensions/event-type`;
+
 export const learningEventCatalog = {
   "course.viewed": {
     verb: "viewed",
@@ -164,6 +171,24 @@ export function createLearningEventStatement(input: {
   };
 }
 
+// Tenant guard for reads from a possibly shared LRS store: only statements
+// this application produced (its actor account homePage or its event-type
+// extension) may reach analytics and learner-profile summaries.
+export function isUaisProducedStatement(statement: unknown): boolean {
+  if (!isRecordValue(statement)) {
+    return false;
+  }
+  const actor = isRecordValue(statement.actor) ? statement.actor : undefined;
+  const account = actor && isRecordValue(actor.account) ? actor.account : undefined;
+  if (account?.homePage === uaisActorHomePage) {
+    return true;
+  }
+  const context = isRecordValue(statement.context) ? statement.context : undefined;
+  const extensions =
+    context && isRecordValue(context.extensions) ? context.extensions : undefined;
+  return Boolean(extensions && uaisEventTypeExtensionKey in extensions);
+}
+
 export function createIdempotentStatementId(idempotencyKey: string): string {
   const digest = createHash("sha256").update(idempotencyKey).digest("hex");
   return [
@@ -271,4 +296,8 @@ function createActivityTypeUri(activityType: LearningRecordActivityType) {
 
 function safePathSegment(value: string) {
   return encodeURIComponent(value.trim().replace(/\s+/g, "-")).replace(/%2F/gi, "/");
+}
+
+function isRecordValue(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

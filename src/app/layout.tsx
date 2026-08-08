@@ -3,6 +3,7 @@ import { Analytics } from "@vercel/analytics/next";
 import { cookies } from "next/headers";
 import { AppShell } from "@/components/layout/app-shell";
 import { AppPreferencesProvider } from "@/components/providers/app-preferences";
+import { SessionUserProvider } from "@/components/providers/session-user";
 import { resolveThemeMode } from "@/components/providers/theme-mode";
 import { defaultLocale, supportedLocales, type Locale } from "@/i18n/copy";
 import { getUaisAppSessionUserFromCookieString } from "@/lib/server/uais-app-session";
@@ -51,7 +52,9 @@ export default async function RootLayout({
           initialLocale={initialLocale}
           initialTheme={initialTheme}
         >
-          <AppShell initialSessionUser={initialSessionUser}>{children}</AppShell>
+          <SessionUserProvider initialSessionUser={initialSessionUser}>
+            <AppShell initialSessionUser={initialSessionUser}>{children}</AppShell>
+          </SessionUserProvider>
         </AppPreferencesProvider>
         <Analytics />
       </body>

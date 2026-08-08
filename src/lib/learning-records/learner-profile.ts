@@ -243,7 +243,20 @@ function readLessonId(statement: XapiStatement) {
   if (typeof value === "string" && value.trim()) {
     return value.trim();
   }
-  return readActivitySegment(statement, "lessons") ?? readLessonIdFromActivity(statement.object.id);
+  const lessonSegment = readActivitySegment(statement, "lessons");
+  if (lessonSegment) {
+    return lessonSegment;
+  }
+  // The last-activity-segment fallback is only trustworthy for lesson-typed
+  // objects; applying it to checkpoint/AI-guide/chatroom activities would mint
+  // phantom "lessons" that distort activeLessonCount and completionRate.
+  return isLessonActivity(statement)
+    ? readLessonIdFromActivity(statement.object.id)
+    : undefined;
+}
+
+function isLessonActivity(statement: XapiStatement) {
+  return statement.object.definition?.type?.endsWith("/lesson") ?? false;
 }
 
 function readActivitySegment(statement: XapiStatement | undefined, segment: string) {

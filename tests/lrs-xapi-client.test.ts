@@ -141,7 +141,7 @@ describe("UAIS Learning Record Store xAPI connection", () => {
         actor: expect.objectContaining({
           objectType: "Agent",
           account: {
-            homePage: "https://uais.top",
+            homePage: "https://uais.top/xapi/actors",
             name: "uais-local-smoke",
           },
         }),

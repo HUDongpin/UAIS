@@ -1,4 +1,5 @@
 import {
+  LrsWriteError,
   postXapiStatement,
   resolveLrsConfig,
   type XapiStatement,
@@ -8,7 +9,9 @@ import {
   createActivityId,
   createIdempotentStatementId,
   createLearningEventStatement,
+  isUaisProducedStatement,
   resolveLearningEventVerb,
+  uaisLrsTenantId,
   type LearningRecordActor,
   type LearningRecordEventInput,
   type LearningRecordEventType,
@@ -156,7 +159,15 @@ export function createLearningRecordQueue(input: {
         if (!item) continue;
         const statement = createLearningEventStatement({
           actor: item.actor,
-          event: item.event,
+          // Every statement leaving this queue carries the UAIS tenant marker
+          // so a shared or future dedicated LRS store can attribute it.
+          event: {
+            ...item.event,
+            context: {
+              ...item.event.context,
+              tenantId: item.event.context.tenantId ?? uaisLrsTenantId,
+            },
+          },
           statementId: createIdempotentStatementId(item.idempotencyKey),
           timestamp: input.now?.(),
         });
@@ -217,7 +228,11 @@ export function getXapiStatements(input: {
       more?: string;
     };
     return {
-      statements: Array.isArray(body.statements) ? body.statements : [],
+      // Tenant guard: the LRS store may be shared with other applications, and
+      // activity/related_activities filters can match foreign statements.
+      statements: (Array.isArray(body.statements) ? body.statements : []).filter(
+        isUaisProducedStatement,
+      ),
       more: typeof body.more === "string" ? body.more : "",
       redaction: {
         endpoint: "fingerprinted",
@@ -252,7 +267,13 @@ async function postWithRetry(input: {
         fetch: input.fetch,
       });
       return true;
-    } catch {
+    } catch (error) {
+      // A same-id conflict means this deterministic statement id is already
+      // stored (idempotent re-emission, possibly with an older body shape);
+      // the record exists, so treat it as written instead of retrying.
+      if (error instanceof LrsWriteError && error.httpStatus === 409) {
+        return true;
+      }
       if (attempt === input.maxAttempts) {
         return false;
       }
