@@ -41,6 +41,121 @@ describe("UAIS multi-agent orchestration", () => {
     });
   });
 
+  it("routes every mentioned agent in mention order before cueing the learner", () => {
+    const messages: UaisChatMessage[] = [
+      {
+        id: "m1",
+        role: "student",
+        content: "@方法顾问 数据怎么收集？@教师 课堂怎么安排？",
+      },
+    ];
+
+    expect(selectNextAgent({ agents, messages, previousTurns: [] })).toEqual({
+      type: "agent",
+      agentId: "methods",
+      reason: "explicit-mention",
+    });
+    expect(
+      selectNextAgent({
+        agents,
+        messages,
+        previousTurns: [{ agentId: "methods", content: "方法顾问 response", actions: [] }],
+      }),
+    ).toEqual({
+      type: "agent",
+      agentId: "teacher",
+      reason: "explicit-mention",
+    });
+    expect(
+      selectNextAgent({
+        agents,
+        messages,
+        previousTurns: [
+          { agentId: "methods", content: "方法顾问 response", actions: [] },
+          { agentId: "teacher", content: "教师 response", actions: [] },
+        ],
+      }),
+    ).toEqual({
+      type: "cue-user",
+      reason: "agent-answered",
+    });
+  });
+
+  it("resolves alias mentions and keeps mention order independent of roster order", () => {
+    const aliasAgents: UaisAgentConfig[] = [
+      { ...agents[0], aliases: ["@Teacher"] },
+      { ...agents[1], aliases: ["@MethodsAdvisor"] },
+    ];
+    const messages: UaisChatMessage[] = [
+      {
+        id: "m1",
+        role: "student",
+        content: "@MethodsAdvisor how do we collect data? @Teacher what about class time?",
+      },
+    ];
+
+    expect(selectNextAgent({ agents: aliasAgents, messages, previousTurns: [] })).toEqual({
+      type: "agent",
+      agentId: "methods",
+      reason: "explicit-mention",
+    });
+    expect(
+      selectNextAgent({
+        agents: aliasAgents,
+        messages,
+        previousTurns: [{ agentId: "methods", content: "Methods response", actions: [] }],
+      }),
+    ).toEqual({
+      type: "agent",
+      agentId: "teacher",
+      reason: "explicit-mention",
+    });
+  });
+
+  it("keeps an unmentioned fallback agent to a single turn", () => {
+    const messages: UaisChatMessage[] = [
+      { id: "m1", role: "student", content: "请帮我规划研究设计" },
+    ];
+
+    expect(selectNextAgent({ agents, messages, previousTurns: [] })).toEqual({
+      type: "agent",
+      agentId: "teacher",
+      reason: "priority",
+    });
+    expect(
+      selectNextAgent({
+        agents,
+        messages,
+        previousTurns: [{ agentId: "teacher", content: "教师 response", actions: [] }],
+      }),
+    ).toEqual({
+      type: "cue-user",
+      reason: "agent-answered",
+    });
+  });
+
+  it("runs one loop turn per mentioned agent", async () => {
+    const result = await runAgentLoop({
+      agents,
+      messages: [
+        {
+          id: "m1",
+          role: "student",
+          content: "@方法顾问 数据怎么收集？@教师 课堂怎么安排？",
+        },
+      ],
+      maxAgentTurns: 4,
+      respond: async (agent) => ({
+        agentId: agent.id,
+        content: `${agent.name} response`,
+        actions: [],
+      }),
+    });
+
+    expect(result.status).toBe("cue-user");
+    expect(result.turns.map((turn) => turn.agentId)).toEqual(["methods", "teacher"]);
+  });
+
   it("runs a bounded director-agent loop until the user is cued", async () => {
     const result = await runAgentLoop({
       agents,

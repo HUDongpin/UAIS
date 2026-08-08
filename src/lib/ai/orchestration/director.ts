@@ -20,21 +20,32 @@ export function selectNextAgent({
     return { type: "end", reason: "no-agents" };
   }
 
-  if (previousTurns.length > 0) {
+  const lastStudentMessage = [...messages].reverse().find((message) => message.role === "student");
+  const mentionedAgents = lastStudentMessage
+    ? findMentionedAgentsInOrder(agents, lastStudentMessage.content)
+    : [];
+
+  if (mentionedAgents.length > 0) {
+    // Every mentioned agent answers once, in the order the learner mentioned
+    // them. Control returns to the learner only after the last mention.
+    const answeredAgentIds = new Set(previousTurns.map((turn) => turn.agentId));
+    const nextMentionedAgent = mentionedAgents.find(
+      (agent) => !answeredAgentIds.has(agent.id),
+    );
+
+    if (nextMentionedAgent) {
+      return {
+        type: "agent",
+        agentId: nextMentionedAgent.id,
+        reason: "explicit-mention",
+      };
+    }
+
     return { type: "cue-user", reason: "agent-answered" };
   }
 
-  const lastStudentMessage = [...messages].reverse().find((message) => message.role === "student");
-  const mentionedAgent = lastStudentMessage
-    ? agents.find((agent) => lastStudentMessage.content.includes(agent.handle))
-    : undefined;
-
-  if (mentionedAgent) {
-    return {
-      type: "agent",
-      agentId: mentionedAgent.id,
-      reason: "explicit-mention",
-    };
+  if (previousTurns.length > 0) {
+    return { type: "cue-user", reason: "agent-answered" };
   }
 
   if (agents.length === 1) {
@@ -51,4 +62,39 @@ export function selectNextAgent({
     agentId: highestPriorityAgent.id,
     reason: "priority",
   };
+}
+
+function findMentionedAgentsInOrder(agents: UaisAgentConfig[], content: string) {
+  return agents
+    .map((agent, rosterIndex) => ({
+      agent,
+      rosterIndex,
+      mentionIndex: findFirstMentionIndex(agent, content),
+    }))
+    .filter((candidate) => candidate.mentionIndex >= 0)
+    .sort((left, right) =>
+      left.mentionIndex === right.mentionIndex
+        ? left.rosterIndex - right.rosterIndex
+        : left.mentionIndex - right.mentionIndex,
+    )
+    .map((candidate) => candidate.agent);
+}
+
+function findFirstMentionIndex(agent: UaisAgentConfig, content: string) {
+  const mentionTokens = [agent.handle, ...(agent.aliases ?? [])].filter(
+    (token): token is string => typeof token === "string" && token.length > 0,
+  );
+
+  let firstIndex = -1;
+  for (const token of mentionTokens) {
+    const index = content.indexOf(token);
+    if (index < 0) {
+      continue;
+    }
+    if (firstIndex < 0 || index < firstIndex) {
+      firstIndex = index;
+    }
+  }
+
+  return firstIndex;
 }

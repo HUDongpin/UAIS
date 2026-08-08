@@ -591,6 +591,46 @@ describe("UAIS AI API route contracts", () => {
     expectNoCredentialValues(body);
   });
 
+  it("responds 504 when the learning AI guide DeepSeek call times out", async () => {
+    const fixture = await createLearningAiGuideCourseAccessFixture({
+      courseId: "elementary-math-research",
+      membershipStatus: "approved",
+    });
+    const postLearningAiGuide = createLearningAiGuidePostHandler({
+      env: {
+        ...fixture.env,
+        DEEPSEEK_API_KEY: "secret-deepseek",
+      },
+      createDeepSeekTextClient: () => ({
+        complete: async () => {
+          throw new Error("DeepSeek request timed out.");
+        },
+      }),
+    });
+
+    const response = await postLearningAiGuide(
+      new Request("http://localhost/api/learning/ai-guide", {
+        method: "POST",
+        headers: { cookie: fixture.cookie },
+        body: JSON.stringify({
+          agentId: "learning-advisor",
+          locale: "zh-CN",
+          question: "这页怎么学习？",
+          course: {
+            courseId: "elementary-math-research",
+            courseTitle: "初等数学研究",
+          },
+        }),
+      }),
+    );
+    const body = await response.json();
+
+    // A provider timeout is an upstream failure, not a malformed request.
+    expect(response.status).toBe(504);
+    expect(body.error).toBe("DeepSeek request timed out.");
+    expectNoCredentialValues(body);
+  });
+
   it("routes concept explanation requests through Qwen multimodal without leaking secrets", async () => {
     const fixture = await createLearningAiGuideCourseAccessFixture({
       courseId: "elementary-math-research",
@@ -7146,6 +7186,231 @@ describe("UAIS AI API route contracts", () => {
       providerRole: "text-reasoning",
       action: "chat-completion",
     });
+    expectNoCredentialValues(body);
+  });
+
+  it("responds 504 when live DeepSeek chat times out", async () => {
+    const postWithTimingOutDeepSeek = createChatPostHandler({
+      env: {
+        DEEPSEEK_API_KEY: "secret-deepseek",
+        UAIS_LIVE_AI_APPROVAL_TOKEN: liveApprovalToken,
+      },
+      createDeepSeekTextClient: () => ({
+        complete: async () => {
+          throw new Error("DeepSeek request timed out.");
+        },
+      }),
+    });
+    const request = new Request("http://localhost/api/ai/chat", {
+      method: "POST",
+      headers: {
+        ...liveApprovalHeaders,
+        ...signedTeacherAiAccessHeaders,
+      },
+      body: JSON.stringify({
+        executionMode: "live",
+        liveProviderApproved: true,
+        courseId: "research-methods",
+        agents: [
+          {
+            id: "teacher",
+            handle: "@教师",
+            name: "教师",
+            role: "teacher",
+            providerRole: "text-reasoning",
+            priority: 10,
+            allowedActions: ["respond"],
+          },
+        ],
+        messages: [{ id: "m1", role: "student", content: "请帮我规划研究设计" }],
+      }),
+    });
+
+    const response = await postWithTimingOutDeepSeek(request);
+    const body = await response.json();
+
+    // A provider timeout is an upstream failure, not a malformed request.
+    expect(response.status).toBe(504);
+    expect(body.error).toBe("DeepSeek request timed out.");
+    expectNoCredentialValues(body);
+  });
+
+  it("sends a role system prompt, capped tokens, and disabled thinking to live DeepSeek chat", async () => {
+    const deepSeekRequests: Array<{
+      model?: string;
+      maxTokens?: number;
+      thinking?: { type: "enabled" | "disabled" };
+      messages: Array<{ role: "system" | "user" | "assistant"; content: string }>;
+    }> = [];
+    const postWithFakeDeepSeek = createChatPostHandler({
+      env: {
+        DEEPSEEK_API_KEY: "secret-deepseek",
+        UAIS_LIVE_AI_APPROVAL_TOKEN: liveApprovalToken,
+      },
+      createDeepSeekTextClient: () => ({
+        complete: async (input) => {
+          deepSeekRequests.push(input);
+          return {
+            provider: "deepseek",
+            model: "deepseek-v4-flash",
+            content: "Live DeepSeek answer",
+          };
+        },
+      }),
+    });
+    const request = new Request("http://localhost/api/ai/chat", {
+      method: "POST",
+      headers: {
+        ...liveApprovalHeaders,
+        ...signedTeacherAiAccessHeaders,
+      },
+      body: JSON.stringify({
+        executionMode: "live",
+        liveProviderApproved: true,
+        courseId: "research-methods",
+        agents: [
+          {
+            id: "methods",
+            handle: "@方法顾问",
+            aliases: ["@MethodsAdvisor"],
+            name: "方法顾问",
+            role: "assistant",
+            providerRole: "text-reasoning",
+            priority: 10,
+            allowedActions: ["respond"],
+          },
+        ],
+        messages: [{ id: "m1", role: "student", content: "请帮我规划研究设计" }],
+      }),
+    });
+
+    const response = await postWithFakeDeepSeek(request);
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.turns[0].content).toBe("Live DeepSeek answer");
+    expect(deepSeekRequests).toHaveLength(1);
+    expect(deepSeekRequests[0].maxTokens).toBe(1024);
+    expect(deepSeekRequests[0].thinking).toEqual({ type: "disabled" });
+    expect(deepSeekRequests[0].messages[0]).toEqual({
+      role: "system",
+      content:
+        "You are 方法顾问 (@方法顾问), the assistant agent in a UAIS university course chatroom. Answer concisely in the learner's language.",
+    });
+    expect(deepSeekRequests[0].messages[1]).toEqual({
+      role: "user",
+      content: "请帮我规划研究设计",
+    });
+    expectNoCredentialValues(body);
+  });
+
+  it("honors a custom agent systemPrompt in live DeepSeek chat", async () => {
+    const deepSeekRequests: Array<{
+      messages: Array<{ role: "system" | "user" | "assistant"; content: string }>;
+    }> = [];
+    const postWithFakeDeepSeek = createChatPostHandler({
+      env: {
+        DEEPSEEK_API_KEY: "secret-deepseek",
+        UAIS_LIVE_AI_APPROVAL_TOKEN: liveApprovalToken,
+      },
+      createDeepSeekTextClient: () => ({
+        complete: async (input) => {
+          deepSeekRequests.push(input);
+          return {
+            provider: "deepseek",
+            model: "deepseek-v4-flash",
+            content: "Live DeepSeek answer",
+          };
+        },
+      }),
+    });
+    const request = new Request("http://localhost/api/ai/chat", {
+      method: "POST",
+      headers: {
+        ...liveApprovalHeaders,
+        ...signedTeacherAiAccessHeaders,
+      },
+      body: JSON.stringify({
+        executionMode: "live",
+        liveProviderApproved: true,
+        courseId: "research-methods",
+        agents: [
+          {
+            id: "methods",
+            handle: "@方法顾问",
+            name: "方法顾问",
+            role: "assistant",
+            providerRole: "text-reasoning",
+            priority: 10,
+            allowedActions: ["respond"],
+            systemPrompt: "你是 UAIS 方法顾问，只讨论研究设计与证据质量。",
+          },
+        ],
+        messages: [{ id: "m1", role: "student", content: "请帮我规划研究设计" }],
+      }),
+    });
+
+    const response = await postWithFakeDeepSeek(request);
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(deepSeekRequests[0].messages[0]).toEqual({
+      role: "system",
+      content: "你是 UAIS 方法顾问，只讨论研究设计与证据质量。",
+    });
+    expectNoCredentialValues(body);
+  });
+
+  it("rejects oversized agent system prompts before calling the provider", async () => {
+    let providerCalls = 0;
+    const postWithFakeDeepSeek = createChatPostHandler({
+      env: {
+        DEEPSEEK_API_KEY: "secret-deepseek",
+        UAIS_LIVE_AI_APPROVAL_TOKEN: liveApprovalToken,
+      },
+      createDeepSeekTextClient: () => ({
+        complete: async () => {
+          providerCalls += 1;
+          return {
+            provider: "deepseek",
+            model: "deepseek-v4-flash",
+            content: "Live DeepSeek answer",
+          };
+        },
+      }),
+    });
+    const request = new Request("http://localhost/api/ai/chat", {
+      method: "POST",
+      headers: {
+        ...liveApprovalHeaders,
+        ...signedTeacherAiAccessHeaders,
+      },
+      body: JSON.stringify({
+        executionMode: "live",
+        liveProviderApproved: true,
+        courseId: "research-methods",
+        agents: [
+          {
+            id: "methods",
+            handle: "@方法顾问",
+            name: "方法顾问",
+            role: "assistant",
+            providerRole: "text-reasoning",
+            priority: 10,
+            allowedActions: ["respond"],
+            systemPrompt: "x".repeat(2001),
+          },
+        ],
+        messages: [{ id: "m1", role: "student", content: "请帮我规划研究设计" }],
+      }),
+    });
+
+    const response = await postWithFakeDeepSeek(request);
+    const body = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(body.error).toBe("Agent systemPrompt must be at most 2000 characters.");
+    expect(providerCalls).toBe(0);
     expectNoCredentialValues(body);
   });
 

@@ -7,6 +7,7 @@ import type {
 } from "@/lib/ai/orchestration/types";
 import {
   createDeepSeekTextClient,
+  deepSeekTimeoutErrorMessage,
   type DeepSeekCompleteResult,
 } from "@/lib/ai/providers/deepseek-client";
 import { assertLiveProviderApproval } from "@/lib/ai/providers/live-approval";
@@ -26,11 +27,22 @@ export const dynamic = "force-dynamic";
 // large client value from being honored if that bound ever changes.
 const maxAllowedAgentTurns = 8;
 
+// Live text-reasoning turns get a role prompt so a generic roster entry still
+// answers in character; callers may override it per agent.
+const maxAgentSystemPromptLength = 2000;
+const maxAgentAliases = 8;
+const maxAgentAliasLength = 80;
+const liveChatMaxTokens = 1024;
+
+type ChatAgentConfig = UaisAgentConfig & {
+  systemPrompt?: string;
+};
+
 type ChatRequestBody = {
   executionMode?: "contract" | "live";
   liveProviderApproved?: boolean;
   courseId?: string;
-  agents: UaisAgentConfig[];
+  agents: ChatAgentConfig[];
   messages: UaisChatMessage[];
   maxAgentTurns?: number;
 };
@@ -39,6 +51,10 @@ type DeepSeekTextClient = {
   complete(input: {
     messages: Array<{ role: "system" | "user" | "assistant"; content: string }>;
     model?: string;
+    maxTokens?: number;
+    thinking?: {
+      type: "enabled" | "disabled";
+    };
   }): Promise<DeepSeekCompleteResult>;
 };
 
@@ -101,22 +117,41 @@ export function createChatPostHandler(deps: ChatPostHandlerDeps = {}) {
               apiKey,
               baseUrl: env.DEEPSEEK_BASE_URL,
             });
+            const requestedAgent = body.agents.find(
+              (candidate) => candidate.id === agent.id,
+            );
             const completion = await client.complete({
               model: env.DEEPSEEK_MODEL ?? provider.defaultModel,
-              messages: body.messages.map((message) => ({
-                role:
-                  message.role === "student"
-                    ? "user"
-                    : message.role === "agent"
-                      ? "assistant"
-                      : "system",
-                content: message.content,
-              })),
+              maxTokens: liveChatMaxTokens,
+              // `deepseek-v4-flash` is a hybrid thinking model: a thinking pass
+              // eats a small token budget and returns empty content.
+              thinking: { type: "disabled" },
+              messages: [
+                {
+                  role: "system" as const,
+                  content:
+                    requestedAgent?.systemPrompt ?? createDefaultAgentSystemPrompt(agent),
+                },
+                ...body.messages.map((message) => ({
+                  role:
+                    message.role === "student"
+                      ? ("user" as const)
+                      : message.role === "agent"
+                        ? ("assistant" as const)
+                        : ("system" as const),
+                  content: message.content,
+                })),
+              ],
             });
+
+            const content = completion.content.trim();
+            if (!content) {
+              throw new Error("DeepSeek returned empty content for the live chat agent.");
+            }
 
             return {
               agentId: agent.id,
-              content: completion.content,
+              content,
               actions: [],
             };
           }
@@ -171,10 +206,15 @@ export function createChatPostHandler(deps: ChatPostHandlerDeps = {}) {
         {
           error: createPublicChatErrorMessage(error),
         },
-        { status: 400 },
+        // A provider timeout is an upstream failure, not a bad request.
+        { status: isDeepSeekTimeoutError(error) ? 504 : 400 },
       );
     }
   };
+}
+
+function isDeepSeekTimeoutError(error: unknown) {
+  return error instanceof Error && error.message === deepSeekTimeoutErrorMessage;
 }
 
 function authorizeChatRequestBeforeBodyRead(input: {
@@ -269,7 +309,7 @@ function parseChatRequest(value: unknown): ChatRequestBody {
   };
 }
 
-function parseAgent(value: unknown): UaisAgentConfig {
+function parseAgent(value: unknown): ChatAgentConfig {
   if (!isRecord(value)) {
     throw new Error("Agent must be an object.");
   }
@@ -279,9 +319,13 @@ function parseAgent(value: unknown): UaisAgentConfig {
     throw new Error("Agent providerRole is invalid.");
   }
 
+  const aliases = parseAgentAliases(value.aliases);
+  const systemPrompt = parseAgentSystemPrompt(value.systemPrompt);
+
   return {
     id: requireString(value.id, "Agent id is required."),
     handle: requireString(value.handle, "Agent handle is required."),
+    ...(aliases ? { aliases } : {}),
     name: requireString(value.name, "Agent name is required."),
     role: parseAgentRole(readString(value.role)),
     providerRole,
@@ -289,10 +333,52 @@ function parseAgent(value: unknown): UaisAgentConfig {
     allowedActions: Array.isArray(value.allowedActions)
       ? value.allowedActions.filter((action): action is string => typeof action === "string")
       : [],
+    ...(systemPrompt ? { systemPrompt } : {}),
   };
 }
 
-function assertUniqueAgentRoster(agents: UaisAgentConfig[]) {
+function parseAgentAliases(value: unknown) {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  if (!Array.isArray(value)) {
+    throw new Error("Agent aliases must be an array of strings.");
+  }
+  if (value.length > maxAgentAliases) {
+    throw new Error(`Agent aliases must be at most ${maxAgentAliases} entries.`);
+  }
+
+  return value.map((alias) => {
+    if (typeof alias !== "string" || !alias.trim()) {
+      throw new Error("Agent aliases must be an array of strings.");
+    }
+    if (alias.length > maxAgentAliasLength) {
+      throw new Error(`Agent alias must be at most ${maxAgentAliasLength} characters.`);
+    }
+    return alias;
+  });
+}
+
+function parseAgentSystemPrompt(value: unknown) {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  if (typeof value !== "string") {
+    throw new Error("Agent systemPrompt must be a string.");
+  }
+  if (value.length > maxAgentSystemPromptLength) {
+    throw new Error(
+      `Agent systemPrompt must be at most ${maxAgentSystemPromptLength} characters.`,
+    );
+  }
+  return value;
+}
+
+function createDefaultAgentSystemPrompt(agent: UaisAgentConfig) {
+  return `You are ${agent.name} (${agent.handle}), the ${agent.role} agent in a UAIS university course chatroom. Answer concisely in the learner's language.`;
+}
+
+function assertUniqueAgentRoster(agents: ChatAgentConfig[]) {
   const agentIds = new Set<string>();
   const agentHandles = new Set<string>();
 

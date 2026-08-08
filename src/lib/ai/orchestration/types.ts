@@ -10,6 +10,12 @@ export type UaisAgentRole = "teacher" | "assistant" | "student" | "specialist";
 export type UaisAgentConfig = {
   id: string;
   handle: string;
+  /**
+   * Optional extra mention handles for the same agent, e.g. an English handle
+   * paired with a Simplified Chinese primary handle. The director treats an
+   * alias exactly like `handle` when it resolves mentions.
+   */
+  aliases?: string[];
   name: string;
   role: UaisAgentRole;
   providerRole: UaisProviderRole;

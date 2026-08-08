@@ -46,6 +46,78 @@ describe("UAIS provider clients", () => {
     expect(JSON.stringify(result)).not.toContain("secret-qwen");
   });
 
+  it("passes a default timeout abort signal to DeepSeek requests", async () => {
+    const requests: Array<{ url: string; init: RequestInit }> = [];
+    const client = createDeepSeekTextClient({
+      apiKey: "secret-deepseek",
+      fetch: async (url, init) => {
+        requests.push({ url: String(url), init: init ?? {} });
+        return Response.json({
+          choices: [{ message: { content: "DeepSeek response" } }],
+        });
+      },
+    });
+
+    await client.complete({
+      messages: [{ role: "user", content: "变量怎么定？" }],
+    });
+
+    // The default 15000ms timeout is attached via AbortSignal.timeout, so the
+    // injected fetch must receive a live (not yet aborted) abort signal.
+    expect(requests[0].init.signal).toBeInstanceOf(AbortSignal);
+    expect(requests[0].init.signal?.aborted).toBe(false);
+  });
+
+  it("maps DeepSeek timeout aborts to a stable timeout error message", async () => {
+    const client = createDeepSeekTextClient({
+      apiKey: "secret-deepseek",
+      fetch: async () => {
+        throw new DOMException("The operation was aborted due to timeout", "TimeoutError");
+      },
+    });
+
+    await expect(
+      client.complete({
+        messages: [{ role: "user", content: "变量怎么定？" }],
+        timeoutMs: 5,
+      }),
+    ).rejects.toThrow("DeepSeek request timed out.");
+  });
+
+  it("maps a non-JSON DeepSeek error body to a clean failure message", async () => {
+    const client = createDeepSeekTextClient({
+      apiKey: "secret-deepseek",
+      fetch: async () =>
+        new Response("<html>502 Bad Gateway</html>", {
+          status: 502,
+          headers: { "Content-Type": "text/html" },
+        }),
+    });
+
+    await expect(
+      client.complete({
+        messages: [{ role: "user", content: "变量怎么定？" }],
+      }),
+    ).rejects.toThrow("DeepSeek request failed.");
+  });
+
+  it("surfaces the DeepSeek JSON error message for provider failures", async () => {
+    const client = createDeepSeekTextClient({
+      apiKey: "secret-deepseek",
+      fetch: async () =>
+        Response.json(
+          { error: { message: "Insufficient balance for this request." } },
+          { status: 402 },
+        ),
+    });
+
+    await expect(
+      client.complete({
+        messages: [{ role: "user", content: "变量怎么定？" }],
+      }),
+    ).rejects.toThrow("Insufficient balance for this request.");
+  });
+
   it("streams Qwen Omni chat through DashScope compatible mode", async () => {
     const requests: Array<{ url: string; init: RequestInit }> = [];
     const client = createQwenMultimodalClient({
