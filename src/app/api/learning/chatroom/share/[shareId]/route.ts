@@ -12,6 +12,10 @@ import {
   type LearningChatroomShareRepository,
 } from "@/lib/server/learning-chatroom-share-store";
 import { getUaisAppSessionUserFromCookieString } from "@/lib/server/uais-app-session";
+import {
+  createAiRequestRateLimiter,
+  type AiRequestRateLimiter,
+} from "@/lib/server/ai-request-rate-limit";
 import type { TeachingCourseManagementRepository } from "@/lib/server/teaching-course-management-store";
 
 // Revokes one share link (plan D8, Phase 5).
@@ -31,11 +35,26 @@ type LearningChatroomShareRevokeHandlerDeps = {
   now?: () => number;
   shareRepository?: LearningChatroomShareRepository;
   courseRepository?: TeachingCourseManagementRepository;
+  // Injected by tests so a suite drives the windows through its own clock
+  // instead of waiting on wall time.
+  rateLimiter?: AiRequestRateLimiter;
 };
 
 type LearningChatroomShareRouteContext = {
   params: { shareId: string } | Promise<{ shareId: string }>;
 };
+
+// Revoking is cheap but not free: every call is a shares-snapshot read and, when
+// it succeeds, a read-modify-write of the whole database. Session-gating alone
+// left a signed-in client able to loop on it, so it gets the same fixed,
+// non-env-tunable ceiling the mint route uses - generous enough that no real
+// teacher or student reaches it, low enough that a loop stops costing snapshot
+// round trips. Kept slightly higher than minting because revocation is the
+// safety valve and must not be the thing that runs out first.
+const learningChatroomShareRevokeRateLimitPerMinute = 20;
+const learningChatroomShareRevokeRateLimitPerDay = 400;
+const learningChatroomShareRevokeRateLimitMessage =
+  "Learning chatroom share rate limit exceeded. Please wait before revoking another link.";
 
 export const DELETE = createLearningChatroomShareRevokeDeleteHandler();
 
@@ -44,6 +63,25 @@ export function createLearningChatroomShareRevokeDeleteHandler(
 ) {
   const env = deps.env ?? process.env;
   const now = deps.now ?? Date.now;
+  const rateLimiter =
+    deps.rateLimiter ??
+    createAiRequestRateLimiter({
+      config: {
+        mode: "enforce",
+        windows: [
+          {
+            id: "per-minute",
+            limit: learningChatroomShareRevokeRateLimitPerMinute,
+            windowMs: 60000,
+          },
+          {
+            id: "per-day",
+            limit: learningChatroomShareRevokeRateLimitPerDay,
+            windowMs: 86400000,
+          },
+        ],
+      },
+    });
 
   return async function DELETE(
     request: Request,
@@ -59,6 +97,19 @@ export function createLearningChatroomShareRevokeDeleteHandler(
         throw new PublicLearningChatroomShareError(
           "UAIS app session is required for learning chatroom sharing.",
           401,
+        );
+      }
+
+      // Checked before the shares read, so a looping caller costs no snapshot
+      // round trip. Keyed on the actor alone, like the mint and chatroom
+      // limiters: ownership is not established yet, so a share-scoped key would
+      // hand out a fresh budget per invented share id.
+      const rateLimit = rateLimiter.check({ key: appSession.account, nowMs: now() });
+      if (!rateLimit.allowed) {
+        throw new PublicLearningChatroomShareError(
+          learningChatroomShareRevokeRateLimitMessage,
+          429,
+          { retryAfterSeconds: rateLimit.retryAfterSeconds },
         );
       }
 
@@ -205,6 +256,7 @@ function createErrorResponse(input: { error: unknown; traceId: string }) {
       redaction: createLearningAiGuideAccessRedaction(),
     },
     input.traceId,
+    publicError?.retryAfterSeconds,
   );
 }
 
@@ -218,12 +270,20 @@ function readPublicError(error: unknown) {
   return undefined;
 }
 
-function jsonResponse(status: number, body: unknown, traceId: string) {
+function jsonResponse(
+  status: number,
+  body: unknown,
+  traceId: string,
+  retryAfterSeconds?: number,
+) {
   return Response.json(body, {
     status,
     headers: {
       "cache-control": "no-store",
       "x-uais-trace-id": traceId,
+      // Only a throttle carries it, so a client can wait the stated whole
+      // seconds instead of guessing.
+      ...(retryAfterSeconds ? { "retry-after": String(retryAfterSeconds) } : {}),
     },
   });
 }
@@ -238,10 +298,12 @@ function readSafeTraceId(request: Request) {
 
 class PublicLearningChatroomShareError extends Error {
   readonly status: number;
+  readonly retryAfterSeconds?: number;
 
-  constructor(message: string, status: number) {
+  constructor(message: string, status: number, options?: { retryAfterSeconds?: number }) {
     super(message);
     this.name = "PublicLearningChatroomShareError";
     this.status = status;
+    this.retryAfterSeconds = options?.retryAfterSeconds;
   }
 }

@@ -733,6 +733,45 @@ describe("DELETE /api/learning/chatroom/share/[shareId]", () => {
     expect(after.status).toBe("not-found");
   });
 
+  it("throttles a looping revoker before it reaches the shares snapshot", async () => {
+    const fixture = await createShareFixture({ groupsMode: "on" });
+    const shareId = await mintGroupShare(fixture);
+
+    // The limiter is injected and its single unit of budget is spent up front,
+    // so the handler's very first call is the throttled one. Pairing that with a
+    // repository that throws on any access proves the guard runs BEFORE the
+    // snapshot read rather than merely changing the status afterwards.
+    const revokeNowMs = Date.parse("2026-08-08T14:01:00.000Z");
+    const rateLimiter = createAiRequestRateLimiter({
+      config: { mode: "enforce", windows: [{ id: "per-minute", limit: 1, windowMs: 60000 }] },
+    });
+    rateLimiter.check({ key: groupMemberOne.account, nowMs: revokeNowMs });
+
+    const revokeShare = createLearningChatroomShareRevokeDeleteHandler({
+      env: fixture.env,
+      now: () => revokeNowMs,
+      rateLimiter,
+      shareRepository: createThrowingShareRepository(),
+    });
+
+    const { request, context } = createRevokeRequest(
+      shareId,
+      fixture.cookieFor(groupMemberOne),
+    );
+    const response = await revokeShare(request, context);
+    const body = await response.json();
+
+    expect(response.status).toBe(429);
+    expect(response.headers.get("retry-after")).toBe("60");
+    expect(body.error).toContain("rate limit exceeded");
+    expectNoAccountIds(body);
+
+    // A different actor keeps their own budget: the limiter keys per account.
+    const other = createRevokeRequest(shareId, fixture.cookieFor(owningTeacher, "teacher"));
+    const allowed = await revokeShare(other.request, other.context);
+    expect(allowed.status).not.toBe(429);
+  });
+
   it("lets the course-owning teacher revoke a link a student minted", async () => {
     const fixture = await createShareFixture({ groupsMode: "on" });
     const shareId = await mintGroupShare(fixture);
