@@ -39,6 +39,8 @@ import type {
   TeachingCourseSettingsRecord,
   TeachingCourseUnitDraftRecord,
   TeachingKnowledgeIndexSyncRecord,
+  TeachingLearningGroupMember,
+  TeachingLearningGroupRecord,
   TeachingResourceReviewItemRecord,
   TeachingStudentGroupSuggestionRecord,
   TeachingStudentPreviewSessionRecord,
@@ -84,7 +86,11 @@ function isTeachingCourseManagementAction(
     value === "generate-class-invite-code-draft" ||
     value === "publish-class-invite-code" ||
     value === "join-class-by-invite" ||
-    value === "approve-class-membership"
+    value === "approve-class-membership" ||
+    value === "create-learning-group" ||
+    value === "update-learning-group-members" ||
+    value === "rename-learning-group" ||
+    value === "delete-learning-group"
   );
 }
 
@@ -367,6 +373,56 @@ export function normalizeStudentGroupSuggestionRecord(
     storageWritePolicy: normalizeStorageWritePolicy(value.storageWritePolicy),
     responsibleSession: "S12",
     redaction: createRedaction(),
+  };
+}
+
+export function normalizeLearningGroupRecord(value: unknown): TeachingLearningGroupRecord {
+  if (!isRecord(value)) {
+    throw new TeachingCourseManagementStoreError(
+      500,
+      "Teaching learning group record is invalid.",
+    );
+  }
+  if (!Array.isArray(value.members)) {
+    throw new TeachingCourseManagementStoreError(
+      500,
+      "Teaching learning group members are invalid.",
+    );
+  }
+  return {
+    groupId: requireSafeId(value.groupId, "learning group id"),
+    courseId: requireSafeId(value.courseId, "course id"),
+    ...(value.classId ? { classId: requireSafeId(value.classId, "class id") } : {}),
+    ownerTeacherId: requireSafeId(value.ownerTeacherId, "owner teacher id"),
+    groupName: requireTrimmedString(value.groupName, "learning group name", 120),
+    // Member-count policy (2..12) is enforced on the write path, not here: a read
+    // normalizer that rejected a stored count would brick the whole snapshot if
+    // the bound ever moved. Shape is still validated strictly.
+    members: value.members.map(normalizeLearningGroupMember),
+    createdAt: requireIsoDate(value.createdAt, "createdAt"),
+    updatedAt: requireIsoDate(value.updatedAt, "updatedAt"),
+    storagePolicy: normalizeRecordStoragePolicy(value.storagePolicy),
+    storageWritePolicy: normalizeStorageWritePolicy(value.storageWritePolicy),
+    responsibleSession: "S12",
+    redaction: createRedaction(),
+  };
+}
+
+function normalizeLearningGroupMember(value: unknown): TeachingLearningGroupMember {
+  if (!isRecord(value)) {
+    throw new TeachingCourseManagementStoreError(
+      500,
+      "Teaching learning group member is invalid.",
+    );
+  }
+  return {
+    studentId: requireSafeId(value.studentId, "student id"),
+    studentDisplayName: requireTrimmedString(
+      value.studentDisplayName,
+      "student display name",
+      120,
+    ),
+    addedAt: requireIsoDate(value.addedAt, "addedAt"),
   };
 }
 

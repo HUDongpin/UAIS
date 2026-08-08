@@ -73,7 +73,11 @@ export type TeachingCourseManagementAction =
   | "generate-class-invite-code-draft"
   | "publish-class-invite-code"
   | "join-class-by-invite"
-  | "approve-class-membership";
+  | "approve-class-membership"
+  | "create-learning-group"
+  | "update-learning-group-members"
+  | "rename-learning-group"
+  | "delete-learning-group";
 
 export type TeachingCourseRecord = {
   courseId: string;
@@ -239,6 +243,43 @@ export type TeachingStudentGroupSuggestionRecord = {
   storageWritePolicy: TeachingCourseManagementStorageWritePolicy;
   responsibleSession: "S12";
   redaction: TeachingCourseManagementRedaction;
+};
+
+// A teacher-assigned learning group: the durable membership list behind a shared
+// group chatroom room. Every member must hold an APPROVED membership in
+// `courseId` (and in `classId` when the group is scoped to one class), which the
+// group handlers enforce on every write. `studentDisplayName` is a snapshot taken
+// from the approved membership record at assignment time, never from a request
+// body, so the student-visible group projection cannot be used to inject names.
+export type TeachingLearningGroupMember = {
+  studentId: string;
+  studentDisplayName: string;
+  addedAt: string;
+};
+
+export type TeachingLearningGroupRecord = {
+  groupId: string;
+  courseId: string;
+  classId?: string;
+  ownerTeacherId: string;
+  groupName: string;
+  members: TeachingLearningGroupMember[];
+  createdAt: string;
+  updatedAt: string;
+  storagePolicy: TeachingCourseManagementRecordStoragePolicy;
+  storageWritePolicy: TeachingCourseManagementStorageWritePolicy;
+  responsibleSession: "S12";
+  redaction: TeachingCourseManagementRedaction;
+};
+
+// Members may be supplied as bare student ids or as `{ studentId }` objects; both
+// normalize to the same student-id list. Display names are resolved server-side.
+export type TeachingLearningGroupMemberInput = string | { studentId: string };
+
+export type TeachingLearningGroupDraftInput = {
+  groupName: string;
+  classId?: string;
+  members: TeachingLearningGroupMemberInput[];
 };
 
 export type TeachingKnowledgeIndexSyncRecord = {
@@ -625,6 +666,9 @@ export type TeachingCourseManagementDatabase = {
   studentPreviewSessions?: TeachingStudentPreviewSessionRecord[];
   studentRosters?: TeachingStudentRosterSyncRecord[];
   studentGroupSuggestions?: TeachingStudentGroupSuggestionRecord[];
+  // Optional and additive: snapshots written before learning groups existed stay
+  // valid and normalize unchanged (the key is simply absent).
+  learningGroups?: TeachingLearningGroupRecord[];
   knowledgeIndexes?: TeachingKnowledgeIndexSyncRecord[];
   resourceReviewItems?: TeachingResourceReviewItemRecord[];
   contentPackages?: TeachingCourseContentPublishRecord[];

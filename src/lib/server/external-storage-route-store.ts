@@ -17,6 +17,11 @@ import {
   normalizeTeachingCourseAssetsDatabase,
   type TeachingCourseAssetsDatabase,
 } from "@/lib/server/teaching-course-assets-store";
+import {
+  createEmptyLearningChatroomTranscriptDatabase,
+  normalizeLearningChatroomTranscriptDatabase,
+  type LearningChatroomTranscriptDatabase,
+} from "@/lib/server/learning-chatroom-transcript-store";
 import { HttpError } from "./external-storage-http-error";
 import {
   createRedaction,
@@ -27,6 +32,7 @@ import {
 } from "./external-storage-route-guards";
 import {
   ensureWithinBase,
+  resolveLearningChatroomTranscriptsSnapshotPath,
   resolveLifecycleAuditPath,
   resolveTeacherOwnershipPath,
   resolveTeachingCourseAssetsBackupPath,
@@ -47,6 +53,8 @@ import {
   countTeachingCourseAssetsBackupSnapshot,
   countTeachingCourseManagementBackupSnapshot,
   countTeachingOperationBackupSnapshot,
+  createLearningChatroomTranscriptsRevision,
+  createLearningChatroomTranscriptsSnapshot,
   createEmptyTeachingCourseAssetsDatabase,
   createEmptyTeachingCourseManagementDatabase,
   createTeachingCourseAssetsBackupReceipt,
@@ -244,6 +252,69 @@ export async function replaceTeachingCourseAssetsSnapshot(input: {
     status: "persisted",
     revision: snapshot.revision,
     storagePolicy: "external-redacted-teaching-course-cover-assets",
+    storageWritePolicy: "external-optimistic-snapshot-replace",
+    responsibleSession: "S12" as const,
+    redaction: createRedaction(),
+  };
+}
+
+
+export async function readLearningChatroomTranscriptsSnapshot(dataDir: string) {
+  const filePath = resolveLearningChatroomTranscriptsSnapshotPath(dataDir);
+  const raw = await readFile(filePath, "utf8").catch((error: NodeJS.ErrnoException) => {
+    if (error.code === "ENOENT") {
+      return undefined;
+    }
+    throw error;
+  });
+  if (!raw) {
+    return createLearningChatroomTranscriptsSnapshot(
+      createEmptyLearningChatroomTranscriptDatabase(),
+      "rev-empty",
+    );
+  }
+
+  const value = JSON.parse(raw) as { database?: unknown; revision?: unknown };
+  const database = normalizeLearningChatroomTranscriptDatabase(value.database);
+  const revision =
+    typeof value.revision === "string" && value.revision.trim()
+      ? value.revision
+      : createLearningChatroomTranscriptsRevision(database);
+  return createLearningChatroomTranscriptsSnapshot(database, revision);
+}
+
+export async function replaceLearningChatroomTranscriptsSnapshot(input: {
+  dataDir: string;
+  expectedRevision: string;
+  database: LearningChatroomTranscriptDatabase;
+}) {
+  const current = await readLearningChatroomTranscriptsSnapshot(input.dataDir);
+  if (current.revision !== input.expectedRevision) {
+    throw new HttpError(409, "Learning chatroom transcripts snapshot revision mismatch.");
+  }
+
+  const snapshot = createLearningChatroomTranscriptsSnapshot(input.database);
+  const snapshotDir = resolve(input.dataDir, "learning-chatroom-transcripts");
+  ensureWithinBase(input.dataDir, snapshotDir);
+  await mkdir(snapshotDir, { recursive: true });
+  const filePath = resolveLearningChatroomTranscriptsSnapshotPath(input.dataDir);
+  const tempPath = resolve(snapshotDir, `.database.${Date.now()}.${randomUUID()}.tmp`);
+  ensureWithinBase(input.dataDir, tempPath);
+  try {
+    await writeFile(tempPath, JSON.stringify(snapshot, null, 2), {
+      encoding: "utf8",
+      flag: "wx",
+    });
+    await rename(tempPath, filePath);
+  } catch (error) {
+    await rm(tempPath, { force: true }).catch(() => undefined);
+    throw error;
+  }
+
+  return {
+    status: "persisted",
+    revision: snapshot.revision,
+    storagePolicy: "external-redacted-learning-chatroom-transcripts",
     storageWritePolicy: "external-optimistic-snapshot-replace",
     responsibleSession: "S12" as const,
     redaction: createRedaction(),

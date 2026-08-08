@@ -8,6 +8,9 @@ import {
 import {
   normalizeTeachingCourseAssetsDatabase,
 } from "@/lib/server/teaching-course-assets-store";
+import {
+  normalizeLearningChatroomTranscriptDatabase,
+} from "@/lib/server/learning-chatroom-transcript-store";
 import { HttpError } from "./external-storage-http-error";
 import {
   createErrorResponse,
@@ -42,9 +45,11 @@ import {
   listLifecycleAuditEvents,
   listTeachingOperationAlertNotifications,
   listTeachingOperationAuditReadback,
+  readLearningChatroomTranscriptsSnapshot,
   readTeacherOwnership,
   readTeachingCourseAssetsSnapshot,
   readTeachingCourseManagementSnapshot,
+  replaceLearningChatroomTranscriptsSnapshot,
   replaceTeachingCourseAssetsSnapshot,
   replaceTeachingCourseManagementSnapshot,
   rollbackTeachingOperation,
@@ -428,6 +433,77 @@ export function createExternalStorageTeachingCourseAssetsDatabasePutHandler(
             dataDir: config.dataDir,
             expectedRevision: body.expectedRevision,
             database: normalizeTeachingCourseAssetsDatabase(body.database),
+          }),
+          config,
+        ),
+      );
+    } catch (error) {
+      return createErrorResponse(error);
+    }
+  };
+}
+
+export function createExternalStorageLearningChatroomTranscriptsDatabaseGetHandler(
+  deps: ExternalStorageRouteDeps = {},
+) {
+  const env = deps.env ?? process.env;
+
+  return async function GET(request: Request) {
+    try {
+      const config = createExternalStorageRouteConfig(env);
+      const unauthorized = authorizeExternalStorageRequest(request, config);
+      if (unauthorized) {
+        return unauthorized;
+      }
+      assertProductionDatabaseAdapterReadyForSnapshotReadback(config);
+
+      return jsonResponse(
+        200,
+        withProductionDatabaseAdapterEvidence(
+          await readLearningChatroomTranscriptsSnapshot(config.dataDir),
+          config,
+        ),
+      );
+    } catch (error) {
+      return createErrorResponse(error);
+    }
+  };
+}
+
+export function createExternalStorageLearningChatroomTranscriptsDatabasePutHandler(
+  deps: ExternalStorageRouteDeps = {},
+) {
+  const env = deps.env ?? process.env;
+
+  return async function PUT(request: Request) {
+    try {
+      const config = createExternalStorageRouteConfig(env);
+      const unauthorized = authorizeExternalStorageRequest(request, config);
+      if (unauthorized) {
+        return unauthorized;
+      }
+      const body = await readJsonBody(request);
+      if (
+        !isRecord(body) ||
+        body.action !== "replace-learning-chatroom-transcripts-database"
+      ) {
+        throw new HttpError(400, "Unsupported learning chatroom transcripts action.");
+      }
+      if (typeof body.expectedRevision !== "string" || !body.expectedRevision.trim()) {
+        throw new HttpError(
+          400,
+          "Learning chatroom transcripts expected revision is required.",
+        );
+      }
+      assertProductionDatabaseAdapterReadyForSnapshotReplace(config);
+
+      return jsonResponse(
+        200,
+        withProductionDatabaseAdapterEvidence(
+          await replaceLearningChatroomTranscriptsSnapshot({
+            dataDir: config.dataDir,
+            expectedRevision: body.expectedRevision,
+            database: normalizeLearningChatroomTranscriptDatabase(body.database),
           }),
           config,
         ),

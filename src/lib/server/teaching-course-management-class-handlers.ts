@@ -97,6 +97,13 @@ export async function rollbackTeachingCourseCreation(input: {
           ),
         }
       : {}),
+    ...(database.learningGroups
+      ? {
+          learningGroups: database.learningGroups.filter(
+            (group) => group.courseId !== courseId,
+          ),
+        }
+      : {}),
     ...(database.knowledgeIndexes
       ? {
           knowledgeIndexes: database.knowledgeIndexes.filter(

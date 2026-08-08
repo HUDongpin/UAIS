@@ -13,6 +13,7 @@ import {
   type TeachingCourseManagementAuthSessionSummary,
   type TeachingCourseManagementRepository,
   type TeachingCourseRecord,
+  type TeachingLearningGroupRecord,
 } from "@/lib/server/teaching-course-management-store";
 import { createUaisTeachingCourseManagementRepository } from "@/lib/server/teaching-course-management-external-store";
 import {
@@ -23,6 +24,7 @@ import {
   type TeachingCourseAssetsRepository,
 } from "@/lib/server/teaching-course-assets-store";
 import { createUaisTeachingCourseAssetsRepository } from "@/lib/server/teaching-course-assets-external-store";
+import { isLearningChatroomGroupsEnabled } from "@/lib/server/learning-chatroom-groups-flag";
 import {
   createUaisTeacherAiOwnershipMergeAdapter,
   type UaisTeacherAiOwnershipMergeInput,
@@ -123,6 +125,41 @@ type StudentVisibleMembership = {
   approvedAt?: string;
 };
 
+// A learning group is projected down to what a member needs to open and read the
+// group's shared chatroom room: the room's identity plus the human-readable
+// roster. Every dropped field is teacher-side or identifying: `ownerTeacherId` is
+// the teacher actor id the course/class projections already exist to remove,
+// `createdAt`/`updatedAt`/`storagePolicy`/`storageWritePolicy`/
+// `responsibleSession`/`redaction` are storage metadata no student surface reads,
+// and — most importantly — each member's `studentId` is another student's account
+// id. Co-members are rendered by DISPLAY NAME only; the caller identifies itself
+// through `isSelf`, which is computed server-side. This projection is applied only
+// to groups the requesting student is a member of, so it never discloses the
+// existence or roster of another group.
+type StudentVisibleGroupMember = {
+  displayName: string;
+  isSelf: boolean;
+};
+
+type StudentVisibleGroup = {
+  groupId: string;
+  courseId: string;
+  classId?: string;
+  groupName: string;
+  members: StudentVisibleGroupMember[];
+};
+
+// Server-computed feature state for the clients of this route (plan D9). The
+// teaching workspace cannot read `UAIS_LEARNING_CHATROOM_GROUPS_MODE` itself —
+// it is a server-only name and must stay one — so the flag it needs in order to
+// hide the Group Collaboration panel while groups ship dark travels here, on the
+// course list the workspace already reads. It carries no value from the env,
+// only the decision, and it is computed by the same helper the chatroom route
+// gates on, so the UI can never advertise a feature the API would deny.
+type TeachingCourseFeatures = {
+  learningChatroomGroups: boolean;
+};
+
 export const GET = createTeachingCourseGetHandler();
 export const POST = createTeachingCoursePostHandler();
 
@@ -131,6 +168,7 @@ export function createTeachingCourseGetHandler(deps: TeachingCourseGetHandlerDep
 
   return async function GET(request: Request) {
     const traceId = readSafeTraceId(request);
+    const features = createTeachingCourseFeatures(env);
     try {
       const authenticatedStudent = readAuthenticatedStudent({
         request,
@@ -225,6 +263,8 @@ export function createTeachingCourseGetHandler(deps: TeachingCourseGetHandlerDep
             courses: [],
             classes: [],
             memberships: [],
+            learningGroups: [],
+            features,
             traceId,
             receipt: {
               action: "list-courses",
@@ -264,11 +304,33 @@ export function createTeachingCourseGetHandler(deps: TeachingCourseGetHandlerDep
         const studentVisibleMemberships: StudentVisibleMembership[] = memberships.map(
           createStudentVisibleMembership,
         );
+        // Only groups the caller actually belongs to, and only inside a course the
+        // caller holds a membership in: a stale group row naming a student who has
+        // since left the course must not resurrect course visibility.
+        //
+        // While groups ship dark the projection is omitted entirely rather than
+        // sent as an empty array. This is the load-bearing half of the flag: the
+        // student dashboard falls back to its placeholder collaboration card and
+        // the chatroom resolves no group room, so a flag-off deployment exposes
+        // no group surface even though the teacher-side records still exist.
+        const learningGroups: StudentVisibleGroup[] = features.learningChatroomGroups
+          ? (database.learningGroups ?? [])
+              .filter(
+                (group) =>
+                  courseIds.has(group.courseId) &&
+                  group.members.some(
+                    (member) => member.studentId === authenticatedStudent.actorId,
+                  ),
+              )
+              .map((group) => createStudentVisibleGroup(group, authenticatedStudent.actorId))
+          : [];
 
         return jsonResponse(200, {
           courses,
           classes,
           memberships: studentVisibleMemberships,
+          ...(features.learningChatroomGroups ? { learningGroups } : {}),
+          features,
           traceId,
           receipt: {
             action: "list-student-courses",
@@ -307,11 +369,22 @@ export function createTeachingCourseGetHandler(deps: TeachingCourseGetHandlerDep
         (membership) =>
           courseIds.has(membership.courseId) && classIds.has(membership.classId),
       );
+      // Teachers receive the full group records (including member student ids) for
+      // the courses they own — same trust level as the raw membership rows above.
+      // These are returned whether or not the flag is on: group CRUD stays
+      // functional for the owning teacher while groups ship dark, and it is the
+      // `features` field, not an empty list, that hides the workspace panel.
+      const learningGroups = (database.learningGroups ?? []).filter(
+        (group) =>
+          group.ownerTeacherId === teacher.actorId && courseIds.has(group.courseId),
+      );
 
       return jsonResponse(200, {
         courses,
         classes,
         memberships,
+        learningGroups,
+        features,
         traceId,
         receipt: {
           action: "list-courses",
@@ -510,6 +583,14 @@ export function createTeachingCoursePostHandler(deps: TeachingCoursePostHandlerD
   };
 }
 
+function createTeachingCourseFeatures(
+  env: Record<string, string | undefined>,
+): TeachingCourseFeatures {
+  return {
+    learningChatroomGroups: isLearningChatroomGroupsEnabled(env),
+  };
+}
+
 function createStudentVisibleCourse(course: TeachingCourseRecord): StudentVisibleCourse {
   return {
     courseId: course.courseId,
@@ -537,6 +618,22 @@ function createStudentVisibleMembership(
     membershipStatus: membership.membershipStatus,
     joinedAt: membership.joinedAt,
     ...(membership.approvedAt === undefined ? {} : { approvedAt: membership.approvedAt }),
+  };
+}
+
+function createStudentVisibleGroup(
+  group: TeachingLearningGroupRecord,
+  studentId: string,
+): StudentVisibleGroup {
+  return {
+    groupId: group.groupId,
+    courseId: group.courseId,
+    ...(group.classId === undefined ? {} : { classId: group.classId }),
+    groupName: group.groupName,
+    members: group.members.map((member) => ({
+      displayName: member.studentDisplayName,
+      isSelf: member.studentId === studentId,
+    })),
   };
 }
 

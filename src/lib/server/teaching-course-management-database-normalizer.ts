@@ -20,6 +20,7 @@ import {
   normalizeGradingQueueRecord,
   normalizeInviteCodeDraftRecord,
   normalizeKnowledgeIndexSyncRecord,
+  normalizeLearningGroupRecord,
   normalizeMembershipRecord,
   normalizeQuizAssessmentRecord,
   normalizeQuizItemReviewRecord,
@@ -85,6 +86,12 @@ export function normalizeTeachingCourseManagementDatabase(
             normalizeStudentGroupSuggestionRecord,
           ),
         }
+      : {}),
+    // Additive optional array (Phase 1 learning groups): absent on every snapshot
+    // written before groups existed, so the key stays absent rather than becoming
+    // an empty array — old snapshots normalize byte-identically.
+    ...(Array.isArray(value.learningGroups)
+      ? { learningGroups: value.learningGroups.map(normalizeLearningGroupRecord) }
       : {}),
     ...(Array.isArray(value.knowledgeIndexes)
       ? { knowledgeIndexes: value.knowledgeIndexes.map(normalizeKnowledgeIndexSyncRecord) }

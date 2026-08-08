@@ -85,6 +85,20 @@ export {
   saveTeachingAgentSettingsRecord,
 } from "./teaching-course-management-settings-handlers";
 export {
+  createTeachingLearningGroupId,
+  createTeachingLearningGroupRecord,
+  deleteTeachingLearningGroup,
+  readTeachingLearningGroupValidation,
+  renameTeachingLearningGroup,
+  teachingLearningGroupMaxMembers,
+  teachingLearningGroupMinMembers,
+  updateTeachingLearningGroupMembers,
+} from "./teaching-course-management-group-handlers";
+export type {
+  TeachingLearningGroupValidation,
+  TeachingLearningGroupValidationReasonCode,
+} from "./teaching-course-management-group-handlers";
+export {
   approveTeachingClassMembership,
   assertTeachingClassInviteCodePublishTarget,
   joinTeachingClassByInviteCode,
@@ -137,6 +151,10 @@ export type {
   TeachingCourseSettingsRecord,
   TeachingCourseUnitDraftRecord,
   TeachingKnowledgeIndexSyncRecord,
+  TeachingLearningGroupDraftInput,
+  TeachingLearningGroupMember,
+  TeachingLearningGroupMemberInput,
+  TeachingLearningGroupRecord,
   TeachingResourceReviewItemRecord,
   TeachingStudentGroupSuggestionRecord,
   TeachingStudentPreviewSessionRecord,

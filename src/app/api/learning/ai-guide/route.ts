@@ -1,4 +1,7 @@
-import { createDeepSeekTextClient } from "@/lib/ai/providers/deepseek-client";
+import {
+  createDeepSeekTextClient,
+  deepSeekTimeoutErrorMessage,
+} from "@/lib/ai/providers/deepseek-client";
 import {
   createQwenMultimodalClient,
   type QwenMultimodalContent,
@@ -276,6 +279,10 @@ function createPublicLearningAiGuideError(error: unknown) {
   }
   if (error instanceof TeachingCourseManagementStoreError) {
     return new PublicLearningAiGuideError(error.message, error.status);
+  }
+  if (error instanceof Error && error.message === deepSeekTimeoutErrorMessage) {
+    // A provider timeout is an upstream failure, not a bad request.
+    return new PublicLearningAiGuideError(error.message, 504);
   }
   if (
     error instanceof Error &&
