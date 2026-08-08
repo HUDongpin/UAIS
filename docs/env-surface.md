@@ -19,13 +19,50 @@ or optional live AI work. It does not contain real values and it does not inspec
 - `active-production`: core auth, managed Postgres, LRS, Sentry, and uptime
   variables that may be part of a production POC deployment after S19/S22
   approval.
-- `optional-live-ai`: DeepSeek, DashScope/Qwen, and AI access variables. These
-  stay blocked until the owner approves live provider use, cost, and rate-limit
-  risk for a specific task.
+- `optional-live-ai`: DeepSeek, DashScope/Qwen, AI access, and live-AI spend
+  guard variables. The provider credentials stay blocked until the owner approves
+  live provider use, cost, and rate-limit risk for a specific task. The
+  `UAIS_LEARNING_CHATROOM_RATE_LIMIT_*` names are the exception: they tune a
+  guard that is already enforced with safe defaults when they are unset, so
+  leaving them unconfigured is safe and setting the mode to `off` is not. The
+  reserved group-chatroom names below also sit in this tier.
 - `quarantined-legacy`: older teacher-auth split, external storage, ordinary
-  teaching provider, and enterprise evidence-gate variables. They are retained
-  for historical scripts/tests but are not required for the core POC production
-  surface.
+  teaching provider, and enterprise evidence-gate variables, plus the local JSON
+  data-directory paths that only apply outside production. They are retained for
+  historical scripts/tests and local/test persistence, but are not required for
+  the core POC production surface.
+
+## Local JSON Data Directories
+
+`UAIS_TEACHING_COURSES_DATA_DIR` and `UAIS_LEARNING_CHATROOM_TRANSCRIPTS_DATA_DIR`
+are quarantined, not active-production, because every production runtime path
+asserts external storage and answers 503 for local JSON persistence. They apply
+to development, tests, and non-production lanes only:
+
+- `UAIS_TEACHING_COURSES_DATA_DIR` defaults to
+  `.tmp/uais-teaching-course-management-db` under the working directory.
+- `UAIS_LEARNING_CHATROOM_TRANSCRIPTS_DATA_DIR` splits transcripts off the course
+  records. When unset it falls back to `UAIS_TEACHING_COURSES_DATA_DIR`, and only
+  then to `.tmp/uais-learning-chatroom-transcripts-db`.
+
+Leave both unset in deployed lanes; a deployment that needs them is a signal that
+external storage is not configured.
+
+## Group-Chatroom Names
+
+These `optional-live-ai` names belong to the group learning chatroom rollout
+(see
+`coordination/reports/2026-08-08-learning-chatroom-group-implementation-plan.md`,
+decisions D6 and D9). As of 2026-08-08 all four are read by
+`src/app/api/learning/chatroom/route.ts`:
+
+- `UAIS_LEARNING_CHATROOM_GROUPS_MODE`: group-chatroom feature flag. Group
+  rooms stay disabled (403 `feature-not-enabled` for `groupId` requests)
+  unless this is explicitly `on`.
+- `UAIS_LEARNING_CHATROOM_HISTORY_RATE_LIMIT_MODE`: history-read (GET) guard
+  switch, enforced unless set to `off`.
+- `UAIS_LEARNING_CHATROOM_HISTORY_RATE_LIMIT_PER_MINUTE`: default 30.
+- `UAIS_LEARNING_CHATROOM_HISTORY_RATE_LIMIT_PER_DAY`: default 2000.
 
 ## Operating Rule
 

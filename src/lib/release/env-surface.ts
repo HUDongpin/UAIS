@@ -12,6 +12,7 @@ export type UaisEnvSurfaceEntry = {
     | "base-url"
     | "dsn"
     | "identifier"
+    | "limit"
     | "model"
     | "mode"
     | "secret"
@@ -247,6 +248,77 @@ export const uaisEnvSurfaceCatalog = [
     purpose: "Signs scoped AI access sessions when live AI routes are approved.",
   },
   {
+    name: "UAIS_LEARNING_CHATROOM_RATE_LIMIT_MODE",
+    tier: "optional-live-ai",
+    owner: "S07/S19",
+    valueKind: "mode",
+    serverOnly: true,
+    productionDefault: "optional",
+    purpose:
+      "Set to off to disable the learning chatroom per-actor spend guard; enforce by default.",
+  },
+  {
+    name: "UAIS_LEARNING_CHATROOM_RATE_LIMIT_PER_MINUTE",
+    tier: "optional-live-ai",
+    owner: "S07/S19",
+    valueKind: "limit",
+    serverOnly: true,
+    productionDefault: "optional",
+    purpose: "Per-actor learning chatroom rounds allowed per minute; defaults to 6.",
+  },
+  {
+    name: "UAIS_LEARNING_CHATROOM_RATE_LIMIT_PER_DAY",
+    tier: "optional-live-ai",
+    owner: "S07/S19",
+    valueKind: "limit",
+    serverOnly: true,
+    productionDefault: "optional",
+    purpose: "Per-actor learning chatroom rounds allowed per day; defaults to 120.",
+  },
+  // Group learning chatroom rollout (2026-08-08 group implementation plan,
+  // D6/D9). The flag and history-read guard are read by
+  // src/app/api/learning/chatroom/route.ts as of 2026-08-08 (Phases 0/2).
+  {
+    name: "UAIS_LEARNING_CHATROOM_GROUPS_MODE",
+    tier: "optional-live-ai",
+    owner: "S07/S19",
+    valueKind: "mode",
+    serverOnly: true,
+    productionDefault: "optional",
+    purpose:
+      "Group learning chatroom feature flag; group rooms stay off unless it is set on.",
+  },
+  {
+    name: "UAIS_LEARNING_CHATROOM_HISTORY_RATE_LIMIT_MODE",
+    tier: "optional-live-ai",
+    owner: "S07/S19",
+    valueKind: "mode",
+    serverOnly: true,
+    productionDefault: "optional",
+    purpose:
+      "Switch for the learning chatroom history-read guard; set to off to disable it, enforce by default.",
+  },
+  {
+    name: "UAIS_LEARNING_CHATROOM_HISTORY_RATE_LIMIT_PER_MINUTE",
+    tier: "optional-live-ai",
+    owner: "S07/S19",
+    valueKind: "limit",
+    serverOnly: true,
+    productionDefault: "optional",
+    purpose:
+      "Per-actor learning chatroom history reads allowed per minute; defaults to 30.",
+  },
+  {
+    name: "UAIS_LEARNING_CHATROOM_HISTORY_RATE_LIMIT_PER_DAY",
+    tier: "optional-live-ai",
+    owner: "S07/S19",
+    valueKind: "limit",
+    serverOnly: true,
+    productionDefault: "optional",
+    purpose:
+      "Per-actor learning chatroom history reads allowed per day; defaults to 2000.",
+  },
+  {
     name: "DEEPSEEK_API_KEY",
     tier: "optional-live-ai",
     owner: "S07/S19",
@@ -317,6 +389,31 @@ export const uaisEnvSurfaceCatalog = [
     serverOnly: true,
     productionDefault: "optional",
     purpose: "Qwen text-to-speech or voice model override.",
+  },
+  // Local JSON persistence paths. They are quarantined rather than active
+  // because every production runtime path asserts external storage and answers
+  // 503 for local JSON persistence, so these only take effect in development,
+  // tests, and non-production lanes. They carry explicit purposes instead of the
+  // shared legacy string below because they are still read by current code.
+  {
+    name: "UAIS_TEACHING_COURSES_DATA_DIR",
+    tier: "quarantined-legacy",
+    owner: "S19/S12",
+    valueKind: "storage-path",
+    serverOnly: true,
+    productionDefault: "quarantined",
+    purpose:
+      "Local JSON data directory for teaching course management outside production; defaults to .tmp/uais-teaching-course-management-db.",
+  },
+  {
+    name: "UAIS_LEARNING_CHATROOM_TRANSCRIPTS_DATA_DIR",
+    tier: "quarantined-legacy",
+    owner: "S19/S12",
+    valueKind: "storage-path",
+    serverOnly: true,
+    productionDefault: "quarantined",
+    purpose:
+      "Optional split directory for local learning chatroom transcripts; falls back to UAIS_TEACHING_COURSES_DATA_DIR, then to .tmp/uais-learning-chatroom-transcripts-db.",
   },
   ...createQuarantinedLegacyEntries([
     "UAIS_TEACHER_AUTH_PROVIDER",
