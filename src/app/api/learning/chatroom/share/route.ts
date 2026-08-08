@@ -9,9 +9,9 @@ import {
 import {
   createLearningChatroomShare,
   LearningChatroomShareStoreError,
-  resolveLearningChatroomShareDataDir,
   type LearningChatroomShareRepository,
 } from "@/lib/server/learning-chatroom-share-store";
+import { resolveLearningChatroomShareBackend } from "@/lib/server/learning-chatroom-share-runtime";
 import { getUaisAppSessionUserFromCookieString } from "@/lib/server/uais-app-session";
 import type { TeachingCourseManagementRepository } from "@/lib/server/teaching-course-management-store";
 
@@ -152,10 +152,17 @@ export function createLearningChatroomShareMintPostHandler(
       // in the chatroom handlers: a link minted without `classId` must still
       // point at the same room the member is reading.
       const classId = access.group ? access.group.classId : body.classId;
-      const { record, receipt } = await createLearningChatroomShare({
-        dataDir: resolveLearningChatroomShareDataDir(env),
+      // Resolves the durable backend when one is configured, and refuses a
+      // production runtime that would otherwise mint into an ephemeral file.
+      const shareBackend = resolveLearningChatroomShareBackend({
         env,
+        ...(deps.fetch ? { fetch: deps.fetch } : {}),
         ...(deps.shareRepository ? { repository: deps.shareRepository } : {}),
+      });
+      const { record, receipt } = await createLearningChatroomShare({
+        dataDir: shareBackend.dataDir,
+        env,
+        ...(shareBackend.repository ? { repository: shareBackend.repository } : {}),
         ...(deps.createShareId ? { shareId: deps.createShareId() } : {}),
         courseId: body.courseId,
         ...(classId ? { classId } : {}),

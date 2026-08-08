@@ -30,6 +30,12 @@ export function resolveTeachingCourseAssetsSnapshotPath(dataDir: string) {
   return filePath;
 }
 
+export function resolveLearningChatroomSharesSnapshotPath(dataDir: string) {
+  const filePath = resolve(dataDir, "learning-chatroom-shares", "database.json");
+  ensureWithinBase(dataDir, filePath);
+  return filePath;
+}
+
 export function resolveLearningChatroomTranscriptsSnapshotPath(dataDir: string) {
   const filePath = resolve(dataDir, "learning-chatroom-transcripts", "database.json");
   ensureWithinBase(dataDir, filePath);

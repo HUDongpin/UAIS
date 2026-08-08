@@ -11,6 +11,7 @@
 
 | Follow-up | Status |
 | --- | --- |
+| Share backend (blocker B1) | **Closed 2026-08-09** — external resource, adapter and shared resolver landed. |
 | Public `/share` read limiter | **Already implemented** — landed in `f08d579`, not deferred as the CTO log stated. Verified in code and by test. |
 | Share **revoke** limiter | **Gap found and closed in this session** — the revoke path had no limiter at all. |
 | Flag-on smoke | **Executed locally, end to end, with evidence below.** Deployment smoke remains owner-gated. |
@@ -91,7 +92,26 @@ That last pair is the important one: the flag is a genuine kill switch, not a UI
 
 These are **not** regressions; they are the gap between "green locally" and "safe in production". All were confirmed by reading the code, not inferred.
 
-**B1 — Share links cannot work in production at all.** `learning-chatroom-share-store.ts` documents a repository seam, but **no repository factory is wired for shares** and there is no `/learning-chatroom-shares/database` external-storage family. In a production runtime `assertLearningChatroomShareLocalJsonRuntimeAllowed` throws, so minting **and** the public read both fail closed. This is deliberate (better than writing to an ephemeral serverless filesystem), but it means: with the flag on in production today, Export works and **Share is dead**. Either wire the external share backend (S12/S22) or ship with the Share button hidden until it exists.
+**B1 — RESOLVED 2026-08-09.** Share links could not work in a deployed runtime at
+all: `learning-chatroom-share-store.ts` documented a `repository` seam, but no
+factory existed and there was no `/learning-chatroom-shares/database`
+external-storage resource, so production fell through to local JSON and
+`assertLearningChatroomShareLocalJsonRuntimeAllowed` refused itself — minting
+**and** the public read both failed closed while every local run passed.
+
+Closed by giving shares the same storage chain transcripts already had: a
+`learning-chatroom-shares` resource on the external-storage service (GET + PUT
+with the `replace-learning-chatroom-shares-database` action, optimistic
+revisions, atomic temp-file writes, path jailing), a client adapter
+(`learning-chatroom-share-external-store.ts`) with the same 404/409/502 and
+production-evidence handling as the transcript adapter, and one resolver
+(`learning-chatroom-share-runtime.ts`) that all three callers — mint, revoke and
+the public page — now share so they cannot drift. Shares deliberately follow
+`UAIS_TEACHING_COURSE_MANAGEMENT_BACKEND` rather than adding a second switch: a
+link and the room it publishes must be equally durable. The local-JSON refusal
+in production is unchanged and still correct; it is now the fallback rather than
+the only path. Ten tests drive the real service handlers and the real adapter
+against each other over a loopback fetch.
 
 **B2 — Transcript and course stores must be external before the flip.** Local JSON is refused in production for every store in this chain. `UAIS_TEACHING_COURSE_MANAGEMENT_BACKEND` and the `UAIS_EXTERNAL_STORAGE_*` family are all in the **quarantined-legacy** env tier, meaning they are not currently expected to be set in production. Group rooms cannot function until that is resolved (S19/S22).
 
@@ -101,7 +121,7 @@ These are **not** regressions; they are the gap between "green locally" and "saf
 
 **B5 — Rate limits are per serverless instance.** Every limiter here is in-process; the effective ceiling is `limit × instance count`. Acceptable for launch, documented in `ai-request-rate-limit.ts`, and a shared-storage limiter remains a separate S12 decision.
 
-**Recommended flip order:** resolve B2 and B3 → deploy with flag off → verify env parity → flip the flag in preview → run §4.1 against the preview with two real seeded accounts → decide B1 (wire the share backend, or hide Share) → flip production.
+**Recommended flip order:** resolve B2 and B3 → deploy with flag off → verify env parity → flip the flag in preview → run §4.1 against the preview with two real seeded accounts → flip production. B1 no longer gates anything: with the external backend configured, shares work; without it, a production runtime still refuses rather than writing somewhere that vanishes.
 
 ---
 

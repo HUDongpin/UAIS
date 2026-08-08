@@ -6,11 +6,11 @@ import {
   isLearningChatroomShareActive,
   LearningChatroomShareStoreError,
   readLearningChatroomShare,
-  resolveLearningChatroomShareDataDir,
   revokeLearningChatroomShare,
   type LearningChatroomShareRecord,
   type LearningChatroomShareRepository,
 } from "@/lib/server/learning-chatroom-share-store";
+import { resolveLearningChatroomShareBackend } from "@/lib/server/learning-chatroom-share-runtime";
 import { getUaisAppSessionUserFromCookieString } from "@/lib/server/uais-app-session";
 import {
   createAiRequestRateLimiter,
@@ -114,11 +114,16 @@ export function createLearningChatroomShareRevokeDeleteHandler(
       }
 
       const { shareId } = await context.params;
-      const dataDir = resolveLearningChatroomShareDataDir(env);
+      const shareBackend = resolveLearningChatroomShareBackend({
+        env,
+        ...(deps.fetch ? { fetch: deps.fetch } : {}),
+        ...(deps.shareRepository ? { repository: deps.shareRepository } : {}),
+      });
+      const dataDir = shareBackend.dataDir;
       const record = await readLearningChatroomShare({
         dataDir,
         env,
-        ...(deps.shareRepository ? { repository: deps.shareRepository } : {}),
+        ...(shareBackend.repository ? { repository: shareBackend.repository } : {}),
         shareId,
       });
       if (!isLearningChatroomShareActive(record)) {
@@ -159,7 +164,7 @@ export function createLearningChatroomShareRevokeDeleteHandler(
       const revocation = await revokeLearningChatroomShare({
         dataDir,
         env,
-        ...(deps.shareRepository ? { repository: deps.shareRepository } : {}),
+        ...(shareBackend.repository ? { repository: shareBackend.repository } : {}),
         shareId: record.shareId,
         now: new Date(now()).toISOString(),
       });

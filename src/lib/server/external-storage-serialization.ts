@@ -16,6 +16,7 @@ import {
   normalizeTeachingCourseAssetsDatabase,
   type TeachingCourseAssetsDatabase,
 } from "@/lib/server/teaching-course-assets-store";
+import type { LearningChatroomShareDatabase } from "@/lib/server/learning-chatroom-share-store";
 import type { LearningChatroomTranscriptDatabase } from "@/lib/server/learning-chatroom-transcript-store";
 import { HttpError } from "./external-storage-http-error";
 import {
@@ -144,6 +145,31 @@ export function createEmptyTeachingCourseAssetsDatabase(): TeachingCourseAssetsD
     assets: [],
     auditEvents: [],
   };
+}
+
+export function createLearningChatroomSharesSnapshot(
+  database: LearningChatroomShareDatabase,
+  revision = createLearningChatroomSharesRevision(database),
+) {
+  return {
+    database,
+    revision,
+    storagePolicy: "external-redacted-learning-chatroom-shares",
+    redaction: createRedaction(),
+  };
+}
+
+export function createLearningChatroomSharesRevision(
+  database: LearningChatroomShareDatabase,
+) {
+  if (database.updatedAt === "1970-01-01T00:00:00.000Z" && database.shares.length === 0) {
+    return "rev-empty";
+  }
+
+  return `rev-${createHash("sha256")
+    .update(JSON.stringify(database))
+    .digest("hex")
+    .slice(0, 16)}`;
 }
 
 export function createLearningChatroomTranscriptsSnapshot(

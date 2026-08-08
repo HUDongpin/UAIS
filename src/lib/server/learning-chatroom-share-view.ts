@@ -19,10 +19,10 @@ import {
   type LearningAiGuideCourseAccessDecision,
 } from "@/lib/server/learning-ai-guide-access";
 import { isLearningChatroomGroupsEnabled } from "@/lib/server/learning-chatroom-groups-flag";
+import { resolveLearningChatroomShareBackend } from "@/lib/server/learning-chatroom-share-runtime";
 import {
   isLearningChatroomShareActive,
   readLearningChatroomShare,
-  resolveLearningChatroomShareDataDir,
   type LearningChatroomShareRecord,
   type LearningChatroomShareRepository,
 } from "@/lib/server/learning-chatroom-share-store";
@@ -137,10 +137,15 @@ export async function loadLearningChatroomShareDocument(
 
   let share: LearningChatroomShareRecord | undefined;
   try {
-    share = await readLearningChatroomShare({
-      dataDir: resolveLearningChatroomShareDataDir(input.env),
+    const shareBackend = resolveLearningChatroomShareBackend({
       env: input.env,
+      ...(input.fetch ? { fetch: input.fetch } : {}),
       ...(input.shareRepository ? { repository: input.shareRepository } : {}),
+    });
+    share = await readLearningChatroomShare({
+      dataDir: shareBackend.dataDir,
+      env: input.env,
+      ...(shareBackend.repository ? { repository: shareBackend.repository } : {}),
       shareId: input.shareId,
     });
   } catch {

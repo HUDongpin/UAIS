@@ -9,8 +9,15 @@ import {
   normalizeTeachingCourseAssetsDatabase,
 } from "@/lib/server/teaching-course-assets-store";
 import {
+  normalizeLearningChatroomShareDatabase,
+} from "@/lib/server/learning-chatroom-share-store";
+import {
   normalizeLearningChatroomTranscriptDatabase,
 } from "@/lib/server/learning-chatroom-transcript-store";
+import {
+  readLearningChatroomSharesSnapshot,
+  replaceLearningChatroomSharesSnapshot,
+} from "./external-storage-route-share-store";
 import { HttpError } from "./external-storage-http-error";
 import {
   createErrorResponse,
@@ -433,6 +440,71 @@ export function createExternalStorageTeachingCourseAssetsDatabasePutHandler(
             dataDir: config.dataDir,
             expectedRevision: body.expectedRevision,
             database: normalizeTeachingCourseAssetsDatabase(body.database),
+          }),
+          config,
+        ),
+      );
+    } catch (error) {
+      return createErrorResponse(error);
+    }
+  };
+}
+
+export function createExternalStorageLearningChatroomSharesDatabaseGetHandler(
+  deps: ExternalStorageRouteDeps = {},
+) {
+  const env = deps.env ?? process.env;
+
+  return async function GET(request: Request) {
+    try {
+      const config = createExternalStorageRouteConfig(env);
+      const unauthorized = authorizeExternalStorageRequest(request, config);
+      if (unauthorized) {
+        return unauthorized;
+      }
+      assertProductionDatabaseAdapterReadyForSnapshotReadback(config);
+
+      return jsonResponse(
+        200,
+        withProductionDatabaseAdapterEvidence(
+          await readLearningChatroomSharesSnapshot(config.dataDir),
+          config,
+        ),
+      );
+    } catch (error) {
+      return createErrorResponse(error);
+    }
+  };
+}
+
+export function createExternalStorageLearningChatroomSharesDatabasePutHandler(
+  deps: ExternalStorageRouteDeps = {},
+) {
+  const env = deps.env ?? process.env;
+
+  return async function PUT(request: Request) {
+    try {
+      const config = createExternalStorageRouteConfig(env);
+      const unauthorized = authorizeExternalStorageRequest(request, config);
+      if (unauthorized) {
+        return unauthorized;
+      }
+      const body = await readJsonBody(request);
+      if (!isRecord(body) || body.action !== "replace-learning-chatroom-shares-database") {
+        throw new HttpError(400, "Unsupported learning chatroom shares action.");
+      }
+      if (typeof body.expectedRevision !== "string" || !body.expectedRevision.trim()) {
+        throw new HttpError(400, "Learning chatroom shares expected revision is required.");
+      }
+      assertProductionDatabaseAdapterReadyForSnapshotReplace(config);
+
+      return jsonResponse(
+        200,
+        withProductionDatabaseAdapterEvidence(
+          await replaceLearningChatroomSharesSnapshot({
+            dataDir: config.dataDir,
+            expectedRevision: body.expectedRevision,
+            database: normalizeLearningChatroomShareDatabase(body.database),
           }),
           config,
         ),
