@@ -44,6 +44,9 @@ export type ChatMessage = {
   agentHandle?: string;
   // Marks a message authored by the current viewer, so the chatroom can align it to the right.
   self?: boolean;
+  // Marks a group-room message authored by the course teacher, so the room can
+  // show instructor guidance apart from a classmate's turn. Server-derived.
+  instructor?: boolean;
 };
 
 export type TeacherCourse = {

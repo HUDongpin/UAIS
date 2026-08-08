@@ -282,7 +282,7 @@ describe("teaching workspace learning group panel", () => {
     // A group without a classId is course-wide.
     expect(panel.getByText("所属班级：全课程")).toBeTruthy();
 
-    const observeLink = panel.getByRole("link", { name: "旁听证据链小组聊天室" });
+    const observeLink = panel.getByRole("link", { name: "进入证据链小组聊天室" });
     expect(observeLink.getAttribute("href")).toBe(
       `/learning/chatroom?courseId=${courseId}&groupId=group-alpha-20260808`,
     );
@@ -720,8 +720,8 @@ describe("teaching workspace learning group panel", () => {
     expect(screen.queryByRole("button", { name: `管理${courseName}的小组` })).toBeNull();
     expect(screen.queryByRole("button", { name: `为${courseName}新建小组` })).toBeNull();
     expect(screen.queryByText("小组协作")).toBeNull();
-    // The 旁听 observe deep links disappear with the panel.
-    expect(screen.queryByRole("link", { name: "旁听证据链小组聊天室" })).toBeNull();
+    // The room deep links disappear with the panel.
+    expect(screen.queryByRole("link", { name: "进入证据链小组聊天室" })).toBeNull();
     expect(screen.queryByText("证据链小组")).toBeNull();
   });
 
@@ -793,7 +793,7 @@ describe("teaching workspace learning group panel", () => {
     expect(panel.getByRole("button", { name: `New group for ${courseNameEn}` })).toBeTruthy();
     expect(
       panel
-        .getByRole("link", { name: "Observe the Evidence Chain Group chatroom" })
+        .getByRole("link", { name: "Open the Evidence Chain Group chatroom" })
         .getAttribute("href"),
     ).toBe(`/learning/chatroom?courseId=${courseId}&groupId=group-alpha-20260808`);
 

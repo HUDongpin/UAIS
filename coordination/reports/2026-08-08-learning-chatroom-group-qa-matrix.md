@@ -83,7 +83,7 @@ Counts are **cited cases**, i.e. named `it` cases that carry evidence for that f
 | --- | --- |
 | Non-member course student, GET **and** POST | group-api → `denies a course member who is not in the requested group` |
 | Other-group member (GET), with own-group positive control | group-api → `denies a member of another group in the same course` |
-| Owning teacher = read-only observer (GET allow, POST deny) | group-api → `lets the owning teacher observe a group room read-only` |
+| Owning teacher = full participant (GET + POST allow, instructor attribution) | group-api → `lets the owning teacher speak in a group room, attributed as the instructor`; `ignores an author role claimed by the request body` |
 | Foreign teacher + every admin | group-api → `denies a teacher who does not own the course and denies every admin` |
 | Teacher × group outside the course | group-api → `denies a teacher observing a group that does not belong to the course` |
 | Flag off, both handlers, store untouched | group-api → `rejects every group request while the flag is off, without touching the store` |
@@ -92,13 +92,13 @@ Counts are **cited cases**, i.e. named `it` cases that carry evidence for that f
 | groupId length bound, both handlers | group-api → `rejects an oversize groupId on both handlers` |
 | Teacher CRUD authz | groups-api → `denies a foreign teacher on create, update, and delete`; `denies student and admin app sessions and unauthenticated callers` |
 | Projection authz + flag surface | groups-api → `returns full group records to the owning teacher only`; `narrows the student group projection to the caller's own groups without student ids`; `reports the group feature state to both roles when groups are on`; `withholds the student group projection while groups ship dark`; `reads the group flag exactly like the chatroom route` |
-| Share mint authz | share-api → `refuses a caller who is not in the group`; `refuses the teacher observer: reading a group room is not publishing it`; `refuses a group link while the feature flag is off`; `requires a session and a course` |
+| Share mint authz | share-api → `refuses a caller who is not in the group`; `keeps group minting member-only even though the teacher speaks in the room`; `refuses a group link while the feature flag is off`; `requires a session and a course` |
 | Share revoke authz | share-api → `lets the creating member revoke, after which the public lookup is a 404`; `lets the course-owning teacher revoke a link a student minted`; `refuses another group member, a foreign teacher, and an unknown id` |
-| Export authz (same gate as GET) | share-api → `gives a group member the room, and refuses a foreign student`; `lets the course-owning teacher print a group room as observer`; `requires a session, a course, and the feature flag for a group room` |
+| Export authz (same gate as GET) | share-api → `gives a group member the room, and refuses a foreign student`; `lets the course-owning teacher print a group room`; `requires a session, a course, and the feature flag for a group room` |
 | Signed-out / no-membership legacy gates | chatroom-api → `rejects chatroom requests without a UAIS app session`; `denies chatroom requests without approved course membership before provider calls`; `rejects a transcript read without a UAIS app session`; `denies a transcript read without course context or approved membership` |
-| Client-side denial handling | group-live → `stops polling a denied group room and explains it once`; `keeps a teacher out of group rooms unless a deep link asks for one`; `renders the observer notice and no composer for a teacher on a group deep link`; `drops the group and re-reads the legacy room when the deployment answers feature-not-enabled`; `shows the no-group notice when the caller has groups but none in this room` |
+| Client-side denial handling | group-live → `stops polling a denied group room and explains it once`; `keeps a teacher out of group rooms unless a deep link asks for one`; `gives a teacher on a group deep link a composer and the instructor identity`; `drops the group and re-reads the legacy room when the deployment answers feature-not-enabled`; `shows the no-group notice when the caller has groups but none in this room` |
 
-Matrix completeness: **member / non-member / other-group member / teacher-owner / foreign-teacher / admin** are all covered on GET; POST denial is pinned for non-member and for the teacher observer (`teacher-group-observer-read-only`). Signed-out × groupId is covered only transitively (the session gate runs before group resolution) — see G4.
+Matrix completeness: **member / non-member / other-group member / teacher-owner / foreign-teacher / admin** are all covered on GET; POST denial is pinned for non-member (`student-group-membership-required`); the owning teacher is a participant on POST and their turn is pinned as instructor-attributed, with body-claimed `authorRole` pinned as ignored. Signed-out × groupId is covered only transitively (the session gate runs before group resolution) — see G4.
 
 ### F4 — Legacy regression: per-student rooms and transcript ids byte-stable (P2)
 
@@ -145,7 +145,7 @@ Matrix completeness: **member / non-member / other-group member / teacher-owner 
 | Round provider budget | chatroom-api → `skips provider calls for agents left without round budget`; `shrinks each provider timeout to the remaining round budget`; `subtracts pre-round request time from the round provider budget`; `skips every agent to a timeout fallback when pre-round work exhausts the request budget` |
 | Group append retry budget (`retryBudgetMs` seam) | group-api → `retries a contended group append past the conflict a per-student append gives up on`; `stops retrying once the caller's retry budget is spent` |
 
-### F7 — UI: identity, mentions, roster, observer, picker, polling, locales, reduced motion (P3)
+### F7 — UI: identity, mentions, roster, teaching presence, picker, polling, locales, reduced motion (P3)
 
 **Cited: 49** (group-live 20 + chatroom-live 29).
 
@@ -164,7 +164,7 @@ Matrix completeness: **member / non-member / other-group member / teacher-owner 
 | Flag-off silent fallback | group-live → `drops the group and re-reads the legacy room when the deployment answers feature-not-enabled` |
 | Membership-denial halt | group-live → `stops polling a denied group room and explains it once` |
 | Mention chips, **both locales** | group-live → `renders localized mention chips in the bubble in both locales` |
-| Observer mode (notice, no composer) | group-live → `renders the observer notice and no composer for a teacher on a group deep link`; `keeps a teacher out of group rooms unless a deep link asks for one` |
+| Teaching presence (composer + instructor identity) | group-live → `gives a teacher on a group deep link a composer and the instructor identity`; `keeps a teacher out of group rooms unless a deep link asks for one` |
 | Polling: merge, agent status, hidden-tab pause, 429 back-off | group-live → `merges a message another member sent while this room was open`; `refreshes agent round status from a poll another member's round produced`; `pauses polling while the tab is hidden and reads immediately on return`; `keeps the thread and backs off when the history read is rate limited` *(last also F10)* |
 | Course resolution, picker, seeds, error copy, transcript replay, round/switch races, draft handling, composer gating, no-session path | chatroom-live → **all 29 cases** (regression floor for the rewritten view; the hook extraction is exercised through them) |
 
@@ -195,7 +195,7 @@ Matrix completeness: **member / non-member / other-group member / teacher-owner 
 | Store round-trip + revoke terminality | share-api → `round-trips a share through the local store and stops resolving once revoked` |
 | Unguessable ids + tolerant normalization | share-api → `mints unguessable ids and normalizes a stored database tolerantly` *(also F5)* |
 | Mint (group, legacy) with no account ids | share-api → `lets a group member mint a link scoped to the room, with no account ids in the answer`; `lets a course member mint a link for their own legacy room` |
-| Mint authz (non-member, observer, flag off, session/course) | share-api → 4 cases, see F3 |
+| Mint authz (non-member, owning teacher = member-only, flag off, session/course) | share-api → 4 cases, see F3 |
 | Revoke (creator, course-owning teacher, refusals) | share-api → 3 cases, see F3 |
 | Public page renders live, display names only | share-api → `renders the live room with display names only`; `keeps a live room current instead of freezing it at mint time` |
 | Public page not-found paths | share-api → `answers not-found for an unknown id, a revoked link, and a deleted group` |
@@ -245,8 +245,8 @@ Ranked by release risk. None of these block the current dark-flag release (`UAIS
 *Recommended:* 2–3 cases in `learning-chatroom-group-live.test.tsx` pinning the log region, the aria-live status node, and Tab order through picker → composer → send.
 
 **G2 — Reduced motion is asserted nowhere; locale breadth in the chatroom view is one case (F7).**
-§7 family 7 names reduced motion explicitly. The source uses `motion-reduce:animate-none` on the three thinking-indicator dots (lines 169–171) with no test. Locale coverage in the group chatroom is a single case (`renders localized mention chips in the bubble in both locales`); the roster, observer notice, picker, no-group notice and denial copy are asserted in zh-CN only. The teaching workspace and student dashboard each have a proper en-US case, so this gap is chatroom-specific.
-*Recommended:* one `motion-reduce` class assertion, plus one en-US case that walks roster + observer notice + denial copy.
+§7 family 7 names reduced motion explicitly. The source uses `motion-reduce:animate-none` on the three thinking-indicator dots (lines 169–171) with no test. Locale coverage in the group chatroom is a single case (`renders localized mention chips in the bubble in both locales`); the roster, instructor labels, picker, no-group notice and denial copy are asserted in zh-CN only. The teaching workspace and student dashboard each have a proper en-US case, so this gap is chatroom-specific.
+*Recommended:* one `motion-reduce` class assertion, plus one en-US case that walks roster + instructor labels + denial copy.
 
 **G3 — The share store's deliberate production 503 is untested (F9).**
 `src/lib/server/learning-chatroom-share-store.ts` refuses local-JSON writes when `VERCEL_ENV`/`NODE_ENV`/`UAIS_DEPLOYMENT_ENV` is `production` (503 at lines 140 and 226). No case in `learning-chatroom-share-api.test.ts` sets any of those, so the guard is unpinned in both directions: nothing proves production 503s, and nothing proves a non-production deployment still mints. This is the seam the CTO log lists under "known seams for release notes", so it will be read as intentional behaviour by operators — it should be a test, not just a comment.

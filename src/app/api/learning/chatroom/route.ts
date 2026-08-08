@@ -96,6 +96,7 @@ type LearningChatroomTranscriptWriteMessage = {
   agentId?: string;
   authorId?: string;
   authorName?: string;
+  authorRole?: "student" | "teacher";
 };
 
 // Who the round's student rows are attributed to. Only group rooms carry it: a
@@ -104,6 +105,7 @@ type LearningChatroomTranscriptWriteMessage = {
 type LearningChatroomMessageAuthor = {
   authorId: string;
   authorName?: string;
+  authorRole: "student" | "teacher";
 };
 
 type LearningChatroomTurnError = {
@@ -336,7 +338,6 @@ export function createLearningChatroomHistoryGetHandler(
         fetch: deps.fetch,
         courseId: room.courseId,
         ...(room.groupId ? { groupId: room.groupId } : {}),
-        intent: "read",
       });
       if (access.status === "denied") {
         return createLearningAiGuideAccessDeniedResponse({ access, traceId });
@@ -477,7 +478,6 @@ export function createLearningChatroomPostHandler(
         fetch: deps.fetch,
         courseId: body.courseId,
         ...(body.groupId ? { groupId: body.groupId } : {}),
-        intent: "write",
       });
       if (access.status === "denied") {
         return createLearningAiGuideAccessDeniedResponse({ access, traceId });
@@ -1190,9 +1190,15 @@ function createLearningChatroomTranscriptRoom(input: {
   };
 }
 
+// Attribution comes from the verified session, never from the request body: a
+// member who posted `authorRole: "teacher"` would otherwise have their message
+// rendered as instructor guidance to the whole room and to signed-out share
+// viewers. The body's author fields are dropped on the way in for the same
+// reason client-supplied agent rows are.
 function createLearningChatroomMessageAuthor(appSession: {
   account: string;
   displayName: string;
+  role: "teacher" | "student" | "admin";
 }): LearningChatroomMessageAuthor {
   const authorName = readString(appSession.displayName).slice(
     0,
@@ -1201,6 +1207,9 @@ function createLearningChatroomMessageAuthor(appSession: {
   return {
     authorId: appSession.account,
     ...(authorName ? { authorName } : {}),
+    // Admins never reach a room (the authorizer denies them), so anyone writing
+    // here is either the course teacher or an assigned member.
+    authorRole: appSession.role === "teacher" ? "teacher" : "student",
   };
 }
 
@@ -1219,6 +1228,7 @@ function createLearningChatroomTranscriptMessage(
       ? {
           authorId: author.authorId,
           ...(author.authorName ? { authorName: author.authorName } : {}),
+          authorRole: author.authorRole,
         }
       : {}),
   };
@@ -1246,6 +1256,9 @@ function createLearningChatroomHistoryMessage(
   return {
     ...replayed,
     ...(message.authorName ? { authorName: message.authorName } : {}),
+    // The room marks instructor turns; member turns carry no role so the
+    // absence is the default rather than a value the client has to compare.
+    ...(message.authorRole === "teacher" ? { authorRole: "teacher" as const } : {}),
     isSelf: message.role === "student" && message.authorId === input.account,
   };
 }

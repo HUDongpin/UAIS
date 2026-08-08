@@ -571,10 +571,15 @@ describe("POST /api/learning/chatroom/share", () => {
     expect(database.shares).toHaveLength(0);
   });
 
-  it("refuses the teacher observer: reading a group room is not publishing it", async () => {
+  it("keeps group minting member-only even though the teacher speaks in the room", async () => {
     const fixture = await createShareFixture({ groupsMode: "on" });
     const { mintShare } = createShareHandlers(fixture);
 
+    // Teaching presence let the teacher POST into the room, but publishing it is
+    // a different exposure: `/share/[shareId]` renders members' display names and
+    // messages to signed-out visitors, and a member cannot revoke a link they did
+    // not create. So minting stays member-only, pinned here explicitly so a later
+    // change to room access cannot quietly grant it.
     const response = await mintShare(
       createMintRequest(
         { courseId: fixture.courseId, groupId: fixture.groupId },
@@ -585,7 +590,9 @@ describe("POST /api/learning/chatroom/share", () => {
 
     expect(response.status).toBe(403);
     expect(body.reasonCode).toBe("share-membership-required");
-    expect(body.access.reasonCode).toBe("teacher-group-observer-read-only");
+    expect(body.access.reasonCode).toBe("teacher-group-share-member-only");
+    const database = await readLearningChatroomShareDatabase({ dataDir: fixture.dataDir });
+    expect(database.shares).toHaveLength(0);
   });
 
   it("refuses a group link while the feature flag is off", async () => {

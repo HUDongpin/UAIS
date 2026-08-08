@@ -158,15 +158,14 @@ async function isLearningChatroomShareRevocationAllowed(input: {
   }
 
   // Course ownership only - deliberately without `groupId`. A teacher's right to
-  // stop a link comes from owning the course, not from being able to observe the
-  // group, so revocation keeps working when the group is already gone.
+  // stop a link comes from owning the course, not from being in the group, so
+  // revocation keeps working when the group is already gone.
   const access = await authorizeLearningAiGuideCourseAccess({
     appSession: { account: input.appSession.account, role: input.appSession.role },
     env: input.env,
     ...(input.fetch ? { fetch: input.fetch } : {}),
     ...(input.repository ? { repository: input.repository } : {}),
     courseId: input.record.courseId,
-    intent: "read",
   });
   return (
     access.status === "authorized" &&

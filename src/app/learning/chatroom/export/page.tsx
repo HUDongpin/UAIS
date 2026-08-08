@@ -13,8 +13,8 @@ import { getUaisAppSessionUserFromCookieString } from "@/lib/server/uais-app-ses
 // route with the room's `?courseId=&classId=&groupId=`; the browser's own print
 // dialog is the PDF generator.
 //
-// Access is the same gate the chatroom GET applies for that room - member, or
-// the course-owning teacher as observer - because a printable transcript is a
+// Access is the same gate the chatroom GET applies for that room - an assigned
+// member, or the course-owning teacher - because a printable transcript is a
 // replay of the room, not a lesser artifact.
 
 const metadataByLocale = {

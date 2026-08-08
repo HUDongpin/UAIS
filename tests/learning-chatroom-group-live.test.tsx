@@ -56,7 +56,8 @@ const teacherUser: UaisAppSessionUser = {
 };
 
 const groupNoGroupCopy = "你还没有被分入小组，请联系老师。";
-const observerNoticeCopy = "教师以旁听身份查看，本页只读。";
+const instructorRowCopy = "授课教师";
+const instructorBadgeCopy = "教师";
 const groupPickerCopy = "选择小组";
 const emptyChatCopy = "暂无聊天内容。发送第一条小组消息即可开始协作。";
 
@@ -750,7 +751,7 @@ describe("learner chatroom group room UI", () => {
     expect(enChips[0].textContent).toBe("@MethodsAdvisor");
   });
 
-  it("renders the observer notice and no composer for a teacher on a group deep link", async () => {
+  it("gives a teacher on a group deep link a composer and the instructor identity", async () => {
     window.history.replaceState({}, "", "/learning/chatroom?groupId=group-three");
     const { calls } = stubFetch({
       teachingCourses: () => teacherCoursesResponse([courseA]),
@@ -769,10 +770,12 @@ describe("learner chatroom group room UI", () => {
     const { container } = renderChatroom(teacherUser);
     await screen.findByText("老师能看到这条吗？");
 
-    expect(screen.getByText(observerNoticeCopy)).toBeTruthy();
-    expect(container.querySelector("#group-message")).toBeNull();
-    expect(screen.queryByRole("button", { name: /发送/ })).toBeNull();
-    expect(screen.getByText("旁听")).toBeTruthy();
+    // Teaching presence (owner decision): the teacher speaks in the room rather
+    // than watching it, so the composer is present and the header identifies
+    // them as the instructor.
+    expect(container.querySelector("#group-message")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /发送/ })).toBeTruthy();
+    expect(screen.getByText(instructorRowCopy)).toBeTruthy();
     // The teacher's own raw group record supplies the roster before the first
     // read lands; neither shape ever carries an account id.
     const roster = rosterPanel();
@@ -790,8 +793,49 @@ describe("learner chatroom group room UI", () => {
     await screen.findByText("当前课程：大学研究方法 · 2026春");
     await settle();
 
-    expect(screen.queryByText(observerNoticeCopy)).toBeNull();
+    expect(screen.queryByText(instructorRowCopy)).toBeNull();
     expect(historyCalls(calls)[0].url).not.toContain("groupId");
+  });
+
+  it("marks the teacher's turn as instructor guidance for a member", async () => {
+    const { calls } = stubFetch({
+      teachingCourses: () => studentCoursesResponse([courseA], [groupThree]),
+      chatroomHistory: () =>
+        groupTranscriptResponse([
+          {
+            id: "stored-teacher",
+            role: "student",
+            content: "记得先确定变量再收集数据。",
+            authorName: "吴亚军",
+            authorRole: "teacher",
+            isSelf: false,
+          },
+          {
+            id: "stored-peer",
+            role: "student",
+            content: "收到，我来整理编码表。",
+            authorName: "林若晨",
+            isSelf: false,
+          },
+        ]),
+    });
+
+    renderChatroom(studentUser);
+    const teacherText = await screen.findByText("记得先确定变量再收集数据。");
+    const peerText = await screen.findByText("收到，我来整理编码表。");
+
+    // Only the teacher's row is badged: a classmate's turn carries no role, so
+    // the badge marks guidance rather than decorating every non-self message.
+    const teacherBubble = teacherText.closest("article");
+    const peerBubble = peerText.closest("article");
+    expect(
+      teacherBubble?.querySelector('[data-uais-chatroom-instructor="true"]'),
+    ).toBeTruthy();
+    expect(teacherBubble?.textContent).toContain(instructorBadgeCopy);
+    expect(
+      peerBubble?.querySelector('[data-uais-chatroom-instructor="true"]'),
+    ).toBeNull();
+    expect(historyCalls(calls)[0].url).toContain("groupId=group-three");
   });
 
   it("merges a message another member sent while this room was open", async () => {

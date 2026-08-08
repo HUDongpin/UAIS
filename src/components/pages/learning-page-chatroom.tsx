@@ -18,8 +18,8 @@
 import Link from "next/link";
 import { useEffect, useRef, type FormEvent } from "react";
 import { ArrowLeft } from "@phosphor-icons/react/dist/ssr/ArrowLeft";
+import { ChalkboardTeacher } from "@phosphor-icons/react/dist/ssr/ChalkboardTeacher";
 import { ChatsCircle } from "@phosphor-icons/react/dist/ssr/ChatsCircle";
-import { Eye } from "@phosphor-icons/react/dist/ssr/Eye";
 import { FilePdf } from "@phosphor-icons/react/dist/ssr/FilePdf";
 import { GraduationCap } from "@phosphor-icons/react/dist/ssr/GraduationCap";
 import { LinkSimple } from "@phosphor-icons/react/dist/ssr/LinkSimple";
@@ -150,7 +150,12 @@ export function HumanAiChatroom({ summary }: HumanAiChatroomProps) {
               </div>
             ) : (
               room.displayMessages.map((message) => (
-                <MessageRow key={message.id} message={message} locale={locale} />
+                <MessageRow
+                  key={message.id}
+                  message={message}
+                  locale={locale}
+                  instructorLabel={t.learning.groupInstructorBadge}
+                />
               ))
             )}
             {room.agentsPending ? (
@@ -175,21 +180,7 @@ export function HumanAiChatroom({ summary }: HumanAiChatroomProps) {
             ) : null}
           </div>
 
-          {room.isObserver ? (
-            <div className="border-t border-[var(--border)] bg-[var(--surface)] p-4">
-              <p className="flex items-center gap-2 rounded-2xl border border-dashed border-[var(--border)] bg-[var(--surface-elevated)] px-4 py-3 text-sm font-medium text-[var(--muted)]">
-                <Eye
-                  size={17}
-                  weight="duotone"
-                  className="shrink-0 text-[var(--accent)]"
-                  aria-hidden="true"
-                />
-                {t.learning.groupObserverNotice}
-              </p>
-            </div>
-          ) : (
-            <Composer room={room} />
-          )}
+          <Composer room={room} />
         </section>
 
         <AgentDock room={room} />
@@ -240,10 +231,10 @@ function RoomHeader({
           <h1 className="truncate text-lg font-semibold text-[var(--foreground)]">
             {room.roomTitle}
           </h1>
-          {room.isObserver ? (
+          {room.isInstructor ? (
             <span className="inline-flex items-center gap-1 rounded-full border border-[var(--accent-border)] bg-[var(--accent-soft)] px-2 py-0.5 text-xs font-semibold text-[var(--accent)]">
-              <Eye size={13} weight="duotone" aria-hidden="true" />
-              {t.learning.groupObserver}
+              <ChalkboardTeacher size={13} weight="duotone" aria-hidden="true" />
+              {t.learning.groupInstructorRow}
             </span>
           ) : null}
           {room.roomMembers.length > 0 ? (
@@ -577,7 +568,7 @@ function AgentDock({ room }: { room: LearningChatroomController }) {
             <button
               key={agent.id}
               type="button"
-              disabled={room.isObserver}
+              disabled={room.composerDisabled}
               onClick={() => room.mentionAgent(handle)}
               className="rounded-2xl border border-[var(--border)] bg-[var(--surface-elevated)] p-3 text-left outline-none transition hover:border-[var(--accent)] hover:bg-[var(--accent-soft)] active:translate-y-px focus-visible:ring-2 focus-visible:ring-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:border-[var(--border)] disabled:hover:bg-[var(--surface-elevated)]"
             >
@@ -675,7 +666,15 @@ function Composer({ room }: { room: LearningChatroomController }) {
   );
 }
 
-function MessageRow({ message, locale }: { message: ChatMessage; locale: Locale }) {
+function MessageRow({
+  message,
+  locale,
+  instructorLabel,
+}: {
+  message: ChatMessage;
+  locale: Locale;
+  instructorLabel: string;
+}) {
   const isSelf = message.self === true;
   const isAgent = message.kind === "agent";
   const authorName = localizedText(message.author, locale);
@@ -716,11 +715,24 @@ function MessageRow({ message, locale }: { message: ChatMessage; locale: Locale 
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p
               className={[
-                "text-sm font-semibold",
+                "flex items-center gap-1.5 text-sm font-semibold",
                 isAgent ? "text-[var(--accent)]" : "text-[var(--foreground)]",
               ].join(" ")}
             >
               {authorName}
+              {/* Marks the course teacher's turn so a member can tell
+                  instructor guidance from a classmate's message. The viewer's
+                  own rows carry no header, so this only ever labels someone
+                  else's message. */}
+              {message.instructor ? (
+                <span
+                  data-uais-chatroom-instructor="true"
+                  className="inline-flex items-center gap-1 rounded-full border border-[var(--accent-border)] bg-[var(--accent-soft)] px-1.5 py-0.5 text-xs font-semibold text-[var(--accent)]"
+                >
+                  <ChalkboardTeacher size={12} weight="duotone" aria-hidden="true" />
+                  {instructorLabel}
+                </span>
+              ) : null}
             </p>
             <span className="text-xs font-medium text-[var(--muted)]">
               {message.time}

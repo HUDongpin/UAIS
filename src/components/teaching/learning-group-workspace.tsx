@@ -209,8 +209,8 @@ export function LearningGroupManager({
                         href={createLearningGroupChatroomHref(group)}
                         aria-label={
                           locale === "zh-CN"
-                            ? `旁听${group.groupName}聊天室`
-                            : `Observe the ${group.groupName} chatroom`
+                            ? `进入${group.groupName}聊天室`
+                            : `Open the ${group.groupName} chatroom`
                         }
                         className="inline-flex h-9 items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface-soft)] px-3 text-sm font-semibold text-[var(--foreground)] outline-none transition hover:bg-[var(--surface-elevated)] focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
                       >

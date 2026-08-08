@@ -20,11 +20,11 @@ import type { TeachingCourseManagementRepository } from "@/lib/server/teaching-c
 // A share record is a capability, not an export: it names a room, and
 // `/share/[shareId]` renders that room live. So minting is gated by exactly the
 // access the chatroom GET requires for the same room - course gate, group
-// membership when `groupId` is present, and the feature flag - with one
-// deliberate difference: the teacher observer may READ a group room but may not
-// mint a public link to it. Minting is member-only (plan D8); a teacher who
-// wants the room off the platform uses the print view, and the course-owning
-// teacher can still revoke any link (sibling DELETE route).
+// membership when `groupId` is present, and the feature flag. Participants mint;
+// since the course-owning teacher participates in their own course's group
+// rooms, they may mint one too, which grants no exposure they did not already
+// have - they can read the room, and they can revoke any link in the course
+// (sibling DELETE route).
 export const dynamic = "force-dynamic";
 
 type LearningChatroomShareMintHandlerDeps = {
@@ -119,16 +119,32 @@ export function createLearningChatroomShareMintPostHandler(
         ...(deps.courseRepository ? { repository: deps.courseRepository } : {}),
         courseId: body.courseId,
         ...(body.groupId ? { groupId: body.groupId } : {}),
-        // `write` is what makes this member-only: the teacher observer is
-        // read-only in a group room, so the same intent the round uses denies a
-        // teacher-minted public link without a second rule to keep in sync.
-        intent: "write",
       });
       if (access.status === "denied") {
         return createAccessDeniedResponse({
           traceId,
           reasonCode: "share-membership-required",
           access,
+        });
+      }
+
+      // Minting a group link stays MEMBER-ONLY, even though the teacher is a
+      // full participant in the room. Reading a room as its course owner and
+      // publishing it to a signed-out URL are different exposures, and the
+      // members - whose display names and messages the public page renders -
+      // cannot revoke a link they did not create. A teacher who needs the room
+      // off-platform uses the print view instead. This check is explicit rather
+      // than riding the authorizer, so the rule cannot be lost again by a
+      // change to the room's own access policy.
+      if (body.groupId && access.reasonCode === "teacher-group-participant-approved") {
+        return createAccessDeniedResponse({
+          traceId,
+          reasonCode: "share-membership-required",
+          access: {
+            ...access,
+            status: "denied",
+            reasonCode: "teacher-group-share-member-only",
+          },
         });
       }
 

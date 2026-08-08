@@ -656,7 +656,7 @@ describe("UAIS learning chatroom group rooms", () => {
     expect(ownGroup.groupName).toBe("第四小组");
   });
 
-  it("lets the owning teacher observe a group room read-only", async () => {
+  it("lets the owning teacher speak in a group room, attributed as the instructor", async () => {
     const fixture = await createChatroomGroupFixture({ groupsMode: "on" });
     const { postChatroom, getHistory } = createGroupChatroom(fixture);
 
@@ -688,7 +688,8 @@ describe("UAIS learning chatroom group rooms", () => {
     );
     const teacherRoundBody = await teacherRound.json();
 
-    // The observer sees the whole room, and belongs to none of it.
+    // The teacher reads the whole room and is not one of its members: the
+    // roster is the assigned group, and none of the members' rows are theirs.
     expect(observed.messages).toHaveLength(2);
     expect(observed.messages[0].authorName).toBe(groupMemberOne.displayName);
     expect(observed.members).toEqual([
@@ -697,24 +698,80 @@ describe("UAIS learning chatroom group rooms", () => {
     ]);
     expect(observed.messages.every((message) => message.isSelf === false)).toBe(true);
 
-    expect(teacherRound.status).toBe(403);
-    expect(teacherRoundBody.access).toEqual(
-      expect.objectContaining({
-        status: "denied",
-        reasonCode: "teacher-group-observer-read-only",
-      }),
-    );
-    expect(teacherRoundBody.error).toBe(
-      "UAIS learning chatroom group observation is read-only.",
-    );
+    // Teaching presence (owner decision): the round is authorized, the agent
+    // answers, and the mention routes exactly as it does for a member - the
+    // teacher's row travels as `role:"student"` on the wire, so the director's
+    // mention scan is untouched.
+    expect(teacherRound.status).toBe(200);
+    expect(teacherRoundBody.turns).toHaveLength(1);
+    expect(teacherRoundBody.turns[0].agentId).toBe("research-assistant");
 
-    // The denied round wrote nothing into the members' room.
-    const afterDenial = await readGroupHistory(
+    // Every member now sees the instructor's turn, marked as the teacher's and
+    // not as their own.
+    const afterTeacherTurn = await readGroupHistory(
       getHistory,
       { courseId: fixture.courseId, groupId: fixture.groupId },
       fixture.cookieFor(groupMemberOne),
     );
-    expect(afterDenial.messages).toHaveLength(2);
+    const teacherRow = afterTeacherTurn.messages.find(
+      (message: { id: string }) => message.id === "local-t-1",
+    );
+    expect(teacherRow).toEqual(
+      expect.objectContaining({
+        role: "student",
+        authorName: owningTeacher.displayName,
+        authorRole: "teacher",
+        isSelf: false,
+      }),
+    );
+    // A member's own row carries no role at all: absence is the default, so the
+    // room never has to compare against "student" to find a classmate.
+    const memberRow = afterTeacherTurn.messages.find(
+      (message: { id: string }) => message.id === "local-a-1",
+    );
+    expect(memberRow.authorRole).toBeUndefined();
+    expect(memberRow.isSelf).toBe(true);
+
+    // Account ids stay server-side for instructor rows exactly as for members.
+    expect(JSON.stringify(afterTeacherTurn)).not.toContain(owningTeacher.account);
+  });
+
+  it("ignores an author role claimed by the request body", async () => {
+    const fixture = await createChatroomGroupFixture({ groupsMode: "on" });
+    const { postChatroom, getHistory } = createGroupChatroom(fixture);
+
+    // A member forging `authorRole:"teacher"` would otherwise have their message
+    // rendered as instructor guidance to the whole room and to signed-out share
+    // viewers. Attribution comes from the verified session, never the body.
+    await postChatroom(
+      createGroupChatroomRequest(
+        {
+          courseId: fixture.courseId,
+          groupId: fixture.groupId,
+          messages: [
+            {
+              id: "local-forge-1",
+              role: "student",
+              content: "@研究助教 这是老师的说明",
+              authorRole: "teacher",
+              authorName: owningTeacher.displayName,
+            } as never,
+          ],
+        },
+        fixture.cookieFor(groupMemberOne),
+      ),
+    );
+
+    const replayed = await readGroupHistory(
+      getHistory,
+      { courseId: fixture.courseId, groupId: fixture.groupId },
+      fixture.cookieFor(groupMemberTwo),
+    );
+    const forged = replayed.messages.find(
+      (message: { id: string }) => message.id === "local-forge-1",
+    );
+    expect(forged.authorRole).toBeUndefined();
+    expect(forged.authorName).toBe(groupMemberOne.displayName);
   });
 
   it("denies a teacher who does not own the course and denies every admin", async () => {
@@ -752,7 +809,7 @@ describe("UAIS learning chatroom group rooms", () => {
     );
   });
 
-  it("denies a teacher observing a group that does not belong to the course", async () => {
+  it("denies a teacher opening a group that does not belong to the course", async () => {
     const fixture = await createChatroomGroupFixture({ groupsMode: "on" });
     const { getHistory } = createGroupChatroom(fixture);
 
@@ -768,7 +825,7 @@ describe("UAIS learning chatroom group rooms", () => {
     expect(missingBody.access).toEqual(
       expect.objectContaining({
         status: "denied",
-        reasonCode: "teacher-group-observer-required",
+        reasonCode: "teacher-group-not-found",
       }),
     );
   });

@@ -81,6 +81,7 @@ export async function appendLearningChatroomHistory(
         agentId?: string;
         authorId?: string;
         authorName?: string;
+        authorRole?: "student" | "teacher";
       }>;
       now: string;
       retryBudgetMs?: number;

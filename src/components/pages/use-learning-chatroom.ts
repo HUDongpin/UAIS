@@ -127,8 +127,8 @@ export type LearningChatroomController = {
   /** Groups exist for this caller, but not in the room they landed in. */
   showNoGroupNotice: boolean;
 
-  /** Teacher reading a group room: read-only, no composer. */
-  isObserver: boolean;
+  /** The course teacher is in one of their own group rooms, as a participant. */
+  isInstructor: boolean;
   roomTitle: string;
   roomMembers: ChatroomRoomMember[];
   agentStatusById: Record<string, ChatroomAgentStatus>;
@@ -311,7 +311,10 @@ export function useLearningChatroom(): LearningChatroomController {
     !needsGroupChoice &&
     (deepLinkGroupMissing || (groups.length > 0 && groupOptions.length === 0));
 
-  const isObserver = Boolean(activeGroup) && sessionUser?.role === "teacher";
+  // The course teacher is a full participant in their own course's group rooms
+  // (owner decision: teaching presence). This flag no longer gates the
+  // composer - it only tells the room to identify the viewer as the instructor.
+  const isInstructor = Boolean(activeGroup) && sessionUser?.role === "teacher";
 
   const fallbackReason = activeCourse?.fallbackReason;
   // The demo fallback is a read-only preview for a learner: without an approved
@@ -330,7 +333,6 @@ export function useLearningChatroom(): LearningChatroomController {
   const composerDisabled =
     resolution.status !== "ready" ||
     demoPreviewOnly ||
-    isObserver ||
     needsGroupChoice ||
     roomAccessNotice !== null;
   const fallbackNotice =
@@ -458,7 +460,7 @@ export function useLearningChatroom(): LearningChatroomController {
         setHaltedRoomKey(roomKey);
         setRoomAccessNotice(
           result.reasonCode === "student-group-membership-required" ||
-            result.reasonCode === "teacher-group-observer-required"
+            result.reasonCode === "teacher-group-not-found"
             ? t.learning.groupNoGroup
             : t.learning.agentAccessDenied,
         );
@@ -722,9 +724,9 @@ export function useLearningChatroom(): LearningChatroomController {
     if (agentsPending) {
       return;
     }
-    // A course must resolve before the room accepts messages; the demo fallback
-    // stays read-only for anyone the route would answer 403, and a teacher
-    // observing a group room has no write path at all.
+    // A course must resolve before the room accepts messages, and the demo
+    // fallback stays read-only for anyone the route would answer 403. The course
+    // teacher is NOT gated here: they participate in their own group rooms.
     if (!activeCourse || composerDisabled) {
       return;
     }
@@ -758,6 +760,10 @@ export function useLearningChatroom(): LearningChatroomController {
           "zh-CN": trimmedDraft,
           "en-US": trimmedDraft,
         },
+        // No `instructor` mark here: the optimistic row is the sender's own, and
+        // a self row renders without the author header the badge lives in. The
+        // badge exists for the OTHER members, who receive this message through a
+        // GET carrying the server-stamped `authorRole`.
         time: locale === "zh-CN" ? "刚刚" : "Now",
         self: true,
       },
@@ -792,8 +798,8 @@ export function useLearningChatroom(): LearningChatroomController {
     // reader the route could only refuse is told here instead of being sent to a
     // page that refuses them. Every export/share outcome - success or not - is
     // written to `notice`, because that is the line the room header renders next
-    // to these two buttons; `error` belongs to the composer, which an observing
-    // teacher does not have.
+    // to these two buttons; `error` belongs to the composer and would put an
+    // export failure under the wrong control.
     if (!sessionUser) {
       setNotice(t.learning.exportSignInRequired);
       return;
@@ -879,7 +885,7 @@ export function useLearningChatroom(): LearningChatroomController {
     needsGroupChoice,
     selectGroup,
     showNoGroupNotice,
-    isObserver,
+    isInstructor,
     roomTitle,
     roomMembers,
     agentStatusById,
@@ -1141,6 +1147,7 @@ type ChatroomHistoryMessage = {
   content?: unknown;
   agentId?: unknown;
   authorName?: unknown;
+  authorRole?: unknown;
   isSelf?: unknown;
   createdAt?: unknown;
 };
@@ -1306,6 +1313,9 @@ function toStoredChatMessage(
       text: { "zh-CN": content, "en-US": content },
       time,
       self: isSelf,
+      // Only the server marks a turn as the teacher's; the client never infers
+      // it from the reader's own role.
+      ...(message.authorRole === "teacher" ? { instructor: true } : {}),
     };
   }
 

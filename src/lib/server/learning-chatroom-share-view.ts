@@ -275,9 +275,6 @@ export async function loadLearningChatroomExportDocument(
       ...(input.courseRepository ? { repository: input.courseRepository } : {}),
       courseId: input.courseId,
       ...(input.groupId ? { groupId: input.groupId } : {}),
-      // A print view is a replay, so the teacher observer is allowed exactly as
-      // on GET; nothing here can write to the room.
-      intent: "read",
     });
   } catch {
     return { status: "unavailable" };

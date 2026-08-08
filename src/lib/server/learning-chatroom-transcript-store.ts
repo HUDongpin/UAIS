@@ -36,12 +36,15 @@ export type LearningChatroomTranscriptMessage = {
   content: string;
   agentId?: string;
   // Schema v2 author attribution, written only for group rooms. `authorId` is
-  // the session account of the student who sent the row and never leaves the
-  // server; `authorName` is the display-name snapshot the room renders. Both
-  // are absent on agent rows and on every v1 row, which is why they are
-  // optional rather than defaulted: a per-student room already knew who spoke.
+  // the session account of the human who sent the row and never leaves the
+  // server; `authorName` is the display-name snapshot the room renders;
+  // `authorRole` separates a member's turn from the course teacher's, so the
+  // room can mark instructor guidance. All three are absent on agent rows and
+  // on every v1 row, which is why they are optional rather than defaulted: a
+  // per-student room already knew who spoke.
   authorId?: string;
   authorName?: string;
+  authorRole?: "student" | "teacher";
   createdAt: string;
 };
 
@@ -266,6 +269,7 @@ export async function appendLearningChatroomTranscriptMessages(input: {
     agentId?: string;
     authorId?: string;
     authorName?: string;
+    authorRole?: "student" | "teacher";
     createdAt?: string;
   }>;
   now?: string;
@@ -606,6 +610,13 @@ function normalizeLearningChatroomTranscriptMessage(
           ),
         }
       : {}),
+    // Only the two known roles survive a readback. Anything else - including a
+    // value a forged or corrupted snapshot might carry - drops to absent rather
+    // than being trusted, so a stored row can never claim instructor authority
+    // that the session did not grant when it was written.
+    ...(record.authorRole === "student" || record.authorRole === "teacher"
+      ? { authorRole: record.authorRole }
+      : {}),
     createdAt: requireIsoDate(record.createdAt, "createdAt"),
   };
 }
@@ -618,6 +629,7 @@ function normalizeIncomingMessages(
     agentId?: string;
     authorId?: string;
     authorName?: string;
+    authorRole?: "student" | "teacher";
     createdAt?: string;
   }>,
   now: string,

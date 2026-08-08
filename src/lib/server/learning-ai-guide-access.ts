@@ -18,8 +18,11 @@ type LearningAiGuideCourseAccessReason =
   // `student-group-membership-required`: a learner must not be able to probe
   // which group ids exist by reading the denial apart.
   | "student-group-membership-required"
-  | "teacher-group-observer-required"
-  | "teacher-group-observer-read-only"
+  | "teacher-group-not-found"
+  // Publishing, not reading: the teacher participates in a group room but may
+  // not mint its public share link. Raised by the share route, which keeps that
+  // rule explicitly rather than deriving it from room access.
+  | "teacher-group-share-member-only"
   | "feature-not-enabled";
 
 type LearningAiGuideCourseAccessActor = {
@@ -53,7 +56,7 @@ export type LearningAiGuideCourseAccessDecision =
         | "teacher-course-ownership-approved"
         | "teacher-demo-published-playback-approved"
         | "student-group-membership-approved"
-        | "teacher-group-observer-approved";
+        | "teacher-group-participant-approved";
       actor: LearningAiGuideCourseAccessActor;
       resource: LearningAiGuideCourseAccessResource;
       membershipId?: string;
@@ -81,10 +84,6 @@ export async function authorizeLearningAiGuideCourseAccess(input: {
   // exactly as it always has and a second group gate is layered on top of the
   // SAME snapshot, so a group room costs no extra store read.
   groupId?: string;
-  // `write` is a round (POST); `read` is a history replay (GET). The distinction
-  // only matters for the teacher observer, who may read a group room but not
-  // speak in it at launch.
-  intent?: "read" | "write";
   fetch?: typeof fetch;
   repository?: TeachingCourseManagementRepository;
 }): Promise<LearningAiGuideCourseAccessDecision> {
@@ -153,18 +152,16 @@ export async function authorizeLearningAiGuideCourseAccess(input: {
 
     if (input.groupId) {
       if (!group) {
-        return createDeniedAccess("teacher-group-observer-required", actor, resource);
-      }
-      if (input.intent === "write") {
-        // Read-only observer at launch (owner decision): the teacher sees the
-        // room but does not speak in it, so the composer has a server-side
-        // counterpart rather than only a hidden UI control.
-        return createDeniedAccess("teacher-group-observer-read-only", actor, resource);
+        return createDeniedAccess("teacher-group-not-found", actor, resource);
       }
 
+      // The course-owning teacher is a full participant in their own course's
+      // group rooms - they read and they speak (owner decision: teaching
+      // presence). Their turns are attributed as the instructor by the route,
+      // which stamps `authorRole` from the session rather than from the body.
       return {
         status: "authorized",
-        reasonCode: "teacher-group-observer-approved",
+        reasonCode: "teacher-group-participant-approved",
         actor,
         resource,
         group: createLearningChatroomGroupProjection(group, actor.actorId),
@@ -303,11 +300,11 @@ export function createLearningAiGuideAccessDeniedMessage(
   if (reasonCode === "student-group-membership-required") {
     return "UAIS learning chatroom requires assigned group membership.";
   }
-  if (reasonCode === "teacher-group-observer-required") {
+  if (reasonCode === "teacher-group-not-found") {
     return "UAIS learning chatroom group was not found in this course.";
   }
-  if (reasonCode === "teacher-group-observer-read-only") {
-    return "UAIS learning chatroom group observation is read-only.";
+  if (reasonCode === "teacher-group-share-member-only") {
+    return "UAIS learning chatroom group share links are minted by group members.";
   }
   if (reasonCode === "feature-not-enabled") {
     return "UAIS learning chatroom group rooms are not enabled.";
