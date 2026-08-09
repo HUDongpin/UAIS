@@ -107,9 +107,9 @@ Condensed from `coordination/reports/2026-08-08-chatroom-groups-flag-on-smoke-an
 | Blocker | State |
 | --- | --- |
 | **B1** share backend | **Closed and committed** (`80f377f`), build gate now run |
-| **B2** external storage env | Open — `UAIS_TEACHING_COURSE_MANAGEMENT_BACKEND` and the `UAIS_EXTERNAL_STORAGE_*` family sit in the quarantined-legacy tier and must be promoted and set in deployed lanes (S19/S12 own the catalog edit) |
-| **B3** transcript schema v2 | Open — the external-storage service must accept `uais-learning-chatroom-transcripts-v2` or every write is rejected; confirm the topology (in-repo routes vs separately deployed service) first |
-| **B4** flag parity | Open — `UAIS_LEARNING_CHATROOM_GROUPS_MODE` must be the literal `on` in the target environment |
+| **B2** external storage env | Open, now **checkable** — `npm run release:chatroom-readiness` reports the selector, endpoint scheme and token length against any environment without printing a value. Still needs S19/S12 to promote the names and set them in the deployed lane. |
+| **B3** transcript schema v2 | Proven for the in-repo topology (a suite drives v1 in / v2 out through the real handlers) and now **verifiable for a separately deployed service**: `release:chatroom-readiness --probe` asks the service for its served `schemaVersion` and blocks on a mismatch or an unreachable resource. |
+| **B4** flag parity | Open, now **caught before the flip** — the preflight rejects `true`/`1`/`yes`/`enabled` with an explicit note and accepts exactly what `isLearningChatroomGroupsEnabled` accepts, pinned by a test against that reader. |
 | **B5** rate limits | Accepted for launch — limiters are per serverless instance |
 
 Two further decisions the runtime survey surfaced, which are not in the B-list and should be:
@@ -143,6 +143,8 @@ Ordered by user-visible impact. None block a dark-flag release.
 Carry these into operator-facing notes so they are not rediscovered as bugs:
 
 - A throttled signed-out `/share` viewer receives a 200 HTML "try again later" page rather than a real 429; an App Router page cannot emit one. The storage reads are still skipped, so the protection is intact and only the status code is imprecise.
+- **Agent providers are no longer a single point of failure.** Each chatroom agent names a preferred provider role and the room holds a completer for every role the deployment configured; a turn falls over to another configured provider when its own fails, is rate limited, or has no key at all. A round is refused only when NO provider is configured. Failover is charged against the same round budget, and the Qwen path carries a route-side timeout because that client takes none.
+
 - The transcript PDF is ~1.4 MB because the GB2312-subset CJK face is embedded whole; runtime subsetting produces broken CJK, so build-time subsetting is deliberate. Characters outside GB2312 render blank.
 - All rate limiters are in-process per serverless instance, so the effective limit is the configured value times the instance count.
 
