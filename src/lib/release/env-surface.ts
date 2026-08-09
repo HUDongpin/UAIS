@@ -421,9 +421,9 @@ export const uaisEnvSurfaceCatalog = [
     owner: "S19/S12",
     valueKind: "storage-backend",
     serverOnly: true,
-    productionDefault: "required",
+    productionDefault: "optional",
     purpose:
-      "Selects the durable store for courses, chatroom transcripts and share links. Left unset it means local JSON, which every one of those stores refuses in a production runtime - so group rooms 503 on first use.",
+      "Selects the durable store for courses, chatroom transcripts and share links. Optional because a production runtime with UAIS_CORE_DATABASE_URL already defaults to Postgres; set it to `external` only to choose the external-storage service instead.",
   },
   {
     name: "UAIS_EXTERNAL_STORAGE_BASE_URL",
@@ -431,9 +431,9 @@ export const uaisEnvSurfaceCatalog = [
     owner: "S19/S12",
     valueKind: "base-url",
     serverOnly: true,
-    productionDefault: "required",
+    productionDefault: "optional",
     purpose:
-      "HTTPS base URL of the external storage service the durable stores read and write. Required whenever the backend selector is `external`.",
+      "HTTPS base URL of the external storage service. Required ONLY when the backend selector is `external`; the default Postgres path needs no endpoint.",
   },
   {
     name: "UAIS_EXTERNAL_STORAGE_ACCESS_TOKEN",
@@ -441,9 +441,9 @@ export const uaisEnvSurfaceCatalog = [
     owner: "S19/S12",
     valueKind: "secret",
     serverOnly: true,
-    productionDefault: "required",
+    productionDefault: "optional",
     purpose:
-      "Bearer token for the external storage service. At least 32 characters; travels on every storage call, which is why the endpoint must be HTTPS.",
+      "Bearer token for the external storage service, at least 32 characters. Required ONLY when the backend selector is `external`; it travels on every storage call, which is why that endpoint must be HTTPS.",
   },
   ...createQuarantinedLegacyEntries([
     "UAIS_TEACHER_AUTH_PROVIDER",

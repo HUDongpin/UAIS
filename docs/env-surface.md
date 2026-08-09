@@ -18,12 +18,15 @@ or optional live AI work. It does not contain real values and it does not inspec
 
 - `active-production`: core auth, managed Postgres, LRS, Sentry, uptime, and
   durable-storage variables that may be part of a production POC deployment after
-  S19/S22 approval. The storage trio -
-  `UAIS_TEACHING_COURSE_MANAGEMENT_BACKEND`, `UAIS_EXTERNAL_STORAGE_BASE_URL` and
-  `UAIS_EXTERNAL_STORAGE_ACCESS_TOKEN` - was promoted out of quarantine when group
-  chatrooms made durable storage non-optional: courses, chatroom transcripts and
-  share links all refuse local JSON in a production runtime, so an unset selector
-  is a 503 on the learner's first message rather than a fallback. Verify them with
+  S19/S22 approval. Durable storage is not optional once group chatrooms are
+  live - courses, chatroom transcripts and share links all refuse local JSON in a
+  production runtime - but it needs no storage-specific configuration: a
+  production runtime with `UAIS_CORE_DATABASE_URL` persists them on the managed
+  Postgres by default. The storage trio
+  (`UAIS_TEACHING_COURSE_MANAGEMENT_BACKEND`, `UAIS_EXTERNAL_STORAGE_BASE_URL`,
+  `UAIS_EXTERNAL_STORAGE_ACCESS_TOKEN`) left quarantine because it is now a
+  supported production choice rather than a legacy name, and is required only
+  when a deployment selects `external` instead. Verify either path with
   `npm run release:chatroom-readiness`.
 - `optional-live-ai`: DeepSeek, DashScope/Qwen, AI access, and live-AI spend
   guard variables. The provider credentials stay blocked until the owner approves

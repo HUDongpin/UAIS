@@ -23,6 +23,21 @@ import {
 // snapshot row guarded by an optimistic revision, replaced inside a transaction
 // that takes FOR UPDATE first.
 
+// Test seam. The store reaches a real Postgres through `createUaisCoreDatabase`;
+// injecting that factory lets a suite drive the SQL shape, the revision guard
+// and the connection cleanup without a server, which is the difference between
+// "this compiles" and "this issues the statements it claims to".
+export type LearningChatroomPostgresClientFactory = (input: {
+  env: Record<string, string | undefined>;
+  max?: number;
+}) => {
+  sql: {
+    (strings: TemplateStringsArray, ...values: unknown[]): Promise<unknown[]>;
+    begin: (run: (sql: never) => Promise<void>) => Promise<void>;
+    end: (options?: { timeout?: number }) => Promise<void>;
+  };
+};
+
 const snapshotKey = "default";
 
 const postgresLearningChatroomTranscriptStorage: LearningChatroomTranscriptStorageDescriptor =
@@ -33,6 +48,7 @@ const postgresLearningChatroomTranscriptStorage: LearningChatroomTranscriptStora
 
 export function createUaisLearningChatroomTranscriptPostgresRepository(input: {
   env: Record<string, string | undefined>;
+  createDatabase?: LearningChatroomPostgresClientFactory;
 }): LearningChatroomTranscriptRepository {
   const readiness = getUaisCoreDatabaseReadiness(input.env);
   if (readiness.status !== "ready") {
@@ -45,7 +61,7 @@ export function createUaisLearningChatroomTranscriptPostgresRepository(input: {
   return {
     storage: postgresLearningChatroomTranscriptStorage,
     read: async () => {
-      const client = createUaisCoreDatabase({ env: input.env, max: 1 });
+      const client = (input.createDatabase ?? createUaisCoreDatabase)({ env: input.env, max: 1 });
       try {
         const rows = await client.sql`
           SELECT database, revision
@@ -68,7 +84,7 @@ export function createUaisLearningChatroomTranscriptPostgresRepository(input: {
     write: async ({ database, expectedRevision }) => {
       const normalizedDatabase = normalizeLearningChatroomTranscriptDatabase(database);
       const revision = createSnapshotRevision(normalizedDatabase);
-      const client = createUaisCoreDatabase({ env: input.env, max: 1 });
+      const client = (input.createDatabase ?? createUaisCoreDatabase)({ env: input.env, max: 1 });
       try {
         await client.sql.begin(async (sql: TransactionSql) => {
           const rows = await sql`
