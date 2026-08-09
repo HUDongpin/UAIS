@@ -42,7 +42,10 @@ Recorded here because most "the page is broken" reports on these two surfaces tu
 
 ## 3. Functional gaps, highest value first
 
-### 3.1 Teaching writes are unreachable from the UI — **open, S12 decision**
+### 3.1 Teaching writes are unreachable from the UI — **RESOLVED 2026-08-09**
+
+> Decided and implemented the same day: a local-runtime-only login bridge mints the signed teacher session, with no development fallback for the signing secret. See `coordination/reports/2026-08-09-nonproduction-teacher-auth-login-bridge-decision.md`. The description below is retained as the problem statement.
+
 
 Every teaching mutation requires the HMAC-signed teacher cookie pair verified with `UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET`: create course, create class, approve membership, `POST /api/teaching/operations`, the audit readback, and course-cover. `/login` issues only the app-session cookie, which is accepted by exactly one endpoint — `GET /api/teaching/courses`, via its `readAuthenticatedAppSessionTeacher` fallback.
 
