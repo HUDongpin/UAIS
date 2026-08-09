@@ -6,6 +6,7 @@ import {
   createLearningChatroomGroupsDisabledAccessDecision,
   type LearningAiGuideCourseAccessDecision,
 } from "@/lib/server/learning-ai-guide-access";
+import { isLearningChatroomGroupsEnabled } from "@/lib/server/learning-chatroom-groups-flag";
 import {
   createLearningChatroomShare,
   LearningChatroomShareStoreError,
@@ -100,7 +101,7 @@ export function createLearningChatroomShareMintPostHandler(
         );
       }
 
-      if (body.groupId && !isLearningChatroomGroupsModeEnabled(env)) {
+      if (body.groupId && !isLearningChatroomGroupsEnabled(env)) {
         return createAccessDeniedResponse({
           traceId,
           reasonCode: "share-membership-required",
@@ -253,10 +254,6 @@ function readRequestOrigin(request: Request) {
       ? forwardedProto
       : url.protocol.replace(":", "");
   return `${protocol}://${host}`;
-}
-
-function isLearningChatroomGroupsModeEnabled(env: Record<string, string | undefined>) {
-  return env.UAIS_LEARNING_CHATROOM_GROUPS_MODE?.trim().toLowerCase() === "on";
 }
 
 function createAccessDeniedResponse(input: {

@@ -267,7 +267,7 @@ export async function loadLearningChatroomExportDocument(
   // Same gate the chatroom GET applies, in the same order: the flag is checked
   // before authorization so a deployment with group rooms off answers the same
   // way whether or not the caller would have been a member.
-  if (input.groupId && !isLearningChatroomGroupsModeEnabled(input.env)) {
+  if (input.groupId && !isLearningChatroomGroupsEnabled(input.env)) {
     return { status: "denied", reasonCode: "feature-not-enabled" };
   }
 
@@ -422,8 +422,4 @@ export function formatChatroomTimestamp(value: string) {
     return value;
   }
   return `${new Date(parsed).toISOString().slice(0, 16).replace("T", " ")} UTC`;
-}
-
-function isLearningChatroomGroupsModeEnabled(env: Record<string, string | undefined>) {
-  return env.UAIS_LEARNING_CHATROOM_GROUPS_MODE?.trim().toLowerCase() === "on";
 }
