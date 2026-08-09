@@ -131,6 +131,71 @@ describe("TeachingOperationPage", () => {
     );
   });
 
+  it("carries the selected course through side-menu navigation", () => {
+    render(
+      <TeachingOperationPage
+        action="manage"
+        operationId="knowledge-base"
+        selectedCourseId="teacher-research-methods"
+      />,
+    );
+
+    const nav = screen.getByRole("navigation", { name: "教学操作页面" });
+    const links = Array.from(nav.querySelectorAll("a"));
+    expect(links).toHaveLength(operations.length);
+    links.forEach((link) => {
+      expect(link.getAttribute("href")).toContain("?course=teacher-research-methods");
+    });
+    // The source action names the card that opened the first page, so it must not
+    // travel to a sibling operation the teacher navigates to next.
+    expect(nav.querySelector('a[href*="action="]')).toBeNull();
+  });
+
+  it("keeps side-menu links unscoped when no course context was supplied", () => {
+    render(<TeachingOperationPage operationId="knowledge-base" />);
+
+    const nav = screen.getByRole("navigation", { name: "教学操作页面" });
+    expect(screen.getByRole("link", { name: "学生管理" }).getAttribute("href")).toBe(
+      "/teaching/students",
+    );
+    expect(nav.querySelector('a[href*="?course="]')).toBeNull();
+    expect(screen.getByText("未选择课程：教学操作需要课程上下文。")).toBeTruthy();
+  });
+
+  it("names the missing course context instead of blaming sign-in or permissions", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          error: "UAIS teaching operation course access is required.",
+          traceId: "trace-course-id-required",
+          access: {
+            status: "denied",
+            reasonCode: "course-id-required",
+            responsibleSession: "S12",
+          },
+        }),
+        { status: 400, headers: { "content-type": "application/json" } },
+      ),
+    );
+
+    try {
+      render(<TeachingOperationPage operationId="course-settings" />);
+
+      fireEvent.click(screen.getByRole("button", { name: "保存课程设置" }));
+
+      await waitFor(() => {
+        expect(
+          screen.getByText("未保存到服务器：缺少课程上下文，请从课程卡片进入。"),
+        ).toBeTruthy();
+      });
+      expect(
+        screen.queryByText("未保存到服务器，请重新登录或检查课程权限。"),
+      ).toBeNull();
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
+
   it("runs key operation buttons with visible server-confirmed feedback", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (_input, init) => {
       const payload = JSON.parse(String((init as RequestInit | undefined)?.body ?? "{}")) as {

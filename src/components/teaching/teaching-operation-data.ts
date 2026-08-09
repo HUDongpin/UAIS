@@ -32,3 +32,19 @@ export function getTeachingCourseActionHref(
   const params = new URLSearchParams({ course: courseId, action });
   return `${getTeachingOperationHref(operationId)}?${params.toString()}`;
 }
+
+// Course context is the operation pages' authorization key: `POST
+// /api/teaching/operations` denies any request without a courseId, so a
+// navigation link that forgets the query silently turns every action on the
+// destination page into a 400. Sidebar traversal between operation pages carries
+// the course the teacher arrived with; the source action deliberately does not
+// travel, because it describes the card that opened the first page, not the one
+// the teacher moved to.
+export function getTeachingOperationHrefWithCourse(operationId: string, courseId?: string) {
+  const scopedCourseId = courseId?.trim();
+  if (!scopedCourseId) {
+    return getTeachingOperationHref(operationId);
+  }
+  const params = new URLSearchParams({ course: scopedCourseId });
+  return `${getTeachingOperationHref(operationId)}?${params.toString()}`;
+}

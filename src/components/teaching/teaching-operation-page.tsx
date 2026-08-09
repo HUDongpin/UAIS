@@ -10,7 +10,7 @@ import { ShieldCheck } from "@phosphor-icons/react/dist/ssr/ShieldCheck";
 import { SquaresFour } from "@phosphor-icons/react/dist/ssr/SquaresFour";
 import { useAppPreferences } from "@/components/providers/app-preferences";
 import {
-  getTeachingOperationHref,
+  getTeachingOperationHrefWithCourse,
   isTeachingOperationId,
   type TeachingOperationId,
 } from "@/components/teaching/teaching-operation-data";
@@ -188,6 +188,9 @@ type TeachingOperationBackendResponse = {
   receipt?: TeachingOperationBackendReceipt;
   domainPersistenceSummary?: TeachingOperationDomainPersistenceSummary;
   partialFailure?: TeachingOperationPartialFailure;
+  access?: {
+    reasonCode?: string;
+  };
   error?: string;
   traceId?: string;
 };
@@ -252,6 +255,16 @@ const TEACHING_OPERATION_DOMAIN_EVIDENCE_MISSING_MESSAGE: LocalizedText = {
 const TEACHING_OPERATION_RECEIPT_MISMATCH_MESSAGE: LocalizedText = {
   "zh-CN": "服务端回执未匹配当前操作，请稍后重试。",
   "en-US": "The server receipt did not match the current operation. Please retry later.",
+};
+
+// The generic save-failure copy sends the teacher to check sign-in and course
+// permissions, which is the wrong instruction when the request simply carried no
+// course: the fix is to re-enter from a course card, not to sign in again. The
+// wording matches the inline workspace's `course-id-required` detail so both
+// teaching surfaces name the same condition the same way.
+const TEACHING_OPERATION_COURSE_CONTEXT_MISSING_MESSAGE: LocalizedText = {
+  "zh-CN": "未保存到服务器：缺少课程上下文，请从课程卡片进入。",
+  "en-US": "Not saved to the server: course context is missing. Please enter from a course card.",
 };
 
 export function TeachingOperationPage({
@@ -343,7 +356,9 @@ export function TeachingOperationPage({
         setStatusMessage(
           localizedText(
             createTeachingOperationPartialFailureMessage(payload?.partialFailure) ??
-              TEACHING_OPERATION_SAVE_FAILED_MESSAGE,
+              (payload?.access?.reasonCode === "course-id-required"
+                ? TEACHING_OPERATION_COURSE_CONTEXT_MISSING_MESSAGE
+                : TEACHING_OPERATION_SAVE_FAILED_MESSAGE),
             locale,
           ),
         );
@@ -964,7 +979,7 @@ export function TeachingOperationPage({
                 return (
                   <Link
                     key={item.id}
-                    href={getTeachingOperationHref(item.id)}
+                    href={getTeachingOperationHrefWithCourse(item.id, selectedCourseId)}
                     aria-current={active ? "page" : undefined}
                     className={[
                       "flex min-h-14 w-full items-center gap-3 rounded-2xl border px-3 py-3 text-left outline-none transition active:translate-y-px focus-visible:ring-2 focus-visible:ring-[var(--accent)]",
@@ -1031,15 +1046,21 @@ export function TeachingOperationPage({
             </div>
 
             <div className="mt-5 rounded-2xl border border-[var(--border)] bg-[var(--surface-soft)] p-4">
+              {/* Every operation on this page posts a courseId, so "all courses"
+                  was never a real scope: without course context the actions can
+                  only fail. A persisted course that is not in the static catalog
+                  still shows its id rather than claiming no course, so a teacher
+                  can see that navigation carried the context. */}
               <p className="text-sm font-semibold text-[var(--foreground)]">
-                {selectedCourse
-                  ? `${locale === "zh-CN" ? "已选择课程" : "Selected course"}：${localizedText(
-                      selectedCourse.title,
-                      locale,
-                    )}`
+                {selectedCourseId
+                  ? `${locale === "zh-CN" ? "已选择课程" : "Selected course"}：${
+                      selectedCourse
+                        ? localizedText(selectedCourse.title, locale)
+                        : selectedCourseId
+                    }`
                   : locale === "zh-CN"
-                    ? "课程范围：全部课程"
-                    : "Course scope: All courses"}
+                    ? "未选择课程：教学操作需要课程上下文。"
+                    : "No course selected: teaching operations need course context."}
               </p>
               <p className="mt-2 text-sm leading-6 text-[var(--muted)]">
                 {action
