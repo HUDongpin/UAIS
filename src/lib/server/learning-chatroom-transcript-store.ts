@@ -115,7 +115,7 @@ export type LearningChatroomTranscriptReadResult = {
 // write emits v2, so a database upgrades itself the first time it is written.
 export const learningChatroomTranscriptSchemaVersion =
   "uais-learning-chatroom-transcripts-v2";
-const learningChatroomTranscriptLegacySchemaVersion =
+export const learningChatroomTranscriptLegacySchemaVersion =
   "uais-learning-chatroom-transcripts-v1";
 
 // One room is a rolling window, not an archive: the composer caps a message at

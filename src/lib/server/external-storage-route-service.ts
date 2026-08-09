@@ -9,9 +9,12 @@ import {
   normalizeTeachingCourseAssetsDatabase,
 } from "@/lib/server/teaching-course-assets-store";
 import {
+  learningChatroomShareSchemaVersion,
   normalizeLearningChatroomShareDatabase,
 } from "@/lib/server/learning-chatroom-share-store";
 import {
+  learningChatroomTranscriptLegacySchemaVersion,
+  learningChatroomTranscriptSchemaVersion,
   normalizeLearningChatroomTranscriptDatabase,
 } from "@/lib/server/learning-chatroom-transcript-store";
 import {
@@ -140,6 +143,10 @@ export function createExternalStorageHealthGetHandler(
           config.productionDatabaseAdapter,
         ),
       teachingCourseAssetsStorageSchema: createTeachingCourseAssetsStorageSchema(
+        ready,
+        config.productionDatabaseAdapter,
+      ),
+      learningChatroomStorageSchema: createLearningChatroomStorageSchema(
         ready,
         config.productionDatabaseAdapter,
       ),
@@ -1358,6 +1365,36 @@ function createTeachingOperationsStorageSchema(
     backupStore: "json-atomic-snapshot",
     restoreDrillLog: "jsonl-append-only",
     concurrencyControl: "atomic-append-and-rename",
+    productionDatabaseAdapter,
+    valueRedacted: true,
+  };
+}
+
+// Declares which learning-chatroom schema versions this service speaks, so a
+// deployment can be checked for compatibility BEFORE the first write instead of
+// discovering it as a rejected round. The app always emits v2 and the shared
+// normalizer still accepts v1; a service built from older code simply will not
+// carry this field, which is itself the signal that it predates v2.
+function createLearningChatroomStorageSchema(
+  ready: boolean,
+  productionDatabaseAdapter = createBlockedProductionDatabaseAdapter(),
+) {
+  return {
+    status: ready ? "ready" : "blocked",
+    transcripts: {
+      schemaVersion: learningChatroomTranscriptSchemaVersion,
+      acceptedSchemaVersions: [
+        learningChatroomTranscriptSchemaVersion,
+        learningChatroomTranscriptLegacySchemaVersion,
+      ],
+    },
+    shares: {
+      schemaVersion: learningChatroomShareSchemaVersion,
+      acceptedSchemaVersions: [learningChatroomShareSchemaVersion],
+    },
+    snapshotStore: "json-atomic-snapshot",
+    revisionControl: "optimistic-revision",
+    concurrencyControl: "atomic-rename-with-revision-check",
     productionDatabaseAdapter,
     valueRedacted: true,
   };

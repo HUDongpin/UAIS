@@ -3,7 +3,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
 import { isLearningChatroomGroupsEnabled } from "@/lib/server/learning-chatroom-groups-flag";
 
 // The production readiness preflight (blockers B2/B3/B4). These blockers are
@@ -161,5 +161,43 @@ describe("chatroom production readiness preflight", () => {
     expect(serialized).not.toContain("sk-fake-deepseek");
     expect(serialized).not.toContain("sk-fake-qwen");
     expect(report.safety.secretsPrinted).toBe(false);
+  });
+});
+
+describe("group flag misconfiguration is visible at runtime", () => {
+  it("warns once per distinct wrong value instead of failing silently", async () => {
+    const { resetLearningChatroomGroupsFlagWarningsForTesting } = await import(
+      "@/lib/server/learning-chatroom-groups-flag"
+    );
+    resetLearningChatroomGroupsFlagWarningsForTesting();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    // The dangerous case: a deployment believes group rooms are live.
+    expect(isLearningChatroomGroupsEnabled({ UAIS_LEARNING_CHATROOM_GROUPS_MODE: "true" })).toBe(
+      false,
+    );
+    expect(isLearningChatroomGroupsEnabled({ UAIS_LEARNING_CHATROOM_GROUPS_MODE: "true" })).toBe(
+      false,
+    );
+    // Read on nearly every request, so the warning is once per value, not per call.
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0]?.[1]).toMatchObject({
+      phase: "feature-flag",
+      configuredValue: "true",
+      expectedValue: "on",
+    });
+
+    // Unset is the documented default and must stay quiet.
+    expect(isLearningChatroomGroupsEnabled({})).toBe(false);
+    expect(warn).toHaveBeenCalledTimes(1);
+
+    // A correct value never warns.
+    expect(isLearningChatroomGroupsEnabled({ UAIS_LEARNING_CHATROOM_GROUPS_MODE: "On" })).toBe(
+      true,
+    );
+    expect(warn).toHaveBeenCalledTimes(1);
+
+    warn.mockRestore();
+    resetLearningChatroomGroupsFlagWarningsForTesting();
   });
 });

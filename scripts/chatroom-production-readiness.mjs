@@ -151,35 +151,44 @@ async function probeTranscriptSchema(env) {
     };
   }
 
-  const url = `${baseUrl.replace(/\/$/, "")}/learning-chatroom-transcripts/database`;
+  // Asks the service what it SPEAKS rather than inferring it from stored data.
+  // A service built before v2 has no `learningChatroomStorageSchema` at all, so
+  // its absence is the signal - which is why a missing field blocks instead of
+  // being treated as "probably fine".
+  const url = `${baseUrl.replace(/\/$/, "")}/healthz`;
   try {
     const response = await fetch(url, {
       method: "GET",
       headers: { accept: "application/json", authorization: `Bearer ${token}` },
       signal: AbortSignal.timeout(probeTimeoutMs),
     });
-    if (!response.ok) {
+    const body = await response.json().catch(() => undefined);
+    const declared = body?.learningChatroomStorageSchema;
+    const accepted = declared?.transcripts?.acceptedSchemaVersions;
+
+    if (!declared) {
       return {
         blocker: "B3",
         title: "External storage accepts transcript schema v2",
         status: "blocked",
         httpStatus: response.status,
-        blockedReasons: [`transcript-resource-unreachable:${response.status}`],
+        // Either the service predates v2, or it is not reachable/ready at all.
+        blockedReasons: response.ok
+          ? ["storage-service-predates-transcript-schema-v2"]
+          : [`storage-service-unhealthy:${response.status}`],
       };
     }
-    const body = await response.json().catch(() => undefined);
-    const served = body?.database?.schemaVersion;
-    // A service on current code always answers v2, because it normalizes with
-    // the same shared code the app writes with. Anything else is the stale
-    // separately-deployed service this blocker is about.
-    const ready = served === transcriptSchemaVersion;
+
+    const ready = Array.isArray(accepted) && accepted.includes(transcriptSchemaVersion);
     return {
       blocker: "B3",
       title: "External storage accepts transcript schema v2",
       status: ready ? "ready" : "blocked",
-      servedSchemaVersion: typeof served === "string" ? served : "(absent)",
+      httpStatus: response.status,
+      declaredTranscriptSchema: declared.transcripts ?? "(absent)",
+      declaredShareSchema: declared.shares ?? "(absent)",
       expectedSchemaVersion: transcriptSchemaVersion,
-      blockedReasons: ready ? [] : ["transcript-schema-version-mismatch"],
+      blockedReasons: ready ? [] : ["transcript-schema-version-not-accepted"],
     };
   } catch {
     // The endpoint and the failure mode are reportable; the token is not.
@@ -187,7 +196,7 @@ async function probeTranscriptSchema(env) {
       blocker: "B3",
       title: "External storage accepts transcript schema v2",
       status: "blocked",
-      blockedReasons: ["transcript-resource-request-failed"],
+      blockedReasons: ["storage-service-request-failed"],
       valuesRedacted: true,
     };
   }
