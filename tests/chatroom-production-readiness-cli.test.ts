@@ -137,6 +137,25 @@ describe("chatroom production readiness preflight", () => {
     expect(provider.configuredRoles).toEqual(["text-reasoning", "multimodal"]);
   });
 
+  it("passes a production deployment that has only the required core database", async () => {
+    // The blocker B2 case: no UAIS_EXTERNAL_STORAGE_* anywhere, yet durable,
+    // because the managed Postgres is already part of the production surface.
+    const { exitCode, report } = await runPreflight(
+      await writeEnvFile([
+        "UAIS_CORE_DATABASE_URL=postgres://user:pass@db.example.com/uais",
+        "UAIS_LEARNING_CHATROOM_GROUPS_MODE=on",
+        "DEEPSEEK_API_KEY=sk-fake-deepseek",
+      ]),
+    );
+
+    expect(report.status).toBe("ready");
+    expect(exitCode).toBe(0);
+    expect(findCheck(report, "B2").resolvedBackend).toBe("postgres");
+    // Nothing to negotiate with: there is no separately versioned service.
+    expect(findCheck(report, "B3").status).toBe("not-applicable");
+    expect(findCheck(report, "B3").blockedReasons).toEqual([]);
+  });
+
   it("treats an unprobed schema check as unverified rather than satisfied", async () => {
     const { exitCode, report } = await runPreflight(await writeEnvFile(readyEnvLines));
 

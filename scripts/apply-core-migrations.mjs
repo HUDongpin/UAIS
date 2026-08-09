@@ -15,6 +15,10 @@ const migrations = [
     version: "0002_teaching_operations",
     path: "migrations/0002_teaching_operations.sql",
   },
+  {
+    version: "0003_learning_chatroom",
+    path: "migrations/0003_learning_chatroom.sql",
+  },
 ];
 
 const databaseUrlEnvNames = ["UAIS_CORE_DATABASE_URL", "DATABASE_URL", "POSTGRES_URL"];

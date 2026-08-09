@@ -1,4 +1,6 @@
 import { createUaisLearningChatroomShareRepository } from "@/lib/server/learning-chatroom-share-external-store";
+import { createUaisLearningChatroomSharePostgresRepository } from "@/lib/server/learning-chatroom-share-postgres-store";
+import { resolveLearningChatroomDurableBackend } from "@/lib/server/learning-chatroom-durable-backend";
 import {
   assertLearningChatroomShareLocalJsonRuntimeAllowed,
   resolveLearningChatroomShareDataDir,
@@ -23,9 +25,15 @@ export function resolveLearningChatroomShareBackend(input: {
 }) {
   const repository =
     input.repository ??
-    createUaisLearningChatroomShareRepository({
+    resolveLearningChatroomDurableBackend({
       env: input.env,
-      ...(input.fetch ? { fetch: input.fetch } : {}),
+      createPostgresRepository: () =>
+        createUaisLearningChatroomSharePostgresRepository({ env: input.env }),
+      createExternalRepository: () =>
+        createUaisLearningChatroomShareRepository({
+          env: input.env,
+          ...(input.fetch ? { fetch: input.fetch } : {}),
+        }),
     });
   if (!repository) {
     assertLearningChatroomShareLocalJsonRuntimeAllowed(input.env);

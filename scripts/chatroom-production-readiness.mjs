@@ -50,21 +50,27 @@ function checkStorageBackend(env) {
   const selector = env.UAIS_TEACHING_COURSE_MANAGEMENT_BACKEND?.trim().toLowerCase() ?? "";
   const blockedReasons = [];
 
-  // An unset selector defaults to local JSON, which every store refuses in a
-  // production runtime - the failure surfaces as a 503 on the learner's first
-  // message rather than at deploy time, which is why it is checked here.
-  const isLocal =
-    selector === "" || selector === "local" || selector === "local-file" || selector === "local-json-file";
-  if (isLocal) {
-    blockedReasons.push("local-json-backend-refused-in-production");
-  }
+  const coreDatabaseConfigured = ["UAIS_CORE_DATABASE_URL", "DATABASE_URL", "POSTGRES_URL"].some(
+    (name) => (env[name] ?? "").trim() !== "",
+  );
+  const usesPostgres =
+    selector === "postgres" ||
+    selector === "managed" ||
+    // The default in a production runtime: the managed database is already a
+    // required part of the surface, so a correct deployment is durable without
+    // any storage-specific configuration at all.
+    (selector === "" && coreDatabaseConfigured);
 
   const baseUrl = env.UAIS_EXTERNAL_STORAGE_BASE_URL?.trim() ?? "";
   const token = classifySecret(env.UAIS_EXTERNAL_STORAGE_ACCESS_TOKEN, {
     minimumLength: minimumAccessTokenLength,
   });
 
-  if (selector === "external") {
+  if (usesPostgres) {
+    if (!coreDatabaseConfigured) {
+      blockedReasons.push("missing-UAIS_CORE_DATABASE_URL");
+    }
+  } else if (selector === "external") {
     if (!baseUrl) {
       blockedReasons.push("missing-UAIS_EXTERNAL_STORAGE_BASE_URL");
     } else if (!baseUrl.startsWith("https://")) {
@@ -74,12 +80,22 @@ function checkStorageBackend(env) {
     if (token.status !== "present") {
       blockedReasons.push(`invalid-UAIS_EXTERNAL_STORAGE_ACCESS_TOKEN:${token.status}`);
     }
+  } else {
+    // Neither a durable selector nor a core database: production refuses local
+    // JSON, so the room would 503 on the first message.
+    blockedReasons.push("local-json-backend-refused-in-production");
   }
 
   return {
     blocker: "B2",
-    title: "External storage configured",
+    title: "Durable storage configured",
     selector: selector || "(unset)",
+    resolvedBackend: usesPostgres
+      ? "postgres"
+      : selector === "external"
+        ? "external"
+        : "local-json",
+    coreDatabaseConfigured,
     baseUrlConfigured: Boolean(baseUrl),
     baseUrlIsHttps: baseUrl.startsWith("https://"),
     accessToken: token,
@@ -139,6 +155,19 @@ function checkProviderKeys(env) {
 }
 
 async function probeTranscriptSchema(env) {
+  const backend = checkStorageBackend(env).resolvedBackend;
+  if (backend !== "external") {
+    // Nothing to negotiate: Postgres storage is this deployment's own schema,
+    // so there is no separately versioned service that could predate v2.
+    return {
+      blocker: "B3",
+      title: "External storage accepts transcript schema v2",
+      status: "not-applicable",
+      reason: `durable-backend-is-${backend}`,
+      blockedReasons: [],
+    };
+  }
+
   const baseUrl = env.UAIS_EXTERNAL_STORAGE_BASE_URL?.trim() ?? "";
   const token = env.UAIS_EXTERNAL_STORAGE_ACCESS_TOKEN ?? "";
   if (!baseUrl || !token) {
@@ -278,15 +307,23 @@ async function main() {
   checks.push(
     options.probe
       ? await probeTranscriptSchema(env)
-      : {
-          blocker: "B3",
-          title: "External storage accepts transcript schema v2",
-          status: "skipped",
-          reason: "probe-not-requested",
-          // Unverified is not the same as satisfied: the in-repo routes are
-          // proven by the suite, but a separately deployed service is not.
-          blockedReasons: ["transcript-schema-v2-unverified"],
-        },
+      : checkStorageBackend(env).resolvedBackend !== "external"
+        ? {
+            blocker: "B3",
+            title: "External storage accepts transcript schema v2",
+            status: "not-applicable",
+            reason: `durable-backend-is-${checkStorageBackend(env).resolvedBackend}`,
+            blockedReasons: [],
+          }
+        : {
+            blocker: "B3",
+            title: "External storage accepts transcript schema v2",
+            status: "skipped",
+            reason: "probe-not-requested",
+            // Unverified is not satisfied: a separately deployed service is only
+            // provable by asking it.
+            blockedReasons: ["transcript-schema-v2-unverified"],
+          },
   );
 
   const blocked = checks.filter((check) => check.blockedReasons.length > 0);
@@ -309,7 +346,14 @@ async function main() {
   } else {
     process.stdout.write(`Chatroom production readiness: ${report.status}\n\n`);
     for (const check of checks) {
-      const mark = check.status === "ready" ? "ok  " : check.status === "skipped" ? "skip" : "BLOCK";
+      const mark =
+        check.blockedReasons.length > 0
+          ? "BLOCK"
+          : check.status === "ready"
+            ? "ok  "
+            : check.status === "not-applicable"
+              ? "n/a "
+              : "skip";
       process.stdout.write(`  [${mark}] ${check.blocker}  ${check.title}\n`);
       for (const reason of check.blockedReasons) {
         process.stdout.write(`         - ${reason}\n`);

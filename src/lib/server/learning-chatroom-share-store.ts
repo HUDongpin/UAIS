@@ -35,11 +35,13 @@ type LearningChatroomShareRedaction = {
 
 export type LearningChatroomShareStoragePolicy =
   | "local-json-learning-chatroom-shares"
-  | "external-redacted-learning-chatroom-shares";
+  | "external-redacted-learning-chatroom-shares"
+  | "postgres-learning-chatroom-shares";
 
 export type LearningChatroomShareStorageWritePolicy =
   | "atomic-json-file-replace"
-  | "external-optimistic-snapshot-replace";
+  | "external-optimistic-snapshot-replace"
+  | "postgres-transactional-snapshot-replace";
 
 export type LearningChatroomShareStorageDescriptor = {
   shareStoragePolicy: LearningChatroomShareStoragePolicy;

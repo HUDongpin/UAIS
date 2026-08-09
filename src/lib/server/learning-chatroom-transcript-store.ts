@@ -19,11 +19,13 @@ type LearningChatroomTranscriptRedaction = {
 
 export type LearningChatroomTranscriptStoragePolicy =
   | "local-json-learning-chatroom-transcripts"
-  | "external-redacted-learning-chatroom-transcripts";
+  | "external-redacted-learning-chatroom-transcripts"
+  | "postgres-learning-chatroom-transcripts";
 
 export type LearningChatroomTranscriptStorageWritePolicy =
   | "atomic-json-file-replace"
-  | "external-optimistic-snapshot-replace";
+  | "external-optimistic-snapshot-replace"
+  | "postgres-transactional-snapshot-replace";
 
 export type LearningChatroomTranscriptStorageDescriptor = {
   transcriptStoragePolicy: LearningChatroomTranscriptStoragePolicy;

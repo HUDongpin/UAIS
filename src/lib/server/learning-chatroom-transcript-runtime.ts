@@ -1,4 +1,6 @@
 import { createUaisLearningChatroomTranscriptRepository } from "@/lib/server/learning-chatroom-transcript-external-store";
+import { createUaisLearningChatroomTranscriptPostgresRepository } from "@/lib/server/learning-chatroom-transcript-postgres-store";
+import { resolveLearningChatroomDurableBackend } from "@/lib/server/learning-chatroom-durable-backend";
 import {
   appendLearningChatroomTranscriptMessages,
   assertLearningChatroomTranscriptLocalJsonRuntimeAllowed,
@@ -133,9 +135,15 @@ function resolveLearningChatroomTranscriptBackend(
 ) {
   const repository =
     input.repository ??
-    createUaisLearningChatroomTranscriptRepository({
+    resolveLearningChatroomDurableBackend({
       env: input.env,
-      fetch: input.fetch,
+      createPostgresRepository: () =>
+        createUaisLearningChatroomTranscriptPostgresRepository({ env: input.env }),
+      createExternalRepository: () =>
+        createUaisLearningChatroomTranscriptRepository({
+          env: input.env,
+          fetch: input.fetch,
+        }),
     });
   if (!repository) {
     assertLearningChatroomTranscriptLocalJsonRuntimeAllowed(input.env);
