@@ -1,11 +1,13 @@
 import * as Sentry from "@sentry/nextjs";
 import { runAgentLoop } from "@/lib/ai/orchestration/agent-loop";
 import { assertResponsibleProgressIsDisplaySafe } from "@/lib/ai/progress/responsible-progress";
+import { deepSeekTimeoutErrorMessage } from "@/lib/ai/providers/deepseek-client";
 import {
-  createDeepSeekTextClient,
-  deepSeekTimeoutErrorMessage,
-} from "@/lib/ai/providers/deepseek-client";
-import { getProviderForRole } from "@/lib/ai/providers/registry";
+  completeChatroomAgentTurn,
+  createLearningChatroomCompleterPool,
+  type ChatroomAgentProviderRole,
+  type ChatroomProviderFactories,
+} from "@/lib/server/learning-chatroom-agent-providers";
 import {
   createAiRequestRateLimiter,
   resolveAiRequestRateLimitCount,
@@ -62,6 +64,10 @@ type LearningChatroomAgent = {
   handle: string;
   aliases: string[];
   priority: number;
+  // Which provider role answers for this agent by default. The room falls over
+  // to any other configured role when this one is missing or failing, so this is
+  // a preference rather than a hard binding - see the completer pool.
+  providerRole: ChatroomAgentProviderRole;
   name: Record<Locale, string>;
   systemPrompt: Record<Locale, string>;
 };
@@ -123,6 +129,9 @@ type LearningChatroomPostHandlerDeps = {
     apiKey: string;
     baseUrl?: string;
   }) => DeepSeekTextClient;
+  // Lets a suite drive the failover path without a network: the pool builds a
+  // Qwen completer whenever DASHSCOPE_API_KEY is present.
+  createQwenMultimodalClient?: ChatroomProviderFactories["createQwenMultimodalClient"];
   fetch?: typeof fetch;
   now?: () => number;
   transcriptRepository?: LearningChatroomTranscriptRepository;
@@ -192,6 +201,7 @@ const learningChatroomAgents: LearningChatroomAgent[] = [
     handle: "@研究助教",
     aliases: ["@ResearchTA"],
     priority: 40,
+    providerRole: "text-reasoning",
     name: {
       "zh-CN": "研究助教",
       "en-US": "Research TA",
@@ -208,6 +218,7 @@ const learningChatroomAgents: LearningChatroomAgent[] = [
     handle: "@方法顾问",
     aliases: ["@MethodsAdvisor"],
     priority: 30,
+    providerRole: "text-reasoning",
     name: {
       "zh-CN": "方法顾问",
       "en-US": "Methods Advisor",
@@ -224,6 +235,7 @@ const learningChatroomAgents: LearningChatroomAgent[] = [
     handle: "@数学助教",
     aliases: ["@MathTA"],
     priority: 20,
+    providerRole: "text-reasoning",
     name: {
       "zh-CN": "数学助教",
       "en-US": "Math TA",
@@ -240,6 +252,7 @@ const learningChatroomAgents: LearningChatroomAgent[] = [
     handle: "@写作助手",
     aliases: ["@WritingHelper"],
     priority: 10,
+    providerRole: "text-reasoning",
     name: {
       "zh-CN": "写作助手",
       "en-US": "Writing Helper",
@@ -398,7 +411,6 @@ export function createLearningChatroomPostHandler(
   deps: LearningChatroomPostHandlerDeps = {},
 ) {
   const env = deps.env ?? process.env;
-  const deepSeekFactory = deps.createDeepSeekTextClient ?? createDeepSeekTextClient;
   const now = deps.now ?? Date.now;
   // One limiter per handler instance: the module-level `POST` is the single
   // production instance, and each test handler gets its own isolated counts.
@@ -514,28 +526,39 @@ export function createLearningChatroomPostHandler(
         body.courseId,
       );
 
-      const apiKey = env.DEEPSEEK_API_KEY;
-      if (!apiKey) {
+      // One completer per configured provider role. A round needs at least one;
+      // it does NOT need a particular one, which is what stops a single provider
+      // outage from silencing all four agents.
+      const completerPool = createLearningChatroomCompleterPool({
+        env,
+        factories: {
+          ...(deps.createDeepSeekTextClient
+            ? { createDeepSeekTextClient: deps.createDeepSeekTextClient }
+            : {}),
+          ...(deps.createQwenMultimodalClient
+            ? { createQwenMultimodalClient: deps.createQwenMultimodalClient }
+            : {}),
+        },
+      });
+      if (completerPool.size === 0) {
         throw new PublicLearningChatroomError(
           "DEEPSEEK_API_KEY is required for the learning chatroom.",
           503,
         );
       }
-
-      const provider = getProviderForRole("text-reasoning");
-      const model = env.DEEPSEEK_MODEL ?? provider.defaultModel;
-      const client = deepSeekFactory({
-        apiKey,
-        baseUrl: env.DEEPSEEK_BASE_URL,
-      });
       const roster = createLearningChatroomRoster(body.locale);
       const promptsByAgentId = new Map(
         learningChatroomAgents.map((agent) => [agent.id as string, agent.systemPrompt[body.locale]]),
+      );
+      const providerRolesByAgentId = new Map<string, ChatroomAgentProviderRole>(
+        learningChatroomAgents.map((agent) => [agent.id as string, agent.providerRole]),
       );
       const namesByAgentId = new Map(
         learningChatroomAgents.map((agent) => [agent.id as string, agent.name[body.locale]]),
       );
       const modelsByAgentId = new Map<string, string>();
+      const providersByAgentId = new Map<string, "deepseek" | "qwen">();
+      const rolesByAgentId = new Map<string, ChatroomAgentProviderRole>();
       const history = body.messages.map(createDeepSeekHistoryMessage);
       const turnErrors: LearningChatroomTurnError[] = [];
       const turnFailureMessages: string[] = [];
@@ -619,14 +642,25 @@ export function createLearningChatroomPostHandler(
           }
 
           try {
-            const completion = await client.complete({
-              model,
+            const completion = await completeChatroomAgentTurn({
+              pool: completerPool,
+              preferredRole:
+                providerRolesByAgentId.get(agent.id) ?? "text-reasoning",
               maxTokens: learningChatroomMaxTokens,
-              timeoutMs: providerTimeoutMs,
-              // `deepseek-v4-flash` is a hybrid thinking model: with a small token
-              // budget an enabled thinking pass consumes the budget and returns
-              // empty content, so the chatroom always disables it.
-              thinking: { type: "disabled" },
+              // Re-read per attempt: a failover spends the same round budget the
+              // first attempt was already drawing on, never a fresh one.
+              remainingMs: () => roundDeadlineMs - now(),
+              resolveTimeoutMs: resolveLearningChatroomProviderTimeoutMs,
+              onFailover: ({ role, nextRole, error }) => {
+                logLearningChatroomError({
+                  traceId,
+                  phase: "agent-turn",
+                  courseId: body.courseId,
+                  agentId: agent.id,
+                  message: `Learning chatroom agent provider ${role} failed; falling over to ${nextRole}.`,
+                  error,
+                });
+              },
               messages: [
                 { role: "system", content: systemPrompt },
                 ...history,
@@ -642,6 +676,8 @@ export function createLearningChatroomPostHandler(
               throw new Error(learningChatroomEmptyContentMessage);
             }
             modelsByAgentId.set(agent.id, completion.model);
+            providersByAgentId.set(agent.id, completion.provider);
+            rolesByAgentId.set(agent.id, completion.role);
 
             return {
               agentId: agent.id,
@@ -684,10 +720,12 @@ export function createLearningChatroomPostHandler(
         }),
         agentId: turn.agentId,
         content: turn.content,
+        // Reports the provider that ACTUALLY answered, which after a failover
+        // is not necessarily the agent's preferred one.
         provider: {
-          provider: "deepseek" as const,
-          role: "text-reasoning" as const,
-          model: modelsByAgentId.get(turn.agentId) ?? model,
+          provider: providersByAgentId.get(turn.agentId) ?? "deepseek",
+          role: rolesByAgentId.get(turn.agentId) ?? "text-reasoning",
+          model: modelsByAgentId.get(turn.agentId) ?? "unavailable",
         },
       }));
 
