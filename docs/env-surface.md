@@ -16,9 +16,15 @@ or optional live AI work. It does not contain real values and it does not inspec
 
 ## Tiers
 
-- `active-production`: core auth, managed Postgres, LRS, Sentry, and uptime
-  variables that may be part of a production POC deployment after S19/S22
-  approval.
+- `active-production`: core auth, managed Postgres, LRS, Sentry, uptime, and
+  durable-storage variables that may be part of a production POC deployment after
+  S19/S22 approval. The storage trio -
+  `UAIS_TEACHING_COURSE_MANAGEMENT_BACKEND`, `UAIS_EXTERNAL_STORAGE_BASE_URL` and
+  `UAIS_EXTERNAL_STORAGE_ACCESS_TOKEN` - was promoted out of quarantine when group
+  chatrooms made durable storage non-optional: courses, chatroom transcripts and
+  share links all refuse local JSON in a production runtime, so an unset selector
+  is a 503 on the learner's first message rather than a fallback. Verify them with
+  `npm run release:chatroom-readiness`.
 - `optional-live-ai`: DeepSeek, DashScope/Qwen, AI access, and live-AI spend
   guard variables. The provider credentials stay blocked until the owner approves
   live provider use, cost, and rate-limit risk for a specific task. The
@@ -26,8 +32,9 @@ or optional live AI work. It does not contain real values and it does not inspec
   guard that is already enforced with safe defaults when they are unset, so
   leaving them unconfigured is safe and setting the mode to `off` is not. The
   reserved group-chatroom names below also sit in this tier.
-- `quarantined-legacy`: older teacher-auth split, external storage, ordinary
-  teaching provider, and enterprise evidence-gate variables, plus the local JSON
+- `quarantined-legacy`: older teacher-auth split, the remaining external-storage
+  service-side names, ordinary teaching provider, and enterprise evidence-gate
+  variables, plus the local JSON
   data-directory paths that only apply outside production. They are retained for
   historical scripts/tests and local/test persistence, but are not required for
   the core POC production surface.

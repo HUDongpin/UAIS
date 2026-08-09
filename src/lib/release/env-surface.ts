@@ -415,6 +415,36 @@ export const uaisEnvSurfaceCatalog = [
     purpose:
       "Optional split directory for local learning chatroom transcripts; falls back to UAIS_TEACHING_COURSES_DATA_DIR, then to .tmp/uais-learning-chatroom-transcripts-db.",
   },
+  {
+    name: "UAIS_TEACHING_COURSE_MANAGEMENT_BACKEND",
+    tier: "active-production",
+    owner: "S19/S12",
+    valueKind: "storage-backend",
+    serverOnly: true,
+    productionDefault: "required",
+    purpose:
+      "Selects the durable store for courses, chatroom transcripts and share links. Left unset it means local JSON, which every one of those stores refuses in a production runtime - so group rooms 503 on first use.",
+  },
+  {
+    name: "UAIS_EXTERNAL_STORAGE_BASE_URL",
+    tier: "active-production",
+    owner: "S19/S12",
+    valueKind: "base-url",
+    serverOnly: true,
+    productionDefault: "required",
+    purpose:
+      "HTTPS base URL of the external storage service the durable stores read and write. Required whenever the backend selector is `external`.",
+  },
+  {
+    name: "UAIS_EXTERNAL_STORAGE_ACCESS_TOKEN",
+    tier: "active-production",
+    owner: "S19/S12",
+    valueKind: "secret",
+    serverOnly: true,
+    productionDefault: "required",
+    purpose:
+      "Bearer token for the external storage service. At least 32 characters; travels on every storage call, which is why the endpoint must be HTTPS.",
+  },
   ...createQuarantinedLegacyEntries([
     "UAIS_TEACHER_AUTH_PROVIDER",
     "UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET",
@@ -427,10 +457,7 @@ export const uaisEnvSurfaceCatalog = [
     "UAIS_TEACHER_AI_OWNERSHIP_DIR",
     "UAIS_VOICE_LIFECYCLE_AUDIT_BACKEND",
     "UAIS_TEACHING_OPERATIONS_BACKEND",
-    "UAIS_TEACHING_COURSE_MANAGEMENT_BACKEND",
     "UAIS_TEACHING_COURSE_ASSETS_BACKEND",
-    "UAIS_EXTERNAL_STORAGE_BASE_URL",
-    "UAIS_EXTERNAL_STORAGE_ACCESS_TOKEN",
     "UAIS_EXTERNAL_STORAGE_SERVICE_MODE",
     "UAIS_EXTERNAL_STORAGE_SERVICE_DATA_DIR",
     "UAIS_EXTERNAL_STORAGE_DATA_DIR",

@@ -30,7 +30,12 @@ describe("B-21 environment surface", () => {
         nextPublicSecretsForbidden: true,
       },
     });
-    expect(summary.counts["active-production"]).toBeLessThanOrEqual(21);
+    // The cap makes a promotion a deliberate act rather than a drift. It moved
+    // 21 -> 24 when durable storage stopped being optional: group chatrooms
+    // refuse local JSON in production, so the backend selector, the storage
+    // endpoint and its token are required for a core production surface rather
+    // than "retained for a future enterprise module".
+    expect(summary.counts["active-production"]).toBeLessThanOrEqual(24);
     expect(summary.activeProductionNames).toEqual(
       expect.arrayContaining([
         "UAIS_APP_SESSION_SIGNING_SECRET",
@@ -41,6 +46,9 @@ describe("B-21 environment surface", () => {
         "SENTRY_DSN",
         "NEXT_PUBLIC_SENTRY_DSN",
         "UAIS_UPTIME_CHECK_URL",
+        "UAIS_TEACHING_COURSE_MANAGEMENT_BACKEND",
+        "UAIS_EXTERNAL_STORAGE_BASE_URL",
+        "UAIS_EXTERNAL_STORAGE_ACCESS_TOKEN",
       ]),
     );
     expect(summary.optionalLiveAiNames).toEqual(
