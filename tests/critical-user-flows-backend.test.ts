@@ -97,6 +97,93 @@ describe("critical UAIS backend user flows", () => {
     expect(JSON.stringify(studentBody)).not.toContain("12345");
   });
 
+  it("teacher login reaches course creation: a UI sign-in carries write authority end to end", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "uais-critical-flow-bridge-"));
+    const env = {
+      NODE_ENV: "development",
+      UAIS_APP_AUTH_PROVIDER: "local-demo",
+      UAIS_TEACHING_COURSES_DATA_DIR: dataDir,
+      UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET: teacherAuthSecret,
+      UAIS_APP_SESSION_SIGNING_SECRET: appSessionSecret,
+    };
+    const mergedOwnership: Array<{ teacherId: string; courseIds: string[] }> = [];
+    const login = createUaisAppSessionPostHandler({
+      env,
+      now: new Date("2026-07-08T09:00:00.000Z"),
+      createSessionId: () => "phoebe-critical-flow-session",
+    });
+    const postCourse = createTeachingCoursePostHandler({
+      env,
+      now: new Date("2026-07-08T09:00:00.000Z"),
+      mergeTeacherAiOwnershipRecord: async (input) => {
+        mergedOwnership.push({
+          teacherId: input.ownership.teacherId,
+          courseIds: input.ownership.courseIds ?? [],
+        });
+        return {
+          teacherId: input.ownership.teacherId,
+          status: "merged",
+          storagePolicy: "external-redacted-teacher-ai-ownership-merge",
+          storageWritePolicy: "external-atomic-merge",
+          responsibleSession: "S12",
+          updatedAt: "2026-07-08T09:00:00.000Z",
+          redaction: {
+            secrets: "omitted",
+            localFiles: "omitted",
+            assets: "ids-only",
+          },
+        };
+      },
+    });
+
+    try {
+      const loginResponse = await login(
+        new Request("https://www.uais.top/api/auth/app-session", {
+          method: "POST",
+          body: JSON.stringify({ account: "Phoebe", password: "12345" }),
+        }),
+      );
+      expect(loginResponse.status).toBe(200);
+
+      // Exactly what a browser would send back: every cookie the login set,
+      // with no hand-built teacher credential anywhere in this test.
+      const cookieHeader = loginResponse.headers
+        .getSetCookie()
+        .map((setCookie) => setCookie.split(";")[0]?.trim())
+        .filter(Boolean)
+        .join("; ");
+
+      const courseResponse = await postCourse(
+        new Request("https://www.uais.top/api/teaching/courses", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            cookie: cookieHeader,
+            "x-uais-trace-id": "trace-critical-login-bridge-course-create",
+          },
+          body: JSON.stringify({
+            name: "Login Bridge Research Methods",
+            instructor: "Phoebe",
+            unit: "Guangzhou University 404",
+            department: "Experimental Teaching Center",
+            semester: "2026 Spring",
+          }),
+        }),
+      );
+      const courseBody = await courseResponse.json();
+
+      expect(courseResponse.status, JSON.stringify(courseBody)).toBe(201);
+      expect(courseBody.course.ownerTeacherId).toBe("Phoebe");
+      // Ownership is merged under the same actor, so the follow-on operation
+      // routes stop answering teacher-course-ownership-required.
+      expect(mergedOwnership).toEqual([
+        { teacherId: "Phoebe", courseIds: [courseBody.course.courseId] },
+      ]);
+    } finally {
+      await rm(dataDir, { recursive: true, force: true });
+    }
+  });
+
   it("enrol and teacher CRUD: creates a course/class, accepts invite join, and approves membership", async () => {
     const dataDir = await mkdtemp(join(tmpdir(), "uais-critical-flow-course-"));
     const env = {

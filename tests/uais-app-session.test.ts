@@ -10,6 +10,7 @@ import {
   getUaisAppSessionUserFromCookieString,
   resolveUaisAppSessionSigningSecret,
 } from "@/lib/server/uais-app-session";
+import { readUaisAuthenticatedTeacherSessionFromSignedCookies } from "@/lib/server/teacher-auth-session";
 import {
   createUaisAppSessionDeleteHandler,
   createUaisAppSessionPostHandler,
@@ -489,6 +490,177 @@ describe("UAIS enterprise app sessions", () => {
       }),
     );
   });
+
+  it("bridges a local teacher login to a signed teacher session tied to the same app session", async () => {
+    const env = {
+      NODE_ENV: "development",
+      UAIS_APP_AUTH_PROVIDER: "local-demo",
+      UAIS_APP_SESSION_SIGNING_SECRET: "test-app-session-signing-secret",
+      UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET:
+        "test-teacher-auth-session-signing-secret-32",
+    };
+    const response = await loginAs({ env, account: "Phoebe" });
+    const body = await response.json();
+    const setCookies = readSetCookieHeaders(response);
+
+    expect(response.status).toBe(200);
+    expect(setCookies).toHaveLength(4);
+    expect(body.localTeacherAuthBridge.status).toBe("issued");
+
+    const teacherSession = readUaisAuthenticatedTeacherSessionFromSignedCookies({
+      request: new Request("http://localhost/api/teaching/operations", {
+        headers: { cookie: createCookieHeaderFromSetCookies(setCookies) },
+      }),
+      secret: "test-teacher-auth-session-signing-secret-32",
+      now: new Date("2099-01-01T00:01:00.000Z"),
+    });
+
+    // The write actor must equal the account the course list reads back under,
+    // or a teacher would create courses their own dashboard never shows.
+    expect(teacherSession?.actorId).toBe("Phoebe");
+    expect(teacherSession?.role).toBe("teacher");
+    // Lifetime coupling: the teacher cookie may not outlive the session that
+    // authorized it.
+    expect(teacherSession?.expiresAt).toBe(body.appSession.expiresAt);
+    expect(setCookies.join("\n")).not.toContain(
+      "test-teacher-auth-session-signing-secret-32",
+    );
+  });
+
+  it("mints no teacher session in any deployed runtime", async () => {
+    const deployedRuntimes = [
+      { label: "vercel-production", markers: { VERCEL_ENV: "production" } },
+      { label: "node-production", markers: { NODE_ENV: "production" } },
+      { label: "uais-production", markers: { UAIS_DEPLOYMENT_ENV: "production" } },
+      { label: "vercel-preview", markers: { VERCEL_ENV: "preview" } },
+      { label: "uais-preview", markers: { UAIS_DEPLOYMENT_ENV: "preview" } },
+      { label: "uais-staging", markers: { UAIS_DEPLOYMENT_ENV: "staging" } },
+      {
+        label: "preview-built-as-production",
+        markers: { VERCEL_ENV: "preview", NODE_ENV: "production" },
+      },
+      {
+        label: "local-production-lane",
+        markers: { NODE_ENV: "production", UAIS_DEPLOYMENT_ENV: "local-production" },
+      },
+    ];
+
+    for (const runtime of deployedRuntimes) {
+      const env = {
+        ...runtime.markers,
+        UAIS_APP_AUTH_PROVIDER: "local-demo",
+        UAIS_APP_ALLOW_PRODUCTION_DEMO_AUTH: "true",
+        UAIS_APP_SESSION_SIGNING_SECRET: "test-app-session-signing-secret",
+        UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET:
+          "test-teacher-auth-session-signing-secret-32",
+      };
+      const response = await loginAs({ env, account: "Phoebe" });
+      const body = await response.json();
+      const setCookies = readSetCookieHeaders(response);
+
+      expect(response.status, `${runtime.label}: ${JSON.stringify(body)}`).toBe(200);
+      expect(setCookies, runtime.label).toHaveLength(2);
+      expect(setCookies.join("\n"), runtime.label).not.toContain(
+        "uais_teacher_auth_claims",
+      );
+      expect(body.localTeacherAuthBridge.status, runtime.label).toBe(
+        "skipped-deployed-runtime",
+      );
+      expect(body.appSession.cookieNames, runtime.label).toEqual([
+        "uais_app_session",
+        "uais_app_session_signature",
+      ]);
+
+      // The decisive proof: a deployed login yields no teacher session even
+      // when the verifier is handed the very secret the bridge would have used.
+      expect(
+        readUaisAuthenticatedTeacherSessionFromSignedCookies({
+          request: new Request("http://localhost/api/teaching/operations", {
+            headers: { cookie: createCookieHeaderFromSetCookies(setCookies) },
+          }),
+          secret: "test-teacher-auth-session-signing-secret-32",
+          now: new Date("2099-01-01T00:01:00.000Z"),
+        }),
+        runtime.label,
+      ).toBeUndefined();
+    }
+  });
+
+  it("mints nothing rather than falling back to a built-in teacher signing secret", async () => {
+    const response = await loginAs({
+      env: {
+        NODE_ENV: "development",
+        UAIS_APP_AUTH_PROVIDER: "local-demo",
+        UAIS_APP_SESSION_SIGNING_SECRET: "test-app-session-signing-secret",
+      },
+      account: "Phoebe",
+    });
+    const body = await response.json();
+
+    expect(readSetCookieHeaders(response)).toHaveLength(2);
+    expect(body.localTeacherAuthBridge.status).toBe(
+      "skipped-signing-secret-not-configured",
+    );
+    expect(body.localTeacherAuthBridge.requiredEnvName).toBe(
+      "UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET",
+    );
+  });
+
+  it("issues no teacher session for a local student login and clears a stale one", async () => {
+    const env = {
+      NODE_ENV: "development",
+      UAIS_APP_AUTH_PROVIDER: "local-demo",
+      UAIS_APP_SESSION_SIGNING_SECRET: "test-app-session-signing-secret",
+      UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET:
+        "test-teacher-auth-session-signing-secret-32",
+    };
+
+    const cleanStudentLogin = await loginAs({ env, account: "Peter" });
+    expect(readSetCookieHeaders(cleanStudentLogin)).toHaveLength(2);
+    expect((await cleanStudentLogin.json()).localTeacherAuthBridge.status).toBe(
+      "skipped-non-teacher-role",
+    );
+
+    const teacherCookies = readSetCookieHeaders(await loginAs({ env, account: "Phoebe" }));
+    const switchedStudentLogin = await loginAs({
+      env,
+      account: "Peter",
+      cookie: createCookieHeaderFromSetCookies(teacherCookies),
+    });
+    const switchedSetCookies = readSetCookieHeaders(switchedStudentLogin);
+
+    expect(switchedSetCookies).toHaveLength(4);
+    const clearedTeacherCookies = switchedSetCookies.filter((setCookie) =>
+      setCookie.startsWith("uais_teacher_auth_"),
+    );
+    expect(clearedTeacherCookies).toHaveLength(2);
+    clearedTeacherCookies.forEach((setCookie) => {
+      expect(setCookie).toContain("Max-Age=0");
+    });
+    expect(
+      readUaisAuthenticatedTeacherSessionFromSignedCookies({
+        request: new Request("http://localhost/api/teaching/operations", {
+          headers: { cookie: createCookieHeaderFromSetCookies(switchedSetCookies) },
+        }),
+        secret: "test-teacher-auth-session-signing-secret-32",
+        now: new Date("2099-01-01T00:01:00.000Z"),
+      }),
+    ).toBeUndefined();
+  });
+
+  it("clears the teacher session on sign-out so it cannot outlive the app session", async () => {
+    const signOutResponse = createUaisAppSessionDeleteHandler({
+      env: { NODE_ENV: "development" },
+    })();
+    const setCookies = readSetCookieHeaders(signOutResponse);
+
+    expect(setCookies).toHaveLength(4);
+    setCookies.forEach((setCookie) => {
+      expect(setCookie).toContain("Max-Age=0");
+    });
+    expect(setCookies.join("\n")).toContain("uais_teacher_auth_claims=");
+    expect(setCookies.join("\n")).toContain("uais_teacher_auth_signature=");
+  });
 });
 
 function readSetCookieHeaders(response: Response) {
@@ -502,8 +674,30 @@ function readSetCookieHeaders(response: Response) {
 
   const combined = response.headers.get("set-cookie");
   return combined
-    ? combined.split(/,\s*(?=uais_app_session(?:_signature)?=)/)
+    ? combined.split(
+        /,\s*(?=uais_(?:app_session(?:_signature)?|teacher_auth_(?:claims|signature))=)/,
+      )
     : [];
+}
+
+async function loginAs(input: {
+  env: Record<string, string | undefined>;
+  account: string;
+  cookie?: string;
+}) {
+  const post = createUaisAppSessionPostHandler({
+    env: input.env,
+    now: new Date("2099-01-01T00:00:00.000Z"),
+    createSessionId: () => "app-session-teacher-bridge-test-id",
+  });
+
+  return post(
+    new Request("http://localhost/api/auth/app-session", {
+      method: "POST",
+      headers: input.cookie ? { cookie: input.cookie } : undefined,
+      body: JSON.stringify({ account: input.account, password: "12345" }),
+    }),
+  );
 }
 
 function createCookieHeaderFromSetCookies(setCookies: string[]) {

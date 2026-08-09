@@ -5,6 +5,11 @@ import {
   type UaisAppSessionUser,
 } from "@/lib/auth/uais-app-session";
 import {
+  createTeacherAuthSessionClearSetCookieHeaders,
+  hasTeacherAuthSessionCookie,
+  resolveLocalTeacherAuthBridge,
+} from "@/lib/server/local-teacher-auth-bridge";
+import {
   authenticateUaisLocalDemoAccount,
   createUaisTrustedAccountProviderAuthenticator,
   resolveUaisAppAuthProviderContract,
@@ -124,12 +129,40 @@ export function createUaisAppSessionPostHandler(
       maxAgeSeconds: ttlSeconds,
       secure: isProductionRuntime,
     });
+    // Local development only: also mint the signed teacher session the teaching
+    // write routes require, so a teacher who signs in through the UI can
+    // actually create and operate courses. Deployed runtimes are untouched -
+    // see src/lib/server/local-teacher-auth-bridge.ts for the two guards that
+    // make that a property rather than a hope.
+    const localTeacherAuthBridge = resolveLocalTeacherAuthBridge({
+      env,
+      providerKind: authProviderContract.providerKind,
+      role: authenticatedUser.role,
+      actorId: authenticatedUser.account,
+      sessionId: claims.sessionId,
+      authenticatedAt: claims.authenticatedAt,
+      expiresAt: claims.expiresAt,
+      maxAgeSeconds: ttlSeconds,
+      secure: isProductionRuntime,
+    });
+    // Switching accounts without signing out would otherwise leave the previous
+    // teacher's write credential in the browser alongside the new session. Only
+    // emitted when the caller actually presents one, so an ordinary sign-in
+    // still returns exactly the cookies it always did.
+    const staleTeacherAuthClearHeaders =
+      localTeacherAuthBridge.status !== "issued" && hasTeacherAuthSessionCookie(request)
+        ? createTeacherAuthSessionClearSetCookieHeaders({ secure: isProductionRuntime })
+        : [];
     const redirectTarget =
       body.from && isUaisRouteAllowedForRole(body.from, authenticatedUser.role)
         ? body.from
         : getUaisHomeHrefForRole(authenticatedUser.role);
     const headers = new Headers({ "content-type": "application/json" });
-    for (const setCookieHeader of setCookieHeaders) {
+    for (const setCookieHeader of [
+      ...setCookieHeaders,
+      ...localTeacherAuthBridge.setCookieHeaders,
+      ...staleTeacherAuthClearHeaders,
+    ]) {
       headers.append("set-cookie", setCookieHeader);
     }
 
@@ -156,6 +189,19 @@ export function createUaisAppSessionPostHandler(
             priority: "High",
             maxAgeSeconds: ttlSeconds,
           },
+          redaction: createRedaction(),
+        },
+        // Names only, never values: this is how a developer finds out why
+        // teaching writes still 401 locally (almost always the unset signing
+        // secret) without anyone having to read the route source.
+        localTeacherAuthBridge: {
+          responsibleSession: "S12",
+          status: localTeacherAuthBridge.status,
+          cookieNames:
+            localTeacherAuthBridge.status === "issued"
+              ? ["uais_teacher_auth_claims", "uais_teacher_auth_signature"]
+              : [],
+          requiredEnvName: "UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET",
           redaction: createRedaction(),
         },
         authProviderContract,
@@ -186,6 +232,16 @@ export function createUaisAppSessionDeleteHandler(
       "set-cookie",
       ["uais_app_session_signature=", ...attributes].join("; "),
     );
+    // The teaching write routes read the teacher cookie alone, with no
+    // cross-check against the app session, so leaving it behind would keep a
+    // signed-out browser authorized to write for the rest of its lifetime - and
+    // would keep the proxy treating that visitor as an authenticated teacher.
+    // Unconditional: clearing a cookie that was never set costs nothing.
+    for (const clearHeader of createTeacherAuthSessionClearSetCookieHeaders({
+      secure: isProductionRuntime,
+    })) {
+      headers.append("set-cookie", clearHeader);
+    }
     return new Response(JSON.stringify({ status: "signed-out" }), {
       status: 200,
       headers,
