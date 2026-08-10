@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { LearningPageShell } from "@/components/pages/learning-page-shell";
+import { LearningPage } from "@/components/pages/learning-page";
 import type { Locale } from "@/i18n/copy";
 import { getLocalizedRouteMetadata } from "@/lib/server/localized-route-metadata";
 
@@ -35,7 +35,7 @@ export default async function Page({
   const query = searchParams ? await searchParams : {};
 
   return (
-    <LearningPageShell
+    <LearningPage
       initialCourseId={getFirstQueryValue(query.courseId)}
       initialClassId={getFirstQueryValue(query.classId)}
     />

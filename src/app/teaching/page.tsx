@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { TeachingPageShell } from "@/components/pages/teaching-page-shell";
+import { TeachingPage } from "@/components/pages/teaching-page";
 import type { Locale } from "@/i18n/copy";
 import { getLocalizedRouteMetadata } from "@/lib/server/localized-route-metadata";
 
@@ -19,5 +19,5 @@ export function generateMetadata(): Promise<Metadata> {
 }
 
 export default function Page() {
-  return <TeachingPageShell />;
+  return <TeachingPage />;
 }

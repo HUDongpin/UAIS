@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { LearningChatroomPageShell } from "@/components/pages/learning-page-shell";
+import { LearningChatroomPage } from "@/components/pages/learning-page-chatroom";
 import type { Locale } from "@/i18n/copy";
 import { getLocalizedRouteMetadata } from "@/lib/server/localized-route-metadata";
 
@@ -19,5 +19,5 @@ export function generateMetadata(): Promise<Metadata> {
 }
 
 export default function Page() {
-  return <LearningChatroomPageShell />;
+  return <LearningChatroomPage />;
 }
