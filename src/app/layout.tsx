@@ -36,8 +36,16 @@ export default async function RootLayout({
   const cookieStore = await cookies();
   const initialLocale = getSupportedLocale(cookieStore.get("uais-locale")?.value);
   const initialTheme = resolveThemeMode(cookieStore.get("uais-theme")?.value);
+  // `process.env` is not optional here. Without it the helper falls back to
+  // `{}`, and an empty env reads as a NON-deployed runtime, so the signature is
+  // verified against the committed development secret instead of the configured
+  // one. Production cookies are signed with the configured secret, so every
+  // verification failed, every render saw a null session, and the header dressed
+  // every signed-in user - teacher, student, admin - in the same anonymous
+  // fallback. Every other server caller on this module already passes its env.
   const initialSessionUser = getUaisAppSessionUserFromCookieString(
     cookieStore.toString(),
+    { env: process.env },
   );
 
   return (

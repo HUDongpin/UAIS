@@ -10,6 +10,7 @@ import { CaretDown } from "@phosphor-icons/react/dist/ssr/CaretDown";
 import { ChartBar } from "@phosphor-icons/react/dist/ssr/ChartBar";
 import { CheckCircle } from "@phosphor-icons/react/dist/ssr/CheckCircle";
 import { Moon } from "@phosphor-icons/react/dist/ssr/Moon";
+import { SignIn } from "@phosphor-icons/react/dist/ssr/SignIn";
 import { SignOut } from "@phosphor-icons/react/dist/ssr/SignOut";
 import { Sparkle } from "@phosphor-icons/react/dist/ssr/Sparkle";
 import { Sun } from "@phosphor-icons/react/dist/ssr/Sun";
@@ -20,12 +21,18 @@ import { HeaderMobileMenu } from "@/components/layout/header-mobile-menu";
 import { useAppPreferences } from "@/components/providers/app-preferences";
 import { getTeachingOperationHref } from "@/components/teaching/teaching-operation-data";
 import { getNavItemsForRole, teacherCourses, teacherSidebarItems } from "@/data/uais";
-import { copy } from "@/i18n/copy";
+import { copy, type Locale } from "@/i18n/copy";
 import { localizedText } from "@/components/ui/localized-text";
 import {
   getUaisHomeHrefForRole,
+  type UaisAppRole,
   type UaisAppSessionUser,
 } from "@/lib/auth/uais-app-session";
+
+const accountRoleLabels: Record<Locale, Record<UaisAppRole, string>> = {
+  "zh-CN": { teacher: "教师账号", student: "学生账号", admin: "管理员账号" },
+  "en-US": { teacher: "Teacher", student: "Student", admin: "Admin" },
+};
 
 export function Header({
   initialSessionUser,
@@ -45,21 +52,17 @@ export function Header({
   // cookie is HttpOnly and `/api/auth/app-session` exposes POST/DELETE only, so
   // polling it back would mean adding a session-read route (S12 backend scope).
   const sessionUser = initialSessionUser ?? null;
-  const role = sessionUser?.role ?? "teacher";
-  const navRole = role === "student" ? "student" : "teacher";
-  const primaryNavItems = getNavItemsForRole(navRole);
-  const userControlLabel =
-    locale === "zh-CN"
-      ? role === "student"
-        ? "学生账号"
-        : role === "admin"
-          ? "管理员账号"
-          : "教师账号"
-      : role === "student"
-        ? "Student"
-        : role === "admin"
-          ? "Admin"
-          : "Teacher";
+  // No verified session means no role. `role` used to default to "teacher", so a
+  // visitor the server could not identify - an anonymous reader of a /share link,
+  // or anybody whose session had expired - was handed a 教师账号 chip, an account
+  // menu reading 已登录, and the whole teacher navigation. Null stays null now:
+  // the signed-out header carries one honest affordance, the sign-in link.
+  const role = sessionUser?.role ?? null;
+  const primaryNavItems = role
+    ? getNavItemsForRole(role === "student" ? "student" : "teacher")
+    : [];
+  const signInLabel = locale === "zh-CN" ? "登录" : "Sign in";
+  const userControlLabel = role ? accountRoleLabels[locale][role] : signInLabel;
   // No session means no name. The header used to fall back to the demo personas
   // "Peter"/"Phoebe", so a visitor whose session had expired - or who had never
   // signed in - read a stranger's name in the account control and could
@@ -186,7 +189,7 @@ export function Header({
     <header className="sticky top-0 z-30 border-b border-[var(--border)] bg-[var(--surface)]/92 backdrop-blur-xl">
       <div className="relative mx-auto flex min-h-[72px] w-full max-w-[1608px] items-center justify-between gap-6 px-4 sm:px-6 lg:px-8">
         <Link
-          href={getUaisHomeHrefForRole(role)}
+          href={role ? getUaisHomeHrefForRole(role) : "/login"}
           className="flex shrink-0 items-center gap-3 rounded-2xl px-1 py-2 text-[var(--foreground)] outline-none transition focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
           aria-label="UAIS"
         >
@@ -200,32 +203,39 @@ export function Header({
           </span>
         </Link>
 
-        <nav
-          aria-label="Primary"
-          className="hidden min-w-0 items-center justify-center gap-8 overflow-x-auto md:absolute md:left-1/2 md:top-0 md:flex md:h-full md:-translate-x-1/2"
-        >
-          {primaryNavItems.map((item) => {
-            const active =
-              pathname === item.href ||
-              pathname.startsWith(`${item.href}/`) ||
-              (pathname === "/" && item.href === "/courses");
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={[
-                  "relative flex h-[72px] items-center whitespace-nowrap px-1 text-base font-semibold outline-none transition focus-visible:ring-2 focus-visible:ring-[var(--accent)]",
-                  active ? "text-[var(--accent)]" : "text-[var(--foreground)] hover:text-[var(--accent)]",
-                ].join(" ")}
-              >
-                {localizedText(item.label, locale)}
-                {active ? (
-                  <span className="absolute bottom-0 left-0 h-0.5 w-full rounded-full bg-[var(--accent)]" />
-                ) : null}
-              </Link>
-            );
-          })}
-        </nav>
+        {/* Role navigation belongs to a role. Without a verified session there
+            is none, so the nav landmark is not rendered at all rather than
+            offering routes the proxy will bounce the visitor straight back from. */}
+        {role ? (
+          <nav
+            aria-label="Primary"
+            className="hidden min-w-0 items-center justify-center gap-8 overflow-x-auto md:absolute md:left-1/2 md:top-0 md:flex md:h-full md:-translate-x-1/2"
+          >
+            {primaryNavItems.map((item) => {
+              const active =
+                pathname === item.href ||
+                pathname.startsWith(`${item.href}/`) ||
+                (pathname === "/" && item.href === "/courses");
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={[
+                    "relative flex h-[72px] items-center whitespace-nowrap px-1 text-base font-semibold outline-none transition focus-visible:ring-2 focus-visible:ring-[var(--accent)]",
+                    active
+                      ? "text-[var(--accent)]"
+                      : "text-[var(--foreground)] hover:text-[var(--accent)]",
+                  ].join(" ")}
+                >
+                  {localizedText(item.label, locale)}
+                  {active ? (
+                    <span className="absolute bottom-0 left-0 h-0.5 w-full rounded-full bg-[var(--accent)]" />
+                  ) : null}
+                </Link>
+              );
+            })}
+          </nav>
+        ) : null}
 
         <div className="flex shrink-0 items-center gap-2 text-[var(--foreground)]">
           <button
@@ -264,129 +274,143 @@ export function Header({
               <Moon size={18} weight="duotone" />
             )}
           </button>
-          {/* Phone-width nav and sign-out. The desktop nav above and the account
-              menu below are both hidden under `md`, so without this the header
-              carried no route affordance and no way out of the app. */}
-          <HeaderMobileMenu
-            locale={locale}
-            pathname={pathname}
-            navItems={primaryNavItems}
-            accountDisplayName={accountDisplayName}
-            accountRoleLabel={userControlLabel}
-            signOutLabel={accountMenuCopy.signOut}
-            onSignOut={() => void signOut()}
-          />
-          <div ref={accountMenuRef} className="relative hidden md:block">
-            <button
-              type="button"
-              onClick={() => setAccountMenuOpen((open) => !open)}
-              className="inline-flex h-11 items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface)] px-2.5 pr-3 text-sm font-medium text-[var(--foreground)] shadow-[0_8px_24px_var(--shadow)] outline-none transition hover:bg-[var(--surface-soft)] active:translate-y-px focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
-              aria-controls="uais-account-menu"
-              aria-expanded={accountMenuOpen}
-              aria-haspopup="menu"
-              aria-label={userControlLabel}
-            >
-              <span className="grid size-8 place-items-center rounded-full bg-[var(--accent-soft)] text-[var(--accent)]">
-                <UserCircle size={20} weight="duotone" />
-              </span>
-              <span className="hidden text-left leading-tight lg:block">
-                <span className="block text-sm font-semibold">
-                  {userDisplayName}
-                </span>
-                <span className="block text-[11px] text-[var(--muted)]">
-                  {userControlLabel}
-                </span>
-              </span>
-              <CaretDown
-                size={14}
-                weight="bold"
-                className={accountMenuOpen ? "rotate-180 transition" : "transition"}
+          {sessionUser ? (
+            <>
+              {/* Phone-width nav and sign-out. The desktop nav above and the account
+                  menu below are both hidden under `md`, so without this the header
+                  carried no route affordance and no way out of the app. */}
+              <HeaderMobileMenu
+                locale={locale}
+                pathname={pathname}
+                navItems={primaryNavItems}
+                accountDisplayName={accountDisplayName}
+                accountRoleLabel={userControlLabel}
+                signOutLabel={accountMenuCopy.signOut}
+                onSignOut={() => void signOut()}
               />
-            </button>
-
-            {accountMenuOpen ? (
-              <div
-                id="uais-account-menu"
-                role="menu"
-                aria-label={userControlLabel}
-                className="absolute right-0 top-full z-50 mt-3 w-[336px] overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] text-[var(--foreground)] shadow-[0_22px_60px_var(--shadow-strong)]"
-              >
-                <div className="border-b border-[var(--border)] p-4">
-                  <div className="flex items-center gap-3">
-                    <span className="grid size-11 place-items-center rounded-2xl bg-[var(--accent-soft)] text-[var(--accent)]">
-                      <UserCircle size={26} weight="duotone" />
+              <div ref={accountMenuRef} className="relative hidden md:block">
+                <button
+                  type="button"
+                  onClick={() => setAccountMenuOpen((open) => !open)}
+                  className="inline-flex h-11 items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface)] px-2.5 pr-3 text-sm font-medium text-[var(--foreground)] shadow-[0_8px_24px_var(--shadow)] outline-none transition hover:bg-[var(--surface-soft)] active:translate-y-px focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+                  aria-controls="uais-account-menu"
+                  aria-expanded={accountMenuOpen}
+                  aria-haspopup="menu"
+                  aria-label={userControlLabel}
+                >
+                  <span className="grid size-8 place-items-center rounded-full bg-[var(--accent-soft)] text-[var(--accent)]">
+                    <UserCircle size={20} weight="duotone" />
+                  </span>
+                  <span className="hidden text-left leading-tight lg:block">
+                    <span className="block text-sm font-semibold">
+                      {userDisplayName}
                     </span>
-                    <span className="min-w-0">
-                      <span className="block truncate text-base font-semibold">
-                        {accountDisplayName}
-                      </span>
-                      <span className="mt-1 inline-flex items-center gap-1.5 text-xs font-medium text-[var(--muted)]">
-                        <CheckCircle size={14} weight="duotone" className="text-[#16794c] dark:text-[#6fd3a5]" />
-                        {accountMenuCopy.signedIn}
-                      </span>
+                    <span className="block text-[11px] text-[var(--muted)]">
+                      {userControlLabel}
                     </span>
-                  </div>
-                </div>
+                  </span>
+                  <CaretDown
+                    size={14}
+                    weight="bold"
+                    className={accountMenuOpen ? "rotate-180 transition" : "transition"}
+                  />
+                </button>
 
-                {role === "teacher" ? (
-                  <div className="border-b border-[var(--border)] p-4">
-                    <p className="text-xs font-semibold uppercase text-[var(--muted)]">
-                      {accountMenuCopy.overview}
-                    </p>
-                    <div className="mt-3 grid grid-cols-2 gap-2">
-                      <AccountMenuMetric>{accountMenuCopy.courses}</AccountMenuMetric>
-                      <AccountMenuMetric>{accountMenuCopy.students}</AccountMenuMetric>
+                {accountMenuOpen ? (
+                  <div
+                    id="uais-account-menu"
+                    role="menu"
+                    aria-label={userControlLabel}
+                    className="absolute right-0 top-full z-50 mt-3 w-[336px] overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] text-[var(--foreground)] shadow-[0_22px_60px_var(--shadow-strong)]"
+                  >
+                    <div className="border-b border-[var(--border)] p-4">
+                      <div className="flex items-center gap-3">
+                        <span className="grid size-11 place-items-center rounded-2xl bg-[var(--accent-soft)] text-[var(--accent)]">
+                          <UserCircle size={26} weight="duotone" />
+                        </span>
+                        <span className="min-w-0">
+                          <span className="block truncate text-base font-semibold">
+                            {accountDisplayName}
+                          </span>
+                          <span className="mt-1 inline-flex items-center gap-1.5 text-xs font-medium text-[var(--muted)]">
+                            <CheckCircle size={14} weight="duotone" className="text-[#16794c] dark:text-[#6fd3a5]" />
+                            {accountMenuCopy.signedIn}
+                          </span>
+                        </span>
+                      </div>
                     </div>
-                    {featuredCourse ? (
-                      <div className="mt-3 rounded-xl bg-[var(--surface-elevated)] p-3">
-                        <p className="text-[11px] font-semibold text-[var(--muted)]">
-                          {accountMenuCopy.currentFocus}
+
+                    {role === "teacher" ? (
+                      <div className="border-b border-[var(--border)] p-4">
+                        <p className="text-xs font-semibold uppercase text-[var(--muted)]">
+                          {accountMenuCopy.overview}
                         </p>
-                        <p className="mt-1 text-sm font-semibold">
-                          {localizedText(featuredCourse.title, locale)}
-                        </p>
-                        <p className="mt-1 text-xs leading-5 text-[var(--muted)]">
-                          {localizedText(featuredCourse.currentFocus, locale)}
-                        </p>
+                        <div className="mt-3 grid grid-cols-2 gap-2">
+                          <AccountMenuMetric>{accountMenuCopy.courses}</AccountMenuMetric>
+                          <AccountMenuMetric>{accountMenuCopy.students}</AccountMenuMetric>
+                        </div>
+                        {featuredCourse ? (
+                          <div className="mt-3 rounded-xl bg-[var(--surface-elevated)] p-3">
+                            <p className="text-[11px] font-semibold text-[var(--muted)]">
+                              {accountMenuCopy.currentFocus}
+                            </p>
+                            <p className="mt-1 text-sm font-semibold">
+                              {localizedText(featuredCourse.title, locale)}
+                            </p>
+                            <p className="mt-1 text-xs leading-5 text-[var(--muted)]">
+                              {localizedText(featuredCourse.currentFocus, locale)}
+                            </p>
+                          </div>
+                        ) : null}
                       </div>
                     ) : null}
-                  </div>
-                ) : null}
 
-                {role === "teacher" ? (
-                  <div className="border-b border-[var(--border)] p-2">
-                    <p className="px-2 pb-1 pt-2 text-xs font-semibold uppercase text-[var(--muted)]">
-                      {accountMenuCopy.shortcuts}
-                    </p>
-                    <div className="space-y-1">
-                      {teacherShortcutItems.map((item) => (
-                        <AccountMenuLink
-                          key={item.href}
-                          href={item.href}
-                          icon={item.icon}
-                          onClick={() => setAccountMenuOpen(false)}
-                        >
-                          {item.label}
-                        </AccountMenuLink>
-                      ))}
+                    {role === "teacher" ? (
+                      <div className="border-b border-[var(--border)] p-2">
+                        <p className="px-2 pb-1 pt-2 text-xs font-semibold uppercase text-[var(--muted)]">
+                          {accountMenuCopy.shortcuts}
+                        </p>
+                        <div className="space-y-1">
+                          {teacherShortcutItems.map((item) => (
+                            <AccountMenuLink
+                              key={item.href}
+                              href={item.href}
+                              icon={item.icon}
+                              onClick={() => setAccountMenuOpen(false)}
+                            >
+                              {item.label}
+                            </AccountMenuLink>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+
+                    <div className="p-2">
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => void signOut()}
+                        className="flex h-11 w-full items-center gap-2 rounded-xl px-3 text-left text-sm font-semibold text-[var(--danger)] outline-none transition hover:bg-[var(--surface-soft)] active:translate-y-px focus-visible:ring-2 focus-visible:ring-[var(--danger)]"
+                      >
+                        <SignOut size={17} weight="duotone" />
+                        {accountMenuCopy.signOut}
+                      </button>
                     </div>
                   </div>
                 ) : null}
-
-                <div className="p-2">
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={() => void signOut()}
-                    className="flex h-11 w-full items-center gap-2 rounded-xl px-3 text-left text-sm font-semibold text-[var(--danger)] outline-none transition hover:bg-[var(--surface-soft)] active:translate-y-px focus-visible:ring-2 focus-visible:ring-[var(--danger)]"
-                  >
-                    <SignOut size={17} weight="duotone" />
-                    {accountMenuCopy.signOut}
-                  </button>
-                </div>
               </div>
-            ) : null}
-          </div>
+            </>
+          ) : (
+            // A visitor the server could not identify gets the one control that
+            // can change that, and nothing that claims an identity for them.
+            <Link
+              href="/login"
+              className="inline-flex h-11 items-center gap-2 rounded-full border border-[var(--accent-border)] bg-[var(--accent-soft)] px-3 text-sm font-semibold text-[var(--accent)] shadow-[0_8px_24px_var(--shadow)] outline-none transition hover:bg-[var(--surface-soft)] active:translate-y-px focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+            >
+              <SignIn size={18} weight="duotone" />
+              {signInLabel}
+            </Link>
+          )}
         </div>
       </div>
     </header>

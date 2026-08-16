@@ -25,8 +25,9 @@ export const minimumUaisAppSessionSecretLength = 32;
 
 export type UaisAppSessionSigningSecretContract = {
   // `development-fallback` is the committed constant a local runtime signs with.
-  // It is never reachable from a deployed runtime - see the deployed branch in
-  // readAppSessionSigningSecretState.
+  // It is never reachable from a deployed runtime - not even by passing an empty
+  // env object, because the deployed branch in readAppSessionSigningSecretState
+  // consults the process env as well as the argument.
   status: "configured" | "development-fallback" | "missing" | "weak";
   minimumLength: typeof minimumUaisAppSessionSecretLength;
   valueRedacted: true;
@@ -276,7 +277,18 @@ function readAppSessionSigningSecretState(env: Record<string, string | undefined
   if (!configured) {
     // A deployed runtime has no fallback: a committed constant would be a
     // published forgery key for every session on the deployment.
-    return deployed
+    //
+    // The *passed* env is not enough to decide that. Every reader on this module
+    // defaults its env to `{}`, and `{}` carries no NODE_ENV or VERCEL_ENV, so a
+    // caller that simply forgot the argument used to land here and be handed the
+    // published constant on production - which is exactly how the root layout
+    // came to verify real production cookies against the development secret and
+    // render every signed-in user as an unidentified visitor. The process env is
+    // the only source that cannot be forgotten, so the deployed check consults it
+    // too: a deployed runtime now refuses the fallback no matter what env object
+    // it was handed. A laptop is unaffected - its process env is not deployed
+    // either, so local dev and every suite fixture keep the fallback.
+    return deployed || isUaisAppDeployedRuntime(readRuntimeEnv())
       ? { status: "missing" }
       : { status: "development-fallback", secret: developmentAppSessionSigningSecret };
   }
@@ -291,6 +303,13 @@ function readAppSessionSigningSecretState(env: Record<string, string | undefined
   }
 
   return { status: "configured", secret: configured };
+}
+
+// Guarded rather than read directly: this module is imported by the proxy, which
+// Next.js may run in the Edge runtime, and by route handlers under test where a
+// caller may have replaced the global.
+function readRuntimeEnv(): Record<string, string | undefined> {
+  return typeof process === "undefined" ? {} : (process.env ?? {});
 }
 
 function parseClaims(claimsValue: string): UaisAppSessionClaims | undefined {

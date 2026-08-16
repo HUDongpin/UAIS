@@ -7,6 +7,29 @@ let mockPathname = "/courses";
 const replace = vi.fn();
 const assign = vi.fn();
 
+// Every assertion about role chrome now has to name the role it is asserting.
+// `<Header />` with no prop is the SIGNED-OUT header, not a teacher one: the
+// component used to default `role` to "teacher", so a visitor the server could
+// not identify was dressed as staff.
+const teacherSession = {
+  account: "t2026007",
+  department: "教育学院",
+  displayName: "康霞",
+  role: "teacher",
+} as const;
+const studentSession = {
+  account: "Peter",
+  department: "学生账号",
+  displayName: "Peter",
+  role: "student",
+} as const;
+const adminSession = {
+  account: "Admin",
+  department: "管理员账号",
+  displayName: "Admin",
+  role: "admin",
+} as const;
+
 function stubLocationAssign() {
   vi.stubGlobal("location", { ...window.location, assign });
 }
@@ -77,7 +100,7 @@ describe("Header", () => {
 
   it("keeps the teacher navigation centered on every route", () => {
     mockPathname = "/learning";
-    render(<Header />);
+    render(<Header initialSessionUser={teacherSession} />);
 
     const primaryNav = screen.getByRole("navigation", { name: "Primary" });
     const navLinks = within(primaryNav).getAllByRole("link");
@@ -95,16 +118,7 @@ describe("Header", () => {
 
   it("shows Student Dashboard instead of My Teaching for the Peter student account", () => {
     mockPathname = "/student-dashboard";
-    render(
-      <Header
-        initialSessionUser={{
-          account: "Peter",
-          department: "学生账号",
-          displayName: "Peter",
-          role: "student",
-        }}
-      />,
-    );
+    render(<Header initialSessionUser={studentSession} />);
 
     const primaryNav = screen.getByRole("navigation", { name: "Primary" });
     const navLinks = within(primaryNav).getAllByRole("link");
@@ -118,21 +132,37 @@ describe("Header", () => {
     expect(screen.getAllByText("学生账号").length).toBeGreaterThan(0);
   });
 
+  it("gives an admin session the admin chip and no teacher-only account sections", () => {
+    mockPathname = "/teaching";
+    render(<Header initialSessionUser={adminSession} />);
+
+    expect(screen.getAllByText("管理员账号").length).toBeGreaterThan(0);
+    expect(screen.queryByText("教师账号")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "管理员账号" }));
+    const menu = screen.getByRole("menu", { name: "管理员账号" });
+
+    // An admin is signed in and gets the sign-out, but the teaching overview and
+    // the teacher shortcuts belong to a teacher and are not rendered for them.
+    expect(within(menu).getByText("Admin")).toBeTruthy();
+    expect(within(menu).getByRole("menuitem", { name: "退出账号" })).toBeTruthy();
+    expect(within(menu).queryByText("教学概览")).toBeNull();
+    expect(within(menu).queryByText("快捷入口")).toBeNull();
+  });
+
   it("opens a teacher account menu with identity, teaching overview, shortcuts, and sign out", () => {
     mockPathname = "/teaching";
-    render(<Header />);
+    render(<Header initialSessionUser={teacherSession} />);
 
     fireEvent.click(screen.getByRole("button", { name: "教师账号" }));
 
     const menu = screen.getByRole("menu", { name: "教师账号" });
 
-    // No session was provided, so the header knows no name. It used to print the
-    // demo persona "Phoebe" here, which told a visitor whose session had expired
-    // - or who had never signed in - that they were logged in as somebody. With
-    // nothing real to show it falls back to the neutral role label the control
-    // is already announced with, and invents nothing.
+    // The menu never prints a demo persona: it names the session it was handed,
+    // and nothing else. Printing "Phoebe" told a visitor they were logged in as
+    // somebody they are not.
     expect(within(menu).queryByText("Phoebe")).toBeNull();
-    expect(within(menu).getAllByText("教师账号").length).toBeGreaterThan(0);
+    expect(within(menu).getByText("康霞")).toBeTruthy();
     expect(within(menu).getByText("已登录")).toBeTruthy();
     expect(within(menu).getByText("2 门课程")).toBeTruthy();
     expect(within(menu).getByText("64 名学生")).toBeTruthy();
@@ -156,16 +186,7 @@ describe("Header", () => {
 
   it("names the signed-in account, and never a name the session did not carry", () => {
     mockPathname = "/teaching";
-    const { unmount } = render(
-      <Header
-        initialSessionUser={{
-          account: "t2026007",
-          role: "teacher",
-          displayName: "康霞",
-          department: "教育学院",
-        }}
-      />,
-    );
+    const { unmount } = render(<Header initialSessionUser={teacherSession} />);
 
     fireEvent.click(screen.getByRole("button", { name: "教师账号" }));
     expect(
@@ -205,7 +226,7 @@ describe("Header", () => {
     vi.stubGlobal("fetch", fetchMock);
     stubLocationAssign();
     mockPathname = "/teaching";
-    render(<Header />);
+    render(<Header initialSessionUser={teacherSession} />);
 
     fireEvent.click(screen.getByRole("button", { name: "教师账号" }));
     fireEvent.click(screen.getByRole("menuitem", { name: "退出账号" }));
@@ -235,7 +256,7 @@ describe("Header", () => {
     vi.stubGlobal("fetch", fetchMock);
     stubLocationAssign();
     mockPathname = "/teaching";
-    render(<Header />);
+    render(<Header initialSessionUser={teacherSession} />);
 
     fireEvent.click(screen.getByRole("button", { name: "教师账号" }));
     fireEvent.click(screen.getByRole("menuitem", { name: "退出账号" }));
@@ -256,7 +277,7 @@ describe("Header", () => {
   // handling at all, so the dark theme rendered a white bar over a dark page.
   it("paints the header from the shared theme tokens", () => {
     mockPathname = "/courses";
-    const { container } = render(<Header />);
+    const { container } = render(<Header initialSessionUser={teacherSession} />);
 
     const header = container.querySelector("header") as HTMLElement;
     expect(header.className).toContain("border-[var(--border)]");
@@ -278,7 +299,7 @@ describe("Header", () => {
   describe("mobile navigation drawer", () => {
     it("keeps the drawer trigger below md and the desktop nav from md up", () => {
       mockPathname = "/courses";
-      const { container } = render(<Header />);
+      const { container } = render(<Header initialSessionUser={teacherSession} />);
 
       const trigger = screen.getByRole("button", { name: "打开导航菜单" });
       expect(trigger.getAttribute("aria-expanded")).toBe("false");
@@ -292,16 +313,7 @@ describe("Header", () => {
 
     it("opens a drawer carrying the role-scoped links and the sign out", () => {
       mockPathname = "/student-dashboard";
-      render(
-        <Header
-          initialSessionUser={{
-            account: "Peter",
-            department: "学生账号",
-            displayName: "Peter",
-            role: "student",
-          }}
-        />,
-      );
+      render(<Header initialSessionUser={studentSession} />);
 
       const trigger = screen.getByRole("button", { name: "打开导航菜单" });
       fireEvent.click(trigger);
@@ -328,7 +340,7 @@ describe("Header", () => {
       vi.stubGlobal("fetch", fetchMock);
       stubLocationAssign();
       mockPathname = "/teaching";
-      render(<Header />);
+      render(<Header initialSessionUser={teacherSession} />);
 
       fireEvent.click(screen.getByRole("button", { name: "打开导航菜单" }));
       fireEvent.click(
@@ -346,7 +358,7 @@ describe("Header", () => {
 
     it("moves focus into the drawer, traps Tab inside it, and closes on Escape", () => {
       mockPathname = "/courses";
-      render(<Header />);
+      render(<Header initialSessionUser={teacherSession} />);
 
       const trigger = screen.getByRole("button", { name: "打开导航菜单" });
       fireEvent.click(trigger);
@@ -369,6 +381,64 @@ describe("Header", () => {
       expect(screen.queryByRole("dialog", { name: "导航" })).toBeNull();
       expect(document.activeElement).toBe(trigger);
       expect(trigger.getAttribute("aria-expanded")).toBe("false");
+    });
+  });
+
+  // E21/blocker-3. The root layout verified production cookies against the
+  // committed development secret, so `initialSessionUser` was null on every
+  // production render - and the header answered a null session with `role ??
+  // "teacher"`. Every signed-in user, and every anonymous visitor on a public
+  // route such as /share/:id, read a 教师账号 chip above teacher navigation and
+  // an account menu announcing 已登录. A header that cannot name the visitor now
+  // says so.
+  describe("signed-out header", () => {
+    it("renders no role chip, no role navigation, and no account menu", () => {
+      mockPathname = "/share/demo-transcript";
+      render(<Header />);
+
+      expect(screen.queryByRole("navigation", { name: "Primary" })).toBeNull();
+      for (const roleLabel of ["教师账号", "学生账号", "管理员账号"]) {
+        expect(screen.queryByText(roleLabel), roleLabel).toBeNull();
+      }
+      expect(screen.queryByRole("button", { name: "教师账号" })).toBeNull();
+      expect(screen.queryByText("已登录")).toBeNull();
+      expect(screen.queryByRole("link", { name: "我的教学" })).toBeNull();
+      expect(screen.queryByRole("link", { name: "我的学习" })).toBeNull();
+      expect(screen.queryByRole("button", { name: "退出账号" })).toBeNull();
+    });
+
+    it("offers the one affordance a signed-out visitor can act on", () => {
+      mockPathname = "/share/demo-transcript";
+      render(<Header />);
+
+      const signIn = screen.getByRole("link", { name: "登录" });
+      expect(signIn.getAttribute("href")).toBe("/login");
+      // Not `md:`-gated, unlike the account menu: a phone reaches it too.
+      expect(signIn.className).not.toContain("md:");
+      // The brand lockup cannot lead to a role home either - there is no role.
+      expect(screen.getByRole("link", { name: "UAIS" }).getAttribute("href")).toBe(
+        "/login",
+      );
+    });
+
+    it("keeps the mobile drawer out of the signed-out header", () => {
+      mockPathname = "/share/demo-transcript";
+      const { container } = render(<Header />);
+
+      // The drawer exists to carry role nav and the sign-out. With neither to
+      // carry, opening it would only restate that the visitor is nobody.
+      expect(screen.queryByRole("button", { name: "打开导航菜单" })).toBeNull();
+      expect(container.querySelector("[data-uais-mobile-nav-trigger]")).toBeNull();
+      expect(container.querySelector("[data-uais-mobile-nav-sign-out]")).toBeNull();
+      expect(screen.getByRole("link", { name: "登录" })).toBeTruthy();
+    });
+
+    it("still carries the session-independent language and theme controls", () => {
+      mockPathname = "/share/demo-transcript";
+      render(<Header />);
+
+      expect(screen.getByRole("button", { name: "语言" })).toBeTruthy();
+      expect(screen.getByRole("button", { name: "主题" })).toBeTruthy();
     });
   });
 });
