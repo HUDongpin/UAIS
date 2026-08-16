@@ -2,8 +2,11 @@
 
 // Course/class management and creation dialogs for the teacher workspace
 // (Phase 3 decomposition of teaching-page.tsx). The main page renders
-// CourseClassManager, NewClassDialog, ClassInvitationDialog, InlineInvitationQrPattern,
-// and NewCourseDialog; the remaining components/helpers here are private to this file.
+// CourseClassManager, NewClassDialog, ClassInvitationDialog and NewCourseDialog;
+// the remaining components/helpers here are private to this file.
+//
+// Plan E9: the roster itself moved to `ClassMembershipRoster`, and the QR is now
+// a real scannable code (`InvitationQrCode`) rather than a seeded hash pattern.
 
 
 
@@ -20,8 +23,16 @@ import { Plus } from "@phosphor-icons/react/dist/ssr/Plus";
 import { QrCode } from "@phosphor-icons/react/dist/ssr/QrCode";
 import { UsersThree } from "@phosphor-icons/react/dist/ssr/UsersThree";
 import { X } from "@phosphor-icons/react/dist/ssr/X";
+import { ClassMembershipRoster } from "@/components/teaching/class-membership-roster";
+import { InvitationQrCode } from "@/components/teaching/invitation-qr-code";
+import {
+  describeInviteAvailability,
+  describeInviteExpiry,
+  describeInviteJoinLimit,
+} from "@/components/teaching/invite-code-policy";
 import { localizedText } from "@/components/ui/localized-text";
 import type { TeacherCourse } from "@/data/uais";
+import { copy } from "@/i18n/copy";
 import type { Locale } from "@/i18n/copy";
 import {
   createDefaultNewCourseDraft,
@@ -36,13 +47,12 @@ import { createProvisionalTeachingCourseId } from "@/lib/teaching-course-id";
 import {
   createCourseCoverBindingPartialFailureMessage,
   createCourseCoverGenerationFailureMessage,
-  createInvitationQrCells,
+  createInviteJoinUrl,
   createTeachingClassActionHref,
   isRecoverableCourseCoverBindingFailure,
   verifyCourseCoverAssetPersistence,
 } from "./teaching-page-helpers";
 import {
-  MEMBERSHIP_APPROVAL_PENDING_MESSAGE,
   TEACHING_COURSE_COVER_TEACHER_READBACK_REQUIRED_MESSAGE,
   TEACHING_OPERATION_SAVE_FAILED_MESSAGE,
 } from "./teaching-page-messages";
@@ -56,8 +66,15 @@ export function CourseClassManager({
   classes,
   membershipsByClass,
   membershipApprovalStatuses,
+  membershipLifecycleStatuses,
+  classRosterStatuses,
+  pendingMembershipIds,
+  pendingBulkApprovalClassIds,
   locale,
   onApproveMembership,
+  onApproveAllPendingMemberships,
+  onRejectMembership,
+  onRemoveMembership,
   onNewClass,
   onOpenInvitation,
 }: {
@@ -65,8 +82,24 @@ export function CourseClassManager({
   classes: TeacherClassItem[];
   membershipsByClass: Record<string, TeacherClassMembershipItem[]>;
   membershipApprovalStatuses: Record<string, string>;
+  membershipLifecycleStatuses: Record<string, string>;
+  classRosterStatuses: Record<string, string>;
+  pendingMembershipIds: string[];
+  pendingBulkApprovalClassIds: string[];
   locale: Locale;
   onApproveMembership: (
+    classItem: TeacherClassItem,
+    membership: TeacherClassMembershipItem,
+  ) => void;
+  onApproveAllPendingMemberships: (
+    classItem: TeacherClassItem,
+    pendingMemberships: TeacherClassMembershipItem[],
+  ) => void;
+  onRejectMembership: (
+    classItem: TeacherClassItem,
+    membership: TeacherClassMembershipItem,
+  ) => void;
+  onRemoveMembership: (
     classItem: TeacherClassItem,
     membership: TeacherClassMembershipItem,
   ) => void;
@@ -92,13 +125,6 @@ export function CourseClassManager({
       {classes.length > 0 ? (
         <div className="mt-4 space-y-3">
           {classes.map((classItem) => {
-            const pendingMemberships = (membershipsByClass[classItem.id] ?? []).filter(
-              (membership) => membership.membershipStatus === "pending-teacher-review",
-            );
-            const visibleApprovalMessages = (membershipsByClass[classItem.id] ?? [])
-              .map((membership) => membershipApprovalStatuses[membership.id])
-              .filter((message): message is string => Boolean(message));
-
             return (
               <div key={classItem.id} className="space-y-2">
                 <div className="flex min-h-[82px] w-full flex-col gap-4 rounded-xl border border-[#e6eaf2] bg-white px-4 py-3 text-left text-[#1d2433] shadow-[0_12px_28px_rgba(46,58,91,0.06)] sm:flex-row sm:items-center sm:justify-between">
@@ -169,53 +195,20 @@ export function CourseClassManager({
                   </div>
                 </div>
 
-                {pendingMemberships.length > 0 || visibleApprovalMessages.length > 0 ? (
-                  <div className="rounded-xl border border-[#f5d38a] bg-[#fff9ec] px-4 py-3 text-sm text-[#6f4c12]">
-                    {pendingMemberships.length > 0 ? (
-                      <div className="space-y-2">
-                        {pendingMemberships.map((membership) => {
-                          const approvalStatus = membershipApprovalStatuses[membership.id];
-                          const isApproving =
-                            approvalStatus ===
-                            localizedText(MEMBERSHIP_APPROVAL_PENDING_MESSAGE, locale);
-
-                          return (
-                            <div
-                              key={membership.id}
-                              className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"
-                            >
-                              <span className="font-semibold">
-                                {locale === "zh-CN"
-                                  ? `${membership.studentDisplayName} 等待加入`
-                                  : `${membership.studentDisplayName} is waiting to join`}
-                              </span>
-                              <button
-                                type="button"
-                                aria-label={
-                                  locale === "zh-CN"
-                                    ? `审批${membership.studentDisplayName}加入${classItem.name}`
-                                    : `Approve ${membership.studentDisplayName} for ${classItem.name}`
-                                }
-                                disabled={isApproving}
-                                className="inline-flex h-9 items-center justify-center rounded-full bg-[#2f7cff] px-4 text-sm font-semibold text-white outline-none transition hover:bg-[#2364d9] focus-visible:ring-2 focus-visible:ring-[#2f7cff] disabled:cursor-not-allowed disabled:opacity-70"
-                                onClick={() => onApproveMembership(classItem, membership)}
-                              >
-                                {locale === "zh-CN" ? "批准加入" : "Approve"}
-                              </button>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    ) : null}
-                    {visibleApprovalMessages.length > 0 ? (
-                      <div className="mt-2 space-y-1">
-                        {visibleApprovalMessages.map((message) => (
-                          <p key={message}>{message}</p>
-                        ))}
-                      </div>
-                    ) : null}
-                  </div>
-                ) : null}
+                <ClassMembershipRoster
+                  classItem={classItem}
+                  memberships={membershipsByClass[classItem.id] ?? []}
+                  membershipApprovalStatuses={membershipApprovalStatuses}
+                  membershipLifecycleStatuses={membershipLifecycleStatuses}
+                  classRosterStatus={classRosterStatuses[classItem.id]}
+                  pendingMembershipIds={pendingMembershipIds}
+                  isBulkApprovalPending={pendingBulkApprovalClassIds.includes(classItem.id)}
+                  locale={locale}
+                  onApproveMembership={onApproveMembership}
+                  onApproveAllPendingMemberships={onApproveAllPendingMemberships}
+                  onRejectMembership={onRejectMembership}
+                  onRemoveMembership={onRemoveMembership}
+                />
               </div>
             );
           })}
@@ -366,6 +359,11 @@ export function ClassInvitationDialog({
   locale: Locale;
   onClose: () => void;
 }) {
+  const t = copy[locale].teaching;
+  // The class record's own join path when it has one (a published code carries
+  // it), otherwise the same path the store would have written.
+  const joinUrl = classItem.joinUrl?.trim() || createInviteJoinUrl(classItem.invitationCode);
+
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/35 px-4 py-8 backdrop-blur-sm">
       <section
@@ -395,74 +393,45 @@ export function ClassInvitationDialog({
           </p>
           <ClipboardText size={28} weight="duotone" className="mb-3 text-[#9ab4d6]" />
         </div>
-        <p className="mt-5 text-2xl font-medium text-[#a1a6b4]">
-          {locale === "zh-CN"
-            ? "请在首页右上角输入邀请码。"
-            : "Enter code at top right of App homepage."}
-        </p>
+        {/* The three real ways in, in the order a student meets them. The line
+            this replaced pointed at a code box on the homepage that does not
+            exist; the box now does exist, on the course plaza page. */}
+        <p className="mt-5 text-xl font-medium text-[#a1a6b4]">{t.inviteScanHint}</p>
         <div className="mt-8 rounded-lg border border-[#eceff4] bg-white p-7">
-          <InvitationQrPattern
-            className={classItem.name}
+          <InvitationQrCode
             invitationCode={classItem.invitationCode}
+            joinUrl={joinUrl}
+            locale={locale}
           />
         </div>
-        <p className="mt-7 text-2xl font-medium text-[#848b9e]">
-          {locale === "zh-CN"
-            ? "该邀请码2026年12月17日前有效"
-            : "This invitation code is valid until December 17, 2026."}
-        </p>
-        <p className="mt-10 text-3xl font-medium text-[#141b2d]">{classItem.name}</p>
+        <dl
+          data-uais-class-invitation-policy={classItem.invitationCode}
+          className="mt-7 grid gap-3 text-left sm:grid-cols-3"
+        >
+          <InvitationPolicyEntry
+            label={t.inviteValidityLabel}
+            value={describeInviteExpiry(classItem, locale)}
+          />
+          <InvitationPolicyEntry
+            label={t.inviteJoinLimitLabel}
+            value={describeInviteJoinLimit(classItem, locale)}
+          />
+          <InvitationPolicyEntry
+            label={t.inviteAvailabilityLabel}
+            value={describeInviteAvailability(classItem, locale)}
+          />
+        </dl>
+        <p className="mt-8 text-3xl font-medium text-[#141b2d]">{classItem.name}</p>
       </section>
     </div>
   );
 }
 
-function InvitationQrPattern({
-  className,
-  invitationCode,
-}: {
-  className: string;
-  invitationCode: string;
-}) {
-  const cells = createInvitationQrCells(`${invitationCode}-${className}`);
-
+function InvitationPolicyEntry({ label, value }: { label: string; value: string }) {
   return (
-    <div
-      aria-label={`QR code for invitation code ${invitationCode}`}
-      data-uais-class-invitation-qr={invitationCode}
-      className="mx-auto grid aspect-square w-full max-w-[560px] grid-cols-[repeat(29,minmax(0,1fr))] bg-white"
-    >
-      {cells.map((active, index) => (
-        <span
-          key={`${invitationCode}-${index}`}
-          className={active ? "bg-black" : "bg-white"}
-        />
-      ))}
-    </div>
-  );
-}
-
-export function InlineInvitationQrPattern({
-  invitationCode,
-  seed,
-}: {
-  invitationCode: string;
-  seed: string;
-}) {
-  const cells = createInvitationQrCells(seed);
-
-  return (
-    <div
-      aria-label={`QR code for inline invitation code ${invitationCode}`}
-      data-uais-inline-invitation-qr={invitationCode}
-      className="mx-auto grid aspect-square w-full grid-cols-[repeat(29,minmax(0,1fr))] bg-white"
-    >
-      {cells.map((active, index) => (
-        <span
-          key={`${invitationCode}-inline-${index}`}
-          className={active ? "bg-black" : "bg-white"}
-        />
-      ))}
+    <div className="rounded-lg border border-[#eceff4] bg-[#fafbfe] px-4 py-3">
+      <dt className="text-xs font-semibold uppercase tracking-wide text-[#8b92a4]">{label}</dt>
+      <dd className="mt-1 text-base font-semibold text-[#252a3a]">{value}</dd>
     </div>
   );
 }

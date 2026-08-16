@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { randomInt, randomUUID } from "node:crypto";
 import { TeachingCourseManagementStoreError } from "./teaching-course-management-error";
 import {
   createRedaction,
@@ -137,6 +137,22 @@ export function countApprovedStudentsForCourse(
   ).size;
 }
 
+// Seats a code has actually taken. A rejected or removed membership frees its
+// seat, so a class whose teacher cleaned up a wrong-class join is not
+// permanently one short of its own join limit.
+export function countInviteCodeJoins(
+  database: TeachingCourseManagementDatabase,
+  input: { classId: string; invitationCode: string },
+) {
+  return database.memberships.filter(
+    (membership) =>
+      membership.classId === input.classId &&
+      membership.invitationCode === input.invitationCode &&
+      (membership.membershipStatus === "pending-teacher-review" ||
+        membership.membershipStatus === "approved"),
+  ).length;
+}
+
 export function createReceipt(input: {
   action: TeachingCourseManagementAction;
   actorId: string;
@@ -174,6 +190,7 @@ export function createAuditEvent(input: {
   authMode?: "signed-teacher-session" | "app-student-session";
   authSession?: TeachingCourseManagementAuthSessionSummary;
   createdAt: string;
+  affectedRecordCount?: number;
   requestSource?: TeachingCourseManagementAuditRequestSource;
   storage: TeachingCourseManagementStorageDescriptor;
 }): TeachingCourseManagementAuditEvent {
@@ -188,12 +205,33 @@ export function createAuditEvent(input: {
     authMode: input.authMode ?? "signed-teacher-session",
     ...(input.authSession ? { authSession: normalizeAuthSessionSummary(input.authSession) } : {}),
     createdAt: input.createdAt,
+    ...(input.affectedRecordCount === undefined
+      ? {}
+      : { affectedRecordCount: input.affectedRecordCount }),
     requestSource: normalizeAuditRequestSource(input.requestSource),
     storagePolicy: input.storage.auditStoragePolicy,
     redaction: createRedaction(),
   };
 }
 
+// How many random codes to draw before giving up. The namespace is 90 million
+// wide, so a deployment would need tens of millions of live classes before a
+// single draw were likely to collide; 32 draws is a bound on the loop, not a
+// number the allocator is expected to approach.
+const inviteCodeAllocationAttempts = 32;
+
+// Codes are drawn at random, not counted upwards from a fixed seed.
+//
+// The old allocator walked 55395057, 55395058, ... which made every code in the
+// deployment guessable from any single code a student had ever seen: the next
+// class to be created got the next number. A code is the only credential the
+// join route asks for, so that is an enumeration of every class in the
+// deployment. `randomInt` is uniform over the range (it rejection-samples
+// internally), and the draw is rejection-sampled again here against the codes
+// this snapshot already knows - classes, unpublished drafts, and the copy a
+// membership keeps of the code it joined with. The Postgres claims table closes
+// the remaining cross-course window inside the write's transaction; a loser
+// there retries and draws again.
 export function createClassInvitationCode(database: TeachingCourseManagementDatabase) {
   const usedInviteCodes = new Set<string>();
   for (const classItem of database.classes) {
@@ -206,8 +244,10 @@ export function createClassInvitationCode(database: TeachingCourseManagementData
     usedInviteCodes.add(membership.invitationCode);
   }
 
-  for (let code = 55395057; code <= 99999999; code += 1) {
-    const invitationCode = String(code).padStart(8, "0");
+  for (let attempt = 0; attempt < inviteCodeAllocationAttempts; attempt += 1) {
+    // 10000000..99999999: always eight digits, never a leading zero that a form
+    // or a spreadsheet could silently eat.
+    const invitationCode = String(randomInt(10_000_000, 100_000_000));
     if (!usedInviteCodes.has(invitationCode)) {
       return invitationCode;
     }

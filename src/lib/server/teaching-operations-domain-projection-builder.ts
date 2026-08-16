@@ -101,11 +101,13 @@ export function createDomainProjections(input: {
         objectType: "student-roster",
         courseId: input.courseId,
         syncedBy: input.actorId,
-        syncStatus: "synced",
+        // Matches the roster record this action actually writes: a recount of
+        // local membership rows, not an import from a student information
+        // system this deployment never contacts.
+        syncStatus: "local-recount",
         operationRecordId: input.recordId,
         ...(input.sourceAction ? { sourceAction: input.sourceAction } : {}),
-        sourceSystems: ["sis-roster", "invite-code-joins", "withdrawals"],
-        pendingTeacherReviewCount: 3,
+        sourceSystems: ["local-class-memberships", "local-class-records"],
         syncedAt: input.createdAt,
         storagePolicy: "domain-projection-teaching-student-roster",
         redaction: createRedaction(),

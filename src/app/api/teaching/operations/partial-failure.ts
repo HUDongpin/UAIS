@@ -188,6 +188,7 @@ export function createStudentRosterProviderSyncPartialFailureResponse(input: {
   const routeError = normalizeTeachingOperationRouteError(input.error);
   return jsonResponse(routeError.status, {
     error: routeError.message,
+    ...(routeError.reasonCode ? { reasonCode: routeError.reasonCode } : {}),
     ...(routeError.diagnostics ? { diagnostics: routeError.diagnostics } : {}),
     traceId: input.traceId,
     receipt: input.receipt,
@@ -223,6 +224,7 @@ export function createKnowledgeIndexProviderSyncPartialFailureResponse(input: {
   const routeError = normalizeTeachingOperationRouteError(input.error);
   return jsonResponse(routeError.status, {
     error: routeError.message,
+    ...(routeError.reasonCode ? { reasonCode: routeError.reasonCode } : {}),
     ...(routeError.diagnostics ? { diagnostics: routeError.diagnostics } : {}),
     traceId: input.traceId,
     receipt: input.receipt,
@@ -258,6 +260,7 @@ export function createCourseContentProviderPublishPartialFailureResponse(input: 
   const routeError = normalizeTeachingOperationRouteError(input.error);
   return jsonResponse(routeError.status, {
     error: routeError.message,
+    ...(routeError.reasonCode ? { reasonCode: routeError.reasonCode } : {}),
     ...(routeError.diagnostics ? { diagnostics: routeError.diagnostics } : {}),
     traceId: input.traceId,
     receipt: input.receipt,
@@ -293,6 +296,7 @@ export function createCourseExportProviderPartialFailureResponse(input: {
   const routeError = normalizeTeachingOperationRouteError(input.error);
   return jsonResponse(routeError.status, {
     error: routeError.message,
+    ...(routeError.reasonCode ? { reasonCode: routeError.reasonCode } : {}),
     ...(routeError.diagnostics ? { diagnostics: routeError.diagnostics } : {}),
     traceId: input.traceId,
     receipt: input.receipt,
@@ -328,6 +332,7 @@ export function createGradingFeedbackProviderPartialFailureResponse(input: {
   const routeError = normalizeTeachingOperationRouteError(input.error);
   return jsonResponse(routeError.status, {
     error: routeError.message,
+    ...(routeError.reasonCode ? { reasonCode: routeError.reasonCode } : {}),
     ...(routeError.diagnostics ? { diagnostics: routeError.diagnostics } : {}),
     traceId: input.traceId,
     receipt: input.receipt,
@@ -364,6 +369,7 @@ export function createClassInvitePublicationPartialFailureResponse(input: {
   const routeError = normalizeTeachingOperationRouteError(input.error);
   return jsonResponse(routeError.status, {
     error: routeError.message,
+    ...(routeError.reasonCode ? { reasonCode: routeError.reasonCode } : {}),
     ...(routeError.diagnostics ? { diagnostics: routeError.diagnostics } : {}),
     traceId: input.traceId,
     receipt: input.receipt,
@@ -394,6 +400,7 @@ export function createCourseManagementDomainObjectPartialFailureResponse(input: 
   const routeError = normalizeTeachingOperationRouteError(input.error);
   return jsonResponse(routeError.status, {
     error: routeError.message,
+    ...(routeError.reasonCode ? { reasonCode: routeError.reasonCode } : {}),
     ...(routeError.diagnostics ? { diagnostics: routeError.diagnostics } : {}),
     traceId: input.traceId,
     receipt: input.receipt,

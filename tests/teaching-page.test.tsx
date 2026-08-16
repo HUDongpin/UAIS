@@ -44,6 +44,150 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+// Plan E9: the inline operations refuse to run until a course is explicitly
+// chosen. The picker replaced a silent `courseCards[0]` fallback, so every test
+// that used to rely on that fallback now names the same course out loud.
+async function chooseWorkspaceCourse(courseId: string) {
+  const courseSelect = screen.getByLabelText(
+    mockPreferences.locale === "zh-CN" ? "工作台操作课程" : "Course for workspace actions",
+  );
+  // A course only becomes selectable once it is in the workspace's list, which for
+  // a persisted course means after the signed course readback lands.
+  await waitFor(() => {
+    expect(courseSelect.querySelector(`option[value="${courseId}"]`)).toBeTruthy();
+  });
+  fireEvent.change(courseSelect, { target: { value: courseId } });
+}
+
+// The invite actions target one class. The class list arrives with the signed
+// course readback, so a click fired before that lands is refused on purpose;
+// these tests wait for the target to resolve rather than for a fallback to guess.
+async function waitForInviteClassTarget() {
+  await waitFor(() => {
+    expect(
+      (screen.getByLabelText("操作班级") as HTMLSelectElement).value,
+    ).not.toBe("");
+  });
+}
+
+// A signed course readback carrying the demo research-methods course together
+// with its one class, so the invite workspace has a real class to target instead
+// of the first-class fallback plan E9 removed.
+function createResearchMethodsClassCourseListReadback() {
+  return Response.json({
+    courses: [
+      {
+        courseId: "teacher-research-methods",
+        courseName: "大学研究方法",
+        instructor: "康霞",
+        unit: "广州大学（404）",
+        department: "实验教学中心",
+        semester: "2026 春季",
+        students: 32,
+      },
+    ],
+    classes: [
+      {
+        classId: "teacher-research-methods-class-1",
+        courseId: "teacher-research-methods",
+        className: "研究方法一班",
+        students: 32,
+        semester: "2026 春季",
+        invitationCode: "55395057",
+      },
+    ],
+    receipt: {
+      action: "list-courses",
+      actorId: "teacher-kang",
+      status: "read",
+      responsibleSession: "S12",
+    },
+  });
+}
+
+// Plan E9 roster fixtures: one class whose waiting/approved/closed rows the
+// bulk-approve, reject and remove controls act on.
+function createBulkRosterCourseListReadback(
+  pendingStudents: string[],
+  approvePending: boolean,
+  closedStudents: string[] = [],
+  approvedStudents: string[] = [],
+  invitePolicy?: {
+    inviteExpiresAt?: string;
+    inviteMaxJoins?: number;
+    inviteDisabled?: boolean;
+  },
+  extraClasses: Array<{ classId: string; className: string }> = [],
+) {
+  const classId = "teacher-course-enterprise-operations-20260623-class-1";
+  const courseId = "teacher-course-enterprise-operations-20260623";
+  const membership = (studentId: string, membershipStatus: string) => ({
+    membershipId: `membership-${studentId}`,
+    courseId,
+    classId,
+    invitationCode: "66334455",
+    studentId,
+    studentDisplayName: studentId,
+    membershipStatus,
+    joinedAt: "2026-06-23T08:10:00.000Z",
+  });
+  const closed = new Set(closedStudents);
+  return Response.json({
+    courses: [
+      {
+        courseId,
+        courseName: "企业级普通教学管理",
+        instructor: "康霞",
+        unit: "广州大学（404）",
+        department: "实验教学中心",
+        semester: "2026 春季",
+        students: 12,
+      },
+    ],
+    classes: [
+      {
+        classId,
+        courseId,
+        className: "企业管理实验班",
+        students: 12,
+        semester: "2026 春季",
+        invitationCode: "66334455",
+        joinUrl: "/courses?invite=66334455",
+        ...(invitePolicy ?? {}),
+      },
+      ...extraClasses.map((extraClass) => ({
+        classId: extraClass.classId,
+        courseId,
+        className: extraClass.className,
+        students: 0,
+        semester: "2026 春季",
+        invitationCode: "66334456",
+      })),
+    ],
+    memberships: [
+      ...pendingStudents.map((studentId) =>
+        membership(
+          studentId,
+          closed.has(studentId)
+            ? "rejected"
+            : approvePending
+              ? "approved"
+              : "pending-teacher-review",
+        ),
+      ),
+      ...approvedStudents.map((studentId) =>
+        membership(studentId, closed.has(studentId) ? "removed" : "approved"),
+      ),
+    ],
+    receipt: {
+      action: "list-courses",
+      actorId: "teacher-kang",
+      status: "read",
+      traceId: "trace-list-courses",
+    },
+  });
+}
+
 function openAgentWorkspace() {
   fireEvent.click(screen.getByRole("link", { name: "智能体配置" }));
 }
@@ -214,12 +358,15 @@ function createVerifiedInlineOperationAuditReadbackResponse(input: {
             updatedAt: "2026-06-22T10:40:00.000Z",
           }
         : {}),
+      // The roster action recounts local membership rows and imports nothing, so
+      // the projection the workspace verifies says `local-recount` over local
+      // sources. A response still claiming `synced` from an `sis-roster` is now
+      // an UNVERIFIED projection, which is what the fixture below pins.
       ...(objectType === "student-roster"
         ? {
             syncedBy: "teacher-kang",
-            syncStatus: "synced",
-            sourceSystems: ["sis-roster", "invite-code-joins", "withdrawals"],
-            pendingTeacherReviewCount: 3,
+            syncStatus: "local-recount",
+            sourceSystems: ["local-class-memberships", "local-class-records"],
             syncedAt: "2026-06-22T10:40:00.000Z",
           }
         : {}),
@@ -759,6 +906,7 @@ describe("TeachingPage", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     render(<TeachingPage />);
+    await chooseWorkspaceCourse("teacher-research-methods");
 
     expect(screen.queryByRole("link", { name: "进入管理" })).toBeNull();
     expect(screen.getByRole("button", { name: "保存课程设置" })).toBeTruthy();
@@ -792,6 +940,7 @@ describe("TeachingPage", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     render(<TeachingPage />);
+    await chooseWorkspaceCourse("teacher-research-methods");
 
     fireEvent.click(screen.getByRole("button", { name: "保存课程设置" }));
 
@@ -826,6 +975,7 @@ describe("TeachingPage", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     render(<TeachingPage />);
+    await chooseWorkspaceCourse("teacher-research-methods");
 
     fireEvent.click(screen.getByRole("button", { name: "保存课程设置" }));
 
@@ -858,6 +1008,7 @@ describe("TeachingPage", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     render(<TeachingPage />);
+    await chooseWorkspaceCourse("teacher-research-methods");
 
     fireEvent.click(screen.getByRole("button", { name: "保存课程设置" }));
 
@@ -911,6 +1062,7 @@ describe("TeachingPage", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     const { container } = render(<TeachingPage />);
+    await chooseWorkspaceCourse("teacher-course-enterprise-operations-20260623");
 
     await waitFor(() => {
       expect(screen.getByText("企业级普通教学管理")).toBeTruthy();
@@ -1001,6 +1153,7 @@ describe("TeachingPage", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     render(<TeachingPage />);
+    await chooseWorkspaceCourse("teacher-research-methods");
 
     const alert = await screen.findByRole("alert");
     expect(alert.textContent).toContain("服务端课程数据未读回");
@@ -1475,6 +1628,7 @@ describe("TeachingPage", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     render(<TeachingPage />);
+    await chooseWorkspaceCourse("teacher-research-methods");
 
     fireEvent.click(screen.getByRole("button", { name: "保存课程设置" }));
 
@@ -1530,6 +1684,7 @@ describe("TeachingPage", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     render(<TeachingPage />);
+    await chooseWorkspaceCourse("teacher-research-methods");
 
     fireEvent.change(screen.getByLabelText("课程名称"), {
       target: { value: "企业级研究方法" },
@@ -1586,6 +1741,7 @@ describe("TeachingPage", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     render(<TeachingPage />);
+    await chooseWorkspaceCourse("teacher-research-methods");
 
     fireEvent.change(screen.getByLabelText("课程名称"), {
       target: { value: "企业级研究方法" },
@@ -1622,6 +1778,7 @@ describe("TeachingPage", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     const { rerender } = render(<TeachingPage />);
+    await chooseWorkspaceCourse("teacher-research-methods");
 
     fireEvent.change(screen.getByLabelText("课程说明"), {
       target: { value: "只修改课程说明。" },
@@ -1678,6 +1835,7 @@ describe("TeachingPage", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     const { rerender } = render(<TeachingPage />);
+    await chooseWorkspaceCourse("teacher-research-methods");
 
     // Touch and revert: the sparse draft now holds the zh-CN strings verbatim, which
     // is indistinguishable from an edit by value alone.
@@ -1742,6 +1900,7 @@ describe("TeachingPage", () => {
 
     mockPreferences.locale = "en-US";
     render(<TeachingPage />);
+    await chooseWorkspaceCourse("teacher-research-methods");
 
     // The demo cards carry no parseable semester, so the persisted rendering is the
     // locale default: "Spring 2026" here, "2025-2026第二学期" in zh-CN.
@@ -1789,6 +1948,7 @@ describe("TeachingPage", () => {
 
     mockPreferences.locale = "en-US";
     render(<TeachingPage />);
+    await chooseWorkspaceCourse("teacher-research-methods");
 
     fireEvent.change(screen.getByLabelText("Course Name"), {
       target: { value: "大学研究方法" },
@@ -1829,6 +1989,7 @@ describe("TeachingPage", () => {
 
     mockPreferences.locale = "en-US";
     render(<TeachingPage />);
+    await chooseWorkspaceCourse("teacher-research-methods");
 
     const courseNameInput = screen.getByLabelText("Course Name") as HTMLInputElement;
     expect(courseNameInput.value).toBe("University Research Methods");
@@ -1878,6 +2039,7 @@ describe("TeachingPage", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     render(<TeachingPage />);
+    await chooseWorkspaceCourse("teacher-research-methods");
 
     fireEvent.change(screen.getByLabelText("课程名称"), { target: { value: "" } });
     fireEvent.change(screen.getByLabelText("课程说明"), {
@@ -1920,6 +2082,7 @@ describe("TeachingPage", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     const { rerender } = render(<TeachingPage />);
+    await chooseWorkspaceCourse("teacher-research-methods");
 
     fireEvent.change(screen.getByLabelText("课程名称"), {
       target: { value: "企业级研究方法" },
@@ -1971,6 +2134,7 @@ describe("TeachingPage", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     render(<TeachingPage />);
+    await chooseWorkspaceCourse("teacher-research-methods");
 
     fireEvent.click(screen.getByRole("button", { name: "保存课程设置" }));
 
@@ -2003,6 +2167,7 @@ describe("TeachingPage", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     render(<TeachingPage />);
+    await chooseWorkspaceCourse("teacher-research-methods");
 
     fireEvent.click(screen.getByRole("button", { name: "保存课程设置" }));
 
@@ -2041,6 +2206,7 @@ describe("TeachingPage", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     render(<TeachingPage />);
+    await chooseWorkspaceCourse("teacher-research-methods");
 
     fireEvent.click(screen.getByRole("button", { name: "保存课程设置" }));
 
@@ -2079,6 +2245,7 @@ describe("TeachingPage", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     render(<TeachingPage />);
+    await chooseWorkspaceCourse("teacher-research-methods");
 
     fireEvent.click(screen.getByRole("link", { name: "课程知识库" }));
     fireEvent.click(screen.getByRole("button", { name: "同步知识库索引" }));
@@ -2115,6 +2282,7 @@ describe("TeachingPage", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     render(<TeachingPage />);
+    await chooseWorkspaceCourse("teacher-research-methods");
 
     fireEvent.click(screen.getByRole("button", { name: "保存课程设置" }));
 
@@ -2180,6 +2348,7 @@ describe("TeachingPage", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     render(<TeachingPage />);
+    await chooseWorkspaceCourse("teacher-research-methods");
 
     fireEvent.click(screen.getByRole("button", { name: "保存课程设置" }));
 
@@ -2223,6 +2392,7 @@ describe("TeachingPage", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     render(<TeachingPage />);
+    await chooseWorkspaceCourse("teacher-research-methods");
 
     fireEvent.click(screen.getByRole("button", { name: "保存课程设置" }));
 
@@ -2279,8 +2449,8 @@ describe("TeachingPage", () => {
       ],
       [
         "学生管理",
-        "同步学生名单",
-        "学生名单同步已保存到服务端。",
+        "重新统计学生名单",
+        "已按当前加入记录重新统计班级和课程人数。",
         "学生名单已同步到本地视图。",
       ],
     ] as const;
@@ -2339,6 +2509,7 @@ describe("TeachingPage", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     render(<TeachingPage />);
+    await chooseWorkspaceCourse("teacher-research-methods");
 
     for (const [workspaceLabel, actionLabel, serverCopy, localCopy] of fallbackActions) {
       fireEvent.click(screen.getByRole("link", { name: workspaceLabel }));
@@ -2436,6 +2607,7 @@ describe("TeachingPage", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     render(<TeachingPage />);
+    await chooseWorkspaceCourse("teacher-research-methods");
 
     fireEvent.click(screen.getByRole("link", { name: "智能体配置" }));
     fireEvent.click(screen.getByRole("button", { name: "保存智能体方案" }));
@@ -2535,6 +2707,7 @@ describe("TeachingPage", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     render(<TeachingPage />);
+    await chooseWorkspaceCourse("teacher-research-methods");
 
     fireEvent.click(screen.getByRole("button", { name: "预览学生端" }));
 
@@ -2637,6 +2810,7 @@ describe("TeachingPage", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     render(<TeachingPage />);
+    await chooseWorkspaceCourse("teacher-research-methods");
 
     fireEvent.click(screen.getByRole("link", { name: "智能体配置" }));
     fireEvent.click(screen.getByRole("button", { name: "运行权限预检" }));
@@ -2737,6 +2911,7 @@ describe("TeachingPage", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     render(<TeachingPage />);
+    await chooseWorkspaceCourse("teacher-research-methods");
 
     fireEvent.click(screen.getByRole("link", { name: "管理员设置" }));
     fireEvent.click(screen.getByRole("button", { name: "保存管理员设置" }));
@@ -2836,6 +3011,7 @@ describe("TeachingPage", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     render(<TeachingPage />);
+    await chooseWorkspaceCourse("teacher-research-methods");
 
     fireEvent.click(screen.getByRole("link", { name: "管理员设置" }));
     fireEvent.click(screen.getByRole("button", { name: "发送协作邀请" }));
@@ -2936,6 +3112,7 @@ describe("TeachingPage", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     render(<TeachingPage />);
+    await chooseWorkspaceCourse("teacher-research-methods");
 
     fireEvent.click(screen.getByRole("link", { name: "测验看板" }));
     fireEvent.click(screen.getByRole("button", { name: "刷新测验看板" }));
@@ -3036,6 +3213,7 @@ describe("TeachingPage", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     render(<TeachingPage />);
+    await chooseWorkspaceCourse("teacher-research-methods");
 
     fireEvent.click(screen.getByRole("link", { name: "测验看板" }));
     fireEvent.click(screen.getByRole("button", { name: "标记低质题复核" }));
@@ -3136,6 +3314,7 @@ describe("TeachingPage", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     render(<TeachingPage />);
+    await chooseWorkspaceCourse("teacher-research-methods");
 
     fireEvent.click(screen.getByRole("link", { name: "数据导出" }));
     fireEvent.click(screen.getByRole("button", { name: "生成导出清单" }));
@@ -3235,6 +3414,7 @@ describe("TeachingPage", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     render(<TeachingPage />);
+    await chooseWorkspaceCourse("teacher-research-methods");
 
     fireEvent.click(screen.getByRole("link", { name: "数据导出" }));
     fireEvent.click(screen.getByRole("button", { name: "校验脱敏范围" }));
@@ -3275,7 +3455,7 @@ describe("TeachingPage", () => {
             status: "persisted",
             audit: createSignedInlineOperationReceiptAudit(),
             displayMessage: {
-              "zh-CN": "学生名单同步已保存到服务端。",
+              "zh-CN": "已按当前加入记录重新统计班级和课程人数。",
               "en-US": "Student roster sync was saved to the server.",
             },
           },
@@ -3335,14 +3515,15 @@ describe("TeachingPage", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     render(<TeachingPage />);
+    await chooseWorkspaceCourse("teacher-research-methods");
 
     fireEvent.click(screen.getByRole("link", { name: "学生管理" }));
-    fireEvent.click(screen.getByRole("button", { name: "同步学生名单" }));
+    fireEvent.click(screen.getByRole("button", { name: "重新统计学生名单" }));
 
     await waitFor(() => {
       expect(screen.getByText("学生名单读回未匹配同步结果，请稍后刷新。")).toBeTruthy();
     });
-    expect(screen.queryByText("学生名单同步已保存到服务端。")).toBeNull();
+    expect(screen.queryByText("已按当前加入记录重新统计班级和课程人数。")).toBeNull();
     expect(
       screen.queryByText("领域对象已验证：student-roster / student-roster-teacher-research-methods"),
     ).toBeNull();
@@ -3433,6 +3614,7 @@ describe("TeachingPage", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     render(<TeachingPage />);
+    await chooseWorkspaceCourse("teacher-research-methods");
 
     fireEvent.click(screen.getByRole("link", { name: "学生管理" }));
     fireEvent.click(screen.getByRole("button", { name: "生成分组建议" }));
@@ -3444,6 +3626,91 @@ describe("TeachingPage", () => {
     expect(
       screen.queryByText("领域对象已验证：group-suggestions / group-suggestions-teacher-research-methods"),
     ).toBeNull();
+  });
+
+  it("shows the teacher the partition the group-suggestion action proposed", async () => {
+    const recordId = "operation-record-group-suggestions-returned";
+    const traceId = "trace-inline-group-suggestions-returned";
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === "/api/teaching/courses") {
+        return createResearchMethodsClassCourseListReadback();
+      }
+      if (String(input) === "/api/teaching/operations") {
+        expect(init?.method).toBe("POST");
+        return Response.json({
+          receipt: {
+            receiptId: recordId,
+            operationId: "students",
+            actionSlot: "secondary",
+            courseId: "teacher-research-methods",
+            status: "persisted",
+            audit: createSignedInlineOperationReceiptAudit(),
+            displayMessage: {
+              "zh-CN": "分组建议已生成，等待教师确认。",
+              "en-US": "Group suggestions generated for teacher confirmation.",
+            },
+          },
+          // The route persists this partition and now returns it. Reporting only
+          // "generated" was why the button read as unwired: the teacher was told
+          // a suggestion existed and shown nothing that had been suggested.
+          studentGroupSuggestionReceipt: {
+            action: "generate-student-group-suggestions",
+            status: "persisted",
+            ungroupedStudentCount: 5,
+            reviewPolicy: "teacher-review-before-group-assignment",
+            suggestedGroups: [
+              {
+                groupName: "第1组",
+                members: [
+                  { studentId: "student-chen", studentDisplayName: "陈可" },
+                  { studentId: "student-li", studentDisplayName: "李明" },
+                  { studentId: "student-wu", studentDisplayName: "吴敏" },
+                  { studentId: "student-zhao", studentDisplayName: "赵一鸣" },
+                ],
+              },
+              {
+                groupName: "第2组",
+                members: [{ studentId: "student-he", studentDisplayName: "何雨桐" }],
+              },
+            ],
+          },
+          domainPersistenceSummary: createPersistedInlineOperationDomainPersistenceSummary(
+            recordId,
+            "students",
+            "secondary",
+          ),
+          traceId,
+        });
+      }
+      if (String(input) === "/api/teaching/operations/audit") {
+        return createVerifiedInlineOperationAuditReadbackResponse({
+          traceId,
+          recordId,
+          operationId: "students",
+          actionSlot: "secondary",
+        });
+      }
+      expect(String(input)).toBe("/api/teaching/operations/audit/alerts");
+      return createClearInlineOperationAuditAlertsResponse(traceId);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<TeachingPage />);
+    await chooseWorkspaceCourse("teacher-research-methods");
+
+    fireEvent.click(screen.getByRole("link", { name: "学生管理" }));
+    fireEvent.click(screen.getByRole("button", { name: "生成分组建议" }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(/建议分组：第1组（4 人）、第2组（1 人）/),
+      ).toBeTruthy();
+    });
+    // The sentence keeps the confirmation it extends, and says out loud that
+    // nothing has been assigned.
+    expect(screen.getByText(/分组建议已生成，等待教师确认。/)).toBeTruthy();
+    expect(screen.getByText(/覆盖 5 名尚未分组的学生/)).toBeTruthy();
+    expect(screen.getByText(/等待教师确认后才会写入/)).toBeTruthy();
   });
 
   it("requires knowledge index business readback before claiming knowledge sync success", async () => {
@@ -3531,6 +3798,7 @@ describe("TeachingPage", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     render(<TeachingPage />);
+    await chooseWorkspaceCourse("teacher-research-methods");
 
     fireEvent.click(screen.getByRole("link", { name: "课程知识库" }));
     fireEvent.click(screen.getByRole("button", { name: "同步知识库索引" }));
@@ -3629,6 +3897,7 @@ describe("TeachingPage", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     render(<TeachingPage />);
+    await chooseWorkspaceCourse("teacher-research-methods");
 
     fireEvent.click(screen.getByRole("link", { name: "课程知识库" }));
     fireEvent.click(screen.getByRole("button", { name: "添加资料占位" }));
@@ -3729,6 +3998,7 @@ describe("TeachingPage", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     render(<TeachingPage />);
+    await chooseWorkspaceCourse("teacher-research-methods");
 
     fireEvent.click(screen.getByRole("link", { name: "数据看板" }));
     fireEvent.click(screen.getByRole("button", { name: "刷新数据看板" }));
@@ -3827,6 +4097,7 @@ describe("TeachingPage", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     render(<TeachingPage />);
+    await chooseWorkspaceCourse("teacher-research-methods");
 
     fireEvent.click(screen.getByRole("link", { name: "数据看板" }));
     fireEvent.click(screen.getByRole("button", { name: "锁定日报快照" }));
@@ -3927,6 +4198,7 @@ describe("TeachingPage", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     render(<TeachingPage />);
+    await chooseWorkspaceCourse("teacher-research-methods");
 
     fireEvent.click(screen.getByRole("link", { name: "课程内容" }));
     fireEvent.click(screen.getByRole("button", { name: "发布课程内容" }));
@@ -4025,6 +4297,7 @@ describe("TeachingPage", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     render(<TeachingPage />);
+    await chooseWorkspaceCourse("teacher-research-methods");
 
     fireEvent.click(screen.getByRole("link", { name: "课程内容" }));
     fireEvent.click(screen.getByRole("button", { name: "生成单元草稿" }));
@@ -4127,6 +4400,7 @@ describe("TeachingPage", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     render(<TeachingPage />);
+    await chooseWorkspaceCourse("teacher-research-methods");
 
     fireEvent.click(screen.getByRole("link", { name: "作业批改" }));
     fireEvent.click(screen.getByRole("button", { name: "保存批改队列" }));
@@ -4227,6 +4501,7 @@ describe("TeachingPage", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     render(<TeachingPage />);
+    await chooseWorkspaceCourse("teacher-research-methods");
 
     fireEvent.click(screen.getByRole("link", { name: "作业批改" }));
     fireEvent.click(screen.getByRole("button", { name: "生成智能反馈建议" }));
@@ -4269,6 +4544,7 @@ describe("TeachingPage", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     render(<TeachingPage />);
+    await chooseWorkspaceCourse("teacher-research-methods");
 
     const primaryButton = screen.getByRole("button", { name: "保存课程设置" });
     const secondaryButton = screen.getByRole("button", { name: "预览学生端" });
@@ -4385,6 +4661,7 @@ describe("TeachingPage", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     render(<TeachingPage />);
+    await chooseWorkspaceCourse("teacher-research-methods");
 
     fireEvent.click(screen.getByRole("button", { name: "保存课程设置" }));
 
@@ -4472,6 +4749,7 @@ describe("TeachingPage", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     render(<TeachingPage />);
+    await chooseWorkspaceCourse("teacher-research-methods");
 
     fireEvent.click(screen.getByRole("button", { name: "保存课程设置" }));
 
@@ -4531,6 +4809,7 @@ describe("TeachingPage", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     const { container } = render(<TeachingPage />);
+    await chooseWorkspaceCourse("teacher-research-methods");
 
     fireEvent.click(screen.getByRole("button", { name: "保存课程设置" }));
 
@@ -4651,6 +4930,7 @@ describe("TeachingPage", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     const { container } = render(<TeachingPage />);
+    await chooseWorkspaceCourse("teacher-research-methods");
 
     expect(screen.getByRole("heading", { name: "大学研究方法" })).toBeTruthy();
 
@@ -4801,6 +5081,7 @@ describe("TeachingPage", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     render(<TeachingPage />);
+    await chooseWorkspaceCourse("teacher-research-methods");
 
     expect(screen.getByRole("heading", { name: "大学研究方法" })).toBeTruthy();
 
@@ -4910,6 +5191,7 @@ describe("TeachingPage", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     render(<TeachingPage />);
+    await chooseWorkspaceCourse("teacher-research-methods");
 
     fireEvent.click(screen.getByRole("button", { name: "保存课程设置" }));
 
@@ -4996,6 +5278,7 @@ describe("TeachingPage", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     const { container } = render(<TeachingPage />);
+    await chooseWorkspaceCourse("teacher-research-methods");
 
     fireEvent.click(screen.getByRole("button", { name: "保存课程设置" }));
 
@@ -5127,6 +5410,7 @@ describe("TeachingPage", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     render(<TeachingPage />);
+    await chooseWorkspaceCourse("teacher-research-methods");
 
     fireEvent.click(screen.getByRole("button", { name: "保存课程设置" }));
 
@@ -5210,6 +5494,7 @@ describe("TeachingPage", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     render(<TeachingPage />);
+    await chooseWorkspaceCourse("teacher-research-methods");
 
     fireEvent.click(screen.getByRole("button", { name: "保存课程设置" }));
 
@@ -5341,6 +5626,7 @@ describe("TeachingPage", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     const { container } = render(<TeachingPage />);
+    await chooseWorkspaceCourse("teacher-research-methods");
 
     fireEvent.click(screen.getByRole("button", { name: "保存课程设置" }));
 
@@ -5431,6 +5717,7 @@ describe("TeachingPage", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     const { container } = render(<TeachingPage />);
+    await chooseWorkspaceCourse("teacher-research-methods");
 
     fireEvent.change(screen.getByLabelText("课程名称"), {
       target: { value: "错误领域对象不应更新课程名" },
@@ -5521,6 +5808,7 @@ describe("TeachingPage", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     const { container } = render(<TeachingPage />);
+    await chooseWorkspaceCourse("teacher-research-methods");
 
     fireEvent.click(screen.getByRole("button", { name: "保存课程设置" }));
 
@@ -5571,6 +5859,7 @@ describe("TeachingPage", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     render(<TeachingPage />);
+    await chooseWorkspaceCourse("teacher-research-methods");
 
     fireEvent.click(screen.getByRole("button", { name: "保存课程设置" }));
 
@@ -5717,6 +6006,7 @@ describe("TeachingPage", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     render(<TeachingPage />);
+    await chooseWorkspaceCourse("teacher-research-methods");
 
     fireEvent.click(screen.getByRole("button", { name: "保存课程设置" }));
 
@@ -5879,6 +6169,7 @@ describe("TeachingPage", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     render(<TeachingPage />);
+    await chooseWorkspaceCourse("teacher-research-methods");
 
     fireEvent.click(screen.getByRole("button", { name: "保存课程设置" }));
 
@@ -6001,6 +6292,7 @@ describe("TeachingPage", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     render(<TeachingPage />);
+    await chooseWorkspaceCourse("teacher-research-methods");
 
     fireEvent.click(screen.getByRole("button", { name: "保存课程设置" }));
 
@@ -6089,6 +6381,7 @@ describe("TeachingPage", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     const { container } = render(<TeachingPage />);
+    await chooseWorkspaceCourse("teacher-research-methods");
 
     fireEvent.click(screen.getByRole("button", { name: "保存课程设置" }));
 
@@ -6198,6 +6491,7 @@ describe("TeachingPage", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     render(<TeachingPage />);
+    await chooseWorkspaceCourse("teacher-research-methods");
 
     fireEvent.click(screen.getByRole("button", { name: "保存课程设置" }));
 
@@ -6307,6 +6601,7 @@ describe("TeachingPage", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     render(<TeachingPage />);
+    await chooseWorkspaceCourse("teacher-research-methods");
 
     fireEvent.click(screen.getByRole("button", { name: "保存课程设置" }));
 
@@ -6421,9 +6716,9 @@ describe("TeachingPage", () => {
       ["管理员设置", "保存管理员设置", "发送协作邀请", "管理员设置已保存，权限变更进入审计记录。", "admins"],
       [
         "学生管理",
-        "同步学生名单",
+        "重新统计学生名单",
         "生成分组建议",
-        "学生名单同步已保存到服务端。",
+        "已按当前加入记录重新统计班级和课程人数。",
         "students",
       ],
       ["数据导出", "生成导出清单", "校验脱敏范围", "导出清单已生成，可交给服务端导出任务。", "data-export"],
@@ -6447,6 +6742,9 @@ describe("TeachingPage", () => {
         }
       | undefined;
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === "/api/teaching/courses") {
+        return createResearchMethodsClassCourseListReadback();
+      }
       if (String(input) === "/api/teaching/operations/audit") {
         expect(latestAuditContext).toBeTruthy();
         return createVerifiedInlineOperationAuditReadbackResponse({
@@ -6515,7 +6813,9 @@ describe("TeachingPage", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
+    window.history.replaceState(null, "", "/teaching");
     const { container } = render(<TeachingPage />);
+    await chooseWorkspaceCourse("teacher-research-methods");
 
     for (const [label, primaryAction, secondaryAction, primaryMessage] of operationActions) {
       fireEvent.click(screen.getByRole("link", { name: label }));
@@ -6646,7 +6946,9 @@ describe("TeachingPage", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
+    window.history.replaceState(null, "", "/teaching");
     const { container } = render(<TeachingPage />);
+    await chooseWorkspaceCourse("teacher-research-methods");
 
     fireEvent.click(screen.getByRole("link", { name: "邀请码" }));
 
@@ -6661,14 +6963,18 @@ describe("TeachingPage", () => {
     expect(screen.getByRole("button", { name: "复制加入链接" })).toBeTruthy();
     expect(screen.getByText("当前班级邀请码")).toBeTruthy();
     expect(screen.getByText("55395057")).toBeTruthy();
+    // Plan E9: the validity and join-limit cards read the class record, and an
+    // unset field says so instead of printing a hardcoded date nobody enforces.
     expect(screen.getByText("有效期")).toBeTruthy();
-    expect(screen.getByText("2026-12-17")).toBeTruthy();
-    expect(screen.getByText("班级范围")).toBeTruthy();
-    expect(screen.getByText("班级")).toBeTruthy();
+    expect(screen.getByText("无过期时间")).toBeTruthy();
     expect(screen.getByText("加入上限")).toBeTruthy();
-    expect(screen.getByText("60 人")).toBeTruthy();
+    expect(screen.getByText("不限人数")).toBeTruthy();
+    expect(screen.getByText("邀请码状态")).toBeTruthy();
+    expect(screen.queryByText("2026-12-17")).toBeNull();
+    expect(screen.queryByText("60 人")).toBeNull();
     expect(container.querySelector('[data-uais-inline-invitation-qr="55395057"]')).toBeTruthy();
 
+    await waitForInviteClassTarget();
     fireEvent.click(screen.getByRole("button", { name: "生成新邀请码" }));
 
     await waitFor(() => {
@@ -6795,12 +7101,14 @@ describe("TeachingPage", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     render(<TeachingPage />);
+    await chooseWorkspaceCourse("teacher-course-enterprise-operations-20260623");
 
     await waitFor(() => {
       expect(screen.getByText("企业管理实验班")).toBeTruthy();
     });
 
     fireEvent.click(screen.getByRole("link", { name: "邀请码" }));
+    await waitForInviteClassTarget();
     fireEvent.click(screen.getByRole("button", { name: "确认发布邀请码" }));
 
     await waitFor(() => {
@@ -6885,6 +7193,7 @@ describe("TeachingPage", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     const { container } = render(<TeachingPage />);
+    await chooseWorkspaceCourse("teacher-course-enterprise-operations-20260623");
 
     await waitFor(() => {
       expect(screen.getByText("企业管理实验班")).toBeTruthy();
@@ -6894,6 +7203,7 @@ describe("TeachingPage", () => {
     expect(screen.getByText("55395057")).toBeTruthy();
     expect(container.querySelector('[data-uais-inline-invitation-qr="55395057"]')).toBeTruthy();
 
+    await waitForInviteClassTarget();
     fireEvent.click(screen.getByRole("button", { name: "确认发布邀请码" }));
 
     await waitFor(() => {
@@ -6985,6 +7295,7 @@ describe("TeachingPage", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     const { container } = render(<TeachingPage />);
+    await chooseWorkspaceCourse("teacher-course-enterprise-operations-20260623");
 
     await waitFor(() => {
       expect(screen.getByText("企业管理实验班")).toBeTruthy();
@@ -6994,6 +7305,7 @@ describe("TeachingPage", () => {
     expect(screen.getByText("55395057")).toBeTruthy();
     expect(container.querySelector('[data-uais-inline-invitation-qr="55395057"]')).toBeTruthy();
 
+    await waitForInviteClassTarget();
     fireEvent.click(screen.getByRole("button", { name: "确认发布邀请码" }));
 
     await waitFor(() => {
@@ -7007,6 +7319,9 @@ describe("TeachingPage", () => {
 
   it("requires enrollment access business readback before claiming invite publication success", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === "/api/teaching/courses") {
+        return createResearchMethodsClassCourseListReadback();
+      }
       if (String(input) === "/api/teaching/operations") {
         expect(init?.method).toBe("POST");
         const body = JSON.parse(String(init?.body)) as {
@@ -7087,12 +7402,15 @@ describe("TeachingPage", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
+    window.history.replaceState(null, "", "/teaching");
     const { container } = render(<TeachingPage />);
+    await chooseWorkspaceCourse("teacher-research-methods");
 
     fireEvent.click(screen.getByRole("link", { name: "邀请码" }));
     expect(screen.getByText("55395057")).toBeTruthy();
     expect(container.querySelector('[data-uais-inline-invitation-qr="55395057"]')).toBeTruthy();
 
+    await waitForInviteClassTarget();
     fireEvent.click(screen.getByRole("button", { name: "确认发布邀请码" }));
 
     await waitFor(() => {
@@ -7107,6 +7425,9 @@ describe("TeachingPage", () => {
 
   it("surfaces invite publish authorization failure details and trace id", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === "/api/teaching/courses") {
+        return createResearchMethodsClassCourseListReadback();
+      }
       expect(String(input)).toBe("/api/teaching/operations");
       expect(init?.method).toBe("POST");
       const body = JSON.parse(String(init?.body)) as {
@@ -7138,9 +7459,12 @@ describe("TeachingPage", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
+    window.history.replaceState(null, "", "/teaching");
     render(<TeachingPage />);
+    await chooseWorkspaceCourse("teacher-research-methods");
 
     fireEvent.click(screen.getByRole("link", { name: "邀请码" }));
+    await waitForInviteClassTarget();
     fireEvent.click(screen.getByRole("button", { name: "确认发布邀请码" }));
 
     await waitFor(() => {
@@ -7156,19 +7480,24 @@ describe("TeachingPage", () => {
   it("waits for the backend invite-code receipt before changing the visible code", async () => {
     let resolveInviteSave: (response: Response) => void = () => undefined;
     const fetchMock = vi.fn(
-      () =>
-        new Promise<Response>((resolve) => {
-          resolveInviteSave = resolve;
-        }),
+      (input: RequestInfo | URL) =>
+        String(input) === "/api/teaching/courses"
+          ? createResearchMethodsClassCourseListReadback()
+          : new Promise<Response>((resolve) => {
+              resolveInviteSave = resolve;
+            }),
     );
     vi.stubGlobal("fetch", fetchMock);
 
+    window.history.replaceState(null, "", "/teaching");
     const { container } = render(<TeachingPage />);
+    await chooseWorkspaceCourse("teacher-research-methods");
 
     fireEvent.click(screen.getByRole("link", { name: "邀请码" }));
     expect(screen.getByText("55395057")).toBeTruthy();
     expect(container.querySelector('[data-uais-inline-invitation-qr="55395057"]')).toBeTruthy();
 
+    await waitForInviteClassTarget();
     fireEvent.click(screen.getByRole("button", { name: "生成新邀请码" }));
 
     await waitFor(() => {
@@ -7215,6 +7544,9 @@ describe("TeachingPage", () => {
   it("waits for invite-code audit readback before changing the visible code when a trace is returned", async () => {
     let resolveAuditReadback: (response: Response) => void = () => undefined;
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === "/api/teaching/courses") {
+        return createResearchMethodsClassCourseListReadback();
+      }
       if (String(input) === "/api/teaching/operations") {
         expect(init?.method).toBe("POST");
         return Response.json({
@@ -7248,12 +7580,15 @@ describe("TeachingPage", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
+    window.history.replaceState(null, "", "/teaching");
     const { container } = render(<TeachingPage />);
+    await chooseWorkspaceCourse("teacher-research-methods");
 
     fireEvent.click(screen.getByRole("link", { name: "邀请码" }));
     expect(screen.getByText("55395057")).toBeTruthy();
     expect(container.querySelector('[data-uais-inline-invitation-qr="55395057"]')).toBeTruthy();
 
+    await waitForInviteClassTarget();
     fireEvent.click(screen.getByRole("button", { name: "生成新邀请码" }));
 
     await waitFor(() => {
@@ -7314,6 +7649,9 @@ describe("TeachingPage", () => {
 
   it("requires invite-code draft business readback before changing the visible invite code", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === "/api/teaching/courses") {
+        return createResearchMethodsClassCourseListReadback();
+      }
       if (String(input) === "/api/teaching/operations") {
         expect(init?.method).toBe("POST");
         return Response.json({
@@ -7372,12 +7710,15 @@ describe("TeachingPage", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
+    window.history.replaceState(null, "", "/teaching");
     const { container } = render(<TeachingPage />);
+    await chooseWorkspaceCourse("teacher-research-methods");
 
     fireEvent.click(screen.getByRole("link", { name: "邀请码" }));
     expect(screen.getByText("55395057")).toBeTruthy();
     expect(container.querySelector('[data-uais-inline-invitation-qr="55395057"]')).toBeTruthy();
 
+    await waitForInviteClassTarget();
     fireEvent.click(screen.getByRole("button", { name: "生成新邀请码" }));
 
     await waitFor(() => {
@@ -7392,6 +7733,9 @@ describe("TeachingPage", () => {
 
   it("surfaces automatic rollback compensation when invite publication partially fails", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === "/api/teaching/courses") {
+        return createResearchMethodsClassCourseListReadback();
+      }
       expect(String(input)).toBe("/api/teaching/operations");
       expect(init?.method).toBe("POST");
       const body = JSON.parse(String(init?.body)) as {
@@ -7437,11 +7781,14 @@ describe("TeachingPage", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
+    window.history.replaceState(null, "", "/teaching");
     const { container } = render(<TeachingPage />);
+    await chooseWorkspaceCourse("teacher-research-methods");
 
     fireEvent.click(screen.getByRole("link", { name: "邀请码" }));
     expect(container.querySelector('[data-uais-inline-invitation-qr="55395057"]')).toBeTruthy();
 
+    await waitForInviteClassTarget();
     fireEvent.click(screen.getByRole("button", { name: "确认发布邀请码" }));
 
     await waitFor(() => {
@@ -8498,6 +8845,7 @@ describe("TeachingPage", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     render(<TeachingPage />);
+    await chooseWorkspaceCourse("teacher-research-methods");
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith(
@@ -8715,6 +9063,7 @@ describe("TeachingPage", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     render(<TeachingPage />);
+    await chooseWorkspaceCourse("teacher-course-updated-course-name-20260623");
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith(
@@ -9004,8 +9353,14 @@ describe("TeachingPage", () => {
     expect(invitationDialog).toBeTruthy();
     expect(screen.getByText("邀请码：")).toBeTruthy();
     expect(screen.getByText("66334455")).toBeTruthy();
-    expect(screen.getByText("请在首页右上角输入邀请码。")).toBeTruthy();
-    expect(screen.getByText("该邀请码2026年12月17日前有效")).toBeTruthy();
+    // The dialog now describes the three real paths in, and reports the code's own
+    // policy rather than a hardcoded validity claim.
+    expect(
+      screen.getByText("扫描二维码、打开加入链接，或在课程广场页输入邀请码。"),
+    ).toBeTruthy();
+    expect(screen.getByText("无过期时间")).toBeTruthy();
+    expect(screen.getByText("不限人数")).toBeTruthy();
+    expect(screen.queryByText("该邀请码2026年12月17日前有效")).toBeNull();
     expect(invitationDialog.textContent).toContain("测试班");
     expect(container.querySelector('[data-uais-class-invitation-qr="66334455"]')).toBeTruthy();
   });
@@ -9062,6 +9417,7 @@ describe("TeachingPage", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     render(<TeachingPage />);
+    await chooseWorkspaceCourse("teacher-course-pending-class-lock-20260625");
 
     await waitFor(() => {
       expect(screen.getByText("企业级普通教学管理")).toBeTruthy();
@@ -9159,6 +9515,7 @@ describe("TeachingPage", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     render(<TeachingPage />);
+    await chooseWorkspaceCourse("teacher-course-enterprise-operations-20260623");
 
     await waitFor(() => {
       expect(screen.getByText("企业级普通教学管理")).toBeTruthy();
@@ -9234,6 +9591,7 @@ describe("TeachingPage", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     render(<TeachingPage />);
+    await chooseWorkspaceCourse("teacher-course-class-receipt-required-20260628");
 
     await waitFor(() => {
       expect(screen.getByText("企业级普通教学管理")).toBeTruthy();
@@ -9312,6 +9670,7 @@ describe("TeachingPage", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     render(<TeachingPage />);
+    await chooseWorkspaceCourse("teacher-course-class-session-required-20260630");
 
     await waitFor(() => {
       expect(screen.getByText("企业级普通教学管理")).toBeTruthy();
@@ -9394,6 +9753,7 @@ describe("TeachingPage", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     render(<TeachingPage />);
+    await chooseWorkspaceCourse("teacher-course-enterprise-operations-20260625");
 
     await waitFor(() => {
       expect(screen.getByText("企业级普通教学管理")).toBeTruthy();
@@ -9484,6 +9844,7 @@ describe("TeachingPage", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     render(<TeachingPage />);
+    await chooseWorkspaceCourse("teacher-course-enterprise-operations-20260626");
 
     await waitFor(() => {
       expect(screen.getByText("企业级普通教学管理")).toBeTruthy();
@@ -9570,6 +9931,7 @@ describe("TeachingPage", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     render(<TeachingPage />);
+    await chooseWorkspaceCourse("teacher-course-enterprise-semester-20260627");
 
     await waitFor(() => {
       expect(screen.getByText("企业级普通教学管理")).toBeTruthy();
@@ -9723,6 +10085,7 @@ describe("TeachingPage", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     render(<TeachingPage />);
+    await chooseWorkspaceCourse("teacher-course-enterprise-rbac-20260625");
 
     await waitFor(() => {
       expect(screen.getByText("企业级 RBAC 教学管理")).toBeTruthy();
@@ -10878,5 +11241,388 @@ describe("TeachingPage", () => {
     await waitFor(() => {
       expect((narrationButton as HTMLButtonElement).disabled).toBe(false);
     });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Plan E9 (PKG-5): enrolment and group operations UI.
+  // ---------------------------------------------------------------------------
+
+  it("approves every waiting join request in one bulk request after a counted confirmation", async () => {
+    window.history.replaceState(null, "", "/teaching");
+    let approvedAll = false;
+    const pendingStudents = ["Peter", "Amy", "Chen"];
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/teaching/courses") {
+        return createBulkRosterCourseListReadback(pendingStudents, approvedAll);
+      }
+      expect(url).toBe(
+        "/api/teaching/classes/teacher-course-enterprise-operations-20260623-class-1/memberships/approve",
+      );
+      expect(init?.method).toBe("POST");
+      expect(JSON.parse(String(init?.body))).toEqual({
+        membershipIds: pendingStudents.map((student) => `membership-${student}`),
+      });
+      approvedAll = true;
+      return Response.json({
+        memberships: [],
+        approvedMembershipIds: pendingStudents.map((student) => `membership-${student}`),
+        alreadyApprovedMembershipIds: [],
+        ineligibleMembershipIds: [],
+        approvedCount: pendingStudents.length,
+        receipt: {
+          action: "approve-class-memberships",
+          actorId: "teacher-kang",
+          courseId: "teacher-course-enterprise-operations-20260623",
+          classId: "teacher-course-enterprise-operations-20260623-class-1",
+          status: "persisted",
+          traceId: "trace-bulk-approve",
+        },
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<TeachingPage />);
+
+    const approveAll = await screen.findByRole("button", {
+      name: "批准企业管理实验班的全部 3 条待审批申请",
+    });
+    expect(approveAll.textContent).toContain("全部批准 (3)");
+    // Nothing is sent until the count has been confirmed.
+    fireEvent.click(approveAll);
+    expect(
+      fetchMock.mock.calls.filter(([request]) => String(request).endsWith("/memberships/approve")),
+    ).toHaveLength(0);
+
+    fireEvent.click(screen.getByRole("button", { name: "确认批准" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("已批准 3 人加入企业管理实验班。")).toBeTruthy();
+    });
+    // One request for the whole class, not one per student.
+    expect(
+      fetchMock.mock.calls.filter(([request]) => String(request).endsWith("/memberships/approve")),
+    ).toHaveLength(1);
+    expect(screen.getByText("待审批: 0")).toBeTruthy();
+    expect(screen.getByText("已批准: 3")).toBeTruthy();
+  });
+
+  it("rejects a waiting join request through the membership status route", async () => {
+    window.history.replaceState(null, "", "/teaching");
+    let rejected = false;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/teaching/courses") {
+        return createBulkRosterCourseListReadback(["Peter"], false, rejected ? ["Peter"] : []);
+      }
+      expect(url).toBe(
+        "/api/teaching/classes/teacher-course-enterprise-operations-20260623-class-1/memberships/membership-Peter",
+      );
+      expect(init?.method).toBe("PATCH");
+      expect(JSON.parse(String(init?.body))).toEqual({ membershipStatus: "rejected" });
+      rejected = true;
+      return Response.json({
+        membership: { membershipId: "membership-Peter", membershipStatus: "rejected" },
+        releasedGroupIds: [],
+        receipt: {
+          action: "reject-class-membership",
+          actorId: "teacher-kang",
+          courseId: "teacher-course-enterprise-operations-20260623",
+          classId: "teacher-course-enterprise-operations-20260623-class-1",
+          status: "persisted",
+          traceId: "trace-reject",
+        },
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<TeachingPage />);
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "拒绝Peter加入企业管理实验班" }),
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("已拒绝 Peter 的加入申请。")).toBeTruthy();
+    });
+    expect(screen.getByText("已拒绝")).toBeTruthy();
+    expect(screen.queryByText("Peter 等待加入")).toBeNull();
+  });
+
+  it("removes an approved student and reports the learning-group seats that were freed", async () => {
+    window.history.replaceState(null, "", "/teaching");
+    let removed = false;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/teaching/courses") {
+        return createBulkRosterCourseListReadback([], true, removed ? ["Peter"] : [], ["Peter"]);
+      }
+      expect(url).toBe(
+        "/api/teaching/classes/teacher-course-enterprise-operations-20260623-class-1/memberships/membership-Peter",
+      );
+      expect(init?.method).toBe("PATCH");
+      expect(JSON.parse(String(init?.body))).toEqual({ membershipStatus: "removed" });
+      removed = true;
+      return Response.json({
+        membership: { membershipId: "membership-Peter", membershipStatus: "removed" },
+        releasedGroupIds: ["group-alpha"],
+        receipt: {
+          action: "remove-class-membership",
+          actorId: "teacher-kang",
+          courseId: "teacher-course-enterprise-operations-20260623",
+          classId: "teacher-course-enterprise-operations-20260623-class-1",
+          status: "persisted",
+          traceId: "trace-remove",
+        },
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<TeachingPage />);
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "将Peter移出企业管理实验班" }),
+    );
+    // Removal confirms in place before anything is sent.
+    expect(
+      fetchMock.mock.calls.filter(([request]) => String(request).includes("membership-Peter")),
+    ).toHaveLength(0);
+    fireEvent.click(
+      screen.getByRole("button", { name: "确认将Peter移出企业管理实验班" }),
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.getByText("已将 Peter 移出企业管理实验班。同时退出了 1 个小组。"),
+      ).toBeTruthy();
+    });
+    expect(screen.getByText("已移出")).toBeTruthy();
+  });
+
+  it("keeps a class-sized roster usable with a name filter", async () => {
+    window.history.replaceState(null, "", "/teaching");
+    const students = Array.from({ length: 40 }, (_, index) => `Student${index}`);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => createBulkRosterCourseListReadback(students, false)),
+    );
+
+    render(<TeachingPage />);
+    await screen.findByText("待审批: 40");
+
+    fireEvent.change(screen.getByLabelText("按姓名筛选学生"), {
+      target: { value: "Student37" },
+    });
+
+    expect(screen.getByText("Student37 等待加入")).toBeTruthy();
+    expect(screen.queryByText("Student36 等待加入")).toBeNull();
+    // The bulk button still speaks for the whole waiting list, not the filter.
+    expect(
+      screen.getByRole("button", { name: "批准企业管理实验班的全部 40 条待审批申请" }),
+    ).toBeTruthy();
+  });
+
+  it("renders a real scannable QR of the absolute join url instead of a seeded pattern", async () => {
+    window.history.replaceState(null, "", "/teaching");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => createBulkRosterCourseListReadback([], true)),
+    );
+
+    const { container } = render(<TeachingPage />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "打开企业管理实验班的邀请码" }),
+    );
+
+    const qr = container.querySelector('[data-uais-class-invitation-qr="66334455"]');
+    expect(qr).toBeTruthy();
+    // A real QR is a versioned square with a quiet zone: version 1 with border 2
+    // is 21 + 4 modules, and every version above it steps by 4. The seeded
+    // pattern this replaced was always exactly 29 modules wide with no version.
+    const moduleCount = Number(qr?.getAttribute("data-uais-invitation-qr-modules"));
+    expect(Number.isInteger(moduleCount)).toBe(true);
+    expect((moduleCount - 25) % 4).toBe(0);
+    expect(moduleCount).toBeGreaterThanOrEqual(25);
+    expect(qr?.tagName.toLowerCase()).toBe("svg");
+    expect(qr?.getAttribute("viewBox")).toBe(`0 0 ${moduleCount} ${moduleCount}`);
+    // It encodes the join url an absolute-origin camera scan can follow.
+    expect(qr?.getAttribute("data-uais-invitation-qr-target")).toBe(
+      `${window.location.origin}/courses?invite=66334455`,
+    );
+    expect(qr?.getAttribute("aria-label")).toContain(
+      `${window.location.origin}/courses?invite=66334455`,
+    );
+    // Dark modules are drawn individually, so a blank grid cannot pass as a code.
+    expect(qr?.querySelectorAll("rect").length).toBeGreaterThan(50);
+  });
+
+  it("reports the invite code's real expiry, join limit and disabled state", async () => {
+    window.history.replaceState(null, "", "/teaching");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        createBulkRosterCourseListReadback([], true, [], [], {
+          inviteExpiresAt: "2027-03-01T00:00:00.000Z",
+          inviteMaxJoins: 45,
+          inviteDisabled: true,
+        }),
+      ),
+    );
+
+    render(<TeachingPage />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "打开企业管理实验班的邀请码" }),
+    );
+
+    expect(screen.getByText("45 人")).toBeTruthy();
+    expect(screen.getByText("已停用")).toBeTruthy();
+    expect(screen.queryByText("无过期时间")).toBeNull();
+    expect(screen.queryByText("该邀请码2026年12月17日前有效")).toBeNull();
+  });
+
+  it("disables every inline workspace action until a course is explicitly chosen", async () => {
+    window.history.replaceState(null, "", "/teaching");
+    const fetchMock = vi.fn(async () => createBulkRosterCourseListReadback([], true));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { container } = render(<TeachingPage />);
+    await screen.findByText("企业管理实验班");
+
+    const saveButton = screen.getByRole("button", { name: "保存课程设置" });
+    expect((saveButton as HTMLButtonElement).disabled).toBe(true);
+    expect(
+      container
+        .querySelector('[data-uais-inline-workspace-actions="course-settings"]')
+        ?.getAttribute("data-uais-inline-workspace-course-chosen"),
+    ).toBe("false");
+    // Clicking it anyway must not reach the operations route with a guessed course.
+    fireEvent.click(saveButton);
+    expect(
+      fetchMock.mock.calls.filter(([request]) => String(request) === "/api/teaching/operations"),
+    ).toHaveLength(0);
+
+    await chooseWorkspaceCourse("teacher-course-enterprise-operations-20260623");
+
+    expect((screen.getByRole("button", { name: "保存课程设置" }) as HTMLButtonElement).disabled).toBe(
+      false,
+    );
+  });
+
+  it("refuses invite-code actions until a class inside the course is resolved", async () => {
+    window.history.replaceState(null, "", "/teaching");
+    const fetchMock = vi.fn(async () =>
+      createBulkRosterCourseListReadback([], true, [], [], undefined, [
+        {
+          classId: "teacher-course-enterprise-operations-20260623-class-2",
+          className: "企业管理二班",
+        },
+      ]),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<TeachingPage />);
+    await chooseWorkspaceCourse("teacher-course-enterprise-operations-20260623");
+    fireEvent.click(screen.getByRole("link", { name: "邀请码" }));
+
+    // Two classes, so there is a real choice and no fallback is allowed to make it.
+    const generate = screen.getByRole("button", { name: "生成新邀请码" });
+    expect((generate as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText("请先选择课程和班级，再执行邀请码操作。")).toBeTruthy();
+    expect(
+      fetchMock.mock.calls.filter(([request]) => String(request) === "/api/teaching/operations"),
+    ).toHaveLength(0);
+
+    fireEvent.change(screen.getByLabelText("操作班级"), {
+      target: { value: "teacher-course-enterprise-operations-20260623-class-2" },
+    });
+
+    expect(
+      (screen.getByRole("button", { name: "生成新邀请码" }) as HTMLButtonElement).disabled,
+    ).toBe(false);
+  });
+
+  it("sends the teacher's expiry, join limit and disable switch with the invite publish", async () => {
+    window.history.replaceState(null, "", "/teaching");
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === "/api/teaching/courses") {
+        return createBulkRosterCourseListReadback([], true);
+      }
+      expect(String(input)).toBe("/api/teaching/operations");
+      const body = JSON.parse(String(init?.body)) as {
+        invitePolicy?: { expiresAt?: string | null; maxJoins?: number | null; disabled?: boolean };
+      };
+      expect(body.invitePolicy).toEqual({
+        expiresAt: new Date("2027-03-01T09:30").toISOString(),
+        maxJoins: 45,
+        disabled: true,
+      });
+      return Response.json({
+        receipt: {
+          displayMessage: { "zh-CN": "邀请码已发布。", "en-US": "Invite code published." },
+          artifacts: [
+            {
+              kind: "invite-code",
+              code: "66334455",
+              status: "published",
+              joinUrl: "/courses?invite=66334455",
+            },
+          ],
+        },
+        classInvitePublicationReceipt: {
+          action: "publish-class-invite-code",
+          actorId: "teacher-kang",
+          courseId: "teacher-course-enterprise-operations-20260623",
+          classId: "teacher-course-enterprise-operations-20260623-class-1",
+          status: "persisted",
+        },
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<TeachingPage />);
+    await chooseWorkspaceCourse("teacher-course-enterprise-operations-20260623");
+    fireEvent.click(screen.getByRole("link", { name: "邀请码" }));
+    await waitForInviteClassTarget();
+
+    fireEvent.change(screen.getByLabelText("有效期（留空表示不过期）"), {
+      target: { value: "2027-03-01T09:30" },
+    });
+    fireEvent.change(screen.getByLabelText("加入上限（留空表示不限人数）"), {
+      target: { value: "45" },
+    });
+    fireEvent.click(screen.getByLabelText("停用该邀请码"));
+    fireEvent.click(screen.getByRole("button", { name: "确认发布邀请码" }));
+
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.filter(([request]) => String(request) === "/api/teaching/operations"),
+      ).toHaveLength(1);
+    });
+  });
+
+  it("refuses an invite join limit of zero before the request leaves the workspace", async () => {
+    window.history.replaceState(null, "", "/teaching");
+    const fetchMock = vi.fn(async () => createBulkRosterCourseListReadback([], true));
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<TeachingPage />);
+    await chooseWorkspaceCourse("teacher-course-enterprise-operations-20260623");
+    fireEvent.click(screen.getByRole("link", { name: "邀请码" }));
+    await waitForInviteClassTarget();
+
+    fireEvent.change(screen.getByLabelText("加入上限（留空表示不限人数）"), {
+      target: { value: "0" },
+    });
+
+    expect(
+      screen.getByText("加入上限需要是大于 0 的整数；如果不限人数，请留空。"),
+    ).toBeTruthy();
+    expect(
+      (screen.getByRole("button", { name: "确认发布邀请码" }) as HTMLButtonElement).disabled,
+    ).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "确认发布邀请码" }));
+    expect(
+      fetchMock.mock.calls.filter(([request]) => String(request) === "/api/teaching/operations"),
+    ).toHaveLength(0);
   });
 });

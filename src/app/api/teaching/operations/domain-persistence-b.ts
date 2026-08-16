@@ -229,6 +229,7 @@ export async function hasDeliveredCollaborationInviteEmailNotification(input: {
   const snapshot = await readTeachingCourseManagementSnapshot({
     dataDir: resolveTeachingCourseManagementDataDir(input.env.UAIS_TEACHING_COURSES_DATA_DIR),
     repository: courseManagementRepository,
+    courseId: input.courseId,
   });
   return Boolean(
     snapshot.database.collaborationInviteNotifications?.some(
@@ -334,6 +335,7 @@ export async function maybeExportCourseDataWithProvider(input: {
   const snapshot = await readTeachingCourseManagementSnapshot({
     dataDir: resolveTeachingCourseManagementDataDir(input.env.UAIS_TEACHING_COURSES_DATA_DIR),
     repository: courseManagementRepository,
+    courseId: input.courseId,
   });
   const exportManifestId = `export-manifest-${input.courseId}`;
   const exportManifest = snapshot.database.exportManifests?.find(
@@ -606,6 +608,7 @@ export async function maybeGenerateGradingFeedbackWithProvider(input: {
   const snapshot = await readTeachingCourseManagementSnapshot({
     dataDir: resolveTeachingCourseManagementDataDir(input.env.UAIS_TEACHING_COURSES_DATA_DIR),
     repository: courseManagementRepository,
+    courseId: input.courseId,
   });
   const gradingFeedbackDraftId = `grading-feedback-draft-${input.courseId}`;
   const gradingFeedbackDraft = snapshot.database.gradingFeedbackDrafts?.find(

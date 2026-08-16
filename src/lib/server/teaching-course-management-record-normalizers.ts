@@ -16,6 +16,7 @@ import {
 import type {
   TeachingClassInviteCodeDraftRecord,
   TeachingClassMembershipRecord,
+  TeachingClassMembershipStatus,
   TeachingClassRecord,
   TeachingCourseAdminSettingsRecord,
   TeachingCourseAgentPermissionPreflightRecord,
@@ -42,6 +43,7 @@ import type {
   TeachingLearningGroupMember,
   TeachingLearningGroupRecord,
   TeachingResourceReviewItemRecord,
+  TeachingStudentGroupSuggestionGroup,
   TeachingStudentGroupSuggestionRecord,
   TeachingStudentPreviewSessionRecord,
   TeachingStudentRosterSyncRecord,
@@ -87,7 +89,11 @@ function isTeachingCourseManagementAction(
     value === "publish-class-invite-code" ||
     value === "join-class-by-invite" ||
     value === "approve-class-membership" ||
+    value === "approve-class-memberships" ||
+    value === "reject-class-membership" ||
+    value === "remove-class-membership" ||
     value === "create-learning-group" ||
+    value === "auto-split-learning-groups" ||
     value === "update-learning-group-members" ||
     value === "rename-learning-group" ||
     value === "delete-learning-group"
@@ -136,6 +142,17 @@ export function normalizeClassRecord(value: unknown): TeachingClassRecord {
     semester: requireTrimmedString(value.semester, "semester", 120),
     invitationCode: requireInviteCode(value.invitationCode),
     joinUrl: requireSafeUrlPath(value.joinUrl, "join url"),
+    // Absent means open: a class written before the invite policy existed keeps
+    // no expiry, no capacity and no disable flag, so its code behaves exactly as
+    // it did. `inviteDisabled` is normalized to the literal `true` or dropped, so
+    // a stored `false` cannot become a third state.
+    ...(value.inviteExpiresAt
+      ? { inviteExpiresAt: requireIsoDate(value.inviteExpiresAt, "inviteExpiresAt") }
+      : {}),
+    ...(value.inviteMaxJoins === undefined || value.inviteMaxJoins === null
+      ? {}
+      : { inviteMaxJoins: requireNonnegativeInteger(value.inviteMaxJoins, "invite max joins") }),
+    ...(value.inviteDisabled === true ? { inviteDisabled: true as const } : {}),
     createdAt: requireIsoDate(value.createdAt, "createdAt"),
     updatedAt: requireIsoDate(value.updatedAt, "updatedAt"),
     storagePolicy: normalizeRecordStoragePolicy(value.storagePolicy),
@@ -160,7 +177,7 @@ export function normalizeMembershipRecord(value: unknown): TeachingClassMembersh
       "student display name",
       160,
     ),
-    membershipStatus: value.membershipStatus === "approved" ? "approved" : "pending-teacher-review",
+    membershipStatus: normalizeMembershipStatus(value.membershipStatus),
     ...(value.approvedAt ? { approvedAt: requireIsoDate(value.approvedAt, "approvedAt") } : {}),
     ...(value.approvedByTeacherId
       ? {
@@ -170,12 +187,32 @@ export function normalizeMembershipRecord(value: unknown): TeachingClassMembersh
           ),
         }
       : {}),
+    ...(value.statusChangedAt
+      ? { statusChangedAt: requireIsoDate(value.statusChangedAt, "statusChangedAt") }
+      : {}),
+    ...(value.statusChangedByTeacherId
+      ? {
+          statusChangedByTeacherId: requireSafeId(
+            value.statusChangedByTeacherId,
+            "status changed by teacher id",
+          ),
+        }
+      : {}),
     joinedAt: requireIsoDate(value.joinedAt, "joinedAt"),
     storagePolicy: normalizeRecordStoragePolicy(value.storagePolicy),
     storageWritePolicy: normalizeStorageWritePolicy(value.storageWritePolicy),
     responsibleSession: "S12",
     redaction: createRedaction(),
   };
+}
+
+// Unknown stays pending rather than throwing: an unreadable status must not
+// brick the whole snapshot, and "waiting for the teacher" is the fail-closed
+// answer - it grants nothing on its own.
+function normalizeMembershipStatus(value: unknown): TeachingClassMembershipStatus {
+  return value === "approved" || value === "rejected" || value === "removed"
+    ? value
+    : "pending-teacher-review";
 }
 
 export function normalizeInviteCodeDraftRecord(value: unknown): TeachingClassInviteCodeDraftRecord {
@@ -314,7 +351,9 @@ export function normalizeStudentRosterSyncRecord(value: unknown): TeachingStuden
     courseId: requireSafeId(value.courseId, "course id"),
     ownerTeacherId: requireSafeId(value.ownerTeacherId, "owner teacher id"),
     syncedBy: requireSafeId(value.syncedBy, "synced by teacher id"),
-    syncStatus: "synced",
+    // Forced, so a record written under the old "synced from an SIS" claim reads
+    // back as the local recount it always was.
+    syncStatus: "local-recount",
     operationRecordId: requireSafeId(value.operationRecordId, "operation record id"),
     ...(value.sourceAction
       ? { sourceAction: requireSafeId(value.sourceAction, "source action") }
@@ -328,7 +367,7 @@ export function normalizeStudentRosterSyncRecord(value: unknown): TeachingStuden
       "pending teacher review count",
     ),
     classCount: requireNonnegativeInteger(value.classCount, "class count"),
-    sourceSystems: ["sis-roster", "invite-code-joins", "withdrawals"],
+    sourceSystems: ["local-class-memberships", "local-class-records"],
     ...(value.providerStatus === "sis-provider-synced"
       ? { providerStatus: "sis-provider-synced" as const }
       : {}),
@@ -366,13 +405,53 @@ export function normalizeStudentGroupSuggestionRecord(
       ? { sourceAction: requireSafeId(value.sourceAction, "source action") }
       : {}),
     suggestionScope: "teacher-editable-student-groups",
-    sourceSignals: ["learning-progress", "participation-frequency", "role-preferences"],
+    // Suggestions written before partitions existed carry none, and normalize to
+    // an empty list rather than throwing: the receipt stays readable, it simply
+    // proposes nothing until the teacher regenerates it.
+    suggestedGroups: Array.isArray(value.suggestedGroups)
+      ? value.suggestedGroups.map(normalizeStudentGroupSuggestionGroup)
+      : [],
+    ungroupedStudentCount: requireNonnegativeInteger(
+      value.ungroupedStudentCount ?? 0,
+      "ungrouped student count",
+    ),
+    sourceSignals: ["approved-class-memberships", "existing-learning-groups"],
     reviewPolicy: "teacher-review-before-group-assignment",
     generatedAt: requireIsoDate(value.generatedAt, "generatedAt"),
     storagePolicy: normalizeRecordStoragePolicy(value.storagePolicy),
     storageWritePolicy: normalizeStorageWritePolicy(value.storageWritePolicy),
     responsibleSession: "S12",
     redaction: createRedaction(),
+  };
+}
+
+function normalizeStudentGroupSuggestionGroup(
+  value: unknown,
+): TeachingStudentGroupSuggestionGroup {
+  if (!isRecord(value) || !Array.isArray(value.members)) {
+    throw new TeachingCourseManagementStoreError(
+      500,
+      "Teaching student group suggestion group is invalid.",
+    );
+  }
+  return {
+    groupName: requireTrimmedString(value.groupName, "learning group name", 120),
+    members: value.members.map((member) => {
+      if (!isRecord(member)) {
+        throw new TeachingCourseManagementStoreError(
+          500,
+          "Teaching student group suggestion member is invalid.",
+        );
+      }
+      return {
+        studentId: requireSafeId(member.studentId, "student id"),
+        studentDisplayName: requireTrimmedString(
+          member.studentDisplayName,
+          "student display name",
+          120,
+        ),
+      };
+    }),
   };
 }
 
@@ -1031,6 +1110,14 @@ export function normalizeAuditEvent(value: unknown): TeachingCourseManagementAud
       ? { authSession: normalizeAuthSessionSummary(value.authSession) }
       : {}),
     createdAt: requireIsoDate(value.createdAt, "createdAt"),
+    ...(value.affectedRecordCount === undefined || value.affectedRecordCount === null
+      ? {}
+      : {
+          affectedRecordCount: requireNonnegativeInteger(
+            value.affectedRecordCount,
+            "affected record count",
+          ),
+        }),
     ...(value.rollbackStatus === "rolled-back"
       ? {
           rollbackStatus: "rolled-back",

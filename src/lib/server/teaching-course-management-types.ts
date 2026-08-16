@@ -30,13 +30,28 @@ export type TeachingCourseManagementRepositorySnapshot = {
   revision?: string;
 };
 
+// Which course a repository call is about. A backend that keeps the whole corpus
+// in one document - the local JSON file, the external storage service - ignores
+// it and answers with everything, exactly as before. The Postgres backend keys a
+// row by it, so a write to one course neither locks nor rewrites another course's
+// row. It stays optional because "every course" is still a legal request: the
+// teacher/student course list, invite-code discovery and the operations exports
+// all span courses by nature.
+export type TeachingCourseManagementRepositoryScope = {
+  courseId?: string;
+};
+
 export type TeachingCourseManagementRepository = {
   storage: TeachingCourseManagementStorageDescriptor;
-  read: () => Promise<TeachingCourseManagementRepositorySnapshot>;
-  write: (input: {
-    database: TeachingCourseManagementDatabase;
-    expectedRevision?: string;
-  }) => Promise<void>;
+  read: (
+    scope?: TeachingCourseManagementRepositoryScope,
+  ) => Promise<TeachingCourseManagementRepositorySnapshot>;
+  write: (
+    input: TeachingCourseManagementRepositoryScope & {
+      database: TeachingCourseManagementDatabase;
+      expectedRevision?: string;
+    },
+  ) => Promise<void>;
 };
 
 export type TeachingCourseManagementAction =
@@ -74,7 +89,11 @@ export type TeachingCourseManagementAction =
   | "publish-class-invite-code"
   | "join-class-by-invite"
   | "approve-class-membership"
+  | "approve-class-memberships"
+  | "reject-class-membership"
+  | "remove-class-membership"
   | "create-learning-group"
+  | "auto-split-learning-groups"
   | "update-learning-group-members"
   | "rename-learning-group"
   | "delete-learning-group";
@@ -108,6 +127,14 @@ export type TeachingClassRecord = {
   semester: string;
   invitationCode: string;
   joinUrl: string;
+  // Invite-code policy for the class's CURRENT code. All three are optional and
+  // default open, so every class minted before the policy existed - and every
+  // legacy sequential code - keeps accepting joins exactly as it did. A
+  // republished code starts a fresh policy AND a fresh join count, because
+  // capacity is counted over the memberships that carry that code.
+  inviteExpiresAt?: string;
+  inviteMaxJoins?: number;
+  inviteDisabled?: true;
   createdAt: string;
   updatedAt: string;
   storagePolicy: TeachingCourseManagementRecordStoragePolicy;
@@ -116,6 +143,17 @@ export type TeachingClassRecord = {
   redaction: TeachingCourseManagementRedaction;
 };
 
+// A membership is not a one-way door. `rejected` is a pending request the teacher
+// declined; `removed` is an approved student the teacher took off the roster. Both
+// are terminal for THAT record and both free the seat: the student may join the
+// course again, which resets the row to a fresh pending request rather than
+// answering the 409 that used to make a wrong-class join permanent.
+export type TeachingClassMembershipStatus =
+  | "pending-teacher-review"
+  | "approved"
+  | "rejected"
+  | "removed";
+
 export type TeachingClassMembershipRecord = {
   membershipId: string;
   courseId: string;
@@ -123,9 +161,13 @@ export type TeachingClassMembershipRecord = {
   invitationCode: string;
   studentId: string;
   studentDisplayName: string;
-  membershipStatus: "pending-teacher-review" | "approved";
+  membershipStatus: TeachingClassMembershipStatus;
   approvedAt?: string;
   approvedByTeacherId?: string;
+  // One pair for both terminal transitions: the status itself already says which
+  // one happened, and the audit event carries the rest.
+  statusChangedAt?: string;
+  statusChangedByTeacherId?: string;
   joinedAt: string;
   storagePolicy: TeachingCourseManagementRecordStoragePolicy;
   storageWritePolicy: TeachingCourseManagementStorageWritePolicy;
@@ -205,18 +247,24 @@ export type TeachingStudentPreviewSessionRecord = {
   redaction: TeachingCourseManagementRedaction;
 };
 
+// "Sync" used to claim a roster import from an SIS, invite-code joins and
+// withdrawals while importing nothing at all: the handler recounts the
+// memberships this deployment already holds and restamps the class/course
+// totals. The record now says that. The optional `provider*` fields below stay
+// as they were - those ARE a real outbound call, made only when a provider is
+// configured.
 export type TeachingStudentRosterSyncRecord = {
   rosterId: string;
   courseId: string;
   ownerTeacherId: string;
   syncedBy: string;
-  syncStatus: "synced";
+  syncStatus: "local-recount";
   operationRecordId: string;
   sourceAction?: string;
   approvedStudentCount: number;
   pendingTeacherReviewCount: number;
   classCount: number;
-  sourceSystems: ["sis-roster", "invite-code-joins", "withdrawals"];
+  sourceSystems: ["local-class-memberships", "local-class-records"];
   providerStatus?: "sis-provider-synced";
   providerSyncId?: string;
   providerSyncedAt?: string;
@@ -227,6 +275,21 @@ export type TeachingStudentRosterSyncRecord = {
   redaction: TeachingCourseManagementRedaction;
 };
 
+export type TeachingStudentGroupSuggestionMember = {
+  studentId: string;
+  studentDisplayName: string;
+};
+
+export type TeachingStudentGroupSuggestionGroup = {
+  groupName: string;
+  members: TeachingStudentGroupSuggestionMember[];
+};
+
+// The receipt used to record that suggestions had been "generated" while
+// carrying no members at all, which is why the workspace called it "not wired
+// yet". It now carries the partition the teacher would get from auto-split, over
+// the students who are approved and not already in a group, and names the two
+// signals it actually reads. Nothing is assigned: `reviewPolicy` still holds.
 export type TeachingStudentGroupSuggestionRecord = {
   groupSuggestionId: string;
   courseId: string;
@@ -236,7 +299,9 @@ export type TeachingStudentGroupSuggestionRecord = {
   operationRecordId: string;
   sourceAction?: string;
   suggestionScope: "teacher-editable-student-groups";
-  sourceSignals: ["learning-progress", "participation-frequency", "role-preferences"];
+  suggestedGroups: TeachingStudentGroupSuggestionGroup[];
+  ungroupedStudentCount: number;
+  sourceSignals: ["approved-class-memberships", "existing-learning-groups"];
   reviewPolicy: "teacher-review-before-group-assignment";
   generatedAt: string;
   storagePolicy: TeachingCourseManagementRecordStoragePolicy;
@@ -621,6 +686,11 @@ export type TeachingCourseManagementAuditEvent = {
   authMode: "signed-teacher-session" | "app-student-session";
   authSession?: TeachingCourseManagementAuthSessionSummary;
   createdAt: string;
+  // How many records the one event stands for. Set only by the handlers that
+  // change several rows inside a single write - bulk approval, auto-split - so
+  // the audit trail reports "45 memberships approved" as one action instead of
+  // pretending 45 separate teacher decisions happened. Absent means one.
+  affectedRecordCount?: number;
   rollbackStatus?: "rolled-back";
   rolledBackAt?: string;
   requestSource: TeachingCourseManagementAuditRequestSource;

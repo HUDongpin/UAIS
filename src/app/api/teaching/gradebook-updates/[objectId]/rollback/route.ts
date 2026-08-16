@@ -484,6 +484,9 @@ function createErrorResponse(error: unknown, traceId: string) {
   if (error instanceof TeachingOperationStoreError) {
     return jsonResponse(error.status, {
       error: error.message,
+      // Stable classification beside the prose, set today for snapshot
+      // contention so a client can retry instead of parsing the message.
+      ...(error.reasonCode ? { reasonCode: error.reasonCode } : {}),
       traceId,
       redaction: createRedaction(),
     }, traceId);

@@ -7,6 +7,13 @@
 // mutations are delegated to the receipt-and-readback handlers in
 // `use-teaching-learning-groups.tsx`; this file only renders and validates the
 // draft client-side against the same 2..12 member bounds the server enforces.
+//
+// Plan E9 added the three things a class-sized course needed: an auto-split
+// control that calls the server's own partition rather than making the teacher
+// build 40 groups by hand, an "already grouped" badge in the member picker (the
+// server refuses a student who is in another group, and the picker used to offer
+// them anyway), and a name filter, because 200 checkboxes with no search is not a
+// list anyone can use.
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
@@ -31,6 +38,10 @@ import {
   type TeachingLearningGroupItem,
   type TeachingLearningGroupPatch,
 } from "./use-teaching-learning-groups";
+
+// A starting value for the box, not a constraint: the server accepts anything in
+// the same 2..12 range a hand-built group may hold.
+export const defaultAutoSplitGroupSize = 5;
 
 export type ApprovedCourseMember = {
   studentId: string;
@@ -92,6 +103,7 @@ export function LearningGroupManager({
   onCreateGroup,
   onUpdateGroup,
   onDeleteGroup,
+  onAutoSplitGroups,
 }: {
   course: TeacherCourse;
   classes: TeacherClassItem[];
@@ -104,16 +116,49 @@ export function LearningGroupManager({
   onCreateGroup: (draft: TeachingLearningGroupDraft) => Promise<void>;
   onUpdateGroup: (groupId: string, patch: TeachingLearningGroupPatch) => Promise<void>;
   onDeleteGroup: (groupId: string) => Promise<void>;
+  onAutoSplitGroups: (input: { groupSize: number }) => Promise<void>;
 }) {
   const t = copy[locale].teaching;
   const courseTitle = localizedText(course.title, locale);
   const [dialogState, setDialogState] = useState<LearningGroupDialogState>();
   const [pendingDeleteGroupId, setPendingDeleteGroupId] = useState<string>();
   const [deleteError, setDeleteError] = useState<string>();
+  const [autoSplitSize, setAutoSplitSize] = useState(String(defaultAutoSplitGroupSize));
+  const [isAutoSplitting, setIsAutoSplitting] = useState(false);
   const approvedMembers = useMemo(
     () => createApprovedCourseMembers(classes, membershipsByClass),
     [classes, membershipsByClass],
   );
+  // Which group already holds each student, by student id. The server refuses a
+  // second group for the same student in the same course, so this is the picker
+  // showing the rule instead of the teacher discovering it at submit time.
+  const groupNamesByStudentId = useMemo(
+    () => createGroupNamesByStudentId(groups),
+    [groups],
+  );
+  const parsedAutoSplitSize = Number(autoSplitSize.trim());
+  const isAutoSplitSizeValid =
+    Number.isSafeInteger(parsedAutoSplitSize) &&
+    parsedAutoSplitSize >= learningGroupMinMembers &&
+    parsedAutoSplitSize <= learningGroupMaxMembers;
+  const ungroupedMemberCount = approvedMembers.filter(
+    (member) => !groupNamesByStudentId[member.studentId],
+  ).length;
+
+  async function runAutoSplit() {
+    if (!isAutoSplitSizeValid || isAutoSplitting) {
+      return;
+    }
+    setIsAutoSplitting(true);
+    try {
+      await onAutoSplitGroups({ groupSize: parsedAutoSplitSize });
+    } catch {
+      // The handler already published the failure into the panel status line;
+      // rethrowing here would only surface an unhandled rejection.
+    } finally {
+      setIsAutoSplitting(false);
+    }
+  }
 
   async function confirmDeleteGroup(groupId: string) {
     setDeleteError(undefined);
@@ -185,6 +230,62 @@ export function LearningGroupManager({
           {approvedMembers.length < learningGroupMinMembers ? (
             <p className="text-sm leading-6 text-[var(--muted)]">{t.groupNoApprovedMembers}</p>
           ) : null}
+
+          <div
+            data-uais-learning-group-auto-split={course.id}
+            className="rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3"
+          >
+            <h5 className="text-sm font-semibold text-[var(--foreground)]">
+              {t.groupAutoSplitTitle}
+            </h5>
+            <p className="mt-1 text-sm leading-6 text-[var(--muted)]">{t.groupAutoSplitSummary}</p>
+            <div className="mt-3 flex flex-wrap items-end gap-3">
+              <div>
+                <label
+                  htmlFor={`learning-group-auto-split-size-${course.id}`}
+                  className="block text-sm font-semibold text-[var(--foreground)]"
+                >
+                  {t.groupAutoSplitSizeLabel}
+                </label>
+                <input
+                  id={`learning-group-auto-split-size-${course.id}`}
+                  type="number"
+                  inputMode="numeric"
+                  min={learningGroupMinMembers}
+                  max={learningGroupMaxMembers}
+                  value={autoSplitSize}
+                  className="mt-2 h-10 w-28 rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] px-3 text-sm font-medium text-[var(--foreground)] outline-none transition focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent)]/20"
+                  onChange={(event) => setAutoSplitSize(event.target.value)}
+                />
+              </div>
+              <button
+                type="button"
+                disabled={
+                  !isAutoSplitSizeValid ||
+                  isAutoSplitting ||
+                  ungroupedMemberCount < learningGroupMinMembers
+                }
+                aria-label={
+                  locale === "zh-CN"
+                    ? `为${courseTitle}自动分组`
+                    : `Auto-split ${courseTitle} into groups`
+                }
+                className="inline-flex h-10 items-center gap-2 rounded-full border border-[var(--accent-border)] bg-[var(--accent-soft)] px-4 text-sm font-semibold text-[var(--accent)] outline-none transition hover:bg-[var(--surface-soft)] active:translate-y-px focus-visible:ring-2 focus-visible:ring-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-60"
+                onClick={() => void runAutoSplit()}
+              >
+                <UsersThree size={17} weight="bold" />
+                {isAutoSplitting ? t.groupAutoSplitRunning : t.groupAutoSplitAction}
+              </button>
+            </div>
+            {isAutoSplitSizeValid ? null : (
+              <p role="alert" className="mt-2 text-sm font-semibold text-rose-600">
+                {t.groupAutoSplitSizeInvalid}
+              </p>
+            )}
+            {isAutoSplitSizeValid && ungroupedMemberCount < learningGroupMinMembers ? (
+              <p className="mt-2 text-sm text-[var(--muted)]">{t.groupAutoSplitNoEligible}</p>
+            ) : null}
+          </div>
 
           {groups.length > 0 ? (
             <div className="space-y-3">
@@ -307,6 +408,7 @@ export function LearningGroupManager({
           course={course}
           classes={classes}
           approvedMembers={approvedMembers}
+          groupNamesByStudentId={groupNamesByStudentId}
           locale={locale}
           group={dialogState.mode === "edit" ? dialogState.group : undefined}
           onCancel={() => setDialogState(undefined)}
@@ -327,6 +429,17 @@ export function LearningGroupManager({
   );
 }
 
+// One group per student per course, so the last write wins here only if the
+// server let two exist - which it does not.
+function createGroupNamesByStudentId(groups: TeachingLearningGroupItem[]) {
+  return groups.reduce<Record<string, string>>((names, group) => {
+    for (const member of group.members) {
+      names[member.studentId] = group.groupName;
+    }
+    return names;
+  }, {});
+}
+
 function resolveLearningGroupClassName(
   group: TeachingLearningGroupItem,
   classes: TeacherClassItem[],
@@ -344,13 +457,16 @@ export function LearningGroupDialog({
   course,
   classes,
   approvedMembers,
+  groupNamesByStudentId,
   group,
   locale,
   // Seam for the `generate-student-group-suggestions` receipt action: a teacher-
   // reviewed suggestion can pre-fill the picker by passing the suggested student
-  // ids here. Auto-assignment stays teacher-reviewed — the dialog still requires
-  // an explicit submit. Not wired yet (the suggestion action lives on the
-  // students operation page, outside this workspace's scope).
+  // ids here. It stays a seam rather than a button, because plan E9 pointed the
+  // one-click path at the server's own auto-split instead: the suggestion action
+  // proposes a partition and persists no group, while auto-split applies exactly
+  // that partition in one write. Two buttons that both said "group my students"
+  // and only one of which did is what made the old one read as dead.
   suggestedMemberIds,
   onCancel,
   onSubmit,
@@ -358,6 +474,9 @@ export function LearningGroupDialog({
   course: TeacherCourse;
   classes: TeacherClassItem[];
   approvedMembers: ApprovedCourseMember[];
+  // Group name per already-grouped student id; the picker badges them and, for a
+  // new group, refuses to select them at all.
+  groupNamesByStudentId: Record<string, string>;
   group?: TeachingLearningGroupItem;
   locale: Locale;
   suggestedMemberIds?: string[];
@@ -373,12 +492,26 @@ export function LearningGroupDialog({
   );
   const [formError, setFormError] = useState<string>();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [memberFilter, setMemberFilter] = useState("");
 
   // A class-scoped group may only hold members of that class, mirroring the
   // server-side approved-membership lookup.
-  const selectableMembers = classId
+  const classScopedMembers = classId
     ? approvedMembers.filter((member) => member.classId === classId)
     : approvedMembers;
+  const normalizedMemberFilter = memberFilter.trim().toLowerCase();
+  const selectableMembers = normalizedMemberFilter
+    ? classScopedMembers.filter(
+        (member) =>
+          member.studentDisplayName.toLowerCase().includes(normalizedMemberFilter) ||
+          member.studentId.toLowerCase().includes(normalizedMemberFilter),
+      )
+    : classScopedMembers;
+  // A member of THIS group is not "already grouped" - the conflict is only with
+  // some other group of the same course, which is exactly what the server checks.
+  const isMemberGroupedElsewhere = (studentId: string) =>
+    Boolean(groupNamesByStudentId[studentId]) &&
+    !group?.members.some((member) => member.studentId === studentId);
   const memberCount = selectedMemberIds.length;
   const isMemberCountValid =
     memberCount >= learningGroupMinMembers && memberCount <= learningGroupMaxMembers;
@@ -397,6 +530,10 @@ export function LearningGroupDialog({
 
   function toggleMember(studentId: string) {
     setFormError(undefined);
+    if (isMemberGroupedElsewhere(studentId)) {
+      setFormError(t.groupMemberAlreadyGrouped);
+      return;
+    }
     setSelectedMemberIds((currentMemberIds) =>
       currentMemberIds.includes(studentId)
         ? currentMemberIds.filter((memberId) => memberId !== studentId)
@@ -515,26 +652,59 @@ export function LearningGroupDialog({
               {t.groupSelectedCount}
               {`: ${memberCount} / ${learningGroupMaxMembers}`}
             </p>
-            {selectableMembers.length > 0 ? (
-              <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                {selectableMembers.map((member) => (
-                  <label
-                    key={member.studentId}
-                    className="flex items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] px-3 py-2 text-sm font-medium text-[var(--foreground)]"
-                  >
-                    <input
-                      type="checkbox"
-                      value={member.studentId}
-                      checked={selectedMemberIds.includes(member.studentId)}
-                      className="size-4"
-                      onChange={() => toggleMember(member.studentId)}
-                    />
-                    {member.studentDisplayName}
-                  </label>
-                ))}
-              </div>
-            ) : (
+            <div className="mt-3">
+              <label htmlFor="learning-group-member-filter" className="sr-only">
+                {t.groupMemberFilterLabel}
+              </label>
+              <input
+                id="learning-group-member-filter"
+                value={memberFilter}
+                aria-label={t.groupMemberFilterLabel}
+                placeholder={t.groupMemberFilterPlaceholder}
+                className="h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] px-3 text-sm font-medium text-[var(--foreground)] outline-none transition focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent)]/20"
+                onChange={(event) => setMemberFilter(event.target.value)}
+              />
+            </div>
+            {classScopedMembers.length === 0 ? (
               <p className="mt-3 text-sm text-[var(--muted)]">{t.groupNoApprovedMembers}</p>
+            ) : selectableMembers.length === 0 ? (
+              <p className="mt-3 text-sm text-[var(--muted)]">{t.groupMemberFilterEmpty}</p>
+            ) : (
+              <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                {selectableMembers.map((member) => {
+                  const groupedElsewhere = isMemberGroupedElsewhere(member.studentId);
+                  return (
+                    <label
+                      key={member.studentId}
+                      data-uais-learning-group-member-option={member.studentId}
+                      className={[
+                        "flex items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] px-3 py-2 text-sm font-medium text-[var(--foreground)]",
+                        groupedElsewhere ? "opacity-70" : "",
+                      ]
+                        .filter(Boolean)
+                        .join(" ")}
+                    >
+                      <input
+                        type="checkbox"
+                        value={member.studentId}
+                        checked={selectedMemberIds.includes(member.studentId)}
+                        disabled={groupedElsewhere}
+                        className="size-4"
+                        onChange={() => toggleMember(member.studentId)}
+                      />
+                      <span className="min-w-0 truncate">{member.studentDisplayName}</span>
+                      {groupedElsewhere ? (
+                        <span
+                          data-uais-learning-group-member-grouped={member.studentId}
+                          className="ml-auto shrink-0 rounded-full border border-[var(--border)] bg-[var(--surface-soft)] px-2 py-0.5 text-xs font-semibold text-[var(--muted)]"
+                        >
+                          {`${t.groupMemberGroupedBadge}: ${groupNamesByStudentId[member.studentId]}`}
+                        </span>
+                      ) : null}
+                    </label>
+                  );
+                })}
+              </div>
             )}
             {memberCount > 0 && !isMemberCountValid ? (
               <p role="alert" className="mt-3 text-sm font-semibold text-rose-600">

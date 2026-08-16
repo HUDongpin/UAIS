@@ -82,10 +82,21 @@ type TeachingLearningGroupValidationPayload = {
   minMembers?: number;
   maxMembers?: number;
   memberIndex?: number;
+  // Set only by the cross-group gate, which names both the student and the group
+  // already holding them. "Someone is double-booked" is not something a teacher
+  // can act on; "林若晨 is already in 第2组" is.
+  studentId?: string;
+  conflictingGroupId?: string;
+  conflictingGroupName?: string;
+  eligibleStudentCount?: number;
 };
 
 type TeachingLearningGroupMutationResponse = {
   group?: PersistedLearningGroupRecord;
+  // Auto-split answers with every group it minted, not one.
+  groups?: PersistedLearningGroupRecord[];
+  groupCount?: number;
+  ungroupedStudentCount?: number;
   receipt?: TeachingLearningGroupReceipt;
   receipts?: TeachingLearningGroupReceipt[];
   validation?: TeachingLearningGroupValidationPayload;
@@ -98,7 +109,8 @@ type LearningGroupMutationAction =
   | "create-learning-group"
   | "update-learning-group-members"
   | "rename-learning-group"
-  | "delete-learning-group";
+  | "delete-learning-group"
+  | "auto-split-learning-groups";
 
 export function useTeachingLearningGroupsWorkspace() {
   const { locale } = useAppPreferences();
@@ -331,6 +343,73 @@ export function useTeachingLearningGroupsWorkspace() {
     [locale, runVerifiedLearningGroupMutation, t.groupDeleted],
   );
 
+  // Split every approved, ungrouped student of the course into groups of K in one
+  // request. The alternative a teacher had was creating 40 groups by hand, one
+  // course-row write each, with a real chance of putting a student in two groups -
+  // which the create/update routes now refuse outright.
+  //
+  // It does not follow `runVerifiedLearningGroupMutation`: that helper verifies
+  // one named group id, and this action mints an unknown number of them. The same
+  // contract is applied here over the whole batch instead.
+  const autoSplitLearningGroups = useCallback(
+    async (courseId: string, input: { groupSize: number; classId?: string }) => {
+      setLearningGroupStatus(courseId, t.groupAutoSplitRunning);
+      const response = await fetch(
+        `/api/teaching/courses/${encodeURIComponent(courseId)}/groups/auto-split`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            groupSize: input.groupSize,
+            ...(input.classId ? { classId: input.classId } : {}),
+          }),
+        },
+      );
+      const body = (await response.json().catch(() => null)) as
+        | TeachingLearningGroupMutationResponse
+        | null;
+      if (!response.ok) {
+        const message = createLearningGroupFailureMessage(body, locale);
+        setLearningGroupStatus(courseId, message);
+        throw new Error(message);
+      }
+      const createdGroupIds = (body?.groups ?? [])
+        .map((group) => group.groupId?.trim())
+        .filter((groupId): groupId is string => Boolean(groupId));
+      if (
+        createdGroupIds.length === 0 ||
+        !hasPersistedLearningGroupReceipts(body, ["auto-split-learning-groups"], courseId)
+      ) {
+        setLearningGroupStatus(courseId, t.groupReceiptMissing);
+        throw new Error(t.groupReceiptMissing);
+      }
+
+      const groupsByCourse = await readPersistedLearningGroups();
+      const persistedGroupIds = new Set(
+        (groupsByCourse[courseId] ?? []).map((group) => group.groupId),
+      );
+      if (createdGroupIds.some((groupId) => !persistedGroupIds.has(groupId))) {
+        setLearningGroupStatus(courseId, t.groupReadbackMissing);
+        throw new Error(t.groupReadbackMissing);
+      }
+
+      setLearningGroupsByCourse(groupsByCourse);
+      setHasLoadedLearningGroups(true);
+      setLearningGroupStatus(
+        courseId,
+        createAutoSplitSummary(createdGroupIds.length, body?.ungroupedStudentCount ?? 0, locale),
+      );
+    },
+    [
+      locale,
+      readPersistedLearningGroups,
+      setLearningGroupStatus,
+      t.groupAutoSplitRunning,
+      t.groupReadbackMissing,
+      t.groupReceiptMissing,
+    ],
+  );
+
   return {
     learningGroupsByCourse,
     learningGroupStatuses,
@@ -342,7 +421,28 @@ export function useTeachingLearningGroupsWorkspace() {
     createLearningGroup,
     updateLearningGroup,
     deleteLearningGroup,
+    autoSplitLearningGroups,
   };
+}
+
+// The count that was actually created, plus the leftovers the partition rule did
+// not place. Today the fold rule leaves none, and saying so is what will make it
+// obvious if that ever stops being true.
+function createAutoSplitSummary(
+  groupCount: number,
+  ungroupedStudentCount: number,
+  locale: Locale,
+) {
+  const base =
+    locale === "zh-CN"
+      ? `已自动创建 ${groupCount} 个小组。`
+      : `Created ${groupCount} ${groupCount === 1 ? "group" : "groups"}.`;
+  if (ungroupedStudentCount <= 0) {
+    return base;
+  }
+  return locale === "zh-CN"
+    ? `${base}仍有 ${ungroupedStudentCount} 名学生未分组。`
+    : `${base} ${ungroupedStudentCount} students are still ungrouped.`;
 }
 
 export function createLearningGroupsByCourse(
@@ -457,6 +557,20 @@ export function createLearningGroupFailureMessage(
       return t.groupMemberInvalid;
     case "group-member-not-approved":
       return t.groupMemberNotApproved;
+    // The cross-group refusal names the group already holding the student, which
+    // is the half a teacher can act on. The student id the server also sends is
+    // deliberately not printed: it is an account identifier, and the picker has
+    // already badged that row by display name.
+    case "group-member-already-grouped":
+      return body?.validation?.conflictingGroupName
+        ? locale === "zh-CN"
+          ? `该学生已在「${body.validation.conflictingGroupName}」中，请先将其移出该小组。`
+          : `That student already belongs to "${body.validation.conflictingGroupName}". Remove them from it first.`
+        : t.groupMemberAlreadyGrouped;
+    case "group-size-invalid":
+      return t.groupAutoSplitSizeInvalid;
+    case "auto-split-no-eligible-students":
+      return t.groupAutoSplitNoEligible;
     default:
       break;
   }

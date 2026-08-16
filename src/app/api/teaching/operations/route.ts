@@ -100,6 +100,7 @@ import {
   jsonResponse,
   normalizeActionSlot,
   normalizeTeachingOperationRouteError,
+  readInviteCodePolicy,
   readPublishedInviteCode,
   readTargetClassId,
   type TeachingOperationAuthenticatedTeacher,
@@ -1124,6 +1125,7 @@ async function maybePublishClassInviteCode(input: {
     assertTeachingCourseManagementLocalJsonRuntimeAllowed(input.env);
   }
 
+  const invitePolicy = readInviteCodePolicy(input.body);
   const { receipt } = await publishTeachingClassInviteCode({
     dataDir: resolveTeachingCourseManagementDataDir(input.env.UAIS_TEACHING_COURSES_DATA_DIR),
     repository: courseManagementRepository,
@@ -1131,6 +1133,9 @@ async function maybePublishClassInviteCode(input: {
     courseId: input.courseId,
     classId: targetClassId,
     invitationCode,
+    // Publishing is where the expiry, the join limit and the disable switch are
+    // set: it is the one action that decides what a code is allowed to do.
+    ...(invitePolicy ? { invitePolicy } : {}),
     audit: { requestSource: input.requestSource },
     traceId: input.traceId,
     now: input.now,
@@ -1460,6 +1465,7 @@ function createErrorResponse(error: unknown, traceId: string) {
   const routeError = normalizeTeachingOperationRouteError(error);
   return jsonResponse(routeError.status, {
     error: routeError.message,
+    ...(routeError.reasonCode ? { reasonCode: routeError.reasonCode } : {}),
     ...(routeError.diagnostics ? { diagnostics: routeError.diagnostics } : {}),
     traceId,
     redaction: createRedaction(),

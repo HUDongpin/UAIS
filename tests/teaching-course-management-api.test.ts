@@ -141,6 +141,19 @@ function createProductionCourseManagementEnvWithoutTeacherAuthProvider(dataDir: 
   };
 }
 
+// Invite codes are drawn at random rather than counted upwards from a fixed
+// seed, so a suite that wants to join a class it just created has to read that
+// class's actual code. Tests that seed a snapshot fixture still pin their own
+// literal codes - those never went through the allocator.
+async function readClassInvitationCode(dataDir: string, classId: string) {
+  const database = await readTeachingCourseManagementDatabase({ dataDir });
+  const invitationCode = database.classes.find(
+    (classItem) => classItem.classId === classId,
+  )?.invitationCode;
+  expect(invitationCode).toMatch(/^\d{8}$/);
+  return invitationCode as string;
+}
+
 function expectNoLocalOrSecretValues(value: unknown, dataDir: string) {
   const serialized = JSON.stringify(value);
   expect(serialized).not.toContain(dataDir);
@@ -449,33 +462,47 @@ describe("teaching course management API", () => {
           }),
         },
       );
+      const kangInvitationCode = await readClassInvitationCode(
+        dataDir,
+        "teacher-course-ai-supported-mathematics-research-20260622-112000-class-1",
+      );
+      const otherInvitationCode = await readClassInvitationCode(
+        dataDir,
+        "teacher-course-another-teacher-course-20260622-112000-class-1",
+      );
       await postJoin(
-        new Request("https://www.uais.top/api/teaching/invite-codes/55395057/join", {
-          method: "POST",
-          headers: {
-            cookie: createStudentCookie(),
-            "x-uais-trace-id": "trace-kang-list-membership",
+        new Request(
+          `https://www.uais.top/api/teaching/invite-codes/${kangInvitationCode}/join`,
+          {
+            method: "POST",
+            headers: {
+              cookie: createStudentCookie(),
+              "x-uais-trace-id": "trace-kang-list-membership",
+            },
           },
-        }),
+        ),
         {
-          params: Promise.resolve({ code: "55395057" }),
+          params: Promise.resolve({ code: kangInvitationCode }),
         },
       );
       await postJoin(
-        new Request("https://www.uais.top/api/teaching/invite-codes/55395058/join", {
-          method: "POST",
-          headers: {
-            cookie: createStudentCookie({
-              account: "Eve",
-              department: "学生账号",
-              displayName: "Eve",
-              role: "student",
-            }),
-            "x-uais-trace-id": "trace-other-list-membership",
+        new Request(
+          `https://www.uais.top/api/teaching/invite-codes/${otherInvitationCode}/join`,
+          {
+            method: "POST",
+            headers: {
+              cookie: createStudentCookie({
+                account: "Eve",
+                department: "学生账号",
+                displayName: "Eve",
+                role: "student",
+              }),
+              "x-uais-trace-id": "trace-other-list-membership",
+            },
           },
-        }),
+        ),
         {
-          params: Promise.resolve({ code: "55395058" }),
+          params: Promise.resolve({ code: otherInvitationCode }),
         },
       );
 
@@ -511,7 +538,7 @@ describe("teaching course management API", () => {
           courseId: "teacher-course-ai-supported-mathematics-research-20260622-112000",
           ownerTeacherId: "teacher-kang",
           className: "Research Methods Class 1",
-          invitationCode: "55395057",
+          invitationCode: kangInvitationCode,
         }),
       ]);
       expect(body.memberships).toEqual([
@@ -1076,8 +1103,9 @@ describe("teaching course management API", () => {
           params: Promise.resolve({ courseId }),
         },
       );
+      const invitationCode = await readClassInvitationCode(dataDir, `${courseId}-class-1`);
       await postJoin(
-        new Request("https://www.uais.top/api/teaching/invite-codes/55395057/join", {
+        new Request(`https://www.uais.top/api/teaching/invite-codes/${invitationCode}/join`, {
           method: "POST",
           headers: {
             cookie: createStudentCookie(),
@@ -1085,11 +1113,11 @@ describe("teaching course management API", () => {
           },
         }),
         {
-          params: Promise.resolve({ code: "55395057" }),
+          params: Promise.resolve({ code: invitationCode }),
         },
       );
       await postJoin(
-        new Request("https://www.uais.top/api/teaching/invite-codes/55395057/join", {
+        new Request(`https://www.uais.top/api/teaching/invite-codes/${invitationCode}/join`, {
           method: "POST",
           headers: {
             cookie: createStudentCookie({
@@ -1102,7 +1130,7 @@ describe("teaching course management API", () => {
           },
         }),
         {
-          params: Promise.resolve({ code: "55395057" }),
+          params: Promise.resolve({ code: invitationCode }),
         },
       );
 
@@ -1243,8 +1271,9 @@ describe("teaching course management API", () => {
           params: Promise.resolve({ courseId }),
         },
       );
+      const invitationCode = await readClassInvitationCode(dataDir, classId);
       await postJoin(
-        new Request("https://www.uais.top/api/teaching/invite-codes/55395057/join", {
+        new Request(`https://www.uais.top/api/teaching/invite-codes/${invitationCode}/join`, {
           method: "POST",
           headers: {
             cookie: createStudentCookie(),
@@ -1252,11 +1281,11 @@ describe("teaching course management API", () => {
           },
         }),
         {
-          params: Promise.resolve({ code: "55395057" }),
+          params: Promise.resolve({ code: invitationCode }),
         },
       );
       await postJoin(
-        new Request("https://www.uais.top/api/teaching/invite-codes/55395057/join", {
+        new Request(`https://www.uais.top/api/teaching/invite-codes/${invitationCode}/join`, {
           method: "POST",
           headers: {
             cookie: createStudentCookie({
@@ -1269,7 +1298,7 @@ describe("teaching course management API", () => {
           },
         }),
         {
-          params: Promise.resolve({ code: "55395057" }),
+          params: Promise.resolve({ code: invitationCode }),
         },
       );
       await postApprove(
@@ -1586,7 +1615,6 @@ describe("teaching course management API", () => {
     });
     const courseId = "teacher-course-ai-supported-mathematics-research-20260622-112000";
     const classId = `${courseId}-class-1`;
-    const joinedInvitationCode = "55395057";
     const republishedInvitationCode = "70001234";
 
     try {
@@ -1622,6 +1650,7 @@ describe("teaching course management API", () => {
           params: Promise.resolve({ courseId }),
         },
       );
+      const joinedInvitationCode = await readClassInvitationCode(dataDir, classId);
       await postJoin(
         new Request(
           `https://www.uais.top/api/teaching/invite-codes/${joinedInvitationCode}/join`,
@@ -2620,8 +2649,11 @@ describe("teaching course management API", () => {
         className: "Research Methods Class 1",
         students: 0,
         semester: "2026 Spring",
-        invitationCode: "55395057",
-        joinUrl: "/courses?invite=55395057",
+        // Drawn at random, so the assertion is on the SHAPE of the code plus the
+        // join url agreeing with it - not on a number the allocator no longer
+        // promises.
+        invitationCode: expect.stringMatching(/^\d{8}$/),
+        joinUrl: `/courses?invite=${body.classItem.invitationCode}`,
         createdAt: "2026-06-22T11:25:00.000Z",
         updatedAt: "2026-06-22T11:25:00.000Z",
         storagePolicy: "local-json-teaching-course-management",
@@ -5017,7 +5049,7 @@ describe("teaching course management API", () => {
       if (init?.method === "GET" && pathname === "/uais/teaching-course-management/database") {
         return Response.json({
           database:
-            requestNumber === 3
+            requestNumber >= 4
               ? {
                   schemaVersion: "uais-teaching-course-management-v1",
                   updatedAt: "2026-06-22T11:24:00.000Z",
@@ -5034,7 +5066,7 @@ describe("teaching course management API", () => {
                   memberships: [],
                   auditEvents: [],
           },
-          revision: requestNumber === 3 ? "rev-1" : "rev-0",
+          revision: requestNumber >= 4 ? "rev-1" : "rev-0",
           storagePolicy: "external-redacted-teaching-course-management-snapshot",
           productionDatabaseAdapter: createReadyProductionDatabaseAdapter(),
           redaction: {
@@ -5046,7 +5078,7 @@ describe("teaching course management API", () => {
       }
 
       if (init?.method === "PUT" && pathname === "/uais/teaching-course-management/database") {
-        if (requestNumber === 2) {
+        if (requestNumber === 3) {
           return Response.json(
             { error: "Teaching course management snapshot revision mismatch." },
             { status: 409 },
@@ -5101,22 +5133,30 @@ describe("teaching course management API", () => {
         classId: `${courseId}-class-2`,
         courseId,
         className: "Retry Class",
-        invitationCode: "55395058",
+        // A randomly drawn code, checked for shape and for not colliding with the
+        // seeded class's code rather than for a value the allocator no longer
+        // promises.
+        invitationCode: expect.stringMatching(/^\d{8}$/),
         storagePolicy: "external-redacted-teaching-course-management-snapshot",
         storageWritePolicy: "external-optimistic-snapshot-replace",
       });
+      // Two GETs per attempt since the per-course re-key: the course's own row,
+      // then the corpus read the invite-code allocator needs because codes are
+      // unique across the deployment and no single course's row can see them.
       expect(externalRequests.map((request) => request.method)).toEqual([
         "GET",
+        "GET",
         "PUT",
+        "GET",
         "GET",
         "PUT",
       ]);
-      expect(externalRequests[1]?.body).toEqual(
+      expect(externalRequests[2]?.body).toEqual(
         expect.objectContaining({
           expectedRevision: "rev-0",
         }),
       );
-      expect(externalRequests[3]?.body).toEqual(
+      expect(externalRequests[5]?.body).toEqual(
         expect.objectContaining({
           expectedRevision: "rev-1",
           database: expect.objectContaining({
@@ -5126,7 +5166,7 @@ describe("teaching course management API", () => {
               }),
               expect.objectContaining({
                 classId: `${courseId}-class-2`,
-                invitationCode: "55395058",
+                invitationCode: body.classItem.invitationCode,
               }),
             ]),
           }),
@@ -5223,7 +5263,7 @@ describe("teaching course management API", () => {
       if (init?.method === "GET" && pathname === "/uais/teaching-course-management/database") {
         return Response.json({
           database:
-            requestNumber === 3
+            requestNumber === 4
               ? {
                   schemaVersion: "uais-teaching-course-management-v1",
                   updatedAt: "2026-06-22T11:39:00.000Z",
@@ -5240,7 +5280,7 @@ describe("teaching course management API", () => {
                   memberships: [],
                   auditEvents: [],
           },
-          revision: requestNumber === 3 ? "rev-1" : "rev-0",
+          revision: requestNumber === 4 ? "rev-1" : "rev-0",
           storagePolicy: "external-redacted-teaching-course-management-snapshot",
           productionDatabaseAdapter: createReadyProductionDatabaseAdapter(),
           redaction: {
@@ -5252,7 +5292,7 @@ describe("teaching course management API", () => {
       }
 
       if (init?.method === "PUT" && pathname === "/uais/teaching-course-management/database") {
-        if (requestNumber === 2) {
+        if (requestNumber === 3) {
           return Response.json(
             { error: "Teaching course management snapshot revision mismatch." },
             { status: 409 },
@@ -5310,18 +5350,22 @@ describe("teaching course management API", () => {
         storagePolicy: "external-redacted-teaching-course-management-snapshot",
         storageWritePolicy: "external-optimistic-snapshot-replace",
       });
+      // The leading GET is the corpus enumeration that resolves which course
+      // this class belongs to; the per-course rows cannot answer that, and the
+      // read-modify-write that follows is scoped to the course it found.
       expect(externalRequests.map((request) => request.method)).toEqual([
+        "GET",
         "GET",
         "PUT",
         "GET",
         "PUT",
       ]);
-      expect(externalRequests[1]?.body).toEqual(
+      expect(externalRequests[2]?.body).toEqual(
         expect.objectContaining({
           expectedRevision: "rev-0",
         }),
       );
-      expect(externalRequests[3]?.body).toEqual(
+      expect(externalRequests[4]?.body).toEqual(
         expect.objectContaining({
           expectedRevision: "rev-1",
           database: expect.objectContaining({
@@ -5525,7 +5569,7 @@ describe("teaching course management API", () => {
       if (init?.method === "GET" && pathname === "/uais/teaching-course-management/database") {
         return Response.json({
           database:
-            requestNumber === 3
+            requestNumber === 4
               ? {
                   schemaVersion: "uais-teaching-course-management-v1",
                   updatedAt: "2026-06-22T11:44:00.000Z",
@@ -5554,7 +5598,7 @@ describe("teaching course management API", () => {
                   memberships: [pendingPeterMembership],
                   auditEvents: [],
           },
-          revision: requestNumber === 3 ? "rev-1" : "rev-0",
+          revision: requestNumber === 4 ? "rev-1" : "rev-0",
           storagePolicy: "external-redacted-teaching-course-management-snapshot",
           productionDatabaseAdapter: createReadyProductionDatabaseAdapter(),
           redaction: {
@@ -5566,7 +5610,7 @@ describe("teaching course management API", () => {
       }
 
       if (init?.method === "PUT" && pathname === "/uais/teaching-course-management/database") {
-        if (requestNumber === 2) {
+        if (requestNumber === 3) {
           return Response.json(
             { error: "Teaching course management snapshot revision mismatch." },
             { status: 409 },
@@ -5637,18 +5681,22 @@ describe("teaching course management API", () => {
         students: 2,
         updatedAt: "2026-06-22T11:45:00.000Z",
       });
+      // The leading GET is the corpus enumeration that resolves which course
+      // this class belongs to; the per-course rows cannot answer that, and the
+      // read-modify-write that follows is scoped to the course it found.
       expect(externalRequests.map((request) => request.method)).toEqual([
+        "GET",
         "GET",
         "PUT",
         "GET",
         "PUT",
       ]);
-      expect(externalRequests[1]?.body).toEqual(
+      expect(externalRequests[2]?.body).toEqual(
         expect.objectContaining({
           expectedRevision: "rev-0",
         }),
       );
-      expect(externalRequests[3]?.body).toEqual(
+      expect(externalRequests[4]?.body).toEqual(
         expect.objectContaining({
           expectedRevision: "rev-1",
           database: expect.objectContaining({
@@ -5918,8 +5966,12 @@ describe("teaching course management API", () => {
         },
       );
 
+      const invitationCode = await readClassInvitationCode(
+        dataDir,
+        "teacher-course-ai-supported-mathematics-research-20260622-112000-class-1",
+      );
       const response = await postJoin(
-        new Request("https://www.uais.top/api/teaching/invite-codes/55395057/join", {
+        new Request(`https://www.uais.top/api/teaching/invite-codes/${invitationCode}/join`, {
           method: "POST",
           headers: {
             cookie: createStudentCookie(),
@@ -5928,7 +5980,7 @@ describe("teaching course management API", () => {
         }),
         {
           params: Promise.resolve({
-            code: "55395057",
+            code: invitationCode,
           }),
         },
       );
@@ -5943,7 +5995,7 @@ describe("teaching course management API", () => {
           "membership-teacher-course-ai-supported-mathematics-research-20260622-112000-class-1-Peter",
         courseId: "teacher-course-ai-supported-mathematics-research-20260622-112000",
         classId: "teacher-course-ai-supported-mathematics-research-20260622-112000-class-1",
-        invitationCode: "55395057",
+        invitationCode,
         studentId: "Peter",
         studentDisplayName: "Peter",
         membershipStatus: "pending-teacher-review",
@@ -6500,15 +6552,16 @@ describe("teaching course management API", () => {
           params: Promise.resolve({ courseId }),
         },
       );
+      const invitationCode = await readClassInvitationCode(dataDir, classId);
       await postJoin(
-        new Request("https://www.uais.top/api/teaching/invite-codes/55395057/join", {
+        new Request(`https://www.uais.top/api/teaching/invite-codes/${invitationCode}/join`, {
           method: "POST",
           headers: {
             cookie: createStudentCookie(studentAppSessionUser, appSessionSecret),
           },
         }),
         {
-          params: Promise.resolve({ code: "55395057" }),
+          params: Promise.resolve({ code: invitationCode }),
         },
       );
 
@@ -6670,15 +6723,16 @@ describe("teaching course management API", () => {
           params: Promise.resolve({ courseId }),
         },
       );
+      const invitationCode = await readClassInvitationCode(dataDir, classId);
       await postJoin(
-        new Request("https://www.uais.top/api/teaching/invite-codes/55395057/join", {
+        new Request(`https://www.uais.top/api/teaching/invite-codes/${invitationCode}/join`, {
           method: "POST",
           headers: {
             cookie: createStudentCookie(),
           },
         }),
         {
-          params: Promise.resolve({ code: "55395057" }),
+          params: Promise.resolve({ code: invitationCode }),
         },
       );
 
@@ -6910,15 +6964,16 @@ describe("teaching course management API", () => {
           params: Promise.resolve({ courseId }),
         },
       );
+      const invitationCode = await readClassInvitationCode(dataDir, classId);
       await postJoin(
-        new Request("https://www.uais.top/api/teaching/invite-codes/55395057/join", {
+        new Request(`https://www.uais.top/api/teaching/invite-codes/${invitationCode}/join`, {
           method: "POST",
           headers: {
             cookie: createStudentCookie(),
           },
         }),
         {
-          params: Promise.resolve({ code: "55395057" }),
+          params: Promise.resolve({ code: invitationCode }),
         },
       );
 
@@ -7067,15 +7122,16 @@ describe("teaching course management API", () => {
           params: Promise.resolve({ courseId }),
         },
       );
+      const invitationCode = await readClassInvitationCode(dataDir, classId);
       await postJoin(
-        new Request("https://www.uais.top/api/teaching/invite-codes/55395057/join", {
+        new Request(`https://www.uais.top/api/teaching/invite-codes/${invitationCode}/join`, {
           method: "POST",
           headers: {
             cookie: createStudentCookie(),
           },
         }),
         {
-          params: Promise.resolve({ code: "55395057" }),
+          params: Promise.resolve({ code: invitationCode }),
         },
       );
 
@@ -7224,8 +7280,9 @@ describe("teaching course management API", () => {
       const classBody = await classResponse.json();
       expect(classResponse.status, JSON.stringify(classBody)).toBe(201);
 
+      const invitationCode = await readClassInvitationCode(dataDir, classId);
       const joinResponse = await postJoin(
-        new Request("https://www.uais.top/api/teaching/invite-codes/55395057/join", {
+        new Request(`https://www.uais.top/api/teaching/invite-codes/${invitationCode}/join`, {
           method: "POST",
           headers: {
             cookie: createStudentCookie(),
@@ -7233,7 +7290,7 @@ describe("teaching course management API", () => {
         }),
         {
           params: Promise.resolve({
-            code: "55395057",
+            code: invitationCode,
           }),
         },
       );
@@ -7469,8 +7526,9 @@ describe("teaching course management API", () => {
       );
       expect(classResponse.status).toBe(201);
 
+      const invitationCode = await readClassInvitationCode(dataDir, classId);
       const joinResponse = await postJoin(
-        new Request("https://www.uais.top/api/teaching/invite-codes/55395057/join", {
+        new Request(`https://www.uais.top/api/teaching/invite-codes/${invitationCode}/join`, {
           method: "POST",
           headers: {
             cookie: createStudentCookie(studentAppSessionUser, appSessionSecret),
@@ -7479,7 +7537,7 @@ describe("teaching course management API", () => {
           },
         }),
         {
-          params: Promise.resolve({ code: "55395057" }),
+          params: Promise.resolve({ code: invitationCode }),
         },
       );
       expect(joinResponse.status).toBe(201);

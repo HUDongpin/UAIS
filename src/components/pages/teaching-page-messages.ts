@@ -1,4 +1,4 @@
-import type { LocalizedText } from "@/i18n/copy";
+import type { Locale, LocalizedText } from "@/i18n/copy";
 
 // Bilingual UI status/error copy for the teacher workspace (Phase 3 decomposition
 // of teaching-page.tsx). Pure LocalizedText data — no component or hook coupling —
@@ -8,6 +8,16 @@ import type { LocalizedText } from "@/i18n/copy";
 export const INVITE_READY_MESSAGE: LocalizedText = {
   "zh-CN": "当前邀请码可用于班级加入预览。",
   "en-US": "Current invite code is ready for class join preview.",
+};
+// Plan E9: the invite and inline operations no longer fall through to the first
+// course (and its first class) when nothing is selected. They refuse and say so.
+export const INVITE_TARGET_REQUIRED_MESSAGE: LocalizedText = {
+  "zh-CN": "请先选择课程和班级，再执行邀请码操作。",
+  "en-US": "Choose a course and a class before running an invite-code action.",
+};
+export const TEACHING_OPERATION_COURSE_REQUIRED_MESSAGE: LocalizedText = {
+  "zh-CN": "请先选择要操作的课程。",
+  "en-US": "Choose the course these actions apply to first.",
 };
 export const INVITE_GENERATED_MESSAGE: LocalizedText = {
   "zh-CN": "邀请码已更新并等待教师确认发布。",
@@ -251,3 +261,45 @@ export const MEMBERSHIP_APPROVAL_READBACK_MISMATCH_MESSAGE: LocalizedText = {
   "zh-CN": "成员审批读回未匹配本次提交，请稍后刷新。",
   "en-US": "Membership approval readback did not match this submission. Please refresh shortly.",
 };
+
+// What the group-suggestion action actually proposed.
+//
+// The store has computed and persisted a real auto-split partition for a while,
+// and the operations route now returns it on `studentGroupSuggestionReceipt`
+// instead of dropping it and keeping the bare receipt. Until then the teacher
+// was told "suggestions generated" and shown nothing that had been suggested,
+// which is why the workspace read as unwired. Group names and sizes only: the
+// full roster belongs to student management, and this is one status line.
+// Nothing here assigns anybody — the sentence says the partition is a proposal.
+export function describeStudentGroupSuggestion(
+  suggestion:
+    | {
+        suggestedGroups?: Array<{ groupName?: string; members?: unknown[] }>;
+        ungroupedStudentCount?: number;
+      }
+    | undefined,
+  locale: Locale,
+) {
+  const groups = suggestion?.suggestedGroups ?? [];
+  const ungrouped = suggestion?.ungroupedStudentCount;
+  if (groups.length === 0) {
+    // A course with too few ungrouped students to split is a real outcome, and
+    // it is the one the teacher most needs told plainly rather than as silence.
+    if (typeof ungrouped !== "number") {
+      return "";
+    }
+    return locale === "zh-CN"
+      ? `当前有 ${ungrouped} 名尚未分组的学生，还不足以给出分组建议。`
+      : `${ungrouped} ungrouped student(s) — not enough to propose a split yet.`;
+  }
+  const partition = groups
+    .map((group) => {
+      const size = Array.isArray(group.members) ? group.members.length : 0;
+      const name = group.groupName?.trim() || (locale === "zh-CN" ? "未命名组" : "Unnamed group");
+      return locale === "zh-CN" ? `${name}（${size} 人）` : `${name} (${size})`;
+    })
+    .join(locale === "zh-CN" ? "、" : ", ");
+  return locale === "zh-CN"
+    ? `建议分组：${partition}；覆盖 ${ungrouped ?? 0} 名尚未分组的学生，等待教师确认后才会写入。`
+    : `Suggested groups: ${partition}. Covers ${ungrouped ?? 0} ungrouped student(s); nothing is assigned until you confirm.`;
+}

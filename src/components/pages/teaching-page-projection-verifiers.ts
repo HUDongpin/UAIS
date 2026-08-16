@@ -248,17 +248,17 @@ export function findMatchingInlineDomainProjection(
   export function isVerifiedStudentRosterProjection(
     projection: InlineTeachingOperationDomainProjection,
   ) {
-    const expectedSourceSystems = ["sis-roster", "invite-code-joins", "withdrawals"];
+    // The roster action is a local recount, and the projection now says so. The
+    // client verifies the honest wording: a response still claiming `synced`
+    // from an `sis-roster` is a stale or forged projection, not a verified one.
+    const expectedSourceSystems = ["local-class-memberships", "local-class-records"];
     return (
       projection.objectType === "student-roster" &&
-      projection.syncStatus === "synced" &&
+      projection.syncStatus === "local-recount" &&
       typeof projection.syncedBy === "string" &&
       projection.syncedBy.trim().length > 0 &&
       typeof projection.syncedAt === "string" &&
       projection.syncedAt.trim().length > 0 &&
-      typeof projection.pendingTeacherReviewCount === "number" &&
-      Number.isFinite(projection.pendingTeacherReviewCount) &&
-      projection.pendingTeacherReviewCount >= 0 &&
       Array.isArray(projection.sourceSystems) &&
       expectedSourceSystems.every((sourceSystem) =>
         projection.sourceSystems?.includes(sourceSystem),

@@ -2975,7 +2975,10 @@ describe("teaching course cover API", () => {
           status: "retried",
           attempts: 2,
           conflicts: 1,
-          maxAttempts: 2,
+          // The ladder the shared policy gives this loop. It answered 2 while
+          // the store allowed a single retry, which dropped the third writer of
+          // an already-paid-for provider image.
+          maxAttempts: 5,
         },
         responsibleSession: "S12",
         redaction: {

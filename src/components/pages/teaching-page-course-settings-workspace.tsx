@@ -54,6 +54,11 @@ type CourseSettingsWorkspaceProps = {
   // signed teacher course list this workspace already loads.
   learningChatroomGroupsEnabled: boolean;
   membershipApprovalStatuses: Record<string, string>;
+  // Plan E9 roster lifecycle: bulk approval per class, reject/remove per row.
+  membershipLifecycleStatuses: Record<string, string>;
+  classRosterStatuses: Record<string, string>;
+  pendingMembershipIds: string[];
+  pendingBulkApprovalClassIds: string[];
   inlineWorkspaceStatuses: Partial<Record<TeachingOperationId, string>>;
   inlineWorkspaceAuditStatuses: Partial<Record<TeachingOperationId, InlineWorkspaceAuditStatus>>;
   inlineWorkspaceAlertStatuses: Partial<Record<TeachingOperationId, InlineWorkspaceAlertStatus>>;
@@ -64,10 +69,23 @@ type CourseSettingsWorkspaceProps = {
   selectedActionCourse: TeacherCourse | undefined;
   selectedCourseActionLabel: string | undefined;
   selectedCourseAction: { courseId: string; action: TeacherCourseAction } | undefined;
+  onSelectCourseAction: (courseId: string) => void;
   setIsNewCourseOpen: Dispatch<SetStateAction<boolean>>;
   setNewClassCourseId: Dispatch<SetStateAction<string | undefined>>;
   setSelectedClassInvitation: Dispatch<SetStateAction<TeacherClassItem | undefined>>;
   approveClassMembership: (
+    classItem: TeacherClassItem,
+    membership: TeacherClassMembershipItem,
+  ) => void;
+  approveAllPendingMemberships: (
+    classItem: TeacherClassItem,
+    pendingMemberships: TeacherClassMembershipItem[],
+  ) => void;
+  rejectMembership: (
+    classItem: TeacherClassItem,
+    membership: TeacherClassMembershipItem,
+  ) => void;
+  removeMembership: (
     classItem: TeacherClassItem,
     membership: TeacherClassMembershipItem,
   ) => void;
@@ -99,6 +117,10 @@ export function CourseSettingsWorkspace({
   classMemberships,
   learningChatroomGroupsEnabled,
   membershipApprovalStatuses,
+  membershipLifecycleStatuses,
+  classRosterStatuses,
+  pendingMembershipIds,
+  pendingBulkApprovalClassIds,
   inlineWorkspaceStatuses,
   inlineWorkspaceAuditStatuses,
   inlineWorkspaceAlertStatuses,
@@ -107,10 +129,14 @@ export function CourseSettingsWorkspace({
   selectedActionCourse,
   selectedCourseActionLabel,
   selectedCourseAction,
+  onSelectCourseAction,
   setIsNewCourseOpen,
   setNewClassCourseId,
   setSelectedClassInvitation,
   approveClassMembership,
+  approveAllPendingMemberships,
+  rejectMembership,
+  removeMembership,
   updateCourseSettingsDraft,
   queueInlineWorkspaceAuditAlertNotifications,
   runInlineWorkspaceAction,
@@ -130,6 +156,7 @@ export function CourseSettingsWorkspace({
       createLearningGroup,
       updateLearningGroup,
       deleteLearningGroup,
+      autoSplitLearningGroups,
     } = useTeachingLearningGroupsWorkspace();
 
     return (
@@ -163,6 +190,7 @@ export function CourseSettingsWorkspace({
               operationId={"course-settings"}
               locale={locale}
               inlineWorkspaceStatuses={inlineWorkspaceStatuses}
+              isCourseChosen={Boolean(selectedCourseAction?.courseId)}
               runInlineWorkspaceAction={runInlineWorkspaceAction}
             />}
             </div>
@@ -171,9 +199,11 @@ export function CourseSettingsWorkspace({
           {<WorkspaceContext
             locale={locale}
             activeWorkspaceItem={activeWorkspaceItem}
+            courseCards={courseCards}
             selectedCourseAction={selectedCourseAction}
             selectedActionCourse={selectedActionCourse}
             selectedCourseActionLabel={selectedCourseActionLabel}
+            onSelectCourse={onSelectCourseAction}
           />}
           {activeCourseSettingsCourse && activeCourseSettingsDraft ? (
             <div
@@ -301,9 +331,16 @@ export function CourseSettingsWorkspace({
                   classes={courseClasses[course.id] ?? []}
                   membershipsByClass={classMemberships}
                   membershipApprovalStatuses={membershipApprovalStatuses}
+                  membershipLifecycleStatuses={membershipLifecycleStatuses}
+                  classRosterStatuses={classRosterStatuses}
+                  pendingMembershipIds={pendingMembershipIds}
+                  pendingBulkApprovalClassIds={pendingBulkApprovalClassIds}
                   course={course}
                   locale={locale}
                   onApproveMembership={approveClassMembership}
+                  onApproveAllPendingMemberships={approveAllPendingMemberships}
+                  onRejectMembership={rejectMembership}
+                  onRemoveMembership={removeMembership}
                   onNewClass={() => setNewClassCourseId(course.id)}
                   onOpenInvitation={setSelectedClassInvitation}
                 />
@@ -328,6 +365,7 @@ export function CourseSettingsWorkspace({
                       updateLearningGroup(course.id, groupId, patch)
                     }
                     onDeleteGroup={(groupId) => deleteLearningGroup(course.id, groupId)}
+                    onAutoSplitGroups={(input) => autoSplitLearningGroups(course.id, input)}
                   />
                 ) : null}
               </article>

@@ -254,6 +254,9 @@ function createErrorResponse(
     return jsonResponse(error.status, {
       error: error.message,
       traceId,
+      // Stable classification beside the prose: an approval that lost the race
+      // for a busy class row is retryable, a denied one is not.
+      ...(error.reasonCode ? { reasonCode: error.reasonCode } : {}),
       ...(access ? { access } : {}),
       redaction: createRedaction(),
     }, traceId);

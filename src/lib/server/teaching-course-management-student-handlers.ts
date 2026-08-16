@@ -6,14 +6,23 @@ import {
   createAuditEvent,
   createReceipt,
   formatTimestampId,
-  isTeachingCourseManagementOptimisticSnapshotConflict,
 } from "./teaching-course-management-helpers";
+import {
+  partitionTeachingLearningGroupCandidates,
+  selectUngroupedApprovedStudents,
+  teachingLearningGroupMinMembers,
+} from "./teaching-course-management-group-handlers";
 import {
   localTeachingCourseManagementStorage,
   readTeachingCourseManagementSnapshot,
   resolveTeachingCourseManagementDataDir,
   writeTeachingCourseManagementSnapshot,
 } from "./teaching-course-management-io";
+import {
+  createTeachingCourseManagementContentionError,
+  createTeachingCourseManagementWriteRetry,
+  teachingCourseManagementMaxWriteAttempts,
+} from "./teaching-course-management-write-retry";
 import type {
   TeachingCourseManagementAuditRequestSource,
   TeachingCourseManagementReceipt,
@@ -26,8 +35,14 @@ import type {
 
 // Student roster / knowledge-index / group-suggestion handler family for the
 // teaching-course-management store (Phase 3 decomposition). Cycle-free: runtime
-// deps are the extracted io/helpers/guards/error modules; store types are a
-// type-only import.
+// deps are the extracted io/helpers/guards/error modules plus the group handlers
+// (which do not import back); store types are a type-only import.
+
+// The group size the suggestion proposes. Auto-split takes the size from the
+// teacher; the suggestion has no request body to carry one, so it shows what a
+// split of four would look like - the middle of the 2..12 band and the size the
+// group workspace defaults to.
+const teachingStudentGroupSuggestionSize = 4;
 
 export async function saveTeachingStudentPreviewSessionRecord(input: {
   dataDir?: string;
@@ -57,10 +72,12 @@ export async function saveTeachingStudentPreviewSessionRecord(input: {
   const generatedAt = now.toISOString();
   const previewSessionId = `student-preview-session-${courseId}`;
 
-  for (let attempt = 0; attempt < 2; attempt += 1) {
+  const writeRetry = createTeachingCourseManagementWriteRetry();
+  for (let attempt = 0; attempt < teachingCourseManagementMaxWriteAttempts; attempt += 1) {
     const snapshot = await readTeachingCourseManagementSnapshot({
       dataDir,
       repository: input.repository,
+      courseId,
     });
     const database = snapshot.database;
     const courseIndex = database.courses.findIndex((course) => course.courseId === courseId);
@@ -155,27 +172,27 @@ export async function saveTeachingStudentPreviewSessionRecord(input: {
         repository: input.repository,
         database,
         expectedRevision: snapshot.revision,
+        courseId,
       });
       return {
         studentPreviewSession,
         receipt,
       };
     } catch (error) {
-      if (
-        input.repository &&
-        attempt === 0 &&
-        isTeachingCourseManagementOptimisticSnapshotConflict(error)
-      ) {
+      if (input.repository && (await writeRetry.shouldRetry({ attempt, error }))) {
         continue;
       }
-      throw error;
+      // A conflict that survives the ladder is exhausted contention, not a
+      // caller mistake: answer with the structured 409 rather than passing the
+      // backend's own revision-mismatch prose through. The local file path has no
+      // revisions and never lands here.
+      throw input.repository && writeRetry.isConflict(error)
+        ? createTeachingCourseManagementContentionError()
+        : error;
     }
   }
 
-  throw new TeachingCourseManagementStoreError(
-    409,
-    "Teaching course management snapshot changed; retry required.",
-  );
+  throw createTeachingCourseManagementContentionError();
 }
 
 export async function saveTeachingStudentRosterSyncRecord(input: {
@@ -206,10 +223,12 @@ export async function saveTeachingStudentRosterSyncRecord(input: {
   const syncedAt = now.toISOString();
   const rosterId = `student-roster-${courseId}`;
 
-  for (let attempt = 0; attempt < 2; attempt += 1) {
+  const writeRetry = createTeachingCourseManagementWriteRetry();
+  for (let attempt = 0; attempt < teachingCourseManagementMaxWriteAttempts; attempt += 1) {
     const snapshot = await readTeachingCourseManagementSnapshot({
       dataDir,
       repository: input.repository,
+      courseId,
     });
     const database = snapshot.database;
     const courseIndex = database.courses.findIndex((course) => course.courseId === courseId);
@@ -274,13 +293,18 @@ export async function saveTeachingStudentRosterSyncRecord(input: {
       courseId,
       ownerTeacherId: course.ownerTeacherId,
       syncedBy: actorId,
-      syncStatus: "synced",
+      // What this handler does, stated as what it does: it recounts the
+      // memberships already in this snapshot and restamps the class/course
+      // totals from them. Nothing is imported and no external system is read;
+      // the optional provider fields below are the only outbound half, and they
+      // are written by a different handler when a provider is configured.
+      syncStatus: "local-recount",
       operationRecordId,
       ...(sourceAction ? { sourceAction } : {}),
       approvedStudentCount,
       pendingTeacherReviewCount,
       classCount: courseClasses.length,
-      sourceSystems: ["sis-roster", "invite-code-joins", "withdrawals"],
+      sourceSystems: ["local-class-memberships", "local-class-records"],
       syncedAt,
       storagePolicy: storage.recordStoragePolicy,
       storageWritePolicy: storage.storageWritePolicy,
@@ -320,27 +344,27 @@ export async function saveTeachingStudentRosterSyncRecord(input: {
         repository: input.repository,
         database,
         expectedRevision: snapshot.revision,
+        courseId,
       });
       return {
         studentRoster,
         receipt,
       };
     } catch (error) {
-      if (
-        input.repository &&
-        attempt === 0 &&
-        isTeachingCourseManagementOptimisticSnapshotConflict(error)
-      ) {
+      if (input.repository && (await writeRetry.shouldRetry({ attempt, error }))) {
         continue;
       }
-      throw error;
+      // A conflict that survives the ladder is exhausted contention, not a
+      // caller mistake: answer with the structured 409 rather than passing the
+      // backend's own revision-mismatch prose through. The local file path has no
+      // revisions and never lands here.
+      throw input.repository && writeRetry.isConflict(error)
+        ? createTeachingCourseManagementContentionError()
+        : error;
     }
   }
 
-  throw new TeachingCourseManagementStoreError(
-    409,
-    "Teaching course management snapshot changed; retry required.",
-  );
+  throw createTeachingCourseManagementContentionError();
 }
 
 export async function markTeachingStudentRosterProviderSynced(input: {
@@ -369,10 +393,12 @@ export async function markTeachingStudentRosterProviderSynced(input: {
   const providerSyncedAt = now.toISOString();
   const rosterId = `student-roster-${courseId}`;
 
-  for (let attempt = 0; attempt < 2; attempt += 1) {
+  const writeRetry = createTeachingCourseManagementWriteRetry();
+  for (let attempt = 0; attempt < teachingCourseManagementMaxWriteAttempts; attempt += 1) {
     const snapshot = await readTeachingCourseManagementSnapshot({
       dataDir,
       repository: input.repository,
+      courseId,
     });
     const database = snapshot.database;
     const courseIndex = database.courses.findIndex((course) => course.courseId === courseId);
@@ -443,27 +469,27 @@ export async function markTeachingStudentRosterProviderSynced(input: {
         repository: input.repository,
         database,
         expectedRevision: snapshot.revision,
+        courseId,
       });
       return {
         studentRoster,
         receipt,
       };
     } catch (error) {
-      if (
-        input.repository &&
-        attempt === 0 &&
-        isTeachingCourseManagementOptimisticSnapshotConflict(error)
-      ) {
+      if (input.repository && (await writeRetry.shouldRetry({ attempt, error }))) {
         continue;
       }
-      throw error;
+      // A conflict that survives the ladder is exhausted contention, not a
+      // caller mistake: answer with the structured 409 rather than passing the
+      // backend's own revision-mismatch prose through. The local file path has no
+      // revisions and never lands here.
+      throw input.repository && writeRetry.isConflict(error)
+        ? createTeachingCourseManagementContentionError()
+        : error;
     }
   }
 
-  throw new TeachingCourseManagementStoreError(
-    409,
-    "Teaching course management snapshot changed; retry required.",
-  );
+  throw createTeachingCourseManagementContentionError();
 }
 
 export async function markTeachingKnowledgeIndexProviderSynced(input: {
@@ -492,10 +518,12 @@ export async function markTeachingKnowledgeIndexProviderSynced(input: {
   const providerSyncedAt = now.toISOString();
   const indexId = `knowledge-index-${courseId}`;
 
-  for (let attempt = 0; attempt < 2; attempt += 1) {
+  const writeRetry = createTeachingCourseManagementWriteRetry();
+  for (let attempt = 0; attempt < teachingCourseManagementMaxWriteAttempts; attempt += 1) {
     const snapshot = await readTeachingCourseManagementSnapshot({
       dataDir,
       repository: input.repository,
+      courseId,
     });
     const database = snapshot.database;
     const courseIndex = database.courses.findIndex((course) => course.courseId === courseId);
@@ -566,27 +594,27 @@ export async function markTeachingKnowledgeIndexProviderSynced(input: {
         repository: input.repository,
         database,
         expectedRevision: snapshot.revision,
+        courseId,
       });
       return {
         knowledgeIndex,
         receipt,
       };
     } catch (error) {
-      if (
-        input.repository &&
-        attempt === 0 &&
-        isTeachingCourseManagementOptimisticSnapshotConflict(error)
-      ) {
+      if (input.repository && (await writeRetry.shouldRetry({ attempt, error }))) {
         continue;
       }
-      throw error;
+      // A conflict that survives the ladder is exhausted contention, not a
+      // caller mistake: answer with the structured 409 rather than passing the
+      // backend's own revision-mismatch prose through. The local file path has no
+      // revisions and never lands here.
+      throw input.repository && writeRetry.isConflict(error)
+        ? createTeachingCourseManagementContentionError()
+        : error;
     }
   }
 
-  throw new TeachingCourseManagementStoreError(
-    409,
-    "Teaching course management snapshot changed; retry required.",
-  );
+  throw createTeachingCourseManagementContentionError();
 }
 
 export async function saveTeachingStudentGroupSuggestionRecord(input: {
@@ -617,10 +645,12 @@ export async function saveTeachingStudentGroupSuggestionRecord(input: {
   const generatedAt = now.toISOString();
   const groupSuggestionId = `group-suggestion-${courseId}`;
 
-  for (let attempt = 0; attempt < 2; attempt += 1) {
+  const writeRetry = createTeachingCourseManagementWriteRetry();
+  for (let attempt = 0; attempt < teachingCourseManagementMaxWriteAttempts; attempt += 1) {
     const snapshot = await readTeachingCourseManagementSnapshot({
       dataDir,
       repository: input.repository,
+      courseId,
     });
     const database = snapshot.database;
     const courseIndex = database.courses.findIndex((course) => course.courseId === courseId);
@@ -664,6 +694,22 @@ export async function saveTeachingStudentGroupSuggestionRecord(input: {
       updatedAt: generatedAt,
     };
 
+    // The suggestion is now the partition auto-split would apply, computed from
+    // the same two inputs and proposing the same 第N组 series - it simply does
+    // not persist any group. A receipt that said "generated" while carrying no
+    // members was the reason the workspace called this button unwired.
+    const candidates = selectUngroupedApprovedStudents(database, { courseId });
+    const suggestedGroups =
+      candidates.length < teachingLearningGroupMinMembers
+        ? []
+        : partitionTeachingLearningGroupCandidates(
+            candidates,
+            teachingStudentGroupSuggestionSize,
+          ).map((partition, partitionIndex) => ({
+            groupName: `第${partitionIndex + 1}组`,
+            members: partition,
+          }));
+
     const studentGroupSuggestion: TeachingStudentGroupSuggestionRecord = {
       groupSuggestionId,
       courseId,
@@ -673,7 +719,9 @@ export async function saveTeachingStudentGroupSuggestionRecord(input: {
       operationRecordId,
       ...(sourceAction ? { sourceAction } : {}),
       suggestionScope: "teacher-editable-student-groups",
-      sourceSignals: ["learning-progress", "participation-frequency", "role-preferences"],
+      suggestedGroups,
+      ungroupedStudentCount: candidates.length,
+      sourceSignals: ["approved-class-memberships", "existing-learning-groups"],
       reviewPolicy: "teacher-review-before-group-assignment",
       generatedAt,
       storagePolicy: storage.recordStoragePolicy,
@@ -714,27 +762,27 @@ export async function saveTeachingStudentGroupSuggestionRecord(input: {
         repository: input.repository,
         database,
         expectedRevision: snapshot.revision,
+        courseId,
       });
       return {
         studentGroupSuggestion,
         receipt,
       };
     } catch (error) {
-      if (
-        input.repository &&
-        attempt === 0 &&
-        isTeachingCourseManagementOptimisticSnapshotConflict(error)
-      ) {
+      if (input.repository && (await writeRetry.shouldRetry({ attempt, error }))) {
         continue;
       }
-      throw error;
+      // A conflict that survives the ladder is exhausted contention, not a
+      // caller mistake: answer with the structured 409 rather than passing the
+      // backend's own revision-mismatch prose through. The local file path has no
+      // revisions and never lands here.
+      throw input.repository && writeRetry.isConflict(error)
+        ? createTeachingCourseManagementContentionError()
+        : error;
     }
   }
 
-  throw new TeachingCourseManagementStoreError(
-    409,
-    "Teaching course management snapshot changed; retry required.",
-  );
+  throw createTeachingCourseManagementContentionError();
 }
 
 export async function saveTeachingKnowledgeIndexSyncRecord(input: {
@@ -765,10 +813,12 @@ export async function saveTeachingKnowledgeIndexSyncRecord(input: {
   const syncedAt = now.toISOString();
   const indexId = `knowledge-index-${courseId}`;
 
-  for (let attempt = 0; attempt < 2; attempt += 1) {
+  const writeRetry = createTeachingCourseManagementWriteRetry();
+  for (let attempt = 0; attempt < teachingCourseManagementMaxWriteAttempts; attempt += 1) {
     const snapshot = await readTeachingCourseManagementSnapshot({
       dataDir,
       repository: input.repository,
+      courseId,
     });
     const database = snapshot.database;
     const courseIndex = database.courses.findIndex((course) => course.courseId === courseId);
@@ -856,25 +906,25 @@ export async function saveTeachingKnowledgeIndexSyncRecord(input: {
         repository: input.repository,
         database,
         expectedRevision: snapshot.revision,
+        courseId,
       });
       return {
         knowledgeIndex,
         receipt,
       };
     } catch (error) {
-      if (
-        input.repository &&
-        attempt === 0 &&
-        isTeachingCourseManagementOptimisticSnapshotConflict(error)
-      ) {
+      if (input.repository && (await writeRetry.shouldRetry({ attempt, error }))) {
         continue;
       }
-      throw error;
+      // A conflict that survives the ladder is exhausted contention, not a
+      // caller mistake: answer with the structured 409 rather than passing the
+      // backend's own revision-mismatch prose through. The local file path has no
+      // revisions and never lands here.
+      throw input.repository && writeRetry.isConflict(error)
+        ? createTeachingCourseManagementContentionError()
+        : error;
     }
   }
 
-  throw new TeachingCourseManagementStoreError(
-    409,
-    "Teaching course management snapshot changed; retry required.",
-  );
+  throw createTeachingCourseManagementContentionError();
 }

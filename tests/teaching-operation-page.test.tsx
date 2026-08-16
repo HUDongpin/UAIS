@@ -113,6 +113,28 @@ describe("TeachingOperationPage", () => {
     });
   });
 
+  it("claims no invite validity the operations page has no class record for", () => {
+    render(
+      <TeachingOperationPage
+        action="manage"
+        operationId="invite-code"
+        selectedCourseId="teacher-research-methods"
+      />,
+    );
+
+    // The metric card printed a fixed "2026-12-17". No record carried that date
+    // and the join route enforces nothing of the kind, so a teacher read an
+    // expiry that would never be applied. This page has no class binding to read
+    // the real policy from (that is the invite-code workspace, which does), so it
+    // says the one true thing instead of inventing a deadline.
+    expect(screen.getByText("有效期")).toBeTruthy();
+    expect(screen.getByText("未设置")).toBeTruthy();
+    expect(screen.queryByText("2026-12-17")).toBeNull();
+    expect(document.body.textContent).not.toContain("2026-12-17");
+    // And no persona names in the record lines either.
+    expect(document.body.textContent).not.toContain("Peter");
+  });
+
   it("keeps the eleven teaching operation entries in a vertical enterprise side menu", () => {
     const { container } = render(<TeachingOperationPage operationId="knowledge-base" />);
 

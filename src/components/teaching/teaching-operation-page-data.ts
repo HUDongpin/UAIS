@@ -714,7 +714,15 @@ export const operationConfigs: Record<TeachingOperationId, OperationConfig> = {
       "en-US": "Invite code published to the class join entry.",
     },
     metrics: [
-      metric("有效期", "Validity", "2026-12-17"),
+      // This card used to print a fixed "2026-12-17". No record carried that
+      // date and no route enforced it, so a teacher read an expiry the join
+      // route would never apply. The real policy (inviteExpiresAt /
+      // inviteMaxJoins / inviteDisabled) lives on the CLASS record, which this
+      // static catalog page has no class binding to read - so it says the one
+      // thing that is true here instead of inventing a deadline. The live
+      // values are rendered by the invite-code workspace, which does hold the
+      // class record (see `describeInviteExpiry` in invite-code-policy.ts).
+      metric("有效期", "Validity", localText("未设置", "Not set")),
       metric("加入范围", "Join scope", localText("班级", "Class")),
       metric("扫码状态", "QR state", localText("就绪", "Ready")),
     ],
@@ -724,7 +732,7 @@ export const operationConfigs: Record<TeachingOperationId, OperationConfig> = {
       localText("教师发布", "Teacher publish"),
     ],
     records: [
-      localText("测试班邀请码沿用 8 位数字格式。", "Peter test class uses an 8-digit code."),
+      localText("测试班邀请码沿用 8 位数字格式。", "The test class uses an 8-digit code."),
       localText("发布前不写入真实学生账户。", "No real student account is written before publish."),
     ],
   },

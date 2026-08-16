@@ -287,13 +287,15 @@ export function normalizeDomainProjection(value: unknown): TeachingOperationDoma
       objectType: "student-roster",
       courseId: requireSafeId(value.courseId, "course id"),
       syncedBy: requireSafeId(value.syncedBy, "synced by"),
-      syncStatus: "synced",
+      // Restated rather than read back, like every other constant here: a
+      // persisted projection written before this correction re-normalizes to the
+      // honest shape instead of carrying `synced`/`sis-roster` forward.
+      syncStatus: "local-recount",
       operationRecordId: requireSafeId(value.operationRecordId, "operation record id"),
       ...(value.sourceAction
         ? { sourceAction: requireSafeId(value.sourceAction, "source action") }
         : {}),
-      sourceSystems: ["sis-roster", "invite-code-joins", "withdrawals"],
-      pendingTeacherReviewCount: 3,
+      sourceSystems: ["local-class-memberships", "local-class-records"],
       syncedAt: requireIsoDate(value.syncedAt, "syncedAt"),
       storagePolicy: "domain-projection-teaching-student-roster",
       redaction: createRedaction(),

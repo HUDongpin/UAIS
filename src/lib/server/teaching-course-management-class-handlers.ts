@@ -8,9 +8,9 @@ import {
 import {
   countApprovedMembershipsForClass,
   countApprovedStudentsForCourse,
+  countInviteCodeJoins,
   createAuditEvent,
   createReceipt,
-  isTeachingCourseManagementOptimisticSnapshotConflict,
 } from "./teaching-course-management-helpers";
 import {
   localTeachingCourseManagementStorage,
@@ -18,6 +18,11 @@ import {
   resolveTeachingCourseManagementDataDir,
   writeTeachingCourseManagementSnapshot,
 } from "./teaching-course-management-io";
+import {
+  createTeachingCourseManagementContentionError,
+  createTeachingCourseManagementWriteRetry,
+  teachingCourseManagementMaxWriteAttempts,
+} from "./teaching-course-management-write-retry";
 import type {
   TeachingClassInviteCodeDraftRecord,
   TeachingClassJoinInput,
@@ -37,6 +42,23 @@ import type {
 // Cycle-free: runtime deps are the extracted io/helpers/guards/error modules; store
 // types are a type-only import.
 
+// Why a join can be refused, in a form the join UI can branch on without reading
+// English. `not-found` keeps its own 404 shape; these three are 403s about a code
+// that exists and is simply not usable right now, which is a different sentence
+// for the student than "that code does not exist".
+export type TeachingClassInviteJoinRefusalReasonCode =
+  | "invite-code-disabled"
+  | "invite-code-expired"
+  | "invite-code-capacity-reached";
+
+// The teacher-settable half of an invite code. Every field is optional and an
+// omitted field means "leave as it is"; `null` clears one back to open.
+export type TeachingClassInviteCodePolicyInput = {
+  expiresAt?: string | null;
+  maxJoins?: number | null;
+  disabled?: boolean | null;
+};
+
 export async function rollbackTeachingCourseCreation(input: {
   dataDir?: string;
   repository?: TeachingCourseManagementRepository;
@@ -46,13 +68,14 @@ export async function rollbackTeachingCourseCreation(input: {
   rolledBackAt?: string;
 }) {
   const dataDir = resolveTeachingCourseManagementDataDir(input.dataDir);
+  const actorId = requireSafeId(input.actorId, "actor id");
+  const courseId = requireSafeId(input.courseId, "course id");
   const snapshot = await readTeachingCourseManagementSnapshot({
     dataDir,
     repository: input.repository,
+    courseId,
   });
   const database = snapshot.database;
-  const actorId = requireSafeId(input.actorId, "actor id");
-  const courseId = requireSafeId(input.courseId, "course id");
   const rolledBackAt = input.rolledBackAt ?? new Date().toISOString();
   const nextDatabase: TeachingCourseManagementDatabase = {
     schemaVersion: "uais-teaching-course-management-v1",
@@ -241,6 +264,7 @@ export async function rollbackTeachingCourseCreation(input: {
     repository: input.repository,
     database: nextDatabase,
     expectedRevision: snapshot.revision,
+    courseId,
   });
 }
 
@@ -276,10 +300,12 @@ export async function saveTeachingClassInviteCodeDraftRecord(input: {
   const generatedAt = now.toISOString();
   const inviteCodeDraftId = `invite-code-draft-${courseId}-${invitationCode}`;
 
-  for (let attempt = 0; attempt < 2; attempt += 1) {
+  const writeRetry = createTeachingCourseManagementWriteRetry();
+  for (let attempt = 0; attempt < teachingCourseManagementMaxWriteAttempts; attempt += 1) {
     const snapshot = await readTeachingCourseManagementSnapshot({
       dataDir,
       repository: input.repository,
+      courseId,
     });
     const database = snapshot.database;
     const courseIndex = database.courses.findIndex((item) => item.courseId === courseId);
@@ -391,27 +417,27 @@ export async function saveTeachingClassInviteCodeDraftRecord(input: {
         repository: input.repository,
         database,
         expectedRevision: snapshot.revision,
+        courseId,
       });
       return {
         inviteCodeDraft,
         receipt,
       };
     } catch (error) {
-      if (
-        input.repository &&
-        attempt === 0 &&
-        isTeachingCourseManagementOptimisticSnapshotConflict(error)
-      ) {
+      if (input.repository && (await writeRetry.shouldRetry({ attempt, error }))) {
         continue;
       }
-      throw error;
+      // A conflict that survives the ladder is exhausted contention, not a
+      // caller mistake: answer with the structured 409 rather than passing the
+      // backend's own revision-mismatch prose through. The local file path has no
+      // revisions and never lands here.
+      throw input.repository && writeRetry.isConflict(error)
+        ? createTeachingCourseManagementContentionError()
+        : error;
     }
   }
 
-  throw new TeachingCourseManagementStoreError(
-    409,
-    "Teaching course management snapshot changed; retry required.",
-  );
+  throw createTeachingCourseManagementContentionError();
 }
 
 export async function publishTeachingClassInviteCode(input: {
@@ -421,6 +447,7 @@ export async function publishTeachingClassInviteCode(input: {
   courseId: string;
   classId: string;
   invitationCode: string;
+  invitePolicy?: TeachingClassInviteCodePolicyInput;
   audit?: {
     requestSource?: TeachingCourseManagementAuditRequestSource;
   };
@@ -436,13 +463,16 @@ export async function publishTeachingClassInviteCode(input: {
   const courseId = requireSafeId(input.courseId, "course id");
   const classId = requireSafeId(input.classId, "class id");
   const invitationCode = requireInviteCode(input.invitationCode, 400);
+  const invitePolicyPatch = normalizeInviteCodePolicyPatch(input.invitePolicy);
   const now = input.now ?? new Date();
   const publishedAt = now.toISOString();
 
-  for (let attempt = 0; attempt < 2; attempt += 1) {
+  const writeRetry = createTeachingCourseManagementWriteRetry();
+  for (let attempt = 0; attempt < teachingCourseManagementMaxWriteAttempts; attempt += 1) {
     const snapshot = await readTeachingCourseManagementSnapshot({
       dataDir,
       repository: input.repository,
+      courseId,
     });
     const database = snapshot.database;
     const courseIndex = database.courses.findIndex((item) => item.courseId === courseId);
@@ -463,7 +493,17 @@ export async function publishTeachingClassInviteCode(input: {
       throw new TeachingCourseManagementStoreError(403, "Teaching class ownership is required.");
     }
 
-    const duplicateClass = database.classes.find(
+    // Invite codes are unique across the deployment, not within a course - a
+    // student joins with the bare code - so this gate needs a corpus-wide view
+    // that the course-scoped read above cannot give it. The store reconciles the
+    // same claim inside the row's transaction, which is what actually closes the
+    // race; this read is what keeps the teacher's answer the precise 409 rather
+    // than a generic retry.
+    const { database: inviteCodeCorpus } = await readTeachingCourseManagementSnapshot({
+      dataDir,
+      repository: input.repository,
+    });
+    const duplicateClass = inviteCodeCorpus.classes.find(
       (item) => item.invitationCode === invitationCode && item.classId !== classId,
     );
     if (duplicateClass) {
@@ -474,6 +514,13 @@ export async function publishTeachingClassInviteCode(input: {
     }
 
     const joinUrl = `/courses?invite=${invitationCode}`;
+    // A fresh code carries a fresh policy: an expiry or a join limit set for the
+    // code the teacher just revoked says nothing about the one replacing it.
+    // Republishing the same code keeps its policy unless this call changes it.
+    const invitePolicy = applyInviteCodePolicyPatch(
+      classItem.invitationCode === invitationCode ? classItem : undefined,
+      invitePolicyPatch,
+    );
     const existingPublishEvent = [...database.auditEvents].reverse().find(
       (event) =>
         event.action === "publish-class-invite-code" &&
@@ -484,7 +531,8 @@ export async function publishTeachingClassInviteCode(input: {
     if (
       existingPublishEvent &&
       classItem.invitationCode === invitationCode &&
-      classItem.joinUrl === joinUrl
+      classItem.joinUrl === joinUrl &&
+      isSameInviteCodePolicy(classItem, invitePolicy)
     ) {
       const receipt = createReceipt({
         action: "publish-class-invite-code",
@@ -505,6 +553,12 @@ export async function publishTeachingClassInviteCode(input: {
       ...classItem,
       invitationCode,
       joinUrl,
+      // Spread over the record's own policy keys rather than beside them: an
+      // omitted key must DISAPPEAR, not survive from the previous code.
+      inviteExpiresAt: undefined,
+      inviteMaxJoins: undefined,
+      inviteDisabled: undefined,
+      ...invitePolicy,
       updatedAt: publishedAt,
     };
     database.classes[classIndex] = updatedClass;
@@ -546,27 +600,27 @@ export async function publishTeachingClassInviteCode(input: {
         repository: input.repository,
         database,
         expectedRevision: snapshot.revision,
+        courseId,
       });
       return {
         classItem: updatedClass,
         receipt,
       };
     } catch (error) {
-      if (
-        input.repository &&
-        attempt === 0 &&
-        isTeachingCourseManagementOptimisticSnapshotConflict(error)
-      ) {
+      if (input.repository && (await writeRetry.shouldRetry({ attempt, error }))) {
         continue;
       }
-      throw error;
+      // A conflict that survives the ladder is exhausted contention, not a
+      // caller mistake: answer with the structured 409 rather than passing the
+      // backend's own revision-mismatch prose through. The local file path has no
+      // revisions and never lands here.
+      throw input.repository && writeRetry.isConflict(error)
+        ? createTeachingCourseManagementContentionError()
+        : error;
     }
   }
 
-  throw new TeachingCourseManagementStoreError(
-    409,
-    "Teaching course management snapshot changed; retry required.",
-  );
+  throw createTeachingCourseManagementContentionError();
 }
 
 export async function assertTeachingClassInviteCodePublishTarget(input: {
@@ -577,13 +631,14 @@ export async function assertTeachingClassInviteCodePublishTarget(input: {
   classId: string;
 }) {
   const dataDir = resolveTeachingCourseManagementDataDir(input.dataDir);
-  const { database } = await readTeachingCourseManagementSnapshot({
-    dataDir,
-    repository: input.repository,
-  });
   const actorId = requireSafeId(input.actorId, "actor id");
   const courseId = requireSafeId(input.courseId, "course id");
   const classId = requireSafeId(input.classId, "class id");
+  const { database } = await readTeachingCourseManagementSnapshot({
+    dataDir,
+    repository: input.repository,
+    courseId,
+  });
   const classItem = database.classes.find(
     (item) => item.classId === classId && item.courseId === courseId,
   );
@@ -620,11 +675,25 @@ export async function joinTeachingClassByInviteCode(input: {
   );
   const now = input.now ?? new Date();
   const joinedAt = now.toISOString();
+  // A student names a class by its code alone, so the course this join belongs
+  // to has to be discovered before the store can be asked for that course's row.
+  // Discovery stays a corpus enumeration - the same one the course list uses -
+  // and only the read-modify-write that follows is course-scoped. Codes never
+  // move between courses, so resolving once outside the retry loop is safe.
+  const courseId = await resolveTeachingClassCourseId({
+    dataDir,
+    repository: input.repository,
+    find: (database) =>
+      database.classes.find((item) => item.invitationCode === invitationCode),
+    notFoundMessage: "Teaching class invite code was not found.",
+  });
 
-  for (let attempt = 0; attempt < 2; attempt += 1) {
+  const writeRetry = createTeachingCourseManagementWriteRetry();
+  for (let attempt = 0; attempt < teachingCourseManagementMaxWriteAttempts; attempt += 1) {
     const snapshot = await readTeachingCourseManagementSnapshot({
       dataDir,
       repository: input.repository,
+      courseId,
     });
     const database = snapshot.database;
     const classItem = database.classes.find((item) => item.invitationCode === invitationCode);
@@ -643,10 +712,20 @@ export async function joinTeachingClassByInviteCode(input: {
     }
 
     const membershipId = `membership-${classItem.classId}-${studentId}`;
-    const existingMembership = database.memberships.find(
+    const existingMembershipIndex = database.memberships.findIndex(
       (membership) => membership.membershipId === membershipId,
     );
-    if (existingMembership) {
+    const existingMembership =
+      existingMembershipIndex >= 0 ? database.memberships[existingMembershipIndex] : undefined;
+    // A membership that is still live - waiting for review or approved - answers
+    // the same idempotent receipt it always did. A rejected or removed one is a
+    // closed request, not a live seat, so the student is allowed to ask again and
+    // the row below is rebuilt as a fresh pending request.
+    if (
+      existingMembership &&
+      existingMembership.membershipStatus !== "rejected" &&
+      existingMembership.membershipStatus !== "removed"
+    ) {
       return {
         membership: existingMembership,
         receipt: createReceipt({
@@ -676,6 +755,15 @@ export async function joinTeachingClassByInviteCode(input: {
         "Student already has a membership in this teaching course.",
       );
     }
+
+    // The code's own policy is checked only once the join is otherwise legal, so
+    // a student who already holds this seat is never told the class is full.
+    assertTeachingClassInviteCodeUsable({
+      database,
+      classItem,
+      invitationCode,
+      now,
+    });
 
     const membership: TeachingClassMembershipRecord = {
       membershipId,
@@ -715,7 +803,15 @@ export async function joinTeachingClassByInviteCode(input: {
       storage,
     });
 
-    database.memberships.push(membership);
+    // A re-join after a rejection or a removal REPLACES the closed row rather
+    // than adding a second one under the same deterministic membership id: the
+    // history lives in the audit events, and the roster stays one row per
+    // student per class.
+    if (existingMembershipIndex >= 0) {
+      database.memberships[existingMembershipIndex] = membership;
+    } else {
+      database.memberships.push(membership);
+    }
     database.classes[classIndex] = {
       ...classItem,
       updatedAt: joinedAt,
@@ -738,24 +834,24 @@ export async function joinTeachingClassByInviteCode(input: {
         repository: input.repository,
         database,
         expectedRevision: snapshot.revision,
+        courseId,
       });
       return { membership, receipt };
     } catch (error) {
-      if (
-        input.repository &&
-        attempt === 0 &&
-        isTeachingCourseManagementOptimisticSnapshotConflict(error)
-      ) {
+      if (input.repository && (await writeRetry.shouldRetry({ attempt, error }))) {
         continue;
       }
-      throw error;
+      // A conflict that survives the ladder is exhausted contention, not a
+      // caller mistake: answer with the structured 409 rather than passing the
+      // backend's own revision-mismatch prose through. The local file path has no
+      // revisions and never lands here.
+      throw input.repository && writeRetry.isConflict(error)
+        ? createTeachingCourseManagementContentionError()
+        : error;
     }
   }
 
-  throw new TeachingCourseManagementStoreError(
-    409,
-    "Teaching course management snapshot changed; retry required.",
-  );
+  throw createTeachingCourseManagementContentionError();
 }
 
 export async function approveTeachingClassMembership(input: {
@@ -783,11 +879,23 @@ export async function approveTeachingClassMembership(input: {
   const membershipId = requireSafeId(input.membershipId, "membership id");
   const now = input.now ?? new Date();
   const approvedAt = now.toISOString();
+  // The approval route addresses a class and a membership, never a course, so
+  // the owning course is discovered the same way the invite join discovers it:
+  // one corpus enumeration up front, then a course-scoped read-modify-write. A
+  // class never changes course, so this cannot go stale inside the loop.
+  const courseId = await resolveTeachingClassCourseId({
+    dataDir,
+    repository: input.repository,
+    find: (database) => database.classes.find((item) => item.classId === classId),
+    notFoundMessage: "Teaching class was not found.",
+  });
 
-  for (let attempt = 0; attempt < 2; attempt += 1) {
+  const writeRetry = createTeachingCourseManagementWriteRetry();
+  for (let attempt = 0; attempt < teachingCourseManagementMaxWriteAttempts; attempt += 1) {
     const snapshot = await readTeachingCourseManagementSnapshot({
       dataDir,
       repository: input.repository,
+      courseId,
     });
     const database = snapshot.database;
     const classIndex = database.classes.findIndex((item) => item.classId === classId);
@@ -886,6 +994,7 @@ export async function approveTeachingClassMembership(input: {
         repository: input.repository,
         database,
         expectedRevision: snapshot.revision,
+        courseId,
       });
       return {
         membership,
@@ -894,20 +1003,151 @@ export async function approveTeachingClassMembership(input: {
         receipt,
       };
     } catch (error) {
-      if (
-        input.repository &&
-        attempt === 0 &&
-        isTeachingCourseManagementOptimisticSnapshotConflict(error)
-      ) {
+      if (input.repository && (await writeRetry.shouldRetry({ attempt, error }))) {
         continue;
       }
-      throw error;
+      // A conflict that survives the ladder is exhausted contention, not a
+      // caller mistake: answer with the structured 409 rather than passing the
+      // backend's own revision-mismatch prose through. The local file path has no
+      // revisions and never lands here.
+      throw input.repository && writeRetry.isConflict(error)
+        ? createTeachingCourseManagementContentionError()
+        : error;
     }
   }
 
-  throw new TeachingCourseManagementStoreError(
-    409,
-    "Teaching course management snapshot changed; retry required.",
+  throw createTeachingCourseManagementContentionError();
+}
+
+// Expiry, capacity and the disable switch, in that order. Each refusal is a 403
+// with its own reason code: the code exists, so answering 404 would be a lie,
+// and one undifferentiated 403 would leave the student guessing which of the
+// three walls they hit.
+function assertTeachingClassInviteCodeUsable(input: {
+  database: TeachingCourseManagementDatabase;
+  classItem: TeachingClassRecord;
+  invitationCode: string;
+  now?: Date;
+}) {
+  if (input.classItem.inviteDisabled) {
+    throw createInviteJoinRefusalError(
+      "Teaching class invite code is disabled.",
+      "invite-code-disabled",
+    );
+  }
+  if (
+    input.classItem.inviteExpiresAt &&
+    Date.parse(input.classItem.inviteExpiresAt) <= (input.now ?? new Date()).getTime()
+  ) {
+    throw createInviteJoinRefusalError(
+      "Teaching class invite code has expired.",
+      "invite-code-expired",
+    );
+  }
+  if (
+    input.classItem.inviteMaxJoins !== undefined &&
+    countInviteCodeJoins(input.database, {
+      classId: input.classItem.classId,
+      invitationCode: input.invitationCode,
+    }) >= input.classItem.inviteMaxJoins
+  ) {
+    throw createInviteJoinRefusalError(
+      "Teaching class invite code join limit is reached.",
+      "invite-code-capacity-reached",
+    );
+  }
+}
+
+function createInviteJoinRefusalError(
+  message: string,
+  reasonCode: TeachingClassInviteJoinRefusalReasonCode,
+) {
+  return new TeachingCourseManagementStoreError(403, message, undefined, reasonCode);
+}
+
+function normalizeInviteCodePolicyPatch(
+  value: TeachingClassInviteCodePolicyInput | undefined,
+): TeachingClassInviteCodePolicyInput {
+  if (!value) {
+    return {};
+  }
+  return {
+    ...(value.expiresAt === undefined
+      ? {}
+      : {
+          expiresAt:
+            value.expiresAt === null
+              ? null
+              : requireInviteCodeExpiry(value.expiresAt),
+        }),
+    ...(value.maxJoins === undefined
+      ? {}
+      : { maxJoins: value.maxJoins === null ? null : requireInviteCodeMaxJoins(value.maxJoins) }),
+    ...(value.disabled === undefined ? {} : { disabled: value.disabled === true }),
+  };
+}
+
+// `current` absent means the class is taking a NEW code, so the patch is applied
+// to an open policy rather than to the retired code's one.
+function applyInviteCodePolicyPatch(
+  current: TeachingClassRecord | undefined,
+  patch: TeachingClassInviteCodePolicyInput,
+): Pick<TeachingClassRecord, "inviteExpiresAt" | "inviteMaxJoins" | "inviteDisabled"> {
+  const expiresAt = patch.expiresAt === undefined ? current?.inviteExpiresAt : patch.expiresAt;
+  const maxJoins = patch.maxJoins === undefined ? current?.inviteMaxJoins : patch.maxJoins;
+  const disabled = patch.disabled === undefined ? current?.inviteDisabled : patch.disabled;
+  return {
+    ...(expiresAt ? { inviteExpiresAt: expiresAt } : {}),
+    ...(maxJoins === null || maxJoins === undefined ? {} : { inviteMaxJoins: maxJoins }),
+    ...(disabled ? { inviteDisabled: true as const } : {}),
+  };
+}
+
+function isSameInviteCodePolicy(
+  classItem: TeachingClassRecord,
+  policy: Pick<TeachingClassRecord, "inviteExpiresAt" | "inviteMaxJoins" | "inviteDisabled">,
+) {
+  return (
+    classItem.inviteExpiresAt === policy.inviteExpiresAt &&
+    classItem.inviteMaxJoins === policy.inviteMaxJoins &&
+    classItem.inviteDisabled === policy.inviteDisabled
   );
 }
 
+function requireInviteCodeExpiry(value: unknown) {
+  if (typeof value !== "string" || Number.isNaN(Date.parse(value))) {
+    throw new TeachingCourseManagementStoreError(400, "Invalid invite code expiry.");
+  }
+  return value;
+}
+
+function requireInviteCodeMaxJoins(value: unknown) {
+  // Zero is rejected rather than treated as "closed": disabling a code is what
+  // `disabled` is for, and a silent 0 would look like an unset field.
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 1) {
+    throw new TeachingCourseManagementStoreError(400, "Invalid invite code join limit.");
+  }
+  return value;
+}
+
+// Class-by-code and class-by-id discovery, shared by the two handlers whose
+// callers cannot name a course. The read is deliberately unscoped: it is the one
+// question the per-course rows cannot answer directly, and it carries no
+// revision, so its result is used only to choose which course's row the caller
+// then reads under an optimistic guard.
+export async function resolveTeachingClassCourseId(input: {
+  dataDir: string;
+  repository?: TeachingCourseManagementRepository;
+  find: (database: TeachingCourseManagementDatabase) => TeachingClassRecord | undefined;
+  notFoundMessage: string;
+}) {
+  const { database } = await readTeachingCourseManagementSnapshot({
+    dataDir: input.dataDir,
+    repository: input.repository,
+  });
+  const classItem = input.find(database);
+  if (!classItem) {
+    throw new TeachingCourseManagementStoreError(404, input.notFoundMessage);
+  }
+  return classItem.courseId;
+}

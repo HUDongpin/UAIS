@@ -25,7 +25,6 @@ import {
   createInviteJoinUrl,
   createInvitePartialFailureStatus,
   createInviteWorkspaceFailureStatus,
-  createMembershipApprovalFailureStatus,
   createRollbackFailureStatus,
   createTeachingClassCreateFailureMessage,
   createTeachingClassCreateReceiptMissingMessage,
@@ -44,10 +43,13 @@ import {
   createKangXiaPptSlideScripts,
 } from "./teacher-ppt-narration-workflow-format";
 import { useAppPreferences } from "@/components/providers/app-preferences";
+import { createInviteCodePolicyPatch } from "@/components/teaching/invite-code-policy";
 import {
   isTeachingOperationId,
   type TeachingOperationId,
 } from "@/components/teaching/teaching-operation-data";
+import { useTeachingClassMembershipLifecycle } from "@/components/teaching/use-teaching-class-membership-lifecycle";
+import { useTeachingInviteTargeting } from "@/components/teaching/use-teaching-invite-targeting";
 import { localizedText } from "@/components/ui/localized-text";
 import { teacherCourses, teacherSidebarItems } from "@/data/uais";
 import type { TeacherCourse } from "@/data/uais";
@@ -65,11 +67,8 @@ import {
   createPersistedCourseLoadErrorMessage,
   createTeacherClassesByCourseFromPersistedClasses,
   createTeacherCourseFromPersistedCourse,
-  createTeacherMembershipFromPersistedMembership,
   createTeacherMembershipsByClassFromPersistedMemberships,
   extractCourseSemester,
-  isMatchingMembershipApprovalResult,
-  isPersistedMembershipApprovalReceipt,
   mergeTeacherClassesByCourseId,
   mergeTeacherCoursesById,
   mergeTeacherMembershipsByClassId,
@@ -84,7 +83,6 @@ import {
   type TeacherClassItem,
   type TeacherClassMembershipItem,
   type TeachingClassCreateResponse,
-  type TeachingClassMembershipApproveResponse,
   type TeachingCourseCreateResponse,
   type TeachingCourseListResponse,
 } from "@/lib/teaching/course-readback";
@@ -98,11 +96,8 @@ import {
   INVITE_PUBLICATION_RECEIPT_MISSING_MESSAGE,
   INVITE_PUBLISHED_MESSAGE,
   INVITE_READY_MESSAGE,
-  MEMBERSHIP_APPROVAL_FAILED_MESSAGE,
-  MEMBERSHIP_APPROVAL_PENDING_MESSAGE,
-  MEMBERSHIP_APPROVAL_READBACK_MISMATCH_MESSAGE,
-  MEMBERSHIP_APPROVAL_READBACK_MISSING_MESSAGE,
-  MEMBERSHIP_APPROVAL_RECEIPT_MISSING_MESSAGE,
+  INVITE_TARGET_REQUIRED_MESSAGE,
+  describeStudentGroupSuggestion,
   TEACHING_CLASS_CREATE_READBACK_MISMATCH_MESSAGE,
   TEACHING_CLASS_CREATE_READBACK_MISSING_MESSAGE,
   TEACHING_COURSE_CREATE_READBACK_MISMATCH_MESSAGE,
@@ -113,6 +108,7 @@ import {
   TEACHING_OPERATION_ALERT_PENDING_MESSAGE,
   TEACHING_OPERATION_AUDIT_FAILED_MESSAGE,
   TEACHING_OPERATION_AUDIT_PENDING_MESSAGE,
+  TEACHING_OPERATION_COURSE_REQUIRED_MESSAGE,
   TEACHING_OPERATION_RECEIPT_MISMATCH_MESSAGE,
   TEACHING_OPERATION_ROLLBACK_FAILED_MESSAGE,
   TEACHING_OPERATION_SAVE_FAILED_MESSAGE,
@@ -140,6 +136,8 @@ import {
 // Learning-group (chatroom group) workspace handlers. They live in a sibling
 // module because this file already sits at the 1500-code-line source cap; they
 // are re-exported here so the teacher workspace keeps one handler entry point.
+// The class-roster lifecycle and invite-targeting hooks (plan E9) are siblings
+// for the same reason, and are composed into the hook below.
 export {
   createLearningGroupFailureMessage,
   createLearningGroupsByCourse,
@@ -164,7 +162,11 @@ export function useTeachingWorkspace() {
   const [courseCards, setCourseCards] = useState<TeacherCourse[]>(() => [...teacherCourses]);
   const [activeWorkspaceItemId, setActiveWorkspaceItemId] =
     useState<TeachingOperationId>("course-settings");
-  const [selectedCourseAction] = useState<{
+  // Plan E9: this now has a setter and an on-screen selector. It used to be
+  // write-only state that nothing could ever set, so every inline operation fell
+  // through to `courseCards[0]` and ran against whichever course happened to sort
+  // first — a wrong-course write with no wrong-course symptom.
+  const [selectedCourseAction, setSelectedCourseAction] = useState<{
     courseId: string;
     action: TeacherCourseAction;
   }>();
@@ -181,9 +183,6 @@ export function useTeachingWorkspace() {
   // group surface at all.
   const [learningChatroomGroupsEnabled, setLearningChatroomGroupsEnabled] = useState(false);
   const [persistedCourseLoadError, setPersistedCourseLoadError] = useState<string>();
-  const [membershipApprovalStatuses, setMembershipApprovalStatuses] = useState<
-    Record<string, string>
-  >({});
   const [selectedClassInvitation, setSelectedClassInvitation] = useState<TeacherClassItem>();
   const [inviteWorkspaceCode, setInviteWorkspaceCode] = useState(DEFAULT_INVITE_CODE);
   const [inviteWorkspaceJoinUrl, setInviteWorkspaceJoinUrl] = useState(
@@ -226,6 +225,13 @@ export function useTeachingWorkspace() {
     clonedVoiceId: "voice-qwen-redacted",
     language: locale,
     slideScripts: kangXiaPptSlideScripts,
+  });
+  const inviteTargeting = useTeachingInviteTargeting({
+    locale,
+    courseClasses,
+    // The invite actions run against the workspace-wide course; only the class
+    // inside it is chosen separately.
+    selectedInviteCourseId: selectedCourseAction?.courseId,
   });
 
   const readPersistedTeachingCourseState =
@@ -286,6 +292,12 @@ export function useTeachingWorkspace() {
     },
     [],
   );
+
+  const membershipLifecycle = useTeachingClassMembershipLifecycle({
+    locale,
+    readPersistedTeachingCourseState,
+    applyPersistedTeachingCourseReadback,
+  });
 
   useEffect(() => {
     if (!shouldLoadPersistedTeachingCourses() || typeof fetch !== "function") {
@@ -426,92 +438,6 @@ export function useTeachingWorkspace() {
     setNewClassCourseId(undefined);
   }
 
-  async function approveClassMembership(
-    classItem: TeacherClassItem,
-    membership: TeacherClassMembershipItem,
-  ) {
-    setMembershipApprovalStatuses((currentStatuses) => ({
-      ...currentStatuses,
-      [membership.id]: localizedText(MEMBERSHIP_APPROVAL_PENDING_MESSAGE, locale),
-    }));
-
-    try {
-      const response = await fetch(
-        `/api/teaching/classes/${encodeURIComponent(classItem.id)}/memberships/${encodeURIComponent(
-          membership.id,
-        )}/approve`,
-        {
-          method: "POST",
-          headers: { accept: "application/json" },
-        },
-      );
-      const body = (await response.json().catch(() => null)) as
-        | TeachingClassMembershipApproveResponse
-        | null;
-      if (!response.ok) {
-        setMembershipApprovalStatuses((currentStatuses) => ({
-          ...currentStatuses,
-          [membership.id]: createMembershipApprovalFailureStatus(body, locale),
-        }));
-        return;
-      }
-      if (!body?.membership) {
-        throw new Error(localizedText(MEMBERSHIP_APPROVAL_FAILED_MESSAGE, locale));
-      }
-
-      const approvedMembership = createTeacherMembershipFromPersistedMembership(body.membership);
-      if (!approvedMembership) {
-        throw new Error(localizedText(MEMBERSHIP_APPROVAL_FAILED_MESSAGE, locale));
-      }
-      if (
-        !isMatchingMembershipApprovalResult({
-          approvedMembership,
-          requestedMembership: membership,
-          requestedClass: classItem,
-        })
-      ) {
-        throw new Error(localizedText(MEMBERSHIP_APPROVAL_FAILED_MESSAGE, locale));
-      }
-      if (!isPersistedMembershipApprovalReceipt(body.receipt, classItem)) {
-        throw new Error(localizedText(MEMBERSHIP_APPROVAL_RECEIPT_MISSING_MESSAGE, locale));
-      }
-
-      const readback = await readPersistedTeachingCourseState();
-      const readbackMembership = (readback.membershipsByClass[classItem.id] ?? []).find(
-        (persistedMembership) => persistedMembership.id === approvedMembership.id,
-      );
-      if (!readbackMembership) {
-        throw new Error(localizedText(MEMBERSHIP_APPROVAL_READBACK_MISSING_MESSAGE, locale));
-      }
-      if (
-        !isMatchingMembershipApprovalResult({
-          approvedMembership: readbackMembership,
-          requestedMembership: membership,
-          requestedClass: classItem,
-        })
-      ) {
-        throw new Error(localizedText(MEMBERSHIP_APPROVAL_READBACK_MISMATCH_MESSAGE, locale));
-      }
-
-      applyPersistedTeachingCourseReadback(readback);
-      setMembershipApprovalStatuses((currentStatuses) => ({
-        ...currentStatuses,
-        [membership.id]:
-          locale === "zh-CN"
-            ? `${readbackMembership.studentDisplayName} 已加入${classItem.name}。`
-            : `${readbackMembership.studentDisplayName} joined ${classItem.name}.`,
-      }));
-    } catch (error) {
-      setMembershipApprovalStatuses((currentStatuses) => ({
-        ...currentStatuses,
-        [membership.id]:
-          error instanceof Error && error.message
-            ? error.message
-            : localizedText(MEMBERSHIP_APPROVAL_FAILED_MESSAGE, locale),
-      }));
-    }
-  }
-
   const newClassCourse = newClassCourseId
     ? courseCards.find((course) => course.id === newClassCourseId)
     : undefined;
@@ -587,6 +513,17 @@ export function useTeachingWorkspace() {
     operationId: TeachingOperationId,
     actionSlot: "primary" | "secondary",
   ) {
+    // Plan E9: refuse rather than guess. The operations route authorizes on the
+    // course id, so an unset course used to become "whatever sorted first" and
+    // the receipt came back looking entirely successful.
+    if (!selectedCourseAction?.courseId) {
+      setInlineWorkspaceStatuses((currentStatuses) => ({
+        ...currentStatuses,
+        [operationId]: localizedText(TEACHING_OPERATION_COURSE_REQUIRED_MESSAGE, locale),
+      }));
+      return;
+    }
+
     const attemptId = createInlineWorkspaceAttemptId(operationId);
     const actionConfig = createInlineWorkspaceActionConfig(operationId, locale);
     setInlineWorkspaceStatuses((currentStatuses) => ({
@@ -615,7 +552,7 @@ export function useTeachingWorkspace() {
     });
 
     try {
-      const courseId = selectedCourseAction?.courseId ?? courseCards[0]?.id;
+      const courseId = selectedCourseAction.courseId;
       const sourceAction = "inline-teaching-workspace";
       const courseSettingsPatch =
         operationId === "course-settings" && actionSlot === "primary" && courseId
@@ -654,6 +591,13 @@ export function useTeachingWorkspace() {
       const payload = (await response.json()) as {
         receipt?: InlineTeachingOperationBackendReceipt;
         domainPersistenceSummary?: InlineTeachingOperationDomainPersistenceSummary;
+        // The partition the students/secondary action proposed. Present only on
+        // that action, and read for display only — it grants nothing and assigns
+        // nobody, which is exactly what the sentence it produces says.
+        studentGroupSuggestionReceipt?: {
+          suggestedGroups?: Array<{ groupName?: string; members?: unknown[] }>;
+          ungroupedStudentCount?: number;
+        };
         traceId?: string;
       };
       if (!isCurrentInlineWorkspaceAttempt(operationId, attemptId)) {
@@ -718,11 +662,21 @@ export function useTeachingWorkspace() {
         return;
       }
       const receiptDisplayMessage = payload.receipt?.displayMessage;
-      const verifiedStatusMessage = receiptDisplayMessage
+      const confirmedStatusMessage = receiptDisplayMessage
         ? localizedText(receiptDisplayMessage, locale)
         : actionSlot === "primary"
           ? actionConfig.primaryMessage
           : actionConfig.secondaryMessage;
+      // "Suggestions generated" and nothing else was the whole reason this
+      // button read as unwired. The partition is on the response now, so the
+      // status line carries it.
+      const studentGroupSuggestionSummary = describeStudentGroupSuggestion(
+        payload.studentGroupSuggestionReceipt,
+        locale,
+      );
+      const verifiedStatusMessage = studentGroupSuggestionSummary
+        ? `${confirmedStatusMessage} ${studentGroupSuggestionSummary}`
+        : confirmedStatusMessage;
       if (payload.traceId) {
         const recordId = payload.receipt?.receiptId;
         if (!recordId) {
@@ -741,7 +695,7 @@ export function useTeachingWorkspace() {
         }));
         void readInlineWorkspaceAuditEvidence({
           operationId,
-          courseId: payload.receipt?.courseId ?? selectedCourseAction?.courseId ?? courseCards[0]?.id,
+          courseId: payload.receipt?.courseId ?? courseId,
           recordId,
           traceId: payload.traceId,
           verifiedStatusMessage,
@@ -1218,13 +1172,27 @@ export function useTeachingWorkspace() {
 
   async function runInviteWorkspaceAction(actionSlot: "primary" | "secondary") {
     const operationId: TeachingOperationId = "invite-code";
+    const courseId = selectedCourseAction?.courseId;
+    const targetClassId = inviteTargeting.selectedInviteClassId;
+    // Plan E9: an invite code belongs to one class. Both halves of the target are
+    // now required, because the old fallback published a code for the first class
+    // of the first course and reported it as a success.
+    if (!courseId || !targetClassId || inviteTargeting.invitePolicyDraftError) {
+      setInviteWorkspaceStatus(INVITE_TARGET_REQUIRED_MESSAGE);
+      return;
+    }
+
     const attemptId = createInlineWorkspaceAttemptId(operationId);
     setInviteWorkspaceStatus(TEACHING_OPERATION_SAVE_PENDING_MESSAGE);
 
     try {
-      const courseId = selectedCourseAction?.courseId ?? courseCards[0]?.id;
       const sourceAction = "inline-teaching-workspace";
-      const targetClassId = resolveInviteWorkspaceTargetClassId(courseId);
+      // Publishing is the action that sets what a code may do, so the expiry,
+      // the join limit and the disable switch ride only that slot.
+      const invitePolicy =
+        actionSlot === "secondary"
+          ? createInviteCodePolicyPatch(inviteTargeting.invitePolicyDraft)
+          : undefined;
       const response = await fetch("/api/teaching/operations", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -1232,7 +1200,8 @@ export function useTeachingWorkspace() {
           operationId,
           actionSlot,
           courseId,
-          ...(targetClassId ? { targetClassId } : {}),
+          targetClassId,
+          ...(invitePolicy ? { invitePolicy } : {}),
           sourceAction,
           idempotencyKey: createTeachingOperationIdempotencyKey({
             operationId,
@@ -1443,6 +1412,9 @@ export function useTeachingWorkspace() {
 
       applyPersistedTeachingCourseReadback(readback);
       setSelectedClassInvitation(readbackClass);
+      // The publish just decided the policy; re-seed the form from what was
+      // actually stored so the card and the boxes agree with the server.
+      inviteTargeting.resyncInvitePolicyDraft(readbackClass);
       applyInviteWorkspaceReceipt({
         inviteArtifact: input.inviteArtifact,
         verifiedStatusMessage: input.verifiedStatusMessage,
@@ -1470,16 +1442,6 @@ export function useTeachingWorkspace() {
     );
   }
 
-  function resolveInviteWorkspaceTargetClassId(courseId?: string) {
-    if (!courseId) {
-      return undefined;
-    }
-    if (selectedClassInvitation?.courseId === courseId) {
-      return selectedClassInvitation.id;
-    }
-    return courseClasses[courseId]?.[0]?.id;
-  }
-
   async function copyInviteWorkspaceValue(value: string, successMessage: LocalizedText) {
     try {
       if (!navigator.clipboard?.writeText) {
@@ -1501,6 +1463,7 @@ export function useTeachingWorkspace() {
     activeWorkspaceItemId,
     setActiveWorkspaceItemId,
     selectedCourseAction,
+    setSelectedCourseAction,
     isNewCourseOpen,
     setIsNewCourseOpen,
     newClassCourseId,
@@ -1514,8 +1477,6 @@ export function useTeachingWorkspace() {
     learningChatroomGroupsEnabled,
     persistedCourseLoadError,
     setPersistedCourseLoadError,
-    membershipApprovalStatuses,
-    setMembershipApprovalStatuses,
     selectedClassInvitation,
     setSelectedClassInvitation,
     inviteWorkspaceCode,
@@ -1546,7 +1507,10 @@ export function useTeachingWorkspace() {
     applyPersistedTeachingCourseReadback,
     createCourseFromDraft,
     createClassForCourse,
-    approveClassMembership,
+    // Plan E9 roster lifecycle + explicit invite targeting, composed from the
+    // sibling hooks so the page shell still reads one workspace object.
+    ...membershipLifecycle,
+    ...inviteTargeting,
     newClassCourse,
     activeWorkspaceItem,
     selectedActionCourse,
@@ -1570,7 +1534,6 @@ export function useTeachingWorkspace() {
     readInviteWorkspaceAuditEvidence,
     applyInviteWorkspaceReceiptWithPublicationReadback,
     applyInviteWorkspaceReceipt,
-    resolveInviteWorkspaceTargetClassId,
     copyInviteWorkspaceValue,
   };
 }

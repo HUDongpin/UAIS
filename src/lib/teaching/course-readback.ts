@@ -52,6 +52,14 @@ export type TeacherClassItem = {
   students: number;
   semester: string;
   invitationCode: string;
+  joinUrl?: string;
+  // The invite code's real policy, exactly as the class record carries it. Each
+  // field is optional because "unset" is a distinct, honest state — an absent
+  // expiry means the code never expires, and the workspace has to be able to say
+  // that rather than print a decorative date nobody enforces.
+  inviteExpiresAt?: string;
+  inviteMaxJoins?: number;
+  inviteDisabled?: boolean;
 };
 
 export type TeacherClassMembershipItem = {
@@ -61,7 +69,11 @@ export type TeacherClassMembershipItem = {
   invitationCode: string;
   studentId: string;
   studentDisplayName: string;
-  membershipStatus: "pending-teacher-review" | "approved";
+  // Mirrors the stored union. A membership the teacher closed must NOT read back
+  // as "pending": the approval queue is filtered on that value, so collapsing
+  // rejected/removed into it would put a student the teacher just removed back
+  // at the top of the list waiting to be approved again.
+  membershipStatus: "pending-teacher-review" | "approved" | "rejected" | "removed";
   joinedAt?: string;
   approvedAt?: string;
 };
@@ -151,6 +163,10 @@ export type TeachingCourseListResponse = {
     students?: number;
     semester?: string;
     invitationCode?: string;
+    joinUrl?: string;
+    inviteExpiresAt?: string;
+    inviteMaxJoins?: number;
+    inviteDisabled?: boolean;
   }>;
   memberships?: Array<{
     membershipId?: string;
@@ -198,6 +214,41 @@ export type TeachingClassMembershipApproveResponse = {
     status?: string;
     traceId?: string;
   };
+  error?: string;
+  traceId?: string;
+  access?: {
+    reasonCode?: string;
+  };
+};
+
+// POST /api/teaching/classes/[classId]/memberships/approve. The route answers
+// with the whole targeted set plus the three id buckets, so the workspace can
+// report "approved N" honestly instead of assuming every row moved.
+export type TeachingClassMembershipBulkApproveResponse = {
+  memberships?: NonNullable<TeachingCourseListResponse["memberships"]>;
+  approvedMembershipIds?: string[];
+  alreadyApprovedMembershipIds?: string[];
+  ineligibleMembershipIds?: string[];
+  approvedCount?: number;
+  classItem?: TeachingClassCreateResponse["classItem"];
+  course?: TeachingCourseCreateResponse["course"];
+  receipt?: TeachingClassMembershipApproveResponse["receipt"];
+  error?: string;
+  traceId?: string;
+  access?: {
+    reasonCode?: string;
+  };
+};
+
+// PATCH /api/teaching/classes/[classId]/memberships/[membershipId]. One field
+// changes; `releasedGroupIds` names the learning groups a removal emptied a seat
+// in, which the group panel refreshes from.
+export type TeachingClassMembershipStatusResponse = {
+  membership?: NonNullable<TeachingCourseListResponse["memberships"]>[number];
+  classItem?: TeachingClassCreateResponse["classItem"];
+  course?: TeachingCourseCreateResponse["course"];
+  releasedGroupIds?: string[];
+  receipt?: TeachingClassMembershipApproveResponse["receipt"];
   error?: string;
   traceId?: string;
   access?: {
@@ -515,6 +566,8 @@ export function createTeacherClassFromPersistedClass(
     return undefined;
   }
 
+  const joinUrl = classItem.joinUrl?.trim();
+  const inviteExpiresAt = classItem.inviteExpiresAt?.trim();
   return {
     id: classId,
     courseId,
@@ -522,6 +575,14 @@ export function createTeacherClassFromPersistedClass(
     students: classItem.students ?? 0,
     semester: classItem.semester?.trim() || "",
     invitationCode,
+    ...(joinUrl ? { joinUrl } : {}),
+    ...(inviteExpiresAt ? { inviteExpiresAt } : {}),
+    // Only a real positive limit is carried through: the store refuses 0, and a
+    // 0 arriving here would otherwise read as "no seats left" rather than "unset".
+    ...(typeof classItem.inviteMaxJoins === "number" && classItem.inviteMaxJoins > 0
+      ? { inviteMaxJoins: classItem.inviteMaxJoins }
+      : {}),
+    ...(classItem.inviteDisabled === true ? { inviteDisabled: true } : {}),
   };
 }
 
@@ -556,8 +617,12 @@ export function createTeacherMembershipFromPersistedMembership(
   const invitationCode = membership.invitationCode?.trim();
   const studentId = membership.studentId?.trim();
   const studentDisplayName = membership.studentDisplayName?.trim();
-  const membershipStatus =
-    membership.membershipStatus === "approved" ? "approved" : "pending-teacher-review";
+  const membershipStatus: TeacherClassMembershipItem["membershipStatus"] =
+    membership.membershipStatus === "approved" ||
+    membership.membershipStatus === "rejected" ||
+    membership.membershipStatus === "removed"
+      ? membership.membershipStatus
+      : "pending-teacher-review";
   if (!membershipId || !courseId || !classId || !invitationCode || !studentId || !studentDisplayName) {
     return undefined;
   }

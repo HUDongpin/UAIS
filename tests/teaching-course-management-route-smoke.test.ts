@@ -760,10 +760,13 @@ describe("teaching course management route smoke evidence", () => {
                 storageWritePolicy: "external-optimistic-snapshot-replace",
                 concurrencyControl: "optimistic-revision-retry",
                 revisionRetry: {
+                  // Mirrors what the real route now answers: the shared
+                  // five-attempt ladder, unused because this write did not
+                  // collide.
                   status: "available",
                   attempts: 1,
                   conflicts: 0,
-                  maxAttempts: 2,
+                  maxAttempts: 5,
                 },
                 responsibleSession: "S12",
                 redaction: {

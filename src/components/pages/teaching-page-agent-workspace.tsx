@@ -50,6 +50,8 @@ type AgentWorkspaceProps = {
   selectedActionCourse: TeacherCourse | undefined;
   selectedCourseActionLabel: string | undefined;
   selectedCourseAction: { courseId: string; action: TeacherCourseAction } | undefined;
+  courseCards: TeacherCourse[];
+  onSelectCourseAction: (courseId: string) => void;
   t: (typeof copy)[Locale];
   queueInlineWorkspaceAuditAlertNotifications: (
     operationId: TeachingOperationId,
@@ -82,6 +84,8 @@ export function AgentWorkspace({
   selectedActionCourse,
   selectedCourseActionLabel,
   selectedCourseAction,
+  courseCards,
+  onSelectCourseAction,
   t,
   queueInlineWorkspaceAuditAlertNotifications,
   runInlineWorkspaceAction,
@@ -109,6 +113,7 @@ export function AgentWorkspace({
               operationId={"agents"}
               locale={locale}
               inlineWorkspaceStatuses={inlineWorkspaceStatuses}
+              isCourseChosen={Boolean(selectedCourseAction?.courseId)}
               runInlineWorkspaceAction={runInlineWorkspaceAction}
             />}
           </div>
@@ -117,9 +122,11 @@ export function AgentWorkspace({
             {<WorkspaceContext
             locale={locale}
             activeWorkspaceItem={activeWorkspaceItem}
+            courseCards={courseCards}
             selectedCourseAction={selectedCourseAction}
             selectedActionCourse={selectedActionCourse}
             selectedCourseActionLabel={selectedCourseActionLabel}
+            onSelectCourse={onSelectCourseAction}
           />}
           </div>
           {<InlineWorkspaceStatus

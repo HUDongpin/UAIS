@@ -804,4 +804,191 @@ describe("teaching workspace learning group panel", () => {
       dialog.getByText("Choose 2 to 12 students with an approved course membership."),
     ).toBeTruthy();
   });
+
+  // Plan E9 (PKG-5): the picker badges students who already belong to another
+  // group of the same course and refuses to select them, because the server
+  // answers that case with a 400 the teacher could previously only discover by
+  // submitting.
+  it("badges already-grouped students in the member picker and blocks selecting them", async () => {
+    window.history.replaceState(null, "", "/teaching");
+    const { container } = (() => {
+      stubTeachingFetch(
+        () => undefined,
+        () =>
+          createTeachingCourseListBody({
+            learningGroups: [createPersistedLearningGroup()],
+          }),
+      );
+      return render(<TeachingPage />);
+    })();
+
+    await openLearningGroupPanel();
+    const panel = readLearningGroupPanel(container);
+    await waitFor(() => {
+      expect(panel.getByText("证据链小组")).toBeTruthy();
+    });
+
+    fireEvent.click(panel.getByRole("button", { name: `为${courseName}新建小组` }));
+    const dialog = screen.getByRole("dialog");
+    const grouped = dialog.querySelector(
+      '[data-uais-learning-group-member-grouped="student-lin"]',
+    );
+    expect(grouped?.textContent).toBe("已分组: 证据链小组");
+    // 陈嘉树 belongs to no group, so no badge and a live checkbox.
+    expect(
+      dialog.querySelector('[data-uais-learning-group-member-grouped="student-chen"]'),
+    ).toBeNull();
+
+    const groupedOption = dialog.querySelector(
+      '[data-uais-learning-group-member-option="student-lin"] input',
+    ) as HTMLInputElement;
+    expect(groupedOption.disabled).toBe(true);
+    const freeOption = dialog.querySelector(
+      '[data-uais-learning-group-member-option="student-chen"] input',
+    ) as HTMLInputElement;
+    expect(freeOption.disabled).toBe(false);
+    fireEvent.click(freeOption);
+    expect(freeOption.checked).toBe(true);
+  });
+
+  it("filters the member picker by name", async () => {
+    window.history.replaceState(null, "", "/teaching");
+    stubTeachingFetch(() => undefined, () => createTeachingCourseListBody());
+
+    const { container } = render(<TeachingPage />);
+    await openLearningGroupPanel();
+    const panel = readLearningGroupPanel(container);
+    fireEvent.click(panel.getByRole("button", { name: `为${courseName}新建小组` }));
+
+    const dialog = screen.getByRole("dialog");
+    expect(
+      dialog.querySelector('[data-uais-learning-group-member-option="student-zhao"]'),
+    ).toBeTruthy();
+
+    fireEvent.change(screen.getByLabelText("按姓名筛选可选学生"), {
+      target: { value: "林" },
+    });
+
+    expect(
+      dialog.querySelector('[data-uais-learning-group-member-option="student-lin"]'),
+    ).toBeTruthy();
+    expect(
+      dialog.querySelector('[data-uais-learning-group-member-option="student-zhao"]'),
+    ).toBeNull();
+  });
+
+  // Plan E9 (PKG-5): auto-split calls E8's handler once and reports the number of
+  // groups the server actually created, verified against a fresh readback.
+  it("auto-splits ungrouped students into groups of K and reports the created count", async () => {
+    window.history.replaceState(null, "", "/teaching");
+    const createdGroups = [
+      createPersistedLearningGroup({
+        groupId: "group-auto-1",
+        groupName: "第1组",
+        members: [
+          { studentId: "student-lin", studentDisplayName: "林若晨", addedAt: "2026-08-08T03:00:00.000Z" },
+          { studentId: "student-zhao", studentDisplayName: "赵一诺", addedAt: "2026-08-08T03:00:00.000Z" },
+        ],
+      }),
+      createPersistedLearningGroup({
+        groupId: "group-auto-2",
+        groupName: "第2组",
+        members: [
+          { studentId: "student-chen", studentDisplayName: "陈嘉树", addedAt: "2026-08-08T03:00:00.000Z" },
+        ],
+      }),
+    ];
+    let splitApplied = false;
+    const { requests } = stubTeachingFetch(
+      ({ url, method }) => {
+        if (url === `/api/teaching/courses/${courseId}/groups/auto-split` && method === "POST") {
+          splitApplied = true;
+          return Response.json(
+            {
+              groups: createdGroups,
+              groupCount: createdGroups.length,
+              ungroupedStudentCount: 0,
+              receipt: createLearningGroupReceipt("auto-split-learning-groups"),
+            },
+            { status: 201 },
+          );
+        }
+        return undefined;
+      },
+      () =>
+        createTeachingCourseListBody({
+          learningGroups: splitApplied ? createdGroups : [],
+        }),
+    );
+
+    const { container } = render(<TeachingPage />);
+    await openLearningGroupPanel();
+    const panel = readLearningGroupPanel(container);
+
+    fireEvent.change(screen.getByLabelText("每组人数"), { target: { value: "2" } });
+    fireEvent.click(panel.getByRole("button", { name: `为${courseName}自动分组` }));
+
+    await waitFor(() => {
+      expect(panel.getByText("已自动创建 2 个小组。")).toBeTruthy();
+    });
+    const splitRequest = requests.find((request) =>
+      request.url.endsWith("/groups/auto-split"),
+    );
+    expect(splitRequest?.method).toBe("POST");
+    expect(splitRequest?.body).toEqual({ groupSize: 2 });
+    expect(panel.getByText("第1组")).toBeTruthy();
+    expect(panel.getByText("第2组")).toBeTruthy();
+  });
+
+  it("surfaces the server's cross-group refusal as readable bilingual guidance", async () => {
+    window.history.replaceState(null, "", "/teaching");
+    stubTeachingFetch(
+      ({ url, method }) => {
+        if (url === `/api/teaching/courses/${courseId}/groups` && method === "POST") {
+          return Response.json(
+            {
+              error: "Teaching learning group member already belongs to another group in this course.",
+              validation: {
+                target: "teaching-learning-group",
+                status: "invalid",
+                reasonCode: "group-member-already-grouped",
+                field: "members",
+                memberIndex: 0,
+                studentId: "student-lin",
+                conflictingGroupId: "group-alpha-20260808",
+                conflictingGroupName: "证据链小组",
+              },
+            },
+            { status: 400 },
+          );
+        }
+        return undefined;
+      },
+      () => createTeachingCourseListBody(),
+    );
+
+    const { container } = render(<TeachingPage />);
+    await openLearningGroupPanel();
+    const panel = readLearningGroupPanel(container);
+    fireEvent.click(panel.getByRole("button", { name: `为${courseName}新建小组` }));
+
+    const dialog = screen.getByRole("dialog");
+    fireEvent.change(within(dialog).getByLabelText("小组名称"), {
+      target: { value: "新小组" },
+    });
+    for (const studentId of ["student-lin", "student-zhao"]) {
+      fireEvent.click(
+        dialog.querySelector(
+          `[data-uais-learning-group-member-option="${studentId}"] input`,
+        ) as HTMLInputElement,
+      );
+    }
+    fireEvent.click(within(dialog).getByRole("button", { name: "创建" }));
+
+    await waitFor(() => {
+      expect(
+        within(dialog).getByText("该学生已在「证据链小组」中，请先将其移出该小组。"),
+      ).toBeTruthy();
+    });
+  });
 });

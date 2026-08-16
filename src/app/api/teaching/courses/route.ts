@@ -84,16 +84,32 @@ type TeachingCourseCreateValidation = {
 
 const maxBodyBytes = 50_000;
 
-const studentVisibleMembershipStatuses = new Set<
+// A membership the student still has a live relationship with: it either grants
+// the class or is waiting on the teacher to decide. These are the ones that may
+// widen what else the student is shown.
+const studentActiveMembershipStatuses = new Set<
   TeachingClassMembershipRecord["membershipStatus"]
 >(["approved", "pending-teacher-review"]);
+
+// A membership the teacher has closed. Returning these used to be considered a
+// leak and they were filtered out entirely - but the effect on the student was
+// that a class simply vanished from the dashboard and the plaza with no
+// statement anywhere that it had been declined or that they had been removed,
+// which reads as a bug in the product rather than as a decision someone took.
+// The rows come back carrying their status so both surfaces can say so; what
+// they do NOT do is widen access, see `activeCourseIds` below.
+const studentClosedMembershipStatuses = new Set<
+  TeachingClassMembershipRecord["membershipStatus"]
+>(["rejected", "removed"]);
 
 // Student-visible projections of the teacher-owned course/class/membership records.
 // Students never receive the raw records: a class's live `invitationCode`/`joinUrl`
 // is the teacher's access-granting credential, and `ownerTeacherId`/roster counts/
-// course description are teacher-only metadata. Applied uniformly to approved AND
-// pending memberships, so squatting a pending membership cannot be used to read a
-// class's current invite code, and republishing a code actually revokes it.
+// course description are teacher-only metadata. Applied uniformly to approved,
+// pending, declined AND removed memberships, so squatting a pending membership
+// cannot be used to read a class's current invite code, republishing a code
+// actually revokes it, and a removed student is left with a name to read a status
+// note against rather than with anything they could act on.
 type StudentVisibleCourse = {
   courseId: string;
   courseName: string;
@@ -282,17 +298,32 @@ export function createTeachingCourseGetHandler(deps: TeachingCourseGetHandlerDep
         throw error;
       }
       if (authenticatedStudent) {
-        // Students see their own approved memberships plus the ones still waiting
-        // for teacher review, so the student dashboard can render the pending
-        // join request. Access-granting surfaces (learning playback, AI guide)
-        // gate on `approved` independently and stay unaffected by this list.
+        // Students see every membership row of their own that a teacher has
+        // acted on or is about to: approved, waiting for review, declined, and
+        // removed. The last two are new. They are reported so the student can be
+        // told WHY a class left their list; they grant nothing, because
+        // access-granting surfaces (learning playback, AI guide) gate on
+        // `approved` independently, and because the one thing on this response
+        // that is derived from membership rather than asked for by id - the
+        // learning-group projection - is keyed to `activeCourseIds` below.
         const memberships = database.memberships.filter(
           (membership) =>
             membership.studentId === authenticatedStudent.actorId &&
-            studentVisibleMembershipStatuses.has(membership.membershipStatus),
+            (studentActiveMembershipStatuses.has(membership.membershipStatus) ||
+              studentClosedMembershipStatuses.has(membership.membershipStatus)),
         );
         const courseIds = new Set(memberships.map((membership) => membership.courseId));
         const classIds = new Set(memberships.map((membership) => membership.classId));
+        // The narrower set: courses the student still holds a live membership
+        // in. A removed student keeps the course NAME (they need it to read the
+        // status note) and loses everything derived from belonging.
+        const activeCourseIds = new Set(
+          memberships
+            .filter((membership) =>
+              studentActiveMembershipStatuses.has(membership.membershipStatus),
+            )
+            .map((membership) => membership.courseId),
+        );
         const courses: StudentVisibleCourse[] = database.courses
           .filter((course) => courseIds.has(course.courseId))
           .map(createStudentVisibleCourse);
@@ -305,8 +336,10 @@ export function createTeachingCourseGetHandler(deps: TeachingCourseGetHandlerDep
           createStudentVisibleMembership,
         );
         // Only groups the caller actually belongs to, and only inside a course the
-        // caller holds a membership in: a stale group row naming a student who has
-        // since left the course must not resurrect course visibility.
+        // caller holds a LIVE membership in: a stale group row naming a student who
+        // has since left the course must not resurrect course visibility. That is
+        // why this reads `activeCourseIds` and not `courseIds` - the closed rows
+        // above widen the course/class name projections and nothing else.
         //
         // While groups ship dark the projection is omitted entirely rather than
         // sent as an empty array. This is the load-bearing half of the flag: the
@@ -317,7 +350,7 @@ export function createTeachingCourseGetHandler(deps: TeachingCourseGetHandlerDep
           ? (database.learningGroups ?? [])
               .filter(
                 (group) =>
-                  courseIds.has(group.courseId) &&
+                  activeCourseIds.has(group.courseId) &&
                   group.members.some(
                     (member) => member.studentId === authenticatedStudent.actorId,
                   ),
@@ -906,9 +939,14 @@ function createErrorResponse(error: unknown, traceId: string) {
     error instanceof TeachingCourseAssetsStoreError
   ) {
     const validation = readCourseValidation(error);
+    // Stable classification beside the prose, set today for snapshot contention
+    // so a client can retry instead of parsing the message. Both stores carry
+    // one on exhausted contention, and neither sets it anywhere else.
+    const reasonCode = error.reasonCode;
     return jsonResponse(error.status, {
       error: error.message,
       traceId,
+      ...(reasonCode ? { reasonCode } : {}),
       ...(validation ? { validation } : {}),
       redaction: createRedaction(),
     }, traceId);

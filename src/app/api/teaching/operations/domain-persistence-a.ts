@@ -232,6 +232,7 @@ export async function maybeSyncStudentRosterWithProvider(input: {
   const snapshot = await readTeachingCourseManagementSnapshot({
     dataDir: resolveTeachingCourseManagementDataDir(input.env.UAIS_TEACHING_COURSES_DATA_DIR),
     repository: courseManagementRepository,
+    courseId: input.courseId,
   });
   const rosterId = `student-roster-${input.courseId}`;
   const studentRoster = snapshot.database.studentRosters?.find(
@@ -336,7 +337,7 @@ export async function maybePersistStudentGroupSuggestionDomainObject(input: {
     assertTeachingCourseManagementLocalJsonRuntimeAllowed(input.env);
   }
 
-  const { receipt } = await saveTeachingStudentGroupSuggestionRecord({
+  const { studentGroupSuggestion, receipt } = await saveTeachingStudentGroupSuggestionRecord({
     dataDir: resolveTeachingCourseManagementDataDir(input.env.UAIS_TEACHING_COURSES_DATA_DIR),
     repository: courseManagementRepository,
     actorId: input.authenticatedTeacher.actorId,
@@ -349,7 +350,26 @@ export async function maybePersistStudentGroupSuggestionDomainObject(input: {
     },
     now: input.now,
   });
-  return receipt;
+  // The suggestion itself, not merely the fact that one was written.
+  //
+  // The store has computed and persisted the partition since it stopped being an
+  // empty "generated" claim, but this function returned the receipt alone and
+  // dropped the record on the floor - so the response the teacher's workspace
+  // reads said "suggestions generated" and carried no suggestion. The teacher
+  // had no way to see, accept or dispute a grouping the server had already made.
+  // Same shape as `maybeSyncStudentRosterWithProvider` below, which likewise
+  // widens its receipt with the record's own fields.
+  //
+  // Nothing is assigned by this: `reviewPolicy` travels with the numbers so the
+  // response says out loud that the partition is a proposal awaiting the
+  // teacher. Member ids belong to the roster of the teacher's own course, which
+  // this caller is already authorized for.
+  return {
+    ...receipt,
+    suggestedGroups: studentGroupSuggestion.suggestedGroups,
+    ungroupedStudentCount: studentGroupSuggestion.ungroupedStudentCount,
+    reviewPolicy: studentGroupSuggestion.reviewPolicy,
+  };
 }
 
 export async function maybePersistKnowledgeIndexSyncDomainObject(input: {
@@ -435,6 +455,7 @@ export async function maybeSyncKnowledgeIndexWithProvider(input: {
   const snapshot = await readTeachingCourseManagementSnapshot({
     dataDir: resolveTeachingCourseManagementDataDir(input.env.UAIS_TEACHING_COURSES_DATA_DIR),
     repository: courseManagementRepository,
+    courseId: input.courseId,
   });
   const indexId = `knowledge-index-${input.courseId}`;
   const knowledgeIndex = snapshot.database.knowledgeIndexes?.find(
@@ -638,6 +659,7 @@ export async function maybePublishCourseContentWithProvider(input: {
   const snapshot = await readTeachingCourseManagementSnapshot({
     dataDir: resolveTeachingCourseManagementDataDir(input.env.UAIS_TEACHING_COURSES_DATA_DIR),
     repository: courseManagementRepository,
+    courseId: input.courseId,
   });
   const contentId = `course-content-${input.courseId}`;
   const contentPackage = snapshot.database.contentPackages?.find(

@@ -89,14 +89,17 @@ export function createInlineWorkspaceActionConfig(
     },
     students: {
       readyMessage: zh ? "学生名单已加载。" : "Student roster loaded.",
-      primaryAction: zh ? "同步学生名单" : "Sync Roster",
+      // Plan E9: the server handler recounts the memberships already in this
+      // snapshot and restamps the class/course totals from them. It reads no
+      // external system, so the copy no longer implies that it does.
+      primaryAction: zh ? "重新统计学生名单" : "Recount Roster",
       primaryMessage: zh
-        ? "学生名单同步已保存到服务端。"
-        : "Roster sync saved on the server.",
+        ? "已按当前加入记录重新统计班级和课程人数。"
+        : "Class and course totals were recounted from the current join records.",
       secondaryAction: zh ? "生成分组建议" : "Generate Group Suggestions",
       secondaryMessage: zh
-        ? "分组建议已生成，等待教师确认。"
-        : "Group suggestions generated for teacher confirmation.",
+        ? "分组建议已生成，等待教师确认；确认后可在小组协作面板使用自动分组落地。"
+        : "Group suggestions generated for review; apply them with Auto-split in the Group Collaboration panel.",
     },
     "data-export": {
       readyMessage: zh
@@ -319,30 +322,30 @@ export function createEnterpriseWorkspaceConfig(
       title: zh ? "学生管理工作台" : "Student Management Workspace",
       subtitle: zh ? "班级运营" : "Class Operations",
       description: zh
-        ? "维护学生名单、分组、加入记录和协作状态，支持名单同步与分组建议。"
-        : "Maintain rosters, groups, join records, and collaboration status with roster sync and grouping suggestions.",
+        ? "维护学生名单、分组、加入记录和协作状态：按加入记录重新统计人数，并生成可确认的分组建议。"
+        : "Maintain rosters, groups, join records, and collaboration status: recount totals from join records and produce reviewable grouping suggestions.",
       metrics: [
         { label: zh ? "学生总数" : "Students", value: "156", note: zh ? "跨 4 个教学班" : "Across 4 teaching classes" },
-        { label: zh ? "名单同步" : "Roster Sync", value: "10m", note: zh ? "最近同步于 10 分钟前" : "Last synced 10 minutes ago" },
-        { label: zh ? "分组建议" : "Group Suggestions", value: "12", note: zh ? "基于活跃度和能力互补" : "Based on activity and complementary skills" },
+        { label: zh ? "名单统计" : "Roster Recount", value: "10m", note: zh ? "最近统计于 10 分钟前" : "Last recounted 10 minutes ago" },
+        { label: zh ? "分组建议" : "Group Suggestions", value: "12", note: zh ? "基于已批准成员与现有小组" : "Based on approved members and existing groups" },
       ],
       lanes: [
         {
-          title: zh ? "同步学生名单" : "Sync Roster",
+          title: zh ? "重新统计学生名单" : "Recount Roster",
           items: zh
-            ? ["比对教务名单、邀请码加入记录和退课状态", "标记异常账号并生成教师确认列表"]
-            : ["Compare SIS roster, invite-code joins, and withdrawals", "Flag anomalies for teacher confirmation"],
+            ? ["按已批准的邀请码加入记录重新统计班级人数", "同步刷新课程总人数和待审批数量"]
+            : ["Recount each class from its approved invite-code join records", "Restamp the course total and the waiting-for-review count"],
         },
         {
           title: zh ? "生成分组建议" : "Generate Groups",
           items: zh
-            ? ["综合学习进度、发言频率和角色偏好", "输出可编辑的小组建议与冲突说明"]
-            : ["Combine progress, participation, and role preferences", "Return editable group suggestions and conflict notes"],
+            ? ["按已批准且尚未分组的学生给出第N组划分建议", "建议仅供确认，落地请使用小组协作面板的自动分组"]
+            : ["Propose a 第N组 partition of approved, ungrouped students", "Suggestions are review-only; apply them with Auto-split in Group Collaboration"],
         },
       ],
       records: zh
-        ? ["研究方法一班名单已同步", "12 个分组建议等待教师确认", "3 名学生需要邀请码加入复核"]
-        : ["Research Methods class 1 roster synced", "12 grouping suggestions await teacher confirmation", "3 students need invite-code join review"],
+        ? ["研究方法一班名单已重新统计", "12 个分组建议等待教师确认", "3 名学生需要邀请码加入复核"]
+        : ["Research Methods class 1 roster recounted", "12 grouping suggestions await teacher confirmation", "3 students need invite-code join review"],
     },
     "data-export": {
       id: "data-export",

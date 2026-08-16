@@ -1,5 +1,8 @@
 import type { TeachingOperationId } from "@/components/teaching/teaching-operation-data";
 import type { LocalizedText } from "@/i18n/copy";
+// Type-only, so the pure-type module stays free of runtime imports and no cycle
+// is created with the postgres store (which imports this store's normalizer).
+import type { TeachingOperationRepository } from "./teaching-operations-postgres-store";
 
 // All shared domain types for the teaching-operations store (Phase 3
 // decomposition). Extracted as a pure type module (no runtime code); the store
@@ -381,16 +384,25 @@ export type TeachingOperationRedactionValidationProjection = {
   redaction: TeachingOperationRedaction;
 };
 
+// "Sync roster" imports nothing. The handler behind it recounts the memberships
+// this deployment already holds and restamps the class/course totals - which is
+// what `TeachingStudentRosterSyncRecord` has said since it was corrected to
+// `local-recount`. This projection was left claiming the opposite: `synced`, out
+// of an `sis-roster` that is not consulted, plus a `pendingTeacherReviewCount`
+// hardcoded to the literal 3 for every course in every deployment. The three
+// fields are now either the record's own honest values or gone: the builder that
+// produces this projection has no snapshot to count from, and a number nobody
+// counted is worse than no number at all - the real count lives on the roster
+// record and reaches the teacher through `studentRosterSyncReceipt`.
 export type TeachingOperationStudentRosterProjection = {
   objectId: string;
   objectType: "student-roster";
   courseId: string;
   syncedBy: string;
-  syncStatus: "synced";
+  syncStatus: "local-recount";
   operationRecordId: string;
   sourceAction?: string;
-  sourceSystems: ["sis-roster", "invite-code-joins", "withdrawals"];
-  pendingTeacherReviewCount: 3;
+  sourceSystems: ["local-class-memberships", "local-class-records"];
   syncedAt: string;
   storagePolicy: "domain-projection-teaching-student-roster";
   redaction: TeachingOperationRedaction;
@@ -916,6 +928,11 @@ export type TeachingOperationActionDefinition = {
 export type ExecuteTeachingOperationActionInput = {
   dataDir?: string;
   env?: Record<string, string | undefined>;
+  // The same managed-snapshot injection seam the rollback and gradebook flows
+  // take, so the guarded write below can be exercised against a repository that
+  // loses the race on purpose. Unset - which is every route - resolution is
+  // exactly the env switch it always was.
+  repository?: TeachingOperationRepository;
   operationId: string;
   actionSlot: TeachingOperationActionSlot;
   actorId?: string;

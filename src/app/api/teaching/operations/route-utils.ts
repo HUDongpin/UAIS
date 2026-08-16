@@ -1,4 +1,7 @@
-import { TeachingCourseManagementStoreError } from "@/lib/server/teaching-course-management-store";
+import {
+  type TeachingClassInviteCodePolicyInput,
+  TeachingCourseManagementStoreError,
+} from "@/lib/server/teaching-course-management-store";
 import {
   TeachingOperationStoreError,
   type TeachingOperationActionSlot,
@@ -31,6 +34,47 @@ export function readTargetClassId(body: Record<string, unknown>) {
         : undefined;
   const normalized = rawValue?.trim();
   return normalized || undefined;
+}
+
+// The teacher-settable invite policy carried alongside a publish action. Absent
+// keys mean "leave as it is"; `null` clears one back to open. Shape only - the
+// store validates the values, so a bad expiry is one 400 from one place.
+export function readInviteCodePolicy(
+  body: Record<string, unknown>,
+): TeachingClassInviteCodePolicyInput | undefined {
+  const policy = isRecord(body.invitePolicy) ? body.invitePolicy : undefined;
+  if (!policy) {
+    return undefined;
+  }
+  return {
+    ...(Object.hasOwn(policy, "expiresAt")
+      ? { expiresAt: readNullableString(policy.expiresAt, "invite code expiry") }
+      : {}),
+    ...(Object.hasOwn(policy, "maxJoins")
+      ? { maxJoins: readNullableNumber(policy.maxJoins, "invite code join limit") }
+      : {}),
+    ...(Object.hasOwn(policy, "disabled") ? { disabled: policy.disabled === true } : {}),
+  };
+}
+
+function readNullableString(value: unknown, label: string) {
+  if (value === null) {
+    return null;
+  }
+  if (typeof value !== "string") {
+    throw new TeachingOperationStoreError(400, `UAIS teaching ${label} is invalid.`);
+  }
+  return value;
+}
+
+function readNullableNumber(value: unknown, label: string) {
+  if (value === null) {
+    return null;
+  }
+  if (typeof value !== "number") {
+    throw new TeachingOperationStoreError(400, `UAIS teaching ${label} is invalid.`);
+  }
+  return value;
 }
 
 export function readGeneratedInviteCode(receipt: TeachingOperationReceipt) {
@@ -95,11 +139,19 @@ export function isTeachingCourseManagementPersistenceConfigured(
   );
 }
 
-export function normalizeTeachingOperationRouteError(error: unknown) {
+export function normalizeTeachingOperationRouteError(error: unknown): {
+  status: number;
+  message: string;
+  reasonCode?: string;
+  diagnostics?: Record<string, unknown>;
+} {
   if (error instanceof TeachingCourseManagementStoreError) {
     return {
       status: error.status,
       message: error.message,
+      // Stable classification beside the prose, set today for snapshot
+      // contention so a client can retry instead of parsing the message.
+      ...(error.reasonCode ? { reasonCode: error.reasonCode } : {}),
       ...(error.diagnostics ? { diagnostics: error.diagnostics } : {}),
     };
   }
@@ -107,6 +159,7 @@ export function normalizeTeachingOperationRouteError(error: unknown) {
     return {
       status: error.status,
       message: error.message,
+      ...(error.reasonCode ? { reasonCode: error.reasonCode } : {}),
     };
   }
   return {

@@ -11,7 +11,9 @@ import { SquaresFour } from "@phosphor-icons/react/dist/ssr/SquaresFour";
 import { teacherSidebarItems } from "@/data/uais";
 import type { TeacherCourse } from "@/data/uais";
 import type { TeachingOperationId } from "@/components/teaching/teaching-operation-data";
+import type { InviteCodePolicyDraft } from "@/components/teaching/invite-code-policy";
 import type { Locale, LocalizedText } from "@/i18n/copy";
+import type { TeacherClassItem } from "@/lib/teaching/course-readback";
 import { dashboardIcons } from "./teaching-page-dashboard-icons";
 import { InlineWorkspaceActionButtons } from "./teaching-page-inline-workspace-action-buttons";
 import { InlineWorkspaceStatus } from "./teaching-page-inline-workspace-status";
@@ -40,9 +42,18 @@ type EnterpriseWorkspaceProps = {
   inviteWorkspaceCode: string;
   inviteWorkspaceJoinUrl: string;
   inviteWorkspaceStatus: LocalizedText;
+  courseCards: TeacherCourse[];
+  inviteCourseClasses: TeacherClassItem[];
+  selectedInviteClass?: TeacherClassItem;
+  selectedInviteClassId?: string;
+  invitePolicyDraft: InviteCodePolicyDraft;
+  invitePolicyDraftError?: string;
+  onSelectInviteClass: (classId: string) => void;
+  onUpdateInvitePolicyDraft: (patch: Partial<InviteCodePolicyDraft>) => void;
   selectedCourseAction: { courseId: string; action: TeacherCourseAction } | undefined;
   selectedActionCourse: TeacherCourse | undefined;
   selectedCourseActionLabel: string | undefined;
+  onSelectCourseAction: (courseId: string) => void;
   copyInviteWorkspaceValue: (value: string, successMessage: LocalizedText) => void;
   queueInlineWorkspaceAuditAlertNotifications: (
     operationId: TeachingOperationId,
@@ -72,9 +83,18 @@ export function EnterpriseWorkspace({
   inviteWorkspaceCode,
   inviteWorkspaceJoinUrl,
   inviteWorkspaceStatus,
+  courseCards,
+  inviteCourseClasses,
+  selectedInviteClass,
+  selectedInviteClassId,
+  invitePolicyDraft,
+  invitePolicyDraftError,
+  onSelectInviteClass,
+  onUpdateInvitePolicyDraft,
   selectedCourseAction,
   selectedActionCourse,
   selectedCourseActionLabel,
+  onSelectCourseAction,
   copyInviteWorkspaceValue,
   queueInlineWorkspaceAuditAlertNotifications,
   runInlineWorkspaceAction,
@@ -119,6 +139,7 @@ export function EnterpriseWorkspace({
                 operationId={config.id}
                 locale={locale}
                 inlineWorkspaceStatuses={inlineWorkspaceStatuses}
+                isCourseChosen={Boolean(selectedCourseAction?.courseId)}
                 runInlineWorkspaceAction={runInlineWorkspaceAction}
               />
             )}
@@ -128,9 +149,11 @@ export function EnterpriseWorkspace({
             {<WorkspaceContext
             locale={locale}
             activeWorkspaceItem={activeWorkspaceItem}
+            courseCards={courseCards}
             selectedCourseAction={selectedCourseAction}
             selectedActionCourse={selectedActionCourse}
             selectedCourseActionLabel={selectedCourseActionLabel}
+            onSelectCourse={onSelectCourseAction}
           />}
           </div>
           {config.id === "invite-code" ? null : <InlineWorkspaceStatus
@@ -167,6 +190,14 @@ export function EnterpriseWorkspace({
               inviteWorkspaceCode={inviteWorkspaceCode}
               inviteWorkspaceJoinUrl={inviteWorkspaceJoinUrl}
               inviteWorkspaceStatus={inviteWorkspaceStatus}
+              inviteCourseClasses={inviteCourseClasses}
+              selectedInviteCourseId={selectedCourseAction?.courseId}
+              selectedInviteClass={selectedInviteClass}
+              selectedInviteClassId={selectedInviteClassId}
+              invitePolicyDraft={invitePolicyDraft}
+              invitePolicyDraftError={invitePolicyDraftError}
+              onSelectInviteClass={onSelectInviteClass}
+              onUpdateInvitePolicyDraft={onUpdateInvitePolicyDraft}
               copyInviteWorkspaceValue={copyInviteWorkspaceValue}
               runInviteWorkspaceAction={runInviteWorkspaceAction}
             /> : null}

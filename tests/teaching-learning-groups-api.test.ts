@@ -4,7 +4,9 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { createLearningChatroomHistoryGetHandler } from "@/app/api/learning/chatroom/route";
 import { createTeachingCourseGetHandler } from "@/app/api/teaching/courses/route";
+import { createTeachingClassMembershipPatchHandler } from "@/app/api/teaching/classes/[classId]/memberships/[membershipId]/route";
 import { createTeachingLearningGroupPostHandler } from "@/app/api/teaching/courses/[courseId]/groups/route";
+import { createTeachingLearningGroupAutoSplitPostHandler } from "@/app/api/teaching/courses/[courseId]/groups/auto-split/route";
 import {
   createTeachingLearningGroupDeleteHandler,
   createTeachingLearningGroupPatchHandler,
@@ -200,6 +202,37 @@ function patchGroupRequest(input: {
     ),
     { params: Promise.resolve({ courseId: input.courseId, groupId: input.groupId }) },
   ] as const;
+}
+
+function autoSplitRequest(input: {
+  courseId: string;
+  cookie?: string;
+  body: unknown;
+}) {
+  return [
+    new Request(
+      `https://www.uais.top/api/teaching/courses/${input.courseId}/groups/auto-split`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          ...(input.cookie ? { cookie: input.cookie } : {}),
+        },
+        body: JSON.stringify(input.body),
+      },
+    ),
+    { params: Promise.resolve({ courseId: input.courseId }) },
+  ] as const;
+}
+
+// Zero-padded so the candidate order the split reports is the order these were
+// seeded in: every fixture student shares one `joinedAt`, so the tie-break is the
+// student id.
+function createSeedStudents(count: number): SeedStudent[] {
+  return Array.from({ length: count }, (_unused, index) => ({
+    studentId: `student-${String(index + 1).padStart(2, "0")}`,
+    displayName: `学生${index + 1}`,
+  }));
 }
 
 function deleteGroupRequest(input: {
@@ -559,6 +592,288 @@ describe("teaching learning group API", () => {
       const repeatedBody = await repeated.json();
       expect(repeated.status, JSON.stringify(repeatedBody)).toBe(404);
       expect(repeatedBody.error).toBe("Teaching learning group was not found.");
+    });
+  });
+
+  it("refuses a member who already belongs to another group in the same course", async () => {
+    await withDataDir("cross-group", async (dataDir) => {
+      const env = createLearningGroupEnv(dataDir);
+      const { course } = await seedTeachingCourseFixture({
+        dataDir,
+        students: [
+          { studentId: "student-lin", displayName: "林若晨" },
+          { studentId: "student-zhao", displayName: "赵一鸣" },
+          { studentId: "student-wu", displayName: "吴敏" },
+        ],
+      });
+      const postGroup = createTeachingLearningGroupPostHandler({ env, now: groupCreatedNow });
+      const patchGroup = createTeachingLearningGroupPatchHandler({
+        env,
+        now: groupUpdatedNow,
+      });
+      const created = await (
+        await postGroup(
+          ...postGroupRequest({
+            courseId: course.courseId,
+            cookie: createTeacherCookie(),
+            body: { groupName: "第1组", members: ["student-lin", "student-zhao"] },
+          }),
+        )
+      ).json();
+
+      const response = await postGroup(
+        ...postGroupRequest({
+          courseId: course.courseId,
+          cookie: createTeacherCookie(),
+          body: { groupName: "第2组", members: ["student-zhao", "student-wu"] },
+        }),
+      );
+      const body = await response.json();
+
+      expect(response.status, JSON.stringify(body)).toBe(400);
+      // The teacher is told WHICH student and WHICH group, or the message is not
+      // actionable on a 200-student roster.
+      expect(body.validation).toEqual(
+        expect.objectContaining({
+          target: "teaching-learning-group",
+          status: "invalid",
+          reasonCode: "group-member-already-grouped",
+          field: "members",
+          memberIndex: 0,
+          studentId: "student-zhao",
+          conflictingGroupId: created.group.groupId,
+          conflictingGroupName: "第1组",
+        }),
+      );
+      expectNoCredentialValues(body, dataDir);
+
+      // A member replacement on the SAME group is not a conflict with itself.
+      const selfPatch = await patchGroup(
+        ...patchGroupRequest({
+          courseId: course.courseId,
+          groupId: created.group.groupId,
+          cookie: createTeacherCookie(),
+          body: { members: ["student-lin", "student-zhao", "student-wu"] },
+        }),
+      );
+      const selfPatchBody = await selfPatch.json();
+      expect(selfPatch.status, JSON.stringify(selfPatchBody)).toBe(200);
+      expect(selfPatchBody.group.members.map((member: { studentId: string }) => member.studentId))
+        .toEqual(["student-lin", "student-zhao", "student-wu"]);
+
+      const database = await readTeachingCourseManagementDatabase({ dataDir });
+      expect(database.learningGroups).toHaveLength(1);
+    });
+  });
+
+  it("auto-splits ungrouped approved students into deterministic 第N组 groups", async () => {
+    await withDataDir("auto-split", async (dataDir) => {
+      const env = createLearningGroupEnv(dataDir);
+      const { course, classItem } = await seedTeachingCourseFixture({
+        dataDir,
+        students: createSeedStudents(9),
+      });
+      const autoSplit = createTeachingLearningGroupAutoSplitPostHandler({
+        env,
+        now: groupCreatedNow,
+      });
+
+      const response = await autoSplit(
+        ...autoSplitRequest({
+          courseId: course.courseId,
+          cookie: createTeacherCookie(),
+          body: { groupSize: 4, classId: classItem.classId },
+        }),
+      );
+      const body = await response.json();
+
+      expect(response.status, JSON.stringify(body)).toBe(201);
+      // 9 students at 4 per group is 4 + 4 + 1, and a group of one is never left
+      // standing: the remainder folds into the previous group.
+      expect(
+        body.groups.map((group: { groupName: string; members: unknown[] }) => [
+          group.groupName,
+          group.members.length,
+        ]),
+      ).toEqual([
+        ["第1组", 4],
+        ["第2组", 5],
+      ]);
+      expect(body.groupCount).toBe(2);
+      expect(body.ungroupedStudentCount).toBe(0);
+      expect(body.receipt.action).toBe("auto-split-learning-groups");
+      expect(new Set(body.groups.map((group: { groupId: string }) => group.groupId)).size).toBe(2);
+      expectNoCredentialValues(body, dataDir);
+
+      const database = await readTeachingCourseManagementDatabase({ dataDir });
+      expect(database.learningGroups).toHaveLength(2);
+      expect(
+        database.auditEvents.filter((event) => event.action === "auto-split-learning-groups"),
+      ).toEqual([
+        expect.objectContaining({
+          action: "auto-split-learning-groups",
+          courseId: course.courseId,
+          classId: classItem.classId,
+          // One event for the whole split, carrying the count rather than
+          // pretending two separate teacher decisions happened.
+          affectedRecordCount: 2,
+        }),
+      ]);
+
+      // A second split continues the series instead of minting another 第1组, and
+      // finds nobody left to group.
+      const repeated = await autoSplit(
+        ...autoSplitRequest({
+          courseId: course.courseId,
+          cookie: createTeacherCookie(),
+          body: { groupSize: 4 },
+        }),
+      );
+      const repeatedBody = await repeated.json();
+      expect(repeated.status, JSON.stringify(repeatedBody)).toBe(400);
+      expect(repeatedBody.validation).toEqual(
+        expect.objectContaining({
+          reasonCode: "auto-split-no-eligible-students",
+          field: "members",
+          eligibleStudentCount: 0,
+        }),
+      );
+    });
+  });
+
+  it("auto-splits fewer ungrouped students than the group size into one group", async () => {
+    await withDataDir("auto-split-small", async (dataDir) => {
+      const env = createLearningGroupEnv(dataDir);
+      const { course } = await seedTeachingCourseFixture({
+        dataDir,
+        students: createSeedStudents(3),
+      });
+      const autoSplit = createTeachingLearningGroupAutoSplitPostHandler({
+        env,
+        now: groupCreatedNow,
+      });
+
+      const response = await autoSplit(
+        ...autoSplitRequest({
+          courseId: course.courseId,
+          cookie: createTeacherCookie(),
+          body: { groupSize: 6 },
+        }),
+      );
+      const body = await response.json();
+
+      expect(response.status, JSON.stringify(body)).toBe(201);
+      expect(body.groups).toHaveLength(1);
+      expect(body.groups[0].groupName).toBe("第1组");
+      expect(body.groups[0].members).toHaveLength(3);
+      // A course-wide split records no class id, because it spans them.
+      expect(body.groups[0].classId).toBeUndefined();
+    });
+  });
+
+  it("keeps auto-split inside the 2..12 member bounds when the size is at the ceiling", async () => {
+    await withDataDir("auto-split-ceiling", async (dataDir) => {
+      const env = createLearningGroupEnv(dataDir);
+      const { course } = await seedTeachingCourseFixture({
+        dataDir,
+        students: createSeedStudents(13),
+      });
+      const autoSplit = createTeachingLearningGroupAutoSplitPostHandler({
+        env,
+        now: groupCreatedNow,
+      });
+
+      const response = await autoSplit(
+        ...autoSplitRequest({
+          courseId: course.courseId,
+          cookie: createTeacherCookie(),
+          body: { groupSize: 12 },
+        }),
+      );
+      const body = await response.json();
+
+      expect(response.status, JSON.stringify(body)).toBe(201);
+      // Folding 12 + 1 would break the ceiling, so the previous group lends a
+      // member downwards instead: both groups stay inside 2..12.
+      expect(body.groups.map((group: { members: unknown[] }) => group.members.length)).toEqual([
+        11, 2,
+      ]);
+
+      const oversized = await autoSplit(
+        ...autoSplitRequest({
+          courseId: course.courseId,
+          cookie: createTeacherCookie(),
+          body: { groupSize: 13 },
+        }),
+      );
+      const oversizedBody = await oversized.json();
+      expect(oversized.status, JSON.stringify(oversizedBody)).toBe(400);
+    });
+  });
+
+  it("frees a removed student's group seats in the write that closes the membership", async () => {
+    await withDataDir("removed-frees-groups", async (dataDir) => {
+      const env = createLearningGroupEnv(dataDir);
+      const { course, classItem } = await seedTeachingCourseFixture({
+        dataDir,
+        students: [
+          { studentId: "student-lin", displayName: "林若晨" },
+          { studentId: "student-zhao", displayName: "赵一鸣" },
+          { studentId: "student-wu", displayName: "吴敏" },
+        ],
+      });
+      const postGroup = createTeachingLearningGroupPostHandler({ env, now: groupCreatedNow });
+      const patchMembership = createTeachingClassMembershipPatchHandler({
+        env,
+        now: groupUpdatedNow,
+      });
+      const created = await (
+        await postGroup(
+          ...postGroupRequest({
+            courseId: course.courseId,
+            cookie: createTeacherCookie(),
+            body: {
+              groupName: "第1组",
+              members: ["student-lin", "student-zhao", "student-wu"],
+            },
+          }),
+        )
+      ).json();
+
+      const membershipId = `membership-${classItem.classId}-student-zhao`;
+      const response = await patchMembership(
+        new Request(
+          `https://www.uais.top/api/teaching/classes/${classItem.classId}/memberships/${membershipId}`,
+          {
+            method: "PATCH",
+            headers: {
+              "content-type": "application/json",
+              cookie: createTeacherCookie(),
+            },
+            body: JSON.stringify({ membershipStatus: "removed" }),
+          },
+        ),
+        {
+          params: Promise.resolve({ classId: classItem.classId, membershipId }),
+        },
+      );
+      const body = await response.json();
+
+      expect(response.status, JSON.stringify(body)).toBe(200);
+      expect(body.membership.membershipStatus).toBe("removed");
+      expect(body.membership.statusChangedByTeacherId).toBe(ownerTeacherId);
+      expect(body.releasedGroupIds).toEqual([created.group.groupId]);
+      expect(body.classItem.students).toBe(2);
+      expect(body.course.students).toBe(2);
+      expectNoCredentialValues(body, dataDir);
+
+      const database = await readTeachingCourseManagementDatabase({ dataDir });
+      expect(
+        database.learningGroups?.[0].members.map((member) => member.studentId),
+      ).toEqual(["student-lin", "student-wu"]);
+      expect(
+        database.auditEvents.some((event) => event.action === "remove-class-membership"),
+      ).toBe(true);
     });
   });
 
@@ -1044,6 +1359,73 @@ describe("teaching learning group API", () => {
       const nonMemberBody = await nonMemberResponse.json();
       expect(nonMemberResponse.status, JSON.stringify(nonMemberBody)).toBe(200);
       expect(nonMemberBody.learningGroups).toEqual([]);
+    });
+  });
+
+  it("tells a removed student their class is closed without leaving them a group room", async () => {
+    await withDataDir("student-get-removed", async (dataDir) => {
+      const env = createLearningGroupEnv(dataDir);
+      const { course, classItem } = await seedTeachingCourseFixture({
+        dataDir,
+        students: [
+          { studentId: "student-lin", displayName: "林若晨" },
+          { studentId: "student-zhao", displayName: "赵一鸣" },
+          { studentId: "student-wu", displayName: "吴思远" },
+        ],
+      });
+      const postGroup = createTeachingLearningGroupPostHandler({ env, now: groupCreatedNow });
+      await postGroup(
+        ...postGroupRequest({
+          courseId: course.courseId,
+          cookie: createTeacherCookie(),
+          body: {
+            groupName: "第1组",
+            members: ["student-lin", "student-zhao", "student-wu"],
+          },
+        }),
+      );
+      const patchMembership = createTeachingClassMembershipPatchHandler({
+        env,
+        now: groupUpdatedNow,
+      });
+      const membershipId = `membership-${classItem.classId}-student-lin`;
+      await patchMembership(
+        new Request(
+          `https://www.uais.top/api/teaching/classes/${classItem.classId}/memberships/${membershipId}`,
+          {
+            method: "PATCH",
+            headers: { "content-type": "application/json", cookie: createTeacherCookie() },
+            body: JSON.stringify({ membershipStatus: "removed" }),
+          },
+        ),
+        { params: Promise.resolve({ classId: classItem.classId, membershipId }) },
+      );
+
+      const getCourses = createTeachingCourseGetHandler({ env, now: seedNow });
+      const response = await getCourses(
+        new Request("https://www.uais.top/api/teaching/courses", {
+          headers: { cookie: createStudentCookie("student-lin", "林若晨") },
+        }),
+      );
+      const body = await response.json();
+
+      expect(response.status, JSON.stringify(body)).toBe(200);
+      // The row is reported. It used to be filtered out with the approved and
+      // pending ones, so the class left the student's dashboard and plaza with
+      // nothing anywhere saying why.
+      expect(body.memberships).toEqual([
+        expect.objectContaining({ membershipId, membershipStatus: "removed" }),
+      ]);
+      // Named, so the status note has something to name.
+      expect(body.courses).toHaveLength(1);
+      expect(body.classes).toHaveLength(1);
+      // And nothing else. A closed membership widens the course/class NAME
+      // projections and nothing derived from belonging: the group projection is
+      // keyed to live memberships, so a removed student keeps no room. (The
+      // removal already freed the seat; this pins the read side of it too.)
+      expect(body.learningGroups).toEqual([]);
+      expect(JSON.stringify(body)).not.toContain("第1组");
+      expectNoCredentialValues(body, dataDir);
     });
   });
 

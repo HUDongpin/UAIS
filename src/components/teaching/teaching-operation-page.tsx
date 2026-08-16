@@ -700,15 +700,18 @@ export function TeachingOperationPage({
       );
     }
     if (input.operationId === "students" && input.actionSlot === "primary") {
+      // Mirrors `isVerifiedStudentRosterProjection`: the action recounts local
+      // membership rows, so the projection it verifies must say `local-recount`
+      // over local sources. The `pendingTeacherReviewCount === 3` check that
+      // used to sit here was verifying a hardcoded literal - it passed for every
+      // course in every deployment and told a teacher nothing.
       const expectedSourceSystems = [
-        "sis-roster",
-        "invite-code-joins",
-        "withdrawals",
+        "local-class-memberships",
+        "local-class-records",
       ];
       return (
         projection.objectType === "student-roster" &&
-        projection.syncStatus === "synced" &&
-        projection.pendingTeacherReviewCount === 3 &&
+        projection.syncStatus === "local-recount" &&
         typeof projection.syncedBy === "string" &&
         projection.syncedBy.trim().length > 0 &&
         typeof projection.syncedAt === "string" &&

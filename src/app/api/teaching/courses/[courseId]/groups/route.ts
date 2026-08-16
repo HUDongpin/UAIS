@@ -181,6 +181,7 @@ async function authorizeTeachingLearningGroupCourseAccessBeforeBody(input: {
   const snapshot = await readTeachingCourseManagementSnapshot({
     dataDir: input.dataDir,
     repository: input.repository,
+    courseId: input.courseId,
   });
   const course = snapshot.database.courses.find((item) => item.courseId === input.courseId);
   if (!course) {
@@ -375,6 +376,9 @@ function createErrorResponse(error: unknown, traceId: string) {
     return jsonResponse(error.status, {
       error: error.message,
       traceId,
+      // Stable classification beside the prose, set today for snapshot
+      // contention so a client can retry instead of parsing the message.
+      ...(error.reasonCode ? { reasonCode: error.reasonCode } : {}),
       ...(validation ? { validation } : {}),
       redaction: createRedaction(),
     }, traceId);

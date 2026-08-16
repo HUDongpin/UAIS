@@ -8,7 +8,6 @@ import { createRedaction, requireSafeId } from "./teaching-course-management-gua
 import {
   createAuditEvent,
   createReceipt,
-  isTeachingCourseManagementOptimisticSnapshotConflict,
 } from "./teaching-course-management-helpers";
 import {
   localTeachingCourseManagementStorage,
@@ -16,6 +15,11 @@ import {
   resolveTeachingCourseManagementDataDir,
   writeTeachingCourseManagementSnapshot,
 } from "./teaching-course-management-io";
+import {
+  createTeachingCourseManagementContentionError,
+  createTeachingCourseManagementWriteRetry,
+  teachingCourseManagementMaxWriteAttempts,
+} from "./teaching-course-management-write-retry";
 import type {
   TeachingCourseAdminSettingsRecord,
   TeachingCourseAgentPermissionPreflightRecord,
@@ -53,10 +57,12 @@ export async function saveTeachingAdminSettingsRecord(input: {
   const savedAt = now.toISOString();
   const adminSettingsId = `admin-settings-${courseId}`;
 
-  for (let attempt = 0; attempt < 2; attempt += 1) {
+  const writeRetry = createTeachingCourseManagementWriteRetry();
+  for (let attempt = 0; attempt < teachingCourseManagementMaxWriteAttempts; attempt += 1) {
     const snapshot = await readTeachingCourseManagementSnapshot({
       dataDir,
       repository: input.repository,
+      courseId,
     });
     const database = snapshot.database;
     const courseIndex = database.courses.findIndex((course) => course.courseId === courseId);
@@ -147,27 +153,27 @@ export async function saveTeachingAdminSettingsRecord(input: {
         repository: input.repository,
         database,
         expectedRevision: snapshot.revision,
+        courseId,
       });
       return {
         adminSettings,
         receipt,
       };
     } catch (error) {
-      if (
-        input.repository &&
-        attempt === 0 &&
-        isTeachingCourseManagementOptimisticSnapshotConflict(error)
-      ) {
+      if (input.repository && (await writeRetry.shouldRetry({ attempt, error }))) {
         continue;
       }
-      throw error;
+      // A conflict that survives the ladder is exhausted contention, not a
+      // caller mistake: answer with the structured 409 rather than passing the
+      // backend's own revision-mismatch prose through. The local file path has no
+      // revisions and never lands here.
+      throw input.repository && writeRetry.isConflict(error)
+        ? createTeachingCourseManagementContentionError()
+        : error;
     }
   }
 
-  throw new TeachingCourseManagementStoreError(
-    409,
-    "Teaching course management snapshot changed; retry required.",
-  );
+  throw createTeachingCourseManagementContentionError();
 }
 
 export async function saveTeachingAgentSettingsRecord(input: {
@@ -198,10 +204,12 @@ export async function saveTeachingAgentSettingsRecord(input: {
   const savedAt = now.toISOString();
   const agentSettingsId = `agent-settings-${courseId}`;
 
-  for (let attempt = 0; attempt < 2; attempt += 1) {
+  const writeRetry = createTeachingCourseManagementWriteRetry();
+  for (let attempt = 0; attempt < teachingCourseManagementMaxWriteAttempts; attempt += 1) {
     const snapshot = await readTeachingCourseManagementSnapshot({
       dataDir,
       repository: input.repository,
+      courseId,
     });
     const database = snapshot.database;
     const courseIndex = database.courses.findIndex((course) => course.courseId === courseId);
@@ -292,27 +300,27 @@ export async function saveTeachingAgentSettingsRecord(input: {
         repository: input.repository,
         database,
         expectedRevision: snapshot.revision,
+        courseId,
       });
       return {
         agentSettings,
         receipt,
       };
     } catch (error) {
-      if (
-        input.repository &&
-        attempt === 0 &&
-        isTeachingCourseManagementOptimisticSnapshotConflict(error)
-      ) {
+      if (input.repository && (await writeRetry.shouldRetry({ attempt, error }))) {
         continue;
       }
-      throw error;
+      // A conflict that survives the ladder is exhausted contention, not a
+      // caller mistake: answer with the structured 409 rather than passing the
+      // backend's own revision-mismatch prose through. The local file path has no
+      // revisions and never lands here.
+      throw input.repository && writeRetry.isConflict(error)
+        ? createTeachingCourseManagementContentionError()
+        : error;
     }
   }
 
-  throw new TeachingCourseManagementStoreError(
-    409,
-    "Teaching course management snapshot changed; retry required.",
-  );
+  throw createTeachingCourseManagementContentionError();
 }
 
 export async function saveTeachingAgentPermissionPreflightRecord(input: {
@@ -343,10 +351,12 @@ export async function saveTeachingAgentPermissionPreflightRecord(input: {
   const checkedAt = now.toISOString();
   const preflightId = `agent-permission-preflight-${courseId}`;
 
-  for (let attempt = 0; attempt < 2; attempt += 1) {
+  const writeRetry = createTeachingCourseManagementWriteRetry();
+  for (let attempt = 0; attempt < teachingCourseManagementMaxWriteAttempts; attempt += 1) {
     const snapshot = await readTeachingCourseManagementSnapshot({
       dataDir,
       repository: input.repository,
+      courseId,
     });
     const database = snapshot.database;
     const courseIndex = database.courses.findIndex((course) => course.courseId === courseId);
@@ -437,25 +447,25 @@ export async function saveTeachingAgentPermissionPreflightRecord(input: {
         repository: input.repository,
         database,
         expectedRevision: snapshot.revision,
+        courseId,
       });
       return {
         agentPermissionPreflight,
         receipt,
       };
     } catch (error) {
-      if (
-        input.repository &&
-        attempt === 0 &&
-        isTeachingCourseManagementOptimisticSnapshotConflict(error)
-      ) {
+      if (input.repository && (await writeRetry.shouldRetry({ attempt, error }))) {
         continue;
       }
-      throw error;
+      // A conflict that survives the ladder is exhausted contention, not a
+      // caller mistake: answer with the structured 409 rather than passing the
+      // backend's own revision-mismatch prose through. The local file path has no
+      // revisions and never lands here.
+      throw input.repository && writeRetry.isConflict(error)
+        ? createTeachingCourseManagementContentionError()
+        : error;
     }
   }
 
-  throw new TeachingCourseManagementStoreError(
-    409,
-    "Teaching course management snapshot changed; retry required.",
-  );
+  throw createTeachingCourseManagementContentionError();
 }

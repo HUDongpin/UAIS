@@ -2582,13 +2582,13 @@ function normalizeTeachingStudentRosterSyncRecord(value) {
     courseId: requireSafeId(value.courseId, "course id"),
     ownerTeacherId: requireSafeId(value.ownerTeacherId, "owner teacher id"),
     syncedBy: requireSafeId(value.syncedBy, "synced by teacher id"),
-    syncStatus: "synced",
+    syncStatus: "local-recount",
     operationRecordId: requireSafeId(value.operationRecordId, "operation record id"),
     ...(value.sourceAction ? { sourceAction: requireSafeId(value.sourceAction, "source action") } : {}),
     approvedStudentCount: requireNonNegativeInteger(value.approvedStudentCount, "approved student count"),
     pendingTeacherReviewCount: requireNonNegativeInteger(value.pendingTeacherReviewCount, "pending teacher review count"),
     classCount: requireNonNegativeInteger(value.classCount, "class count"),
-    sourceSystems: ["sis-roster", "invite-code-joins", "withdrawals"],
+    sourceSystems: ["local-class-memberships", "local-class-records"],
     ...(value.providerStatus === "sis-provider-synced"
       ? { providerStatus: "sis-provider-synced" }
       : {}),
@@ -2606,6 +2606,27 @@ function normalizeTeachingStudentRosterSyncRecord(value) {
   };
 }
 
+function normalizeTeachingStudentGroupSuggestionGroup(value) {
+  requireRecord(value, "teaching student group suggestion group");
+  if (!Array.isArray(value.members)) {
+    throw new HttpError(400, "Teaching student group suggestion group members must be an array.");
+  }
+  return {
+    groupName: requireTrimmedString(value.groupName, "learning group name", 120),
+    members: value.members.map((member) => {
+      requireRecord(member, "teaching student group suggestion member");
+      return {
+        studentId: requireSafeId(member.studentId, "student id"),
+        studentDisplayName: requireTrimmedString(
+          member.studentDisplayName,
+          "student display name",
+          120,
+        ),
+      };
+    }),
+  };
+}
+
 function normalizeTeachingStudentGroupSuggestionRecord(value) {
   requireRecord(value, "teaching student group suggestion record");
   return {
@@ -2617,7 +2638,14 @@ function normalizeTeachingStudentGroupSuggestionRecord(value) {
     operationRecordId: requireSafeId(value.operationRecordId, "operation record id"),
     ...(value.sourceAction ? { sourceAction: requireSafeId(value.sourceAction, "source action") } : {}),
     suggestionScope: "teacher-editable-student-groups",
-    sourceSignals: ["learning-progress", "participation-frequency", "role-preferences"],
+    suggestedGroups: Array.isArray(value.suggestedGroups)
+      ? value.suggestedGroups.map(normalizeTeachingStudentGroupSuggestionGroup)
+      : [],
+    ungroupedStudentCount: requireNonNegativeInteger(
+      value.ungroupedStudentCount ?? 0,
+      "ungrouped student count",
+    ),
+    sourceSignals: ["approved-class-memberships", "existing-learning-groups"],
     reviewPolicy: "teacher-review-before-group-assignment",
     generatedAt: requireIsoDate(value.generatedAt, "generatedAt"),
     storagePolicy: normalizeTeachingCourseRecordStoragePolicy(value.storagePolicy),

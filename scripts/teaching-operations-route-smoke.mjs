@@ -4667,16 +4667,15 @@ function hasStudentRosterSyncDomainObject({ body, courseId, recordId }) {
       roster.courseId === courseId &&
       roster.ownerTeacherId === getExpectedSmokeTeacherId() &&
       roster.syncedBy === getExpectedSmokeTeacherId() &&
-      roster.syncStatus === "synced" &&
+      roster.syncStatus === "local-recount" &&
       roster.operationRecordId === recordId &&
       roster.sourceAction === "route-smoke-student-roster" &&
       roster.approvedStudentCount >= 0 &&
       roster.pendingTeacherReviewCount >= 0 &&
       roster.classCount >= 1 &&
       Array.isArray(roster.sourceSystems) &&
-      roster.sourceSystems.includes("sis-roster") &&
-      roster.sourceSystems.includes("invite-code-joins") &&
-      roster.sourceSystems.includes("withdrawals") &&
+      roster.sourceSystems.includes("local-class-memberships") &&
+      roster.sourceSystems.includes("local-class-records") &&
       roster.storagePolicy === "external-redacted-teaching-course-management-snapshot" &&
       roster.storageWritePolicy === "external-optimistic-snapshot-replace",
   );
@@ -4703,9 +4702,9 @@ function hasStudentGroupSuggestionDomainObject({ body, courseId, recordId }) {
       suggestion.sourceAction === "route-smoke-student-group-suggestion" &&
       suggestion.suggestionScope === "teacher-editable-student-groups" &&
       Array.isArray(suggestion.sourceSignals) &&
-      suggestion.sourceSignals.includes("learning-progress") &&
-      suggestion.sourceSignals.includes("participation-frequency") &&
-      suggestion.sourceSignals.includes("role-preferences") &&
+      suggestion.sourceSignals.includes("approved-class-memberships") &&
+      suggestion.sourceSignals.includes("existing-learning-groups") &&
+      Array.isArray(suggestion.suggestedGroups) &&
       suggestion.reviewPolicy === "teacher-review-before-group-assignment" &&
       suggestion.storagePolicy === "external-redacted-teaching-course-management-snapshot" &&
       suggestion.storageWritePolicy === "external-optimistic-snapshot-replace",

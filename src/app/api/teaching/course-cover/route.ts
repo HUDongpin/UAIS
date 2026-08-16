@@ -605,11 +605,15 @@ function createErrorResponse(error: unknown, traceId: string) {
 
   return jsonResponse(failure.status, {
     error: failure.message,
+    ...(failure.reasonCode ? { reasonCode: failure.reasonCode } : {}),
     redaction: createRedaction(),
   }, traceId);
 }
 
-function normalizeCourseCoverError(error: unknown, fallbackMessage: string) {
+function normalizeCourseCoverError(
+  error: unknown,
+  fallbackMessage: string,
+): { status: number; message: string; reasonCode?: string } {
   if (
     error instanceof CourseCoverRouteError ||
     error instanceof TeachingCourseAssetsStoreError ||
@@ -618,6 +622,12 @@ function normalizeCourseCoverError(error: unknown, fallbackMessage: string) {
     return {
       status: error.status,
       message: error.message,
+      // Stable classification beside the prose, set today for snapshot
+      // contention - on the course row this cover binds to, and on the asset
+      // snapshot the cover itself is written into.
+      ...(!(error instanceof CourseCoverRouteError) && error.reasonCode
+        ? { reasonCode: error.reasonCode }
+        : {}),
     };
   }
 

@@ -4552,15 +4552,26 @@ describe("teaching operation backend persistence", () => {
           objectType: "student-roster",
           courseId: "teacher-research-methods",
           syncedBy: "teacher-kang",
-          syncStatus: "synced",
+          // The action recounts local membership rows. It contacts no student
+          // information system, and the projection said it did - `synced` out of
+          // an `sis-roster`, with a `pendingTeacherReviewCount` hardcoded to the
+          // literal 3 for every course in every deployment. The record behind it
+          // has said `local-recount` since it was corrected; the projection now
+          // agrees with the record instead of contradicting it, and the count
+          // nobody counted is gone (the real one is on the roster record).
+          syncStatus: "local-recount",
           operationRecordId: receipt.receiptId,
           sourceAction: "manage",
-          sourceSystems: ["sis-roster", "invite-code-joins", "withdrawals"],
-          pendingTeacherReviewCount: 3,
+          sourceSystems: ["local-class-memberships", "local-class-records"],
           storagePolicy: "domain-projection-teaching-student-roster",
           syncedAt: "2026-06-22T09:45:00.000Z",
         }),
       );
+      expect(
+        domainProjections?.some(
+          (projection) => "pendingTeacherReviewCount" in (projection as object),
+        ),
+      ).toBe(false);
       expectNoLocalOrSecretValues(domainProjections, dataDir);
     } finally {
       await rm(dataDir, { recursive: true, force: true });
@@ -12867,13 +12878,15 @@ describe("teaching operation backend persistence", () => {
           courseId: course.courseId,
           ownerTeacherId: "teacher-kang",
           syncedBy: "teacher-kang",
-          syncStatus: "synced",
+          // The receipt states the local recount it actually performs; nothing
+          // is imported from an SIS here.
+          syncStatus: "local-recount",
           operationRecordId: body.receipt.receiptId,
           sourceAction: "inline-teaching-workspace",
           approvedStudentCount: 1,
           pendingTeacherReviewCount: 1,
           classCount: 1,
-          sourceSystems: ["sis-roster", "invite-code-joins", "withdrawals"],
+          sourceSystems: ["local-class-memberships", "local-class-records"],
           syncedAt: "2026-06-22T12:20:00.000Z",
           storagePolicy: "local-json-teaching-course-management",
           storageWritePolicy: "atomic-json-file-replace",
@@ -13063,7 +13076,7 @@ describe("teaching operation backend persistence", () => {
             approvedStudentCount: 1,
             pendingTeacherReviewCount: 1,
             classCount: 1,
-            sourceSystems: ["sis-roster", "invite-code-joins", "withdrawals"],
+            sourceSystems: ["local-class-memberships", "local-class-records"],
             redaction: {
               secrets: "omitted",
               localFiles: "omitted",
@@ -13232,7 +13245,7 @@ describe("teaching operation backend persistence", () => {
         expect.objectContaining({
           rosterId: `student-roster-${course.courseId}`,
           operationRecordId: body.receipt.receiptId,
-          syncStatus: "synced",
+          syncStatus: "local-recount",
         }),
       ]);
       expect(studentRosters?.[0]).not.toHaveProperty("providerStatus");
@@ -13882,7 +13895,7 @@ describe("teaching operation backend persistence", () => {
           operationRecordId: body.receipt.receiptId,
           sourceAction: "inline-teaching-workspace",
           suggestionScope: "teacher-editable-student-groups",
-          sourceSignals: ["learning-progress", "participation-frequency", "role-preferences"],
+          sourceSignals: ["approved-class-memberships", "existing-learning-groups"],
           reviewPolicy: "teacher-review-before-group-assignment",
           generatedAt: "2026-06-22T12:15:00.000Z",
           storagePolicy: "local-json-teaching-course-management",
@@ -13909,6 +13922,137 @@ describe("teaching operation backend persistence", () => {
       );
       expectNoLocalOrSecretValues(studentGroupSuggestions, dataDir);
       expectNoLocalOrSecretValues(courseDatabase, dataDir);
+      expectNoLocalOrSecretValues(body, dataDir);
+    } finally {
+      await rm(dataDir, { recursive: true, force: true });
+    }
+  });
+
+  it("returns the suggested partition to the teacher instead of only a receipt", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "uais-teaching-route-group-suggestion-return-"));
+    const operationsDataDir = join(dataDir, "operations");
+    const coursesDataDir = join(dataDir, "courses");
+    const ownershipDir = join(dataDir, "teacher-ai-ownership");
+    const teacherAuthSecret = "test-teacher-auth-session-signing-secret";
+    const teacherCookie = createUaisTeacherAuthSessionCookieHeader({
+      secret: teacherAuthSecret,
+      claims: {
+        sessionId: "teacher-group-suggestion-return-session",
+        actorId: "teacher-kang",
+        role: "teacher",
+        authenticatedAt: "2026-06-22T12:10:00.000Z",
+        expiresAt: "2026-06-22T13:10:00.000Z",
+      },
+    });
+    const postOperation = createTeachingOperationActionPostHandler({
+      env: {
+        UAIS_TEACHING_OPERATIONS_DATA_DIR: operationsDataDir,
+        UAIS_TEACHING_COURSES_DATA_DIR: coursesDataDir,
+        UAIS_TEACHER_AI_OWNERSHIP_DIR: ownershipDir,
+        UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET: teacherAuthSecret,
+      },
+      now: new Date("2026-06-22T12:15:00.000Z"),
+    });
+
+    try {
+      const { course } = await createTeachingCourseRecord({
+        dataDir: coursesDataDir,
+        actorId: "teacher-kang",
+        draft: {
+          name: "Returned Group Suggestions",
+          instructor: "Kang Xia",
+          unit: "Guangzhou University 404",
+          department: "Experimental Teaching Center",
+          semester: "2026 Spring",
+        },
+        traceId: "trace-create-returned-group-suggestion-course",
+        now: new Date("2026-06-22T12:11:00.000Z"),
+      });
+      const { classItem } = await createTeachingClassRecord({
+        dataDir: coursesDataDir,
+        actorId: "teacher-kang",
+        courseId: course.courseId,
+        draft: { className: "Suggestion Class" },
+        traceId: "trace-create-returned-group-suggestion-class",
+        now: new Date("2026-06-22T12:12:00.000Z"),
+      });
+      for (const [studentId, studentDisplayName] of [
+        ["student-li", "Li Ming"],
+        ["student-chen", "Chen Yu"],
+      ] as const) {
+        const joined = await joinTeachingClassByInviteCode({
+          dataDir: coursesDataDir,
+          join: {
+            invitationCode: classItem.invitationCode,
+            studentId,
+            studentDisplayName,
+          },
+          traceId: `trace-returned-group-suggestion-join-${studentId}`,
+          now: new Date("2026-06-22T12:13:00.000Z"),
+        });
+        await approveTeachingClassMembership({
+          dataDir: coursesDataDir,
+          actorId: "teacher-kang",
+          classId: classItem.classId,
+          membershipId: joined.membership.membershipId,
+          traceId: `trace-returned-group-suggestion-approve-${studentId}`,
+          now: new Date("2026-06-22T12:14:00.000Z"),
+        });
+      }
+      await storeUaisTeacherAiOwnershipRecord({
+        baseDir: ownershipDir,
+        ownership: { teacherId: "teacher-kang", courseIds: [course.courseId] },
+        updatedAt: "2026-06-22T12:14:30.000Z",
+      });
+
+      const response = await postOperation(
+        new Request("https://www.uais.top/api/teaching/operations", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            cookie: teacherCookie,
+            "x-uais-trace-id": "trace-returned-group-suggestions",
+          },
+          body: JSON.stringify({
+            operationId: "students",
+            actionSlot: "secondary",
+            courseId: course.courseId,
+            sourceAction: "inline-teaching-workspace",
+            idempotencyKey: "group-suggestion-returned-20260622",
+          }),
+        }),
+      );
+      const body = await response.json();
+
+      expect(response.status, JSON.stringify(body)).toBe(200);
+      // The store has computed and persisted this partition for a while; the
+      // route dropped it and kept the bare receipt, so the teacher was told
+      // "suggestions generated" and shown nothing that had been suggested.
+      expect(body.studentGroupSuggestionReceipt).toEqual(
+        expect.objectContaining({
+          action: "generate-student-group-suggestions",
+          status: "persisted",
+          ungroupedStudentCount: 2,
+          // Travels WITH the numbers: the response says out loud that this is a
+          // proposal, and no group record was written by it.
+          reviewPolicy: "teacher-review-before-group-assignment",
+          // Deterministic order, so a teacher who re-runs the action reads the
+          // same proposal rather than a reshuffled one.
+          suggestedGroups: [
+            {
+              groupName: "第1组",
+              members: [
+                { studentId: "student-chen", studentDisplayName: "Chen Yu" },
+                { studentId: "student-li", studentDisplayName: "Li Ming" },
+              ],
+            },
+          ],
+        }),
+      );
+      const courseDatabase = await readTeachingCourseManagementDatabase({
+        dataDir: coursesDataDir,
+      });
+      expect(courseDatabase.learningGroups ?? []).toEqual([]);
       expectNoLocalOrSecretValues(body, dataDir);
     } finally {
       await rm(dataDir, { recursive: true, force: true });
@@ -14046,7 +14190,7 @@ describe("teaching operation backend persistence", () => {
           operationRecordId: firstBody.receipt.receiptId,
           suggestionStatus: "generated",
           suggestionScope: "teacher-editable-student-groups",
-          sourceSignals: ["learning-progress", "participation-frequency", "role-preferences"],
+          sourceSignals: ["approved-class-memberships", "existing-learning-groups"],
           reviewPolicy: "teacher-review-before-group-assignment",
           generatedAt: "2026-06-22T12:15:00.000Z",
         }),
@@ -20868,7 +21012,7 @@ describe("teaching operation backend persistence", () => {
       if (init?.method === "GET") {
         return Response.json({
           database:
-            requestNumber >= 4
+            requestNumber >= 5
               ? {
                   schemaVersion: "uais-teaching-course-management-v1",
                   updatedAt: "2026-06-22T11:34:00.000Z",
@@ -20885,7 +21029,7 @@ describe("teaching operation backend persistence", () => {
                   memberships: [],
                   auditEvents: [],
           },
-          revision: requestNumber >= 4 ? "rev-1" : "rev-0",
+          revision: requestNumber >= 5 ? "rev-1" : "rev-0",
           storagePolicy: "external-redacted-teaching-course-management-snapshot",
           productionDatabaseAdapter: createReadyProductionDatabaseAdapter(),
           redaction: {
@@ -20897,7 +21041,7 @@ describe("teaching operation backend persistence", () => {
       }
 
       if (init?.method === "PUT") {
-        if (requestNumber === 3) {
+        if (requestNumber === 4) {
           return Response.json(
             { error: "Teaching course management snapshot revision mismatch." },
             { status: 409 },
@@ -20996,19 +21140,24 @@ describe("teaching operation backend persistence", () => {
           storageWritePolicy: "external-optimistic-snapshot-replace",
         }),
       );
+      // Three GETs per publish attempt since the per-course re-key: the
+      // pre-flight target check, the course's own row, and the corpus read that
+      // the deployment-wide invite-code uniqueness gate needs.
       expect(courseManagementRequests.map((request) => request.method)).toEqual([
         "GET",
         "GET",
+        "GET",
         "PUT",
+        "GET",
         "GET",
         "PUT",
       ]);
-      expect(courseManagementRequests[2]?.body).toEqual(
+      expect(courseManagementRequests[3]?.body).toEqual(
         expect.objectContaining({
           expectedRevision: "rev-0",
         }),
       );
-      expect(courseManagementRequests[4]?.body).toEqual(
+      expect(courseManagementRequests[6]?.body).toEqual(
         expect.objectContaining({
           expectedRevision: "rev-1",
           database: expect.objectContaining({
@@ -21478,7 +21627,11 @@ describe("teaching operation backend persistence", () => {
           requestedAt: "2026-06-22T11:50:00.000Z",
         }),
       ]);
+      // The third GET is the corpus read the deployment-wide invite-code
+      // uniqueness gate needs; the course's own row cannot see another course's
+      // codes since the per-course re-key.
       expect(courseManagementRequests.map((request) => request.method)).toEqual([
+        "GET",
         "GET",
         "GET",
         "PUT",

@@ -30,6 +30,7 @@ export function TeachingPage() {
     courseCards,
     activeWorkspaceItemId,
     selectedCourseAction,
+    setSelectedCourseAction,
     isNewCourseOpen,
     setIsNewCourseOpen,
     setNewClassCourseId,
@@ -39,6 +40,10 @@ export function TeachingPage() {
     learningChatroomGroupsEnabled,
     persistedCourseLoadError,
     membershipApprovalStatuses,
+    membershipLifecycleStatuses,
+    classRosterStatuses,
+    pendingMembershipIds,
+    pendingBulkApprovalClassIds,
     selectedClassInvitation,
     setSelectedClassInvitation,
     inviteWorkspaceCode,
@@ -56,6 +61,9 @@ export function TeachingPage() {
     createCourseFromDraft,
     createClassForCourse,
     approveClassMembership,
+    approveAllPendingMemberships,
+    rejectMembership,
+    removeMembership,
     newClassCourse,
     activeWorkspaceItem,
     selectedActionCourse,
@@ -68,7 +76,21 @@ export function TeachingPage() {
     queueInlineWorkspaceAuditAlertNotifications,
     runInlineWorkspaceRollback,
     runInviteWorkspaceAction,
-    copyInviteWorkspaceValue,  } = useTeachingWorkspace();
+    copyInviteWorkspaceValue,
+    inviteCourseClasses,
+    selectedInviteClass,
+    selectedInviteClassId,
+    invitePolicyDraft,
+    invitePolicyDraftError,
+    selectInviteClass,
+    updateInvitePolicyDraft,
+  } = useTeachingWorkspace();
+  // The workspace-wide course selector. `manage` is the action every inline
+  // operation runs under; the label the context panel shows comes from it.
+  function selectWorkspaceCourse(courseId: string) {
+    setSelectedCourseAction(courseId ? { courseId, action: "manage" } : undefined);
+  }
+
   function renderActiveWorkspacePanel() {
     if (activeWorkspaceItemId === "course-settings") {
       return (
@@ -83,6 +105,10 @@ export function TeachingPage() {
           classMemberships={classMemberships}
           learningChatroomGroupsEnabled={learningChatroomGroupsEnabled}
           membershipApprovalStatuses={membershipApprovalStatuses}
+          membershipLifecycleStatuses={membershipLifecycleStatuses}
+          classRosterStatuses={classRosterStatuses}
+          pendingMembershipIds={pendingMembershipIds}
+          pendingBulkApprovalClassIds={pendingBulkApprovalClassIds}
           inlineWorkspaceStatuses={inlineWorkspaceStatuses}
           inlineWorkspaceAuditStatuses={inlineWorkspaceAuditStatuses}
           inlineWorkspaceAlertStatuses={inlineWorkspaceAlertStatuses}
@@ -91,10 +117,14 @@ export function TeachingPage() {
           selectedActionCourse={selectedActionCourse}
           selectedCourseActionLabel={selectedCourseActionLabel}
           selectedCourseAction={selectedCourseAction}
+          onSelectCourseAction={selectWorkspaceCourse}
           setIsNewCourseOpen={setIsNewCourseOpen}
           setNewClassCourseId={setNewClassCourseId}
           setSelectedClassInvitation={setSelectedClassInvitation}
           approveClassMembership={approveClassMembership}
+          approveAllPendingMemberships={approveAllPendingMemberships}
+          rejectMembership={rejectMembership}
+          removeMembership={removeMembership}
           updateCourseSettingsDraft={updateCourseSettingsDraft}
           queueInlineWorkspaceAuditAlertNotifications={queueInlineWorkspaceAuditAlertNotifications}
           runInlineWorkspaceAction={runInlineWorkspaceAction}
@@ -121,6 +151,8 @@ export function TeachingPage() {
         selectedActionCourse={selectedActionCourse}
         selectedCourseActionLabel={selectedCourseActionLabel}
         selectedCourseAction={selectedCourseAction}
+        courseCards={courseCards}
+        onSelectCourseAction={selectWorkspaceCourse}
         t={t}
         queueInlineWorkspaceAuditAlertNotifications={queueInlineWorkspaceAuditAlertNotifications}
         runInlineWorkspaceAction={runInlineWorkspaceAction}
@@ -142,6 +174,15 @@ export function TeachingPage() {
         inviteWorkspaceCode={inviteWorkspaceCode}
         inviteWorkspaceJoinUrl={inviteWorkspaceJoinUrl}
         inviteWorkspaceStatus={inviteWorkspaceStatus}
+        courseCards={courseCards}
+        inviteCourseClasses={inviteCourseClasses}
+        selectedInviteClass={selectedInviteClass}
+        selectedInviteClassId={selectedInviteClassId}
+        invitePolicyDraft={invitePolicyDraft}
+        invitePolicyDraftError={invitePolicyDraftError}
+        onSelectInviteClass={selectInviteClass}
+        onUpdateInvitePolicyDraft={updateInvitePolicyDraft}
+        onSelectCourseAction={selectWorkspaceCourse}
         selectedCourseAction={selectedCourseAction}
         selectedActionCourse={selectedActionCourse}
         selectedCourseActionLabel={selectedCourseActionLabel}

@@ -1,4 +1,9 @@
 import { randomUUID } from "node:crypto";
+import type { AiRequestRateLimiter } from "@/lib/server/ai-request-rate-limit";
+import {
+  createTeachingInviteJoinRateLimiter,
+  resolveTeachingInviteJoinRateLimitKey,
+} from "@/lib/server/teaching-invite-join-rate-limit";
 import { getUaisAppSessionClaimsFromCookieString } from "@/lib/server/uais-app-session";
 import { resolveUaisAppAuthProviderContract } from "@/lib/server/uais-app-auth-provider";
 import { createUaisTeachingCourseManagementRepository } from "@/lib/server/teaching-course-management-external-store";
@@ -22,6 +27,9 @@ type TeachingInviteCodeJoinPostHandlerDeps = {
   now?: Date;
   fetch?: typeof fetch;
   hasTrustedAccountProvider?: boolean;
+  // Injected so a suite can drive the throttle windows without sleeping. The
+  // limiter itself is per handler instance, exactly like the AI routes'.
+  rateLimiter?: AiRequestRateLimiter;
 };
 
 type AuthenticatedStudent = {
@@ -53,6 +61,7 @@ export function createTeachingInviteCodeJoinPostHandler(
   deps: TeachingInviteCodeJoinPostHandlerDeps = {},
 ) {
   const env = deps.env ?? process.env;
+  const rateLimiter = deps.rateLimiter ?? createTeachingInviteJoinRateLimiter();
 
   return async function POST(request: Request, context: TeachingInviteCodeJoinRouteContext) {
     const traceId = readSafeTraceId(request);
@@ -105,6 +114,28 @@ export function createTeachingInviteCodeJoinPostHandler(
           redaction: createRedaction(),
         }, traceId);
       }
+      // Throttled once the caller is known and before any storage read: the
+      // invite code is the only credential this route asks for, so an
+      // unthrottled authenticated caller can walk the code space until they land
+      // in a class that is not theirs. Keyed on the account, which the session
+      // proves, rather than on anything the client can vary.
+      const rateLimit = rateLimiter.check({
+        key: resolveTeachingInviteJoinRateLimitKey(authenticatedStudent.actorId),
+        nowMs: (deps.now ?? new Date()).getTime(),
+      });
+      if (!rateLimit.allowed) {
+        return jsonResponse(429, {
+          error: "UAIS teaching invite-code join rate limit reached.",
+          traceId,
+          reasonCode: "invite-join-rate-limited",
+          // A 429 without Retry-After tells a client nothing, so it retries
+          // straight back into the same rejection. The limiter already computed
+          // a never-zero value.
+          retryAfterSeconds: rateLimit.retryAfterSeconds,
+          redaction: createRedaction(),
+        }, traceId, { "retry-after": String(rateLimit.retryAfterSeconds) });
+      }
+
       const courseManagementRepository = createUaisTeachingCourseManagementRepository({
         env,
         fetch: deps.fetch,
@@ -270,6 +301,10 @@ function createErrorResponse(
     return jsonResponse(error.status, {
       error: error.message,
       traceId,
+      // Enrolment day contention answers 409 with a stable code beside the
+      // prose, so the join UI can tell "the class row was busy, try again" apart
+      // from "this code does not exist" without matching on English.
+      ...(error.reasonCode ? { reasonCode: error.reasonCode } : {}),
       ...(access ? { access } : {}),
       redaction: createRedaction(),
     }, traceId);
@@ -282,12 +317,18 @@ function createErrorResponse(
   }, traceId);
 }
 
-function jsonResponse(status: number, body: unknown, traceId: string) {
+function jsonResponse(
+  status: number,
+  body: unknown,
+  traceId: string,
+  headers: Record<string, string> = {},
+) {
   return Response.json(body, {
     status,
     headers: {
       "cache-control": "no-store",
       "x-uais-trace-id": traceId,
+      ...headers,
     },
   });
 }
