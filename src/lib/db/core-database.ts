@@ -1,5 +1,9 @@
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
+import {
+  UAIS_CORE_DATABASE_MIGRATION_VERSIONS,
+  type UaisCoreDatabaseMigrationVersion,
+} from "@/lib/db/migrations";
 import * as schema from "@/lib/db/schema";
 
 export const UAIS_CORE_DATABASE_ENV_NAMES = [
@@ -16,7 +20,11 @@ export type UaisCoreDatabaseReadiness =
       status: "ready";
       providerClass: "managed-postgres";
       selectedEnvName: UaisCoreDatabaseEnvName;
-      migrations: ["0001_core_poc"];
+      // The inventory this build expects the database to have, not a literal
+      // pinned here: it said `["0001_core_poc"]` while the runner applied seven,
+      // so every readiness report described a schema no deployment was running.
+      // See src/lib/db/migrations.ts for where the list comes from.
+      migrations: readonly UaisCoreDatabaseMigrationVersion[];
       valueRedacted: true;
     }
   | {
@@ -46,7 +54,7 @@ export function getUaisCoreDatabaseReadiness(
     status: "ready",
     providerClass: "managed-postgres",
     selectedEnvName,
-    migrations: ["0001_core_poc"],
+    migrations: UAIS_CORE_DATABASE_MIGRATION_VERSIONS,
     valueRedacted: true,
   };
 }
@@ -75,6 +83,113 @@ export function createUaisCoreDatabase(input: {
       credentials: "omitted" as const,
     },
   };
+}
+
+// Connection reuse for the snapshot stores.
+//
+// Every store used to call `createUaisCoreDatabase` per operation and
+// `sql.end()` in a `finally`, so a single 5-second history poll opened and tore
+// down two fresh Neon TLS connections. At roughly 200 students polling that is
+// ~80 connection setups per second, sustained, against a budget sized for
+// pooled access - which presents to a student as intermittent "history
+// unavailable" rather than as an error anyone can act on.
+//
+// Copied from the accepted in-repo precedent at
+// src/lib/ai/langgraph-runtime/postgres-persistence.ts: module-scoped cache,
+// keyed on the RESOLVED URL rather than on the env object, rebuilding on a
+// different URL instead of handing back a stale client.
+//
+// Three settings are load-bearing and differ from the disposable client above:
+//   - `idle_timeout` / `max_lifetime`: the disposable client needed neither
+//     because it was ended within the call. A memoized pool without them turns
+//     a per-call socket into a per-container socket set held open forever, and
+//     a frozen-then-reclaimed serverless container leaks its sockets until the
+//     server times them out.
+//   - `max: 2`: a serverless instance handles one request at a time; this is
+//     headroom for a transaction plus a concurrent read, not a real pool size.
+//     The multiplier that matters is instances, not connections per instance.
+//   - `prepare: false`: what makes the client safe behind Neon's pooled
+//     (`-pooler`) endpoint, which is the endpoint this change is for.
+type UaisCoreDatabasePool = ReturnType<typeof createUaisCoreDatabasePool>;
+
+let cachedCoreDatabasePool:
+  | { databaseUrl: string; pool: UaisCoreDatabasePool }
+  | undefined;
+
+export function getUaisCoreDatabasePool(input: {
+  env: Record<string, string | undefined>;
+  // Accepted and ignored, so the stores' injectable `createDatabase` seam keeps
+  // one call shape for both the pooled accessor and a test double. A pool sizes
+  // itself; the per-call `max: 1` the stores pass was only ever meaningful for
+  // a client that was created and destroyed inside the call.
+  max?: number;
+}): UaisCoreDatabasePool {
+  const databaseUrl = readSelectedDatabaseUrl(input.env);
+  if (!databaseUrl) {
+    throw new Error("UAIS core database URL is required for the Postgres adapter.");
+  }
+
+  if (cachedCoreDatabasePool?.databaseUrl === databaseUrl) {
+    return cachedCoreDatabasePool.pool;
+  }
+
+  const pool = createUaisCoreDatabasePool(databaseUrl);
+  cachedCoreDatabasePool = { databaseUrl, pool };
+  return pool;
+}
+
+function createUaisCoreDatabasePool(databaseUrl: string) {
+  const sql = postgres(databaseUrl, {
+    max: 2,
+    prepare: false,
+    idle_timeout: 30,
+    max_lifetime: 60 * 30,
+    // Without this a database that is unreachable rather than merely slow -
+    // wrong host, revoked network rule, Neon cold-start gone bad - leaves every
+    // request hanging until the platform's own function timeout. Ten seconds is
+    // long enough for a legitimate cold start and short enough that the caller
+    // still gets to run its own degradation path.
+    connect_timeout: 10,
+  });
+
+  return {
+    // The marker `closeUaisCoreDatabaseClient` reads. A pooled client outlives
+    // the operation that borrowed it; ending it in a caller's `finally` would
+    // close the shared pool out from under every other in-flight caller.
+    pooled: true as const,
+    db: drizzle(sql, { schema }),
+    sql,
+    redaction: {
+      databaseUrl: "omitted" as const,
+      credentials: "omitted" as const,
+    },
+  };
+}
+
+// The release call every store now makes instead of `sql.end({ timeout: 5 })`.
+//
+// Pooled clients are kept; anything else - a disposable `createUaisCoreDatabase`
+// result, or a test double injected through a store's `createDatabase` seam - is
+// still closed exactly as before. That is deliberate: the suites assert
+// `client.ended === 1` on every path including the conflict path, and those
+// assertions are the contract for "the connection is released even when the
+// write is rejected". A test double carries no `pooled` marker, so it keeps
+// taking the closing branch and the assertions keep passing unchanged.
+export async function closeUaisCoreDatabaseClient(client: {
+  pooled?: boolean;
+  sql: { end: (options?: { timeout?: number }) => Promise<void> | void };
+}) {
+  if (client.pooled) {
+    return;
+  }
+  await client.sql.end({ timeout: 5 });
+}
+
+/** Test seam: drops the memoized pool so a suite cannot leak one across files. */
+export async function resetUaisCoreDatabasePoolForTesting() {
+  const cached = cachedCoreDatabasePool;
+  cachedCoreDatabasePool = undefined;
+  await cached?.pool.sql.end({ timeout: 5 });
 }
 
 export function readUaisCoreDatabaseUrl(env: Record<string, string | undefined>) {

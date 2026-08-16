@@ -337,6 +337,42 @@ export const uaisProviderJobs = pgTable(
   ],
 );
 
+// Sign-in identifiers, one account, many addresses.
+//
+// The cohort signs in with email and either a student's official or personal
+// address is acceptable, so the address cannot be `uaisUsers.account`: two
+// addresses would resolve to two accounts and split one student into two
+// actors. `account` stays the stable teaching actorId (no '@', which eight
+// route validators require) and these rows point at it.
+//
+// Deliberately NOT added to `uaisCoreSchemaTables` below - that object's key set
+// is pinned by an exact assertion in tests/core-database-foundation.test.ts, and
+// this table has no drizzle consumer today. The hand-written SQL in
+// migrations/0005_user_login_identifiers.sql is the source of truth, as it is
+// for every table here.
+export const uaisUserLoginIdentifiers = pgTable(
+  "uais_user_login_identifiers",
+  {
+    identifier: text("identifier").primaryKey(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => uaisUsers.id, { onDelete: "cascade" }),
+    identifierKind: text("identifier_kind").notNull().default("email"),
+    createdAt,
+  },
+  (table) => [
+    index("uais_user_login_identifiers_user_id_idx").on(table.userId),
+    check(
+      "uais_user_login_identifiers_kind_check",
+      sql`${table.identifierKind} IN ('email', 'account')`,
+    ),
+    check(
+      "uais_user_login_identifiers_lowercase_check",
+      sql`${table.identifier} = lower(${table.identifier})`,
+    ),
+  ],
+);
+
 export const uaisCoreSchemaTables = {
   users: uaisUsers,
   courses: uaisCourses,

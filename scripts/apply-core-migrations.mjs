@@ -1,25 +1,54 @@
+// Applies the UAIS core migrations.
+//
+// Two calling conventions, because a build and an operator need opposite
+// failure modes:
+//
+//   node scripts/apply-core-migrations.mjs
+//     Strict. No database URL is an error. This is `npm run db:migrate`, the
+//     one an operator runs deliberately against a known target, where silence
+//     would mean "I thought I migrated production and did not".
+//
+//   node scripts/apply-core-migrations.mjs --deploy
+//     Build-safe. Used by `vercel-build`. Skips - exit 0 with a structured
+//     record - in exactly two situations, and applies normally otherwise:
+//
+//     1. No database URL in the build environment. Coupling `next build` to
+//        database availability is what took the production site stale: the
+//        build env had no URL, the strict script exited 1, every deploy after
+//        2026-08-08 failed, and nothing probed the live site to notice. A
+//        missing URL must not be able to stop shipping the application.
+//     2. A non-production Vercel deployment (`VERCEL_ENV` set and not
+//        "production"). Preview builds share the project's environment, so the
+//        old command let any preview branch migrate the production database.
+//        Absent VERCEL_ENV entirely (self-hosted, CI, local) this does not
+//        apply and the migration runs.
+//
+// A skip is reported, never silent, so the deploy log says which of the two
+// cases happened. Pair it with the schema check on /healthz: if a skip left the
+// database behind the code, that endpoint is where it surfaces.
 import { createHash } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
-import { cwd, env, exit } from "node:process";
+import { argv, cwd, env, exit } from "node:process";
 import { PostgresSaver } from "@langchain/langgraph-checkpoint-postgres";
 import { PostgresStore } from "@langchain/langgraph-checkpoint-postgres/store";
 import postgres from "postgres";
 
-const migrations = [
-  {
-    version: "0001_core_poc",
-    path: "migrations/0001_core_poc.sql",
-  },
-  {
-    version: "0002_teaching_operations",
-    path: "migrations/0002_teaching_operations.sql",
-  },
-  {
-    version: "0003_learning_chatroom",
-    path: "migrations/0003_learning_chatroom.sql",
-  },
-];
+// Derived from the directory rather than hand-listed here. A hand-listed runner
+// is a second inventory to keep in step with the files, and the cost of it
+// falling behind is a deploy that reports "applied" having skipped the migration
+// someone just added. The numeric filename prefix is the apply order, which is
+// what the lexicographic sort produces. Runtime code that cannot read this
+// directory - /healthz from a serverless bundle - reads the pinned projection in
+// src/lib/db/migrations.ts instead, and a test holds the two together.
+const migrationsDirectory = "migrations";
+const migrations = (await readdir(join(cwd(), migrationsDirectory)))
+  .filter((entry) => entry.endsWith(".sql"))
+  .sort()
+  .map((entry) => ({
+    version: entry.slice(0, -".sql".length),
+    path: join(migrationsDirectory, entry),
+  }));
 
 const databaseUrlEnvNames = ["UAIS_CORE_DATABASE_URL", "DATABASE_URL", "POSTGRES_URL"];
 
@@ -31,12 +60,40 @@ function readDatabaseUrl() {
   return undefined;
 }
 
+const deployMode = argv.includes("--deploy");
+
+function reportSkipped(skippedReason) {
+  console.log(
+    JSON.stringify({
+      target: "uais-core-database-migrations",
+      status: "skipped",
+      skippedReason,
+      mode: "deploy",
+      migrations: migrations.map((migration) => migration.version),
+      valueRedacted: true,
+    }),
+  );
+}
+
 const databaseUrl = readDatabaseUrl();
 if (!databaseUrl) {
+  if (deployMode) {
+    reportSkipped("missing-database-url");
+    exit(0);
+  }
   console.error(
     `Blocked: set one of ${databaseUrlEnvNames.join(", ")} before applying UAIS core migrations.`,
   );
   exit(1);
+}
+
+// Only Vercel sets VERCEL_ENV. Anywhere else - CI, a self-hosted box, a local
+// run - the value is absent and this guard does nothing, which is why it tests
+// for "set and not production" rather than "not production".
+const vercelEnv = env.VERCEL_ENV?.trim().toLowerCase();
+if (deployMode && vercelEnv && vercelEnv !== "production") {
+  reportSkipped("non-production-vercel-deployment");
+  exit(0);
 }
 
 const sql = postgres(databaseUrl.value, {
