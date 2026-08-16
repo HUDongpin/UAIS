@@ -1,7 +1,11 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import {
+  getUaisCoreDatabasePool,
+  resetUaisCoreDatabasePoolForTesting,
+} from "@/lib/db/core-database";
 import {
   backfillTeachingCourseManagementToPostgres,
   verifyTeachingCourseManagementParity,
@@ -68,27 +72,76 @@ async function seedJsonFile(dataDir: string, database: TeachingCourseManagementD
   );
 }
 
+const cutoverCourseKeys = ["course-a", "course-b"];
+
 describe.skipIf(!databaseUrl)(
   "teaching-course-management durable cutover (integration)",
   () => {
+    // Parity is a WHOLE-CORPUS property: the gate reads every course row there
+    // is and compares it with the whole file corpus. Since the per-course re-key
+    // each course is its own row rather than a shared 'default' one the next
+    // writer overwrites, so a row another suite left behind is real drift as far
+    // as this gate is concerned. Every suite in the `npm run test:db` lane now
+    // deletes its own rows; this check turns a leftover into an answer instead
+    // of an unexplained "expected parity, received mismatch".
+    beforeAll(async () => {
+      const client = getUaisCoreDatabasePool({
+        env: { UAIS_CORE_DATABASE_URL: databaseUrl },
+      });
+      const rows = (await client.sql`
+        SELECT snapshot_key
+        FROM uais_teaching_course_management_snapshots
+        ORDER BY snapshot_key
+      `) as Array<{ snapshot_key: string }>;
+      if (rows.length > 0) {
+        throw new Error(
+          `Teaching course management cutover parity needs the corpus to itself; ${rows.length} course row(s) were already present. Point the lane at a fresh database (see npm run test:db).`,
+        );
+      }
+    }, 60_000);
+
+    afterAll(async () => {
+      const client = getUaisCoreDatabasePool({
+        env: { UAIS_CORE_DATABASE_URL: databaseUrl },
+      });
+      await client.sql`
+        DELETE FROM uais_teaching_class_invite_code_claims
+        WHERE course_id = ANY(${cutoverCourseKeys})
+      `;
+      await client.sql`
+        DELETE FROM uais_teaching_course_management_snapshots
+        WHERE snapshot_key = ANY(${cutoverCourseKeys})
+      `;
+      await resetUaisCoreDatabasePoolForTesting();
+    }, 60_000);
+
     it("backfills JSON -> Postgres, verifies parity, switches reads, and rolls back safely", async () => {
       const dataDir = await mkdtemp(join(tmpdir(), "uais-cutover-"));
       // Isolated snapshot key namespace is not needed: a fresh migrated DB starts empty.
       const env = { UAIS_CORE_DATABASE_URL: databaseUrl };
       try {
         // EXPAND baseline: the JSON file is the current durable source of truth.
-        const seeded = buildDatabase([buildCourse("course-a", "Research Methods A")]);
+        // TWO courses, listed in an order the managed side cannot reproduce: the
+        // store keeps one row per course and a corpus read returns them in
+        // snapshot_key order, so `course-b` first is exactly the case a byte
+        // comparison of the two corpora reports as drift when nothing drifted.
+        const seeded = buildDatabase([
+          buildCourse("course-b", "Research Methods B"),
+          buildCourse("course-a", "Research Methods A"),
+        ]);
         await seedJsonFile(dataDir, seeded);
         const fromFile = await readTeachingCourseManagementDatabase({ dataDir });
-        expect(fromFile.courses).toHaveLength(1);
+        expect(fromFile.courses).toHaveLength(2);
 
-        // MIGRATE: backfill the JSON snapshot into managed Postgres and verify parity.
+        // MIGRATE: backfill the JSON snapshot into managed Postgres and verify
+        // parity. The backfill writes course by course - a corpus-wide write is
+        // not expressible against per-course rows, and asking for one is a 500.
         const backfill = await backfillTeachingCourseManagementToPostgres({
           env,
           sourceDataDir: dataDir,
         });
         expect(backfill.status).toBe("parity");
-        expect(backfill.entityCounts.courses).toBe(1);
+        expect(backfill.entityCounts.courses).toBe(2);
         expect(backfill.managedRevision).toBeTruthy();
         // Redaction: the parity result must not leak record contents.
         expect(JSON.stringify(backfill)).not.toContain("Research Methods A");
@@ -99,6 +152,15 @@ describe.skipIf(!databaseUrl)(
           sourceDataDir: dataDir,
         });
         expect(parity.status).toBe("parity");
+
+        // MIGRATE is re-runnable: "run it repeatedly until parity holds" means
+        // the second run replaces the rows the first one wrote, under their
+        // revisions.
+        const rerun = await backfillTeachingCourseManagementToPostgres({
+          env,
+          sourceDataDir: dataDir,
+        });
+        expect(rerun.status).toBe("parity");
 
         // CONTRACT (switch reads): the store's resolver returns the Postgres
         // repository when the backend flag is set, and it serves the same data.
@@ -112,12 +174,15 @@ describe.skipIf(!databaseUrl)(
         const viaPostgres = await readTeachingCourseManagementSnapshot({
           repository: postgresRepository,
         });
+        // The corpus read merges the rows in snapshot_key order, which is NOT
+        // the order the file listed them in.
         expect(viaPostgres.database.courses.map((course) => course.courseId)).toEqual([
           "course-a",
+          "course-b",
         ]);
 
         // CONTRACT (rollback): reads without the flag return to the untouched JSON
-        // file, so a rollback loses no data.
+        // file, so a rollback loses no data - including its own record order.
         const rolledBack = await readTeachingCourseManagementSnapshot({ dataDir });
         expect(rolledBack.database).toEqual(seeded);
 
@@ -126,8 +191,8 @@ describe.skipIf(!databaseUrl)(
         await seedJsonFile(
           dataDir,
           buildDatabase([
-            buildCourse("course-a", "Research Methods A"),
             buildCourse("course-b", "Research Methods B"),
+            buildCourse("course-a", "Research Methods A Renamed"),
           ]),
         );
         const drift = await verifyTeachingCourseManagementParity({

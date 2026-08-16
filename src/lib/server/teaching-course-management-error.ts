@@ -7,6 +7,11 @@ export class TeachingCourseManagementStoreError extends Error {
     readonly status: number,
     message: string,
     readonly diagnostics?: Record<string, unknown>,
+    // Stable, machine-readable classification of the failure, surfaced verbatim
+    // by the route error bodies. Only set where a client is expected to branch
+    // on the reason rather than show the message - snapshot contention today -
+    // so an absent code means "the message is the whole answer".
+    readonly reasonCode?: string,
   ) {
     super(message);
   }

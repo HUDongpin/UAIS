@@ -44,12 +44,20 @@ export async function readTeachingCourseManagementDatabase(input: {
   return normalizeTeachingCourseManagementDatabase(JSON.parse(raw));
 }
 
+// `courseId` narrows the call to one course's row on a backend that keeps one -
+// see TeachingCourseManagementRepositoryScope. A caller that knows its course
+// must pass it on BOTH the read and the write: the revision it reads belongs to
+// that course's row, and a write guarded by a revision from somewhere else can
+// never apply.
 export async function readTeachingCourseManagementSnapshot(input: {
   dataDir?: string;
   repository?: TeachingCourseManagementRepository;
+  courseId?: string;
 }): Promise<TeachingCourseManagementRepositorySnapshot> {
   if (input.repository) {
-    const snapshot = await input.repository.read();
+    const snapshot = await input.repository.read(
+      input.courseId ? { courseId: input.courseId } : undefined,
+    );
     return {
       database: normalizeTeachingCourseManagementDatabase(snapshot.database),
       ...(snapshot.revision ? { revision: requireSafeId(snapshot.revision, "revision") } : {}),
@@ -66,11 +74,13 @@ export async function writeTeachingCourseManagementSnapshot(input: {
   repository?: TeachingCourseManagementRepository;
   database: TeachingCourseManagementDatabase;
   expectedRevision?: string;
+  courseId?: string;
 }) {
   if (input.repository) {
     await input.repository.write({
       database: normalizeTeachingCourseManagementDatabase(input.database),
       ...(input.expectedRevision ? { expectedRevision: input.expectedRevision } : {}),
+      ...(input.courseId ? { courseId: input.courseId } : {}),
     });
     return;
   }

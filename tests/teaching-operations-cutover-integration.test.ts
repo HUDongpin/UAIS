@@ -9,9 +9,11 @@ import {
 import { createUaisTeachingOperationRepository } from "@/lib/server/teaching-operations-postgres-store";
 import {
   loadTeachingOperationDatabase,
+  loadTeachingOperationSnapshot,
   normalizeTeachingOperationDatabase,
   persistTeachingOperationDatabase,
   readTeachingOperationDatabase,
+  TeachingOperationStoreError,
   type TeachingOperationDatabase,
 } from "@/lib/server/teaching-operations-store";
 
@@ -115,10 +117,17 @@ describe.skipIf(!databaseUrl)(
         UAIS_TEACHING_OPERATIONS_SNAPSHOT_BACKEND: "postgres",
         UAIS_CORE_DATABASE_URL: databaseUrl,
       };
-      // Persist via the same store helper the operational functions now call...
+      // Persist via the same store helper the operational functions now call,
+      // in the way they call it: under the revision the read returned. Every
+      // guarded flow does this (runGuardedTeachingOperationSnapshotWrite), and
+      // the managed row refuses a writer that names no revision against an
+      // existing snapshot - that writer read nothing, so replacing what it found
+      // would drop whoever wrote it.
+      const before = await loadTeachingOperationSnapshot({ env: postgresEnv });
       await persistTeachingOperationDatabase({
         database: buildDatabase(["invite-store-helper"]),
         env: postgresEnv,
+        ...(before.revision ? { expectedRevision: before.revision } : {}),
       });
       // ...and read it back via the store helper — proving the read-switch routes
       // to Postgres (not the JSON file) when the dedicated backend var is set.
@@ -136,6 +145,30 @@ describe.skipIf(!databaseUrl)(
       } finally {
         await rm(fileDataDir, { recursive: true, force: true });
       }
+    });
+
+    it("refuses an unguarded replace of the row on the real database", async () => {
+      const postgresEnv = {
+        UAIS_TEACHING_OPERATIONS_SNAPSHOT_BACKEND: "postgres",
+        UAIS_CORE_DATABASE_URL: databaseUrl,
+      };
+      // The row exists by now (the tests above wrote it). A writer that names no
+      // revision is a writer that read no snapshot, and letting it replace this
+      // one is exactly how a concurrent teacher's action used to disappear. The
+      // guard is a statement shape - a FOR UPDATE pre-check plus a conditional
+      // ON CONFLICT - so it is only fully proven against a real Postgres.
+      const error = await persistTeachingOperationDatabase({
+        database: buildDatabase(["invite-unguarded"]),
+        env: postgresEnv,
+      }).catch((thrown: unknown) => thrown);
+
+      expect(error).toBeInstanceOf(TeachingOperationStoreError);
+      expect(error).toMatchObject({ status: 409 });
+      // The refused write left the snapshot alone.
+      const unchanged = await loadTeachingOperationDatabase({ env: postgresEnv });
+      expect(unchanged.inviteCodes.map((code) => code.inviteId)).not.toContain(
+        "invite-unguarded",
+      );
     });
   },
 );

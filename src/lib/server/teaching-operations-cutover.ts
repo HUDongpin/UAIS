@@ -3,7 +3,10 @@ import {
   readTeachingOperationDatabase,
   type TeachingOperationDatabase,
 } from "@/lib/server/teaching-operations-store";
-import { createUaisTeachingOperationPostgresRepository } from "@/lib/server/teaching-operations-postgres-store";
+import {
+  createUaisTeachingOperationPostgresRepository,
+  type TeachingOperationPostgresClientFactory,
+} from "@/lib/server/teaching-operations-postgres-store";
 
 // Phase 1 durable-data cutover for the teaching-operations entity.
 //
@@ -40,19 +43,35 @@ export type TeachingOperationsCutoverParity = {
   };
 };
 
+type TeachingOperationsCutoverInput = {
+  env: Record<string, string | undefined>;
+  sourceDataDir?: string;
+  // The store's own test seam, passed straight through, so the read-then-write
+  // sequence below can be driven without a server.
+  createDatabase?: TeachingOperationPostgresClientFactory;
+};
+
 /**
  * Backfill: copy the JSON-file snapshot into managed Postgres, then verify parity.
  * The JSON file is the source of truth and is left untouched (rollback stays safe).
  */
-export async function backfillTeachingOperationsToPostgres(input: {
-  env: Record<string, string | undefined>;
-  sourceDataDir?: string;
-}): Promise<TeachingOperationsCutoverParity> {
+export async function backfillTeachingOperationsToPostgres(
+  input: TeachingOperationsCutoverInput,
+): Promise<TeachingOperationsCutoverParity> {
   const source = normalizeTeachingOperationDatabase(
     await readTeachingOperationDatabase({ dataDir: input.sourceDataDir }),
   );
-  const repository = createUaisTeachingOperationPostgresRepository({ env: input.env });
-  await repository.write({ database: source });
+  const repository = createRepository(input);
+  // Named revision, not an unconditional replace. The backfill is documented as
+  // "run it repeatedly until parity holds", so the second run is replacing the
+  // row the first one wrote and has to say so - the managed store refuses a
+  // write that presents itself as a first writer against an existing row,
+  // because that is how one teacher's action used to vanish under another's.
+  const managed = await repository.read();
+  await repository.write({
+    database: source,
+    ...(managed.revision ? { expectedRevision: managed.revision } : {}),
+  });
   return verifyParityAgainstManaged(source, repository);
 }
 
@@ -60,15 +79,21 @@ export async function backfillTeachingOperationsToPostgres(input: {
  * Read-only parity gate between the JSON-file snapshot and managed Postgres.
  * Use before switching reads, and after, to confirm the two sources agree.
  */
-export async function verifyTeachingOperationsParity(input: {
-  env: Record<string, string | undefined>;
-  sourceDataDir?: string;
-}): Promise<TeachingOperationsCutoverParity> {
+export async function verifyTeachingOperationsParity(
+  input: TeachingOperationsCutoverInput,
+): Promise<TeachingOperationsCutoverParity> {
   const source = normalizeTeachingOperationDatabase(
     await readTeachingOperationDatabase({ dataDir: input.sourceDataDir }),
   );
-  const repository = createUaisTeachingOperationPostgresRepository({ env: input.env });
+  const repository = createRepository(input);
   return verifyParityAgainstManaged(source, repository);
+}
+
+function createRepository(input: TeachingOperationsCutoverInput) {
+  return createUaisTeachingOperationPostgresRepository({
+    env: input.env,
+    ...(input.createDatabase ? { createDatabase: input.createDatabase } : {}),
+  });
 }
 
 async function verifyParityAgainstManaged(

@@ -3,6 +3,20 @@ import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { cwd } from "node:process";
 import type { QwenCourseCoverGenerateResult } from "@/lib/ai/providers/qwen-client";
+import {
+  TeachingCourseAssetsStoreError,
+  isTeachingCourseAssetsOptimisticSnapshotConflict,
+} from "./teaching-course-assets-error";
+import {
+  createTeachingCourseAssetsContentionError,
+  createTeachingCourseAssetsWriteRetry,
+  teachingCourseAssetsMaxWriteAttempts,
+} from "./teaching-course-assets-write-retry";
+
+// Re-exported so the routes, the external adapter and every `instanceof` check
+// keep importing the error from this store unchanged after it moved to its own
+// module (see teaching-course-assets-error.ts for why it had to).
+export { TeachingCourseAssetsStoreError };
 
 type TeachingCourseAssetRedaction = {
   secrets: "omitted";
@@ -121,15 +135,6 @@ const localTeachingCourseAssetsStorage: TeachingCourseAssetsStorageDescriptor = 
   storageWritePolicy: "atomic-json-file-replace",
 };
 
-export class TeachingCourseAssetsStoreError extends Error {
-  constructor(
-    readonly status: number,
-    message: string,
-  ) {
-    super(message);
-  }
-}
-
 export function assertTeachingCourseAssetsLocalJsonRuntimeAllowed(
   env: Record<string, string | undefined>,
 ) {
@@ -209,7 +214,12 @@ export async function storeTeachingCourseCoverAsset(input: {
       })
     : undefined;
 
-  const maxAttempts = input.repository ? 2 : 1;
+  // The local JSON backend carries no revision - its atomic replace is the whole
+  // concurrency story - so there is nothing for a retry to be about and it keeps
+  // its single attempt. A repository-backed write is guarded by a revision, so
+  // it runs the shared five-attempt jittered ladder.
+  const writeRetry = createTeachingCourseAssetsWriteRetry();
+  const maxAttempts = input.repository ? teachingCourseAssetsMaxWriteAttempts : 1;
   let conflicts = 0;
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     const snapshot = await readTeachingCourseAssetsSnapshot({
@@ -242,22 +252,21 @@ export async function storeTeachingCourseCoverAsset(input: {
         }),
       };
     } catch (error) {
-      if (
-        input.repository &&
-        attempt === 0 &&
-        isTeachingCourseAssetsOptimisticSnapshotConflict(error)
-      ) {
+      if (input.repository && (await writeRetry.shouldRetry({ attempt, error }))) {
         conflicts += 1;
         continue;
       }
-      throw error;
+      // A conflict that survives the ladder is exhausted contention, not a
+      // caller mistake: answer with the structured 409 rather than passing the
+      // backend's own revision-mismatch prose through. Anything else - a
+      // provider error, an invalid record - is rethrown unchanged.
+      throw isTeachingCourseAssetsOptimisticSnapshotConflict(error)
+        ? createTeachingCourseAssetsContentionError()
+        : error;
     }
   }
 
-  throw new TeachingCourseAssetsStoreError(
-    409,
-    "Teaching course cover asset snapshot changed; retry required.",
-  );
+  throw createTeachingCourseAssetsContentionError();
 }
 
 function createTeachingCourseCoverAssetPersistenceReceipt(input: {
@@ -507,10 +516,6 @@ function normalizeCourseCoverAuditStoragePolicy(
   return value === "external-redacted-teaching-course-cover-audit-log"
     ? "external-redacted-teaching-course-cover-audit-log"
     : "local-json-teaching-course-cover-audit-log";
-}
-
-function isTeachingCourseAssetsOptimisticSnapshotConflict(error: unknown) {
-  return error instanceof TeachingCourseAssetsStoreError && error.status === 409;
 }
 
 function resolveDatabasePath(dataDir: string) {

@@ -1,6 +1,10 @@
 import { createHash } from "node:crypto";
 import type { TransactionSql } from "postgres";
-import { createUaisCoreDatabase, getUaisCoreDatabaseReadiness } from "@/lib/db/core-database";
+import {
+  closeUaisCoreDatabaseClient,
+  getUaisCoreDatabasePool,
+  getUaisCoreDatabaseReadiness,
+} from "@/lib/db/core-database";
 import {
   LearningChatroomShareStoreError,
   createEmptyLearningChatroomShareDatabase,
@@ -61,7 +65,7 @@ export function createUaisLearningChatroomSharePostgresRepository(input: {
   return {
     storage: postgresLearningChatroomShareStorage,
     read: async () => {
-      const client = (input.createDatabase ?? createUaisCoreDatabase)({ env: input.env, max: 1 });
+      const client = (input.createDatabase ?? getUaisCoreDatabasePool)({ env: input.env, max: 1 });
       try {
         const rows = await client.sql`
           SELECT database, revision
@@ -78,13 +82,17 @@ export function createUaisLearningChatroomSharePostgresRepository(input: {
           ...(revision ? { revision } : {}),
         };
       } finally {
-        await client.sql.end({ timeout: 5 });
+        // Releases an injected test double or a disposable client exactly as
+        // before; a pooled client is kept open for the next request. See
+        // closeUaisCoreDatabaseClient for why the distinction is a marker
+        // rather than a flag the caller passes.
+        await closeUaisCoreDatabaseClient(client);
       }
     },
     write: async ({ database, expectedRevision }) => {
       const normalizedDatabase = normalizeLearningChatroomShareDatabase(database);
       const revision = createSnapshotRevision(normalizedDatabase);
-      const client = (input.createDatabase ?? createUaisCoreDatabase)({ env: input.env, max: 1 });
+      const client = (input.createDatabase ?? getUaisCoreDatabasePool)({ env: input.env, max: 1 });
       try {
         await client.sql.begin(async (sql: TransactionSql) => {
           const rows = await sql`
@@ -123,7 +131,11 @@ export function createUaisLearningChatroomSharePostgresRepository(input: {
           `;
         });
       } finally {
-        await client.sql.end({ timeout: 5 });
+        // Releases an injected test double or a disposable client exactly as
+        // before; a pooled client is kept open for the next request. See
+        // closeUaisCoreDatabaseClient for why the distinction is a marker
+        // rather than a flag the caller passes.
+        await closeUaisCoreDatabaseClient(client);
       }
     },
   };

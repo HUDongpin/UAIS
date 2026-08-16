@@ -2,6 +2,10 @@ import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { cwd } from "node:process";
+import {
+  nextOptimisticWriteRetryDelayMs,
+  snapshotContentionReasonCode,
+} from "./optimistic-write-retry";
 
 // Server-side persistence for the human-AI learner chatroom, scoped per
 // (courseId, classId, student) so a refresh or a navigation keeps the
@@ -32,11 +36,40 @@ export type LearningChatroomTranscriptStorageDescriptor = {
   storageWritePolicy: LearningChatroomTranscriptStorageWritePolicy;
 };
 
+// Teacher moderation, recorded ON the row it acted on rather than in a parallel
+// table. A hidden message has to stay hidden through every replay path the room
+// has - the chatroom GET, the export/print document, the PDF and the signed-out
+// `/share` page - and a second store would eventually disagree with this one
+// about which of them a moderator actually stopped. `actorId` is the acting
+// teacher's account: identity, so it stays server-side exactly like `authorId`
+// and never reaches a projection.
+//
+// `status: "visible"` is a restore, not an absence: the moderator who put a
+// message back is as much a part of the audit trail as the one who took it down,
+// which is why a restore rewrites the block instead of deleting it.
+export type LearningChatroomTranscriptMessageModeration = {
+  status: "hidden" | "visible";
+  actorId: string;
+  actedAt: string;
+};
+
+// Room-level moderation, on the transcript record. A frozen room refuses student
+// writes while the course teacher keeps speaking, so a class can be quieted
+// without losing what it already said.
+export type LearningChatroomTranscriptRoomModeration = {
+  status: "frozen" | "open";
+  actorId: string;
+  actedAt: string;
+};
+
 export type LearningChatroomTranscriptMessage = {
   messageId: string;
   role: "student" | "agent";
   content: string;
   agentId?: string;
+  // Absent on every unmoderated row, which is almost all of them, so the absence
+  // means "never moderated" rather than "moderated and allowed".
+  moderation?: LearningChatroomTranscriptMessageModeration;
   // Schema v2 author attribution, written only for group rooms. `authorId` is
   // the session account of the human who sent the row and never leaves the
   // server; `authorName` is the display-name snapshot the room renders;
@@ -60,6 +93,9 @@ export type LearningChatroomTranscriptRecord = {
   groupId?: string;
   studentId: string;
   messages: LearningChatroomTranscriptMessage[];
+  // Absent means the room was never frozen. A thawed room keeps the block with
+  // `status: "open"` so the audit trail survives the unfreeze.
+  moderation?: LearningChatroomTranscriptRoomModeration;
   createdAt: string;
   updatedAt: string;
   storagePolicy: LearningChatroomTranscriptStoragePolicy;
@@ -79,13 +115,27 @@ export type LearningChatroomTranscriptRepositorySnapshot = {
   revision?: string;
 };
 
+// Which room a repository call is about. A backend that keeps the whole corpus
+// in one document - the local JSON file, the external storage service - ignores
+// it and answers with everything, exactly as before. The Postgres backend keys a
+// row by it, so an append to one room neither locks nor rewrites another room's
+// row. It stays optional because "the whole corpus" is still a legal request for
+// the backends that can express it.
+export type LearningChatroomTranscriptRepositoryScope = {
+  transcriptId?: string;
+};
+
 export type LearningChatroomTranscriptRepository = {
   storage: LearningChatroomTranscriptStorageDescriptor;
-  read: () => Promise<LearningChatroomTranscriptRepositorySnapshot>;
-  write: (input: {
-    database: LearningChatroomTranscriptDatabase;
-    expectedRevision?: string;
-  }) => Promise<void>;
+  read: (
+    scope?: LearningChatroomTranscriptRepositoryScope,
+  ) => Promise<LearningChatroomTranscriptRepositorySnapshot>;
+  write: (
+    input: LearningChatroomTranscriptRepositoryScope & {
+      database: LearningChatroomTranscriptDatabase;
+      expectedRevision?: string;
+    },
+  ) => Promise<void>;
 };
 
 export type LearningChatroomTranscriptAppendReceipt = {
@@ -106,11 +156,42 @@ export type LearningChatroomTranscriptReadResult = {
   classId?: string;
   groupId?: string;
   studentId: string;
+  // Hidden rows are already gone from this list: filtering here rather than in
+  // each of the four readers is what stops a moderated message from surviving in
+  // whichever one is next added.
   messages: LearningChatroomTranscriptMessage[];
+  hiddenMessageCount: number;
+  // The ids behind that count, and the only thing about a hidden row this result
+  // still discloses. Nothing renders them: they exist so a caller can recognise
+  // a hidden row it is being handed from somewhere else - a client re-posting
+  // its own stale transcript - as already stored and already moderated. Without
+  // them a hidden message is simply absent from `messages`, which reads exactly
+  // like "never stored", and the provider round used to append it to the prompt
+  // as an unstored pending row.
+  hiddenMessageIds: string[];
+  moderation?: LearningChatroomTranscriptRoomModeration;
   storagePolicy: LearningChatroomTranscriptStoragePolicy;
   responsibleSession: "S12";
   redaction: LearningChatroomTranscriptRedaction;
 };
+
+export type LearningChatroomTranscriptModerationReceipt = {
+  status: "applied";
+  transcriptId: string;
+  target: "message" | "room";
+  moderation:
+    | LearningChatroomTranscriptMessageModeration
+    | LearningChatroomTranscriptRoomModeration;
+  messageId?: string;
+  storagePolicy: LearningChatroomTranscriptStoragePolicy;
+  storageWritePolicy: LearningChatroomTranscriptStorageWritePolicy;
+  responsibleSession: "S12";
+  redaction: LearningChatroomTranscriptRedaction;
+};
+
+export type LearningChatroomTranscriptModerationResult =
+  | { status: "not-found" }
+  | { status: "applied"; receipt: LearningChatroomTranscriptModerationReceipt };
 
 // Schema v2 adds per-message author attribution and the group room key. Reads
 // accept v1 as well - a v1 record simply carries no author fields - but every
@@ -139,6 +220,17 @@ const learningChatroomTranscriptMaxAuthorNameLength = 120;
 const learningChatroomTranscriptMaxAppendAttempts = 2;
 const learningChatroomGroupTranscriptMaxAppendAttempts = 4;
 
+// Decorrelated jitter between attempts, the AWS backoff: the next wait is drawn
+// from [base, previous * 3] and clamped to a small cap. Retrying instantly -
+// which is what a bare `continue` did - guarantees that the writers who lost a
+// group room's race re-read the same snapshot in the same millisecond and
+// collide again, so four attempts are spent inside a few milliseconds and the
+// append is dropped. Randomised waits spread the losers apart instead. The cap
+// stays small because the caller is a learner waiting on a live round, not a
+// batch job: the whole ladder is worth a fraction of one provider call.
+export const learningChatroomTranscriptRetryBaseDelayMs = 25;
+export const learningChatroomTranscriptRetryMaxDelayMs = 250;
+
 const localLearningChatroomTranscriptStorage: LearningChatroomTranscriptStorageDescriptor =
   {
     transcriptStoragePolicy: "local-json-learning-chatroom-transcripts",
@@ -149,6 +241,12 @@ export class LearningChatroomTranscriptStoreError extends Error {
   constructor(
     readonly status: number,
     message: string,
+    // Stable, machine-readable classification, same field and same values as
+    // the teaching stores carry (see optimistic-write-retry.ts). Only set where
+    // a caller is expected to branch on the reason rather than show the message
+    // - exhausted snapshot contention today - so an absent code means "the
+    // message is the whole answer".
+    readonly reasonCode?: string,
   ) {
     super(message);
     this.name = "LearningChatroomTranscriptStoreError";
@@ -239,9 +337,15 @@ export async function readLearningChatroomTranscript(input: {
   const { database } = await readLearningChatroomTranscriptSnapshot({
     dataDir: input.dataDir,
     repository: input.repository,
+    transcriptId,
   });
   const transcript = database.transcripts.find(
     (item) => item.transcriptId === transcriptId,
+  );
+
+  const messages = transcript?.messages ?? [];
+  const visibleMessages = messages.filter(
+    (message) => message.moderation?.status !== "hidden",
   );
 
   return {
@@ -250,8 +354,274 @@ export async function readLearningChatroomTranscript(input: {
     ...(input.classId ? { classId: input.classId } : {}),
     ...(input.groupId ? { groupId: input.groupId } : {}),
     studentId: input.studentId,
-    messages: transcript?.messages ?? [],
+    messages: visibleMessages,
+    hiddenMessageCount: messages.length - visibleMessages.length,
+    hiddenMessageIds: messages
+      .filter((message) => message.moderation?.status === "hidden")
+      .map((message) => message.messageId),
+    ...(transcript?.moderation ? { moderation: transcript.moderation } : {}),
     storagePolicy: storage.transcriptStoragePolicy,
+    responsibleSession: "S12",
+    redaction: createRedaction(),
+  };
+}
+
+// Hides or restores one stored row. The message is kept - a moderated
+// conversation still has to be auditable, and deleting the row would also make
+// the append idempotent-by-id guarantee lie, since the client re-posts its whole
+// visible transcript and a deleted row would simply come back.
+export async function setLearningChatroomTranscriptMessageModeration(input: {
+  dataDir?: string;
+  repository?: LearningChatroomTranscriptRepository;
+  courseId: string;
+  classId?: string;
+  studentId: string;
+  groupId?: string;
+  messageId: string;
+  status: LearningChatroomTranscriptMessageModeration["status"];
+  actorId: string;
+  now?: string;
+  retryBudgetMs?: number;
+}): Promise<LearningChatroomTranscriptModerationResult> {
+  const storage = input.repository?.storage ?? localLearningChatroomTranscriptStorage;
+  const now = input.now ?? new Date().toISOString();
+  const moderation: LearningChatroomTranscriptMessageModeration = {
+    status: input.status,
+    actorId: requireBoundedText(
+      input.actorId,
+      "moderator id",
+      learningChatroomTranscriptMaxIdLength,
+    ),
+    actedAt: requireIsoDate(now, "moderation actedAt"),
+  };
+  const messageId = requireBoundedText(
+    input.messageId,
+    "message id",
+    learningChatroomTranscriptMaxIdLength,
+  );
+
+  const result = await mutateLearningChatroomTranscriptRecord({
+    ...input,
+    now,
+    mutate: (existing) => {
+      if (!existing?.messages.some((message) => message.messageId === messageId)) {
+        // Nothing to moderate. Reported rather than invented: creating a room
+        // record for a message that was never stored would publish an empty room
+        // as a side effect of a mistyped id.
+        return "not-found";
+      }
+      return {
+        ...existing,
+        messages: existing.messages.map((message) =>
+          message.messageId === messageId ? { ...message, moderation } : message,
+        ),
+        updatedAt: now,
+      };
+    },
+  });
+  if (result === "not-found") {
+    return { status: "not-found" };
+  }
+
+  return {
+    status: "applied",
+    receipt: createModerationReceipt({
+      transcriptId: createLearningChatroomTranscriptId(input),
+      target: "message",
+      moderation,
+      messageId,
+      storage,
+    }),
+  };
+}
+
+// Freezes or thaws the room. Unlike message moderation this may run against a
+// room that has never been written - a teacher can quiet a room before anyone
+// speaks in it - so an absent record is created rather than reported missing.
+export async function setLearningChatroomTranscriptRoomModeration(input: {
+  dataDir?: string;
+  repository?: LearningChatroomTranscriptRepository;
+  courseId: string;
+  classId?: string;
+  studentId: string;
+  groupId?: string;
+  status: LearningChatroomTranscriptRoomModeration["status"];
+  actorId: string;
+  now?: string;
+  retryBudgetMs?: number;
+}): Promise<LearningChatroomTranscriptModerationResult> {
+  const storage = input.repository?.storage ?? localLearningChatroomTranscriptStorage;
+  const now = input.now ?? new Date().toISOString();
+  const transcriptId = createLearningChatroomTranscriptId(input);
+  const moderation: LearningChatroomTranscriptRoomModeration = {
+    status: input.status,
+    actorId: requireBoundedText(
+      input.actorId,
+      "moderator id",
+      learningChatroomTranscriptMaxIdLength,
+    ),
+    actedAt: requireIsoDate(now, "moderation actedAt"),
+  };
+  const courseId = requireBoundedText(
+    input.courseId,
+    "course id",
+    learningChatroomTranscriptMaxIdLength,
+  );
+  const classId = input.classId
+    ? requireBoundedText(input.classId, "class id", learningChatroomTranscriptMaxIdLength)
+    : undefined;
+  const groupId = input.groupId
+    ? requireBoundedText(input.groupId, "group id", learningChatroomTranscriptMaxIdLength)
+    : undefined;
+  const studentId = requireBoundedText(
+    input.studentId,
+    "student id",
+    learningChatroomTranscriptMaxIdLength,
+  );
+
+  await mutateLearningChatroomTranscriptRecord({
+    ...input,
+    now,
+    mutate: (existing) => ({
+      transcriptId,
+      courseId,
+      ...(classId ? { classId } : {}),
+      ...(groupId ? { groupId } : {}),
+      // Creation provenance is preserved exactly as an append preserves it: a
+      // teacher freezing someone else's room must not become its creator.
+      studentId: existing?.studentId ?? studentId,
+      messages: existing?.messages ?? [],
+      moderation,
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+      storagePolicy: storage.transcriptStoragePolicy,
+      storageWritePolicy: storage.storageWritePolicy,
+      responsibleSession: "S12",
+      redaction: createRedaction(),
+    }),
+  });
+
+  return {
+    status: "applied",
+    receipt: createModerationReceipt({
+      transcriptId,
+      target: "room",
+      moderation,
+      storage,
+    }),
+  };
+}
+
+// The moderation counterpart of the append loop: one read-modify-write of a
+// single room's record, retried against a fresh revision on a snapshot conflict
+// with the same decorrelated-jitter ladder. Moderation is a rare, human-triggered
+// write, so it borrows the per-student attempt count even on a group room.
+async function mutateLearningChatroomTranscriptRecord(input: {
+  dataDir?: string;
+  repository?: LearningChatroomTranscriptRepository;
+  courseId: string;
+  classId?: string;
+  studentId: string;
+  groupId?: string;
+  now: string;
+  retryBudgetMs?: number;
+  mutate: (
+    existing: LearningChatroomTranscriptRecord | undefined,
+  ) => LearningChatroomTranscriptRecord | "not-found";
+}): Promise<"applied" | "not-found"> {
+  const transcriptId = createLearningChatroomTranscriptId(input);
+  const maxAttempts = input.repository ? learningChatroomTranscriptMaxAppendAttempts : 1;
+  const retryBudgetStartedAtMs = Date.now();
+  let retryDelayMs = 0;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    const snapshot = await readLearningChatroomTranscriptSnapshot({
+      dataDir: input.dataDir,
+      repository: input.repository,
+      transcriptId,
+    });
+    const existing = snapshot.database.transcripts.find(
+      (item) => item.transcriptId === transcriptId,
+    );
+    const mutated = input.mutate(existing);
+    if (mutated === "not-found") {
+      return "not-found";
+    }
+    const transcript = normalizeLearningChatroomTranscript(mutated);
+    const nextDatabase: LearningChatroomTranscriptDatabase = {
+      schemaVersion: learningChatroomTranscriptSchemaVersion,
+      updatedAt: input.now,
+      transcripts: [
+        ...snapshot.database.transcripts.filter(
+          (item) => item.transcriptId !== transcriptId,
+        ),
+        transcript,
+      ],
+    };
+
+    try {
+      await writeLearningChatroomTranscriptSnapshot({
+        dataDir: input.dataDir,
+        repository: input.repository,
+        transcriptId,
+        database: nextDatabase,
+        expectedRevision: snapshot.revision,
+      });
+      return "applied";
+    } catch (error) {
+      if (
+        input.repository &&
+        attempt < maxAttempts - 1 &&
+        isLearningChatroomTranscriptSnapshotConflict(error) &&
+        hasLearningChatroomTranscriptRetryBudget(
+          retryBudgetStartedAtMs,
+          input.retryBudgetMs,
+        )
+      ) {
+        retryDelayMs = nextLearningChatroomTranscriptRetryDelayMs({
+          previousDelayMs: retryDelayMs,
+        });
+        await sleepLearningChatroomTranscriptRetry(
+          clampLearningChatroomTranscriptRetryDelay({
+            delayMs: retryDelayMs,
+            startedAtMs: retryBudgetStartedAtMs,
+            retryBudgetMs: input.retryBudgetMs,
+          }),
+        );
+        continue;
+      }
+      throw error;
+    }
+  }
+
+  // Exhausted contention on the moderated room, not a caller mistake. Same
+  // stable `reasonCode` as every other snapshot surface in the tree, so a client
+  // can tell "the room was busy, try again" from "your request was wrong"
+  // without parsing English. The prose is unchanged.
+  throw new LearningChatroomTranscriptStoreError(
+    409,
+    "Learning chatroom transcript snapshot changed; retry required.",
+    snapshotContentionReasonCode,
+  );
+}
+
+function createModerationReceipt(input: {
+  transcriptId: string;
+  target: "message" | "room";
+  moderation:
+    | LearningChatroomTranscriptMessageModeration
+    | LearningChatroomTranscriptRoomModeration;
+  messageId?: string;
+  storage: LearningChatroomTranscriptStorageDescriptor;
+}): LearningChatroomTranscriptModerationReceipt {
+  return {
+    status: "applied",
+    transcriptId: input.transcriptId,
+    target: input.target,
+    moderation: input.moderation,
+    ...(input.messageId ? { messageId: input.messageId } : {}),
+    storagePolicy: input.storage.transcriptStoragePolicy,
+    storageWritePolicy: input.storage.storageWritePolicy,
     responsibleSession: "S12",
     redaction: createRedaction(),
   };
@@ -311,10 +681,12 @@ export async function appendLearningChatroomTranscriptMessages(input: {
       : learningChatroomTranscriptMaxAppendAttempts
     : 1;
   const retryBudgetStartedAtMs = Date.now();
+  let retryDelayMs = 0;
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     const snapshot = await readLearningChatroomTranscriptSnapshot({
       dataDir: input.dataDir,
       repository: input.repository,
+      transcriptId,
     });
     const existing = snapshot.database.transcripts.find(
       (item) => item.transcriptId === transcriptId,
@@ -364,6 +736,7 @@ export async function appendLearningChatroomTranscriptMessages(input: {
       await writeLearningChatroomTranscriptSnapshot({
         dataDir: input.dataDir,
         repository: input.repository,
+        transcriptId,
         database: nextDatabase,
         expectedRevision: snapshot.revision,
       });
@@ -391,24 +764,57 @@ export async function appendLearningChatroomTranscriptMessages(input: {
           input.retryBudgetMs,
         )
       ) {
-        continue;
+        retryDelayMs = nextLearningChatroomTranscriptRetryDelayMs({
+          previousDelayMs: retryDelayMs,
+        });
+        await sleepLearningChatroomTranscriptRetry(
+          clampLearningChatroomTranscriptRetryDelay({
+            delayMs: retryDelayMs,
+            startedAtMs: retryBudgetStartedAtMs,
+            retryBudgetMs: input.retryBudgetMs,
+          }),
+        );
+        // The wait itself can spend what remained of the caller's budget, so the
+        // budget is re-checked on the far side of it rather than only before:
+        // sleeping through a deadline and then starting an attempt anyway would
+        // be worse than not retrying at all.
+        if (
+          hasLearningChatroomTranscriptRetryBudget(
+            retryBudgetStartedAtMs,
+            input.retryBudgetMs,
+          )
+        ) {
+          continue;
+        }
+        break;
       }
       throw error;
     }
   }
 
+  // The append ladder ran out of attempts or out of budget: the room was busy
+  // for the whole window. Carries the same stable `reasonCode` as the
+  // moderation loop above and as the teaching stores, so one client rule covers
+  // every optimistic-snapshot surface. The prose is unchanged.
   throw new LearningChatroomTranscriptStoreError(
     409,
     "Learning chatroom transcript snapshot changed; retry required.",
+    snapshotContentionReasonCode,
   );
 }
 
 export async function readLearningChatroomTranscriptSnapshot(input: {
   dataDir?: string;
   repository?: LearningChatroomTranscriptRepository;
+  // Absent means "the whole corpus", which is what the local file and the
+  // external service answer either way. A per-room backend needs the key to
+  // read one room instead of all of them.
+  transcriptId?: string;
 }): Promise<LearningChatroomTranscriptRepositorySnapshot> {
   if (input.repository) {
-    const snapshot = await input.repository.read();
+    const snapshot = await input.repository.read(
+      input.transcriptId ? { transcriptId: input.transcriptId } : undefined,
+    );
     return {
       database: normalizeLearningChatroomTranscriptDatabase(snapshot.database),
       ...(snapshot.revision
@@ -449,12 +855,14 @@ export async function readLearningChatroomTranscriptDatabase(input: {
 async function writeLearningChatroomTranscriptSnapshot(input: {
   dataDir?: string;
   repository?: LearningChatroomTranscriptRepository;
+  transcriptId?: string;
   database: LearningChatroomTranscriptDatabase;
   expectedRevision?: string;
 }) {
   if (input.repository) {
     await input.repository.write({
       database: normalizeLearningChatroomTranscriptDatabase(input.database),
+      ...(input.transcriptId ? { transcriptId: input.transcriptId } : {}),
       ...(input.expectedRevision ? { expectedRevision: input.expectedRevision } : {}),
     });
     return;
@@ -552,6 +960,7 @@ function normalizeLearningChatroomTranscript(
           .map(normalizeLearningChatroomTranscriptMessage)
           .slice(-resolveLearningChatroomTranscriptMaxMessages(groupId))
       : [],
+    ...normalizeOptionalModeration(record.moderation, ["frozen", "open"]),
     createdAt,
     updatedAt: requireIsoDate(record.updatedAt, "updatedAt"),
     storagePolicy: normalizeTranscriptStoragePolicy(record.storagePolicy),
@@ -619,7 +1028,40 @@ function normalizeLearningChatroomTranscriptMessage(
     ...(record.authorRole === "student" || record.authorRole === "teacher"
       ? { authorRole: record.authorRole }
       : {}),
+    ...normalizeOptionalModeration(record.moderation, ["hidden", "visible"]),
     createdAt: requireIsoDate(record.createdAt, "createdAt"),
+  };
+}
+
+// One normalizer for both moderation blocks, because they are the same three
+// fields with different status vocabularies. An absent block stays absent - the
+// common case is an unmoderated row - and a block whose status is not one this
+// build knows is dropped rather than trusted, exactly as `authorRole` is: a
+// forged or corrupted snapshot must not be able to invent a moderation state.
+// A present-but-malformed actor or timestamp is a hard rejection, like every
+// other required field in this file.
+function normalizeOptionalModeration<Status extends string>(
+  value: unknown,
+  statuses: readonly Status[],
+): { moderation?: { status: Status; actorId: string; actedAt: string } } {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return {};
+  }
+  const record = value as Record<string, unknown>;
+  const status = statuses.find((candidate) => candidate === record.status);
+  if (!status) {
+    return {};
+  }
+  return {
+    moderation: {
+      status,
+      actorId: requireBoundedText(
+        record.actorId,
+        "moderator id",
+        learningChatroomTranscriptMaxIdLength,
+      ),
+      actedAt: requireIsoDate(record.actedAt, "moderation actedAt"),
+    },
   };
 }
 
@@ -666,7 +1108,11 @@ function isLearningChatroomTranscriptSnapshotConflict(error: unknown) {
   return error instanceof LearningChatroomTranscriptStoreError && error.status === 409;
 }
 
-function resolveLearningChatroomTranscriptMaxMessages(groupId: string | undefined) {
+// Exported because the window is no longer only an internal trimming rule: the
+// room, the export document, the PDF and the share page all have to be able to
+// say that older turns have rolled out, and they can only say it honestly
+// against the same cap the append actually trims to.
+export function resolveLearningChatroomTranscriptMaxMessages(groupId: string | undefined) {
   return groupId
     ? learningChatroomGroupTranscriptMaxMessages
     : learningChatroomTranscriptMaxMessages;
@@ -682,6 +1128,49 @@ function hasLearningChatroomTranscriptRetryBudget(
     return true;
   }
   return Date.now() - startedAtMs < retryBudgetMs;
+}
+
+// Exported for its own coverage: the property that matters is a spread, and a
+// spread is only observable across many draws, which is unpleasant to assert
+// through a whole append. `random` is injectable for the same reason.
+//
+// The draw itself is the shared server-wide policy (optimistic-write-retry.ts);
+// only the base and the cap are this room's. Keeping one implementation means
+// the chatroom and the teaching write loops cannot drift apart on the one thing
+// that has to hold everywhere: losers of a race must wait different amounts.
+export function nextLearningChatroomTranscriptRetryDelayMs(input: {
+  previousDelayMs: number;
+  random?: number;
+}) {
+  return nextOptimisticWriteRetryDelayMs({
+    previousDelayMs: input.previousDelayMs,
+    baseDelayMs: learningChatroomTranscriptRetryBaseDelayMs,
+    maxDelayMs: learningChatroomTranscriptRetryMaxDelayMs,
+    ...(input.random === undefined ? {} : { random: input.random }),
+  });
+}
+
+// The budget bounds the wait as well as the attempt count. The unclamped draw is
+// what feeds the next one, so a truncated final wait does not flatten the ladder.
+function clampLearningChatroomTranscriptRetryDelay(input: {
+  delayMs: number;
+  startedAtMs: number;
+  retryBudgetMs: number | undefined;
+}) {
+  if (input.retryBudgetMs === undefined) {
+    return input.delayMs;
+  }
+  const remainingMs = input.retryBudgetMs - (Date.now() - input.startedAtMs);
+  return Math.max(0, Math.min(input.delayMs, remainingMs));
+}
+
+async function sleepLearningChatroomTranscriptRetry(delayMs: number) {
+  if (delayMs <= 0) {
+    return;
+  }
+  await new Promise((resolve) => {
+    setTimeout(resolve, delayMs);
+  });
 }
 
 function resolveDatabasePath(dataDir: string) {

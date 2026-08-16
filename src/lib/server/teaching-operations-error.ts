@@ -4,10 +4,16 @@
 // the store can later split its guard/normalizer clusters without an import cycle.
 export class TeachingOperationStoreError extends Error {
   status: number;
+  // Stable, machine-readable classification of the failure, surfaced verbatim by
+  // the route error bodies. Only set where a client is expected to branch on the
+  // reason rather than show the message - snapshot contention today - so an
+  // absent code means "the message is the whole answer".
+  readonly reasonCode?: string;
 
-  constructor(status: number, message: string) {
+  constructor(status: number, message: string, reasonCode?: string) {
     super(message);
     this.name = "TeachingOperationStoreError";
     this.status = status;
+    this.reasonCode = reasonCode;
   }
 }

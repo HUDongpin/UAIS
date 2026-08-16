@@ -1,6 +1,10 @@
 import { createHash } from "node:crypto";
 import type { TransactionSql } from "postgres";
-import { createUaisCoreDatabase, getUaisCoreDatabaseReadiness } from "@/lib/db/core-database";
+import {
+  closeUaisCoreDatabaseClient,
+  getUaisCoreDatabasePool,
+  getUaisCoreDatabaseReadiness,
+} from "@/lib/db/core-database";
 import {
   TeachingOperationStoreError,
   normalizeTeachingOperationDatabase,
@@ -8,6 +12,21 @@ import {
 } from "@/lib/server/teaching-operations-store";
 
 const snapshotKey = "default";
+
+// Test seam, matching teaching-course-management-postgres-store.ts and the two
+// chatroom stores. The revision guard below is a statement shape - a FOR UPDATE
+// pre-check plus a conditional ON CONFLICT - and neither half is observable
+// from a type-checker or from a repository double that never issues SQL.
+export type TeachingOperationPostgresClientFactory = (input: {
+  env: Record<string, string | undefined>;
+  max?: number;
+}) => {
+  sql: {
+    (strings: TemplateStringsArray, ...values: unknown[]): Promise<unknown[]>;
+    begin: (run: (sql: never) => Promise<void>) => Promise<void>;
+    end: (options?: { timeout?: number }) => Promise<void>;
+  };
+};
 
 export type TeachingOperationRepositorySnapshot = {
   database: TeachingOperationDatabase;
@@ -50,6 +69,7 @@ export function createUaisTeachingOperationRepository(input: {
 
 export function createUaisTeachingOperationPostgresRepository(input: {
   env: Record<string, string | undefined>;
+  createDatabase?: TeachingOperationPostgresClientFactory;
 }): TeachingOperationRepository {
   const readiness = getUaisCoreDatabaseReadiness(input.env);
   if (readiness.status !== "ready") {
@@ -61,7 +81,7 @@ export function createUaisTeachingOperationPostgresRepository(input: {
 
   return {
     read: async () => {
-      const client = createUaisCoreDatabase({ env: input.env, max: 1 });
+      const client = (input.createDatabase ?? getUaisCoreDatabasePool)({ env: input.env });
       try {
         const rows = await client.sql`
           SELECT database, revision
@@ -80,13 +100,17 @@ export function createUaisTeachingOperationPostgresRepository(input: {
           ...(revision ? { revision } : {}),
         };
       } finally {
-        await client.sql.end({ timeout: 5 });
+        // Releases an injected test double or a disposable client exactly as
+        // before; a pooled client is kept open for the next request. See
+        // closeUaisCoreDatabaseClient for why the distinction is a marker
+        // rather than a flag the caller passes.
+        await closeUaisCoreDatabaseClient(client);
       }
     },
     write: async ({ database, expectedRevision }) => {
       const normalizedDatabase = normalizeTeachingOperationDatabase(database);
       const revision = createSnapshotRevision(normalizedDatabase);
-      const client = createUaisCoreDatabase({ env: input.env, max: 1 });
+      const client = (input.createDatabase ?? getUaisCoreDatabasePool)({ env: input.env });
       try {
         await client.sql.begin(async (sql: TransactionSql) => {
           const rows = await sql`
@@ -97,7 +121,15 @@ export function createUaisTeachingOperationPostgresRepository(input: {
           `;
           const currentRevision =
             typeof rows[0]?.revision === "string" ? rows[0].revision.trim() : undefined;
-          if (expectedRevision && currentRevision && currentRevision !== expectedRevision) {
+          // Strict equality, not "both sides present". The old guard skipped
+          // whenever either side was absent, so a writer that read no snapshot
+          // and then found one replaced it wholesale - which is exactly what two
+          // teachers acting on an empty deployment do, and the first one's
+          // action disappeared without an error anywhere. The store's callers
+          // already re-read and re-apply on a 409 (see
+          // teaching-operations-write-retry.ts), so refusing is the answer that
+          // keeps both writes.
+          if (rows.length > 0 && currentRevision !== expectedRevision) {
             throw new TeachingOperationStoreError(
               409,
               "Postgres teaching operation snapshot changed; retry required.",
@@ -109,7 +141,13 @@ export function createUaisTeachingOperationPostgresRepository(input: {
           // server describes as type 3802 reaches Bind unserialized inside
           // sql.begin() and throws. Forcing the parameter to text sends the raw
           // JSON string, then ::jsonb parses it server-side.
-          await sql`
+          //
+          // The WHERE on the conflict path closes the window FOR UPDATE cannot:
+          // a lock on a row that does not exist yet locks nothing, so two
+          // writers arriving at a fresh deployment both see no row and both
+          // insert. The second one's DO UPDATE is then skipped, RETURNING is
+          // empty, and it retries against the row the first one committed.
+          const applied = await sql`
             INSERT INTO uais_teaching_operations_snapshots (
               snapshot_key,
               database,
@@ -127,10 +165,23 @@ export function createUaisTeachingOperationPostgresRepository(input: {
               database = EXCLUDED.database,
               revision = EXCLUDED.revision,
               updated_at = EXCLUDED.updated_at
+            WHERE uais_teaching_operations_snapshots.revision
+              IS NOT DISTINCT FROM ${expectedRevision ?? null}::text
+            RETURNING snapshot_key
           `;
+          if (applied.length === 0) {
+            throw new TeachingOperationStoreError(
+              409,
+              "Postgres teaching operation snapshot changed; retry required.",
+            );
+          }
         });
       } finally {
-        await client.sql.end({ timeout: 5 });
+        // Releases an injected test double or a disposable client exactly as
+        // before; a pooled client is kept open for the next request. See
+        // closeUaisCoreDatabaseClient for why the distinction is a marker
+        // rather than a flag the caller passes.
+        await closeUaisCoreDatabaseClient(client);
       }
     },
   };

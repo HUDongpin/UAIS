@@ -14,10 +14,8 @@ import {
   isUaisProductionDatabaseAdapterEvidence,
   isUaisProductionRuntime,
 } from "@/lib/server/production-database-adapter-evidence";
-import {
-  createUaisTeachingCourseManagementPostgresRepository,
-  isUaisTeachingCourseManagementPostgresSelector,
-} from "@/lib/server/teaching-course-management-postgres-store";
+import { createUaisTeachingCourseManagementPostgresRepository } from "@/lib/server/teaching-course-management-postgres-store";
+import { selectUaisDurableSnapshotBackend } from "@/lib/server/uais-durable-snapshot-backend";
 
 const externalTeachingCourseManagementStorage: TeachingCourseManagementStorageDescriptor = {
   recordStoragePolicy: "external-redacted-teaching-course-management-snapshot",
@@ -29,12 +27,21 @@ export function createUaisTeachingCourseManagementRepository(input: {
   env: Record<string, string | undefined>;
   fetch?: typeof fetch;
 }): TeachingCourseManagementRepository | undefined {
-  if (
-    isUaisTeachingCourseManagementPostgresSelector(
-      input.env.UAIS_TEACHING_COURSE_MANAGEMENT_BACKEND,
-    )
-  ) {
+  // Shared with the chatroom stores, which is the point: an unset selector used
+  // to leave the chatroom on Postgres (it had gained a production auto-default)
+  // and this store on local JSON, which production refuses. The course list,
+  // invite join, approval and group routes then all answered 503 on a
+  // deployment the readiness script reported as ready. One selection function
+  // means the two can no longer disagree.
+  const selection = selectUaisDurableSnapshotBackend(input.env);
+  if (selection === "postgres") {
     return createUaisTeachingCourseManagementPostgresRepository({ env: input.env });
+  }
+  if (selection === "local-json") {
+    // Allowed outside production; the caller's own production guard refuses it
+    // inside. Returning early keeps the external-storage contract below from
+    // deciding a case the selection function has already answered.
+    return undefined;
   }
 
   const backendContract = resolveUaisStorageBackendContract({
@@ -64,6 +71,11 @@ export function createUaisTeachingCourseManagementRepository(input: {
   const fetchImpl = input.fetch ?? fetch;
   const databaseUrl = `${config.baseUrl}/teaching-course-management/database`;
 
+  // The course scope is accepted and ignored on both calls: this backend keeps
+  // the whole corpus in ONE document behind ONE url, so it has nothing to key a
+  // row by and answers with everything, exactly as it did before the Postgres
+  // store was re-keyed per course. Callers stay correct either way - they pass
+  // the scope as a hint, and every handler still filters the envelope it reads.
   return {
     storage: externalTeachingCourseManagementStorage,
     read: async () => {

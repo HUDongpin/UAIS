@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { selectLearningChatroomDurableBackend } from "@/lib/server/learning-chatroom-durable-backend";
+import { createUaisTeachingCourseManagementRepository } from "@/lib/server/teaching-course-management-external-store";
 
 // Closes blocker B2 at the code level. Chatroom stores refuse local JSON in a
 // production runtime, and the only durable option used to be a separately
@@ -61,6 +62,70 @@ describe("learning chatroom durable backend selection", () => {
       expect(
         selectLearningChatroomDurableBackend({ [marker]: "production", ...coreDatabase }),
       ).toBe("postgres");
+    }
+  });
+});
+
+// The course-management store used to require the selector to be set explicitly
+// while the chatroom had already gained the production auto-default above. An
+// unset selector therefore split the deployment in half: durable chatroom,
+// local-JSON course management - which production refuses - so the student
+// course list, invite join, approvals and groups all answered 503 while the
+// readiness script reported the same configuration as ready.
+describe("teaching course management backend selection", () => {
+  it("resolves to Postgres in production when only the core database is configured", () => {
+    const repository = createUaisTeachingCourseManagementRepository({
+      env: { ...production, ...coreDatabase },
+    });
+
+    expect(repository?.storage).toMatchObject({
+      recordStoragePolicy: "postgres-teaching-course-management-snapshot",
+      storageWritePolicy: "postgres-transactional-snapshot-replace",
+    });
+  });
+
+  it("still leaves local development on the file store", () => {
+    expect(createUaisTeachingCourseManagementRepository({ env: {} })).toBeUndefined();
+    expect(
+      createUaisTeachingCourseManagementRepository({ env: { ...coreDatabase } }),
+    ).toBeUndefined();
+  });
+
+  it("agrees with the chatroom stores on every environment", () => {
+    // The property that keeps the two from drifting apart again: whatever the
+    // chatroom resolves to, course management resolves to as well. A selector
+    // that names Postgres without a database URL is counted as "postgres" on
+    // both sides - both fail closed with the same 503 rather than one of them
+    // quietly falling back to a different backend.
+    function describeCourseManagement(env: Record<string, string | undefined>) {
+      try {
+        const repository = createUaisTeachingCourseManagementRepository({ env });
+        if (!repository) {
+          return "local-json";
+        }
+        return repository.storage.recordStoragePolicy ===
+          "postgres-teaching-course-management-snapshot"
+          ? "postgres"
+          : "external";
+      } catch (error) {
+        return (error as Error).message.includes("UAIS_CORE_DATABASE_URL")
+          ? "postgres"
+          : "external";
+      }
+    }
+
+    for (const env of [
+      {},
+      { ...coreDatabase },
+      { ...production },
+      { ...production, ...coreDatabase },
+      { ...production, ...coreDatabase, UAIS_TEACHING_COURSE_MANAGEMENT_BACKEND: "postgres" },
+      { UAIS_TEACHING_COURSE_MANAGEMENT_BACKEND: "managed" },
+    ]) {
+      expect({ env, backend: describeCourseManagement(env) }).toEqual({
+        env,
+        backend: selectLearningChatroomDurableBackend(env),
+      });
     }
   });
 });

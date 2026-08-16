@@ -23,9 +23,7 @@ import type {
   TeachingOperationBackupRestoreReceipt,
   TeachingOperationDatabase,
   TeachingOperationDatabaseBackup,
-  TeachingOperationDomainProjection,
   TeachingOperationExportManifest,
-  TeachingOperationExternalAppendAdapter,
   TeachingOperationExternalAppendReceipt,
   TeachingOperationGradeReleaseNotificationProjection,
   TeachingOperationGradeReleaseRollbackNotificationProjection,
@@ -42,6 +40,10 @@ import type {
   TeachingOperationRollbackReceipt,
   ValidatedExecuteTeachingOperationActionInput,
 } from "./teaching-operations-types";
+// Type-only, so the runtime import stays one-directional (the postgres store
+// imports this store's normalizer/error at runtime; this store reaches the
+// postgres store through a dynamic import) and no module cycle is created.
+import type { TeachingOperationRepository } from "./teaching-operations-postgres-store";
 import { resolveTeachingOperationDataDir } from "./teaching-operation-data-dir";
 import { actionDefinitions } from "./teaching-operations-action-catalog";
 import {
@@ -59,8 +61,20 @@ import {
   normalizeTeachingOperationAuditReadbackEvent,
 } from "./teaching-operations-audit-normalizers";
 import { createDomainProjections } from "./teaching-operations-domain-projection-builder";
+import { createDomainProjectionArtifact } from "./teaching-operations-gradebook-external-handlers";
 import { normalizeDomainProjection } from "./teaching-operations-domain-projection-normalizer";
 import { TeachingOperationStoreError } from "./teaching-operations-error";
+import {
+  createTeachingOperationContentionError,
+  createTeachingOperationWriteRetry,
+  teachingOperationMaxWriteAttempts,
+} from "./teaching-operations-write-retry";
+import {
+  applyPendingTeachingOperationWrite,
+  collectAppendedTeachingOperationEntities,
+  readTeachingOperationEntityBaseline,
+  type PendingTeachingOperationWrite,
+} from "./teaching-operations-pending-write";
 import {
   createIdempotentRecordId,
   createRecordId,
@@ -113,6 +127,13 @@ export {
   createUaisTeachingOperationExternalAuditReadAdapter,
   createUaisTeachingOperationExternalRollbackAdapter,
 } from "./teaching-operations-external-adapters";
+// The append-only gradebook release/rollback pair moved to its own module when
+// the guarded snapshot writes grew; re-exported so the routes keep importing
+// them from the store unchanged.
+export {
+  releaseExternalTeachingGradebookUpdate,
+  rollbackExternalTeachingGradebookRelease,
+} from "./teaching-operations-gradebook-external-handlers";
 
 const firstInviteCode = "55395057";
 const localTeachingOperationWriteQueues = new Map<string, Promise<void>>();
@@ -167,9 +188,15 @@ async function executeValidatedTeachingOperationAction(input: {
   usingExternalPersistence: boolean;
 }): Promise<TeachingOperationReceipt> {
   const { dataDir, usingExternalPersistence } = input;
-  const database = usingExternalPersistence
-    ? createEmptyDatabase()
-    : await loadTeachingOperationDatabase({ dataDir });
+  const access = createTeachingOperationSnapshotAccess(dataDir, input.input.repository);
+  // The revision-carrying read, so the write below can be guarded. External
+  // persistence appends to someone else's log and never replaces this snapshot,
+  // so it keeps starting from an empty in-memory database with no revision.
+  const snapshot: { database: TeachingOperationDatabase; revision?: string } =
+    usingExternalPersistence
+      ? { database: createEmptyDatabase() }
+      : await loadTeachingOperationSnapshot(access);
+  const database = snapshot.database;
   const now = input.input.now ?? new Date();
   const createdAt = now.toISOString();
   if (!input.input.actorId) {
@@ -236,6 +263,10 @@ async function executeValidatedTeachingOperationAction(input: {
   const recordId = idempotencyKey
     ? createIdempotentRecordId(actorId, idempotencyKey)
     : createRecordId(input.input.operationId, definition.actionId, now);
+  // Read before `createArtifacts`, which is the step that appends invite codes,
+  // outbox items and export manifests to the snapshot it is handed. The
+  // difference is what a merge-only retry has to carry across.
+  const entityBaseline = readTeachingOperationEntityBaseline(database);
   const artifacts = await createArtifacts({
     dataDir,
     database,
@@ -320,7 +351,18 @@ async function executeValidatedTeachingOperationAction(input: {
     : undefined;
 
   if (!input.input.appendExternalTeachingOperation) {
-    await persistTeachingOperationDatabase({ dataDir, database });
+    await persistPendingTeachingOperationWrite({
+      access,
+      database,
+      ...(snapshot.revision ? { revision: snapshot.revision } : {}),
+      pending: {
+        record,
+        ...(auditEvent ? { auditEvent } : {}),
+        domainProjections,
+        ...collectAppendedTeachingOperationEntities(database, entityBaseline),
+        updatedAt: createdAt,
+      },
+    });
   }
 
   return createTeachingOperationReceiptFromRecord({
@@ -469,32 +511,67 @@ function usesPostgresOperationSnapshot(env: Record<string, string | undefined>) 
   return selector === "postgres" || selector === "managed";
 }
 
-export async function loadTeachingOperationDatabase(
-  input: { dataDir?: string; env?: Record<string, string | undefined> } = {},
-): Promise<TeachingOperationDatabase> {
-  const env = input.env ?? process.env;
-  if (usesPostgresOperationSnapshot(env)) {
-    const { createUaisTeachingOperationPostgresRepository } = await import(
-      "./teaching-operations-postgres-store"
-    );
-    const snapshot = await createUaisTeachingOperationPostgresRepository({ env }).read();
-    return normalizeDatabase(snapshot.database);
-  }
-  return readTeachingOperationDatabase({ dataDir: input.dataDir });
+export type TeachingOperationSnapshotAccessInput = {
+  dataDir?: string;
+  env?: Record<string, string | undefined>;
+  repository?: TeachingOperationRepository;
+};
+
+function createTeachingOperationSnapshotAccess(
+  dataDir: string,
+  repository: TeachingOperationRepository | undefined,
+): TeachingOperationSnapshotAccessInput {
+  return {
+    dataDir,
+    ...(repository ? { repository } : {}),
+  };
 }
 
-export async function persistTeachingOperationDatabase(input: {
-  dataDir?: string;
-  database: TeachingOperationDatabase;
-  env?: Record<string, string | undefined>;
-}): Promise<void> {
-  const env = input.env ?? process.env;
-  if (usesPostgresOperationSnapshot(env)) {
-    const { createUaisTeachingOperationPostgresRepository } = await import(
-      "./teaching-operations-postgres-store"
-    );
-    await createUaisTeachingOperationPostgresRepository({ env }).write({
+export async function loadTeachingOperationDatabase(
+  input: TeachingOperationSnapshotAccessInput = {},
+): Promise<TeachingOperationDatabase> {
+  return (await loadTeachingOperationSnapshot(input)).database;
+}
+
+// The revision-carrying read. Every read-modify-write flow uses this one and
+// hands the revision back to `persistTeachingOperationDatabase`, so a writer that
+// read a snapshot another writer has since replaced is told to start over rather
+// than overwriting work it never saw. The file backend has no revisions - its
+// atomic replace plus the local write lock already serialize writers in one
+// process - so it answers without one and the guard below is a no-op there.
+export async function loadTeachingOperationSnapshot(
+  input: TeachingOperationSnapshotAccessInput = {},
+): Promise<{ database: TeachingOperationDatabase; revision?: string }> {
+  const repository = await resolveTeachingOperationSnapshotRepository(input);
+  if (repository) {
+    const snapshot = await repository.read();
+    return {
+      database: normalizeDatabase(snapshot.database),
+      ...(snapshot.revision ? { revision: snapshot.revision } : {}),
+    };
+  }
+  return { database: await readTeachingOperationDatabase({ dataDir: input.dataDir }) };
+}
+
+export async function persistTeachingOperationDatabase(
+  input: TeachingOperationSnapshotAccessInput & {
+    database: TeachingOperationDatabase;
+    // Absent means "I read no stored revision", which on the FILE backend is
+    // still an unconditional write - that backend has no revisions, and its
+    // atomic replace plus the local write lock already serialize writers in one
+    // process. On the managed backend it now means "I am the first writer", and
+    // a row that exists proves otherwise, so the write is refused rather than
+    // replacing a snapshot this caller never read. A caller that means to
+    // replace a snapshot it did not derive from - the backup restore - reads the
+    // current revision first and names it here.
+    expectedRevision?: string;
+  },
+): Promise<void> {
+  const repository = await resolveTeachingOperationSnapshotRepository(input);
+  if (repository) {
+    await repository.write({
       database: input.database,
+      ...(input.expectedRevision ? { expectedRevision: input.expectedRevision } : {}),
     });
     return;
   }
@@ -502,6 +579,107 @@ export async function persistTeachingOperationDatabase(input: {
     dataDir: resolveTeachingOperationDataDir(input.dataDir),
     database: input.database,
   });
+}
+
+// One guarded read-modify-write against the operations snapshot: read it with
+// its revision, let the caller rebuild it from exactly that read, and write it
+// back under that revision. A writer whose snapshot was replaced while it was
+// thinking loses the write and starts over from the fresh one, so two teachers
+// acting at the same moment no longer end with one of the two updates silently
+// gone. `apply` therefore has to be re-runnable: it may only derive a new
+// database from the one it is handed, never carry state between attempts.
+async function runGuardedTeachingOperationSnapshotWrite<T>(input: {
+  access: TeachingOperationSnapshotAccessInput;
+  apply: (
+    database: TeachingOperationDatabase,
+  ) => Promise<{ database: TeachingOperationDatabase; result: T }>;
+}): Promise<T> {
+  const writeRetry = createTeachingOperationWriteRetry();
+  for (let attempt = 0; attempt < teachingOperationMaxWriteAttempts; attempt += 1) {
+    const snapshot = await loadTeachingOperationSnapshot(input.access);
+    const applied = await input.apply(snapshot.database);
+    try {
+      await persistTeachingOperationDatabase({
+        ...input.access,
+        database: applied.database,
+        ...(snapshot.revision ? { expectedRevision: snapshot.revision } : {}),
+      });
+      return applied.result;
+    } catch (error) {
+      if (await writeRetry.shouldRetry({ attempt, error })) {
+        continue;
+      }
+      // A conflict that survives the ladder is exhausted contention, not a
+      // caller mistake: answer with the structured 409 rather than passing the
+      // backend's own revision-mismatch prose through.
+      throw writeRetry.isConflict(error) ? createTeachingOperationContentionError() : error;
+    }
+  }
+
+  throw createTeachingOperationContentionError();
+}
+
+// The same guard for the one flow that cannot re-run its body.
+//
+// Executing an action writes an export-manifest file and allocates an invite
+// code inside `createArtifacts`, before the snapshot is persisted, and the
+// receipt the teacher receives names both. Handing that body to
+// `runGuardedTeachingOperationSnapshotWrite` would re-create the file and burn a
+// second code on every lost race, which is why this write had no guard at all
+// and could overwrite a concurrent teacher's action outright.
+//
+// A lost race therefore re-reads the fresh snapshot and re-applies only the
+// values that were already built - no artifact is created twice, no code is
+// allocated twice - and retries the merge. Exhaustion answers with the same
+// structured 409 the other flows use.
+async function persistPendingTeachingOperationWrite(input: {
+  access: TeachingOperationSnapshotAccessInput;
+  database: TeachingOperationDatabase;
+  revision?: string;
+  pending: PendingTeachingOperationWrite;
+}): Promise<void> {
+  const writeRetry = createTeachingOperationWriteRetry();
+  let database = input.database;
+  let revision = input.revision;
+  for (let attempt = 0; attempt < teachingOperationMaxWriteAttempts; attempt += 1) {
+    try {
+      await persistTeachingOperationDatabase({
+        ...input.access,
+        database,
+        ...(revision ? { expectedRevision: revision } : {}),
+      });
+      return;
+    } catch (error) {
+      if (!(await writeRetry.shouldRetry({ attempt, error }))) {
+        throw writeRetry.isConflict(error) ? createTeachingOperationContentionError() : error;
+      }
+      const snapshot = await loadTeachingOperationSnapshot(input.access);
+      database = applyPendingTeachingOperationWrite(snapshot.database, input.pending);
+      revision = snapshot.revision;
+    }
+  }
+
+  throw createTeachingOperationContentionError();
+}
+
+// The managed repository is resolved once per call rather than held, so an env
+// change between requests still takes effect. `repository` is the injection seam
+// the durable-backend tests use to exercise contention without a live Postgres;
+// unset, resolution is exactly the env switch it always was.
+async function resolveTeachingOperationSnapshotRepository(
+  input: TeachingOperationSnapshotAccessInput,
+): Promise<TeachingOperationRepository | undefined> {
+  if (input.repository) {
+    return input.repository;
+  }
+  const env = input.env ?? process.env;
+  if (!usesPostgresOperationSnapshot(env)) {
+    return undefined;
+  }
+  const { createUaisTeachingOperationPostgresRepository } = await import(
+    "./teaching-operations-postgres-store"
+  );
+  return createUaisTeachingOperationPostgresRepository({ env });
 }
 
 export async function readTeachingOperationDatabaseBackup(input: {
@@ -558,6 +736,10 @@ export async function readTeachingGradebookUpdate(input: {
 
 export async function restoreTeachingOperationDatabaseBackup(input: {
   dataDir?: string;
+  // Same seam its sibling `rollbackTeachingOperationRecord` already carries.
+  // The route resolves the backend from the environment; naming a repository
+  // lets the snapshot half of a restore be exercised without one.
+  repository?: TeachingOperationRepository;
   backupId: string;
   actorId: string;
   audit: TeachingGradebookReleaseAuditInput;
@@ -606,7 +788,20 @@ export async function restoreTeachingOperationDatabaseBackup(input: {
       redaction: createRedaction(),
     };
 
-    await persistTeachingOperationDatabase({ dataDir, database: restoredDatabase });
+    // A restore is the one write that does NOT derive its database from the
+    // snapshot it replaces - it comes from a backup file - so it has to name the
+    // revision it is displacing explicitly. Without it the managed backend reads
+    // this as a first write and refuses. Read as late as possible, so the window
+    // between the read and the replace is only this call. The file backend has
+    // no revisions and answers `undefined`, which leaves its behaviour exactly
+    // as it was.
+    const access = createTeachingOperationSnapshotAccess(dataDir, input.repository);
+    const current = await loadTeachingOperationSnapshot(access);
+    await persistTeachingOperationDatabase({
+      ...access,
+      database: restoredDatabase,
+      ...(current.revision ? { expectedRevision: current.revision } : {}),
+    });
     return {
       receipt,
       database: restoredDatabase,
@@ -616,6 +811,7 @@ export async function restoreTeachingOperationDatabaseBackup(input: {
 
 export async function rollbackTeachingOperationRecord(input: {
   dataDir?: string;
+  repository?: TeachingOperationRepository;
   recordId: string;
   actorId: string;
   rollbackReason: string;
@@ -626,91 +822,101 @@ export async function rollbackTeachingOperationRecord(input: {
   database: TeachingOperationDatabase;
 }> {
   const dataDir = resolveTeachingOperationDataDir(input.dataDir);
-  return runWithTeachingOperationLocalWriteLock(dataDir, async () => {
-    const recordId = requireSafeId(input.recordId, "teaching operation record id");
-    const actorId = requireSafeId(input.actorId, "actor id");
-    const rollbackReason = requireSafeId(input.rollbackReason, "rollback reason");
-    const database = await loadTeachingOperationDatabase({ dataDir });
-    const record = database.records.find((item) => item.recordId === recordId);
-    if (!record) {
-      throw new TeachingOperationStoreError(404, "Teaching operation record was not found.");
-    }
-    if (!record.courseId) {
-      throw new TeachingOperationStoreError(
-        409,
-        "Teaching operation record has no course scope.",
-      );
-    }
-    if (
-      database.domainProjections.some(
-        (projection) =>
-          projection.objectType === "operation-rollback" &&
-          projection.targetRecordId === recordId,
-      )
-    ) {
-      throw new TeachingOperationStoreError(
-        409,
-        "Teaching operation record has already been rolled back.",
-      );
-    }
+  const access = createTeachingOperationSnapshotAccess(dataDir, input.repository);
+  return runWithTeachingOperationLocalWriteLock(dataDir, () =>
+    runGuardedTeachingOperationSnapshotWrite({
+      access,
+      apply: async (database) => {
+        const recordId = requireSafeId(input.recordId, "teaching operation record id");
+        const actorId = requireSafeId(input.actorId, "actor id");
+        const rollbackReason = requireSafeId(input.rollbackReason, "rollback reason");
+        const record = database.records.find((item) => item.recordId === recordId);
+        if (!record) {
+          throw new TeachingOperationStoreError(
+            404,
+            "Teaching operation record was not found.",
+          );
+        }
+        if (!record.courseId) {
+          throw new TeachingOperationStoreError(
+            409,
+            "Teaching operation record has no course scope.",
+          );
+        }
+        // Re-checked on every attempt rather than once: the writer this loop
+        // lost to may have been the rollback of this very record.
+        if (
+          database.domainProjections.some(
+            (projection) =>
+              projection.objectType === "operation-rollback" &&
+              projection.targetRecordId === recordId,
+          )
+        ) {
+          throw new TeachingOperationStoreError(
+            409,
+            "Teaching operation record has already been rolled back.",
+          );
+        }
 
-    const now = input.now ?? new Date();
-    const rolledBackAt = now.toISOString();
-    const auditEvent = createTeachingOperationRollbackAuditEvent({
-      audit: input.audit,
-      actorId,
-      record,
-      rollbackReason,
-      now,
-      createdAt: rolledBackAt,
-    });
-    const rollbackProjection: TeachingOperationRollbackProjection = {
-      objectId: `operation-rollback-${recordId}`,
-      objectType: "operation-rollback",
-      courseId: record.courseId,
-      targetRecordId: recordId,
-      targetOperationId: record.operationId,
-      targetActionSlot: record.actionSlot,
-      targetActionId: record.actionId,
-      rollbackStatus: "rolled-back",
-      rollbackReason,
-      rolledBackBy: actorId,
-      rolledBackAt,
-      storagePolicy: "domain-projection-teaching-operation-rollback",
-      redaction: createRedaction(),
-    };
-    const nextDatabase: TeachingOperationDatabase = {
-      ...database,
-      updatedAt: rolledBackAt,
-      auditEvents: [...database.auditEvents, auditEvent],
-      domainProjections: [...database.domainProjections, rollbackProjection],
-    };
-    const receipt: TeachingOperationRollbackReceipt = {
-      receiptId: `teaching-operation-rollback-${recordId}-${formatTimestampId(now)}`,
-      action: "rollback-teaching-operation-record",
-      actorId,
-      courseId: record.courseId,
-      targetRecordId: recordId,
-      traceId: input.audit.traceId,
-      rollbackReason,
-      status: "persisted",
-      storagePolicy: "local-json-teaching-operation-database",
-      storageWritePolicy: "atomic-json-file-replace",
-      responsibleSession: "S12",
-      createdAt: rolledBackAt,
-      redaction: createRedaction(),
-    };
+        const now = input.now ?? new Date();
+        const rolledBackAt = now.toISOString();
+        const auditEvent = createTeachingOperationRollbackAuditEvent({
+          audit: input.audit,
+          actorId,
+          record,
+          rollbackReason,
+          now,
+          createdAt: rolledBackAt,
+        });
+        const rollbackProjection: TeachingOperationRollbackProjection = {
+          objectId: `operation-rollback-${recordId}`,
+          objectType: "operation-rollback",
+          courseId: record.courseId,
+          targetRecordId: recordId,
+          targetOperationId: record.operationId,
+          targetActionSlot: record.actionSlot,
+          targetActionId: record.actionId,
+          rollbackStatus: "rolled-back",
+          rollbackReason,
+          rolledBackBy: actorId,
+          rolledBackAt,
+          storagePolicy: "domain-projection-teaching-operation-rollback",
+          redaction: createRedaction(),
+        };
+        const nextDatabase: TeachingOperationDatabase = {
+          ...database,
+          updatedAt: rolledBackAt,
+          auditEvents: [...database.auditEvents, auditEvent],
+          domainProjections: [...database.domainProjections, rollbackProjection],
+        };
+        const receipt: TeachingOperationRollbackReceipt = {
+          receiptId: `teaching-operation-rollback-${recordId}-${formatTimestampId(now)}`,
+          action: "rollback-teaching-operation-record",
+          actorId,
+          courseId: record.courseId,
+          targetRecordId: recordId,
+          traceId: input.audit.traceId,
+          rollbackReason,
+          status: "persisted",
+          storagePolicy: "local-json-teaching-operation-database",
+          storageWritePolicy: "atomic-json-file-replace",
+          responsibleSession: "S12",
+          createdAt: rolledBackAt,
+          redaction: createRedaction(),
+        };
 
-    await persistTeachingOperationDatabase({ dataDir, database: nextDatabase });
-    return {
-      receipt,
-      database: nextDatabase,
-    };
-  });
+        return {
+          database: nextDatabase,
+          result: { receipt, database: nextDatabase },
+        };
+      },
+    }),
+  );
 }
 
 export async function releaseTeachingGradebookUpdate(input: {
   dataDir?: string;
+  repository?: TeachingOperationRepository;
   objectId: string;
   actorId: string;
   audit: TeachingGradebookReleaseAuditInput;
@@ -722,92 +928,96 @@ export async function releaseTeachingGradebookUpdate(input: {
   receipt: TeachingGradebookReleaseReceipt;
 }> {
   const dataDir = resolveTeachingOperationDataDir(input.dataDir);
-  const database = await loadTeachingOperationDatabase({ dataDir });
-  const objectId = requireSafeId(input.objectId, "gradebook update id");
-  const actorId = requireSafeId(input.actorId, "actor id");
-  const providerRelease = input.providerRelease
-    ? normalizeTeachingGradebookReleaseProviderReceipt(input.providerRelease)
-    : undefined;
-  const projectionIndex = database.domainProjections.findIndex(
-    (item) => item.objectType === "gradebook-update" && item.objectId === objectId,
-  );
-  if (projectionIndex < 0) {
-    throw new TeachingOperationStoreError(404, "Gradebook update was not found.");
-  }
+  const access = createTeachingOperationSnapshotAccess(dataDir, input.repository);
+  return runGuardedTeachingOperationSnapshotWrite({
+    access,
+    apply: async (database) => {
+      const objectId = requireSafeId(input.objectId, "gradebook update id");
+      const actorId = requireSafeId(input.actorId, "actor id");
+      const providerRelease = input.providerRelease
+        ? normalizeTeachingGradebookReleaseProviderReceipt(input.providerRelease)
+        : undefined;
+      const projectionIndex = database.domainProjections.findIndex(
+        (item) => item.objectType === "gradebook-update" && item.objectId === objectId,
+      );
+      if (projectionIndex < 0) {
+        throw new TeachingOperationStoreError(404, "Gradebook update was not found.");
+      }
 
-  const existingProjection = database.domainProjections[projectionIndex];
-  if (existingProjection.objectType !== "gradebook-update") {
-    throw new TeachingOperationStoreError(500, "Gradebook update projection is invalid.");
-  }
-  const now = input.now ?? new Date();
-  const releasedAt = now.toISOString();
-  const gradebookUpdate: TeachingOperationGradebookUpdateProjection = {
-    ...existingProjection,
-    updateStatus: "released",
-    releasedBy: existingProjection.releasedBy ?? actorId,
-    releasedAt: existingProjection.releasedAt ?? releasedAt,
-    ...(providerRelease ?? {}),
-  };
-  const notification: TeachingOperationGradeReleaseNotificationProjection = {
-    objectId: `grade-release-notification-${gradebookUpdate.courseId}`,
-    objectType: "grade-release-notification",
-    courseId: gradebookUpdate.courseId,
-    gradebookUpdateId: gradebookUpdate.objectId,
-    queuedBy: actorId,
-    notificationStatus: "queued",
-    deliveryChannel: "student-grade-release-notification",
-    operationRecordId: gradebookUpdate.operationRecordId,
-    ...(gradebookUpdate.sourceAction ? { sourceAction: gradebookUpdate.sourceAction } : {}),
-    deliveryPolicy: "teacher-confirmed-grade-release-before-student-notification",
-    queuedAt: releasedAt,
-    storagePolicy: "domain-projection-teaching-grade-release-notification",
-    redaction: createRedaction(),
-  };
-  const receipt: TeachingGradebookReleaseReceipt = {
-    receiptId: `gradebook-release-${gradebookUpdate.objectId}-${formatTimestampId(now)}`,
-    action: "release-gradebook-update",
-    actorId,
-    courseId: gradebookUpdate.courseId,
-    gradebookUpdateId: gradebookUpdate.objectId,
-    traceId: input.audit.traceId,
-    status: "persisted",
-    ...(providerRelease ?? {}),
-    storagePolicy: "local-json-teaching-operation-database",
-    storageWritePolicy: "atomic-json-file-replace",
-    responsibleSession: "S12",
-    createdAt: releasedAt,
-    redaction: createRedaction(),
-  };
-  const auditEvent = createGradebookReleaseAuditEvent({
-    audit: input.audit,
-    actorId,
-    courseId: gradebookUpdate.courseId,
-    gradebookUpdateId: gradebookUpdate.objectId,
-    now,
-    createdAt: releasedAt,
+      const existingProjection = database.domainProjections[projectionIndex];
+      if (existingProjection.objectType !== "gradebook-update") {
+        throw new TeachingOperationStoreError(500, "Gradebook update projection is invalid.");
+      }
+      const now = input.now ?? new Date();
+      const releasedAt = now.toISOString();
+      const gradebookUpdate: TeachingOperationGradebookUpdateProjection = {
+        ...existingProjection,
+        updateStatus: "released",
+        releasedBy: existingProjection.releasedBy ?? actorId,
+        releasedAt: existingProjection.releasedAt ?? releasedAt,
+        ...(providerRelease ?? {}),
+      };
+      const notification: TeachingOperationGradeReleaseNotificationProjection = {
+        objectId: `grade-release-notification-${gradebookUpdate.courseId}`,
+        objectType: "grade-release-notification",
+        courseId: gradebookUpdate.courseId,
+        gradebookUpdateId: gradebookUpdate.objectId,
+        queuedBy: actorId,
+        notificationStatus: "queued",
+        deliveryChannel: "student-grade-release-notification",
+        operationRecordId: gradebookUpdate.operationRecordId,
+        ...(gradebookUpdate.sourceAction ? { sourceAction: gradebookUpdate.sourceAction } : {}),
+        deliveryPolicy: "teacher-confirmed-grade-release-before-student-notification",
+        queuedAt: releasedAt,
+        storagePolicy: "domain-projection-teaching-grade-release-notification",
+        redaction: createRedaction(),
+      };
+      const receipt: TeachingGradebookReleaseReceipt = {
+        receiptId: `gradebook-release-${gradebookUpdate.objectId}-${formatTimestampId(now)}`,
+        action: "release-gradebook-update",
+        actorId,
+        courseId: gradebookUpdate.courseId,
+        gradebookUpdateId: gradebookUpdate.objectId,
+        traceId: input.audit.traceId,
+        status: "persisted",
+        ...(providerRelease ?? {}),
+        storagePolicy: "local-json-teaching-operation-database",
+        storageWritePolicy: "atomic-json-file-replace",
+        responsibleSession: "S12",
+        createdAt: releasedAt,
+        redaction: createRedaction(),
+      };
+      const auditEvent = createGradebookReleaseAuditEvent({
+        audit: input.audit,
+        actorId,
+        courseId: gradebookUpdate.courseId,
+        gradebookUpdateId: gradebookUpdate.objectId,
+        now,
+        createdAt: releasedAt,
+      });
+      const notificationIndex = database.domainProjections.findIndex(
+        (item) => item.objectType === "grade-release-notification" && item.objectId === notification.objectId,
+      );
+
+      database.domainProjections[projectionIndex] = gradebookUpdate;
+      if (notificationIndex >= 0) {
+        database.domainProjections[notificationIndex] = notification;
+      } else {
+        database.domainProjections.push(notification);
+      }
+      database.auditEvents.push(auditEvent);
+      database.updatedAt = releasedAt;
+      return {
+        database,
+        result: { gradebookUpdate, notification, receipt },
+      };
+    },
   });
-  const notificationIndex = database.domainProjections.findIndex(
-    (item) => item.objectType === "grade-release-notification" && item.objectId === notification.objectId,
-  );
-
-  database.domainProjections[projectionIndex] = gradebookUpdate;
-  if (notificationIndex >= 0) {
-    database.domainProjections[notificationIndex] = notification;
-  } else {
-    database.domainProjections.push(notification);
-  }
-  database.auditEvents.push(auditEvent);
-  database.updatedAt = releasedAt;
-  await persistTeachingOperationDatabase({ dataDir, database });
-  return {
-    gradebookUpdate,
-    notification,
-    receipt,
-  };
 }
 
 export async function rollbackTeachingGradebookRelease(input: {
   dataDir?: string;
+  repository?: TeachingOperationRepository;
   objectId: string;
   actorId: string;
   audit: TeachingGradebookReleaseAuditInput;
@@ -819,292 +1029,98 @@ export async function rollbackTeachingGradebookRelease(input: {
   receipt: TeachingGradebookReleaseRollbackReceipt;
 }> {
   const dataDir = resolveTeachingOperationDataDir(input.dataDir);
-  const database = await loadTeachingOperationDatabase({ dataDir });
-  const objectId = requireSafeId(input.objectId, "gradebook update id");
-  const actorId = requireSafeId(input.actorId, "actor id");
-  const projectionIndex = database.domainProjections.findIndex(
-    (item) => item.objectType === "gradebook-update" && item.objectId === objectId,
-  );
-  if (projectionIndex < 0) {
-    throw new TeachingOperationStoreError(404, "Gradebook update was not found.");
-  }
+  const access = createTeachingOperationSnapshotAccess(dataDir, input.repository);
+  return runGuardedTeachingOperationSnapshotWrite({
+    access,
+    apply: async (database) => {
+      const objectId = requireSafeId(input.objectId, "gradebook update id");
+      const actorId = requireSafeId(input.actorId, "actor id");
+      const projectionIndex = database.domainProjections.findIndex(
+        (item) => item.objectType === "gradebook-update" && item.objectId === objectId,
+      );
+      if (projectionIndex < 0) {
+        throw new TeachingOperationStoreError(404, "Gradebook update was not found.");
+      }
 
-  const existingProjection = database.domainProjections[projectionIndex];
-  if (existingProjection.objectType !== "gradebook-update") {
-    throw new TeachingOperationStoreError(500, "Gradebook update projection is invalid.");
-  }
-  if (existingProjection.updateStatus !== "released") {
-    throw new TeachingOperationStoreError(409, "Gradebook update is not released.");
-  }
+      const existingProjection = database.domainProjections[projectionIndex];
+      if (existingProjection.objectType !== "gradebook-update") {
+        throw new TeachingOperationStoreError(500, "Gradebook update projection is invalid.");
+      }
+      if (existingProjection.updateStatus !== "released") {
+        throw new TeachingOperationStoreError(409, "Gradebook update is not released.");
+      }
 
-  const now = input.now ?? new Date();
-  const rolledBackAt = now.toISOString();
-  const providerRollback = input.providerRollback
-    ? normalizeTeachingGradebookReleaseRollbackProviderReceipt(input.providerRollback)
-    : undefined;
-  const gradebookUpdate: TeachingOperationGradebookUpdateProjection = {
-    ...existingProjection,
-    updateStatus: "release-rolled-back",
-    releaseRolledBackBy: actorId,
-    releaseRolledBackAt: rolledBackAt,
-    ...(providerRollback ?? {}),
-  };
-  const notification: TeachingOperationGradeReleaseRollbackNotificationProjection = {
-    objectId: `grade-release-rollback-notification-${gradebookUpdate.courseId}`,
-    objectType: "grade-release-rollback-notification",
-    courseId: gradebookUpdate.courseId,
-    gradebookUpdateId: gradebookUpdate.objectId,
-    queuedBy: actorId,
-    notificationStatus: "queued",
-    deliveryChannel: "student-grade-release-rollback-notification",
-    operationRecordId: gradebookUpdate.operationRecordId,
-    ...(gradebookUpdate.sourceAction ? { sourceAction: gradebookUpdate.sourceAction } : {}),
-    deliveryPolicy: "teacher-confirmed-grade-release-rollback-before-student-notification",
-    queuedAt: rolledBackAt,
-    storagePolicy: "domain-projection-teaching-grade-release-rollback-notification",
-    redaction: createRedaction(),
-  };
-  const receipt: TeachingGradebookReleaseRollbackReceipt = {
-    receiptId: `gradebook-release-rollback-${gradebookUpdate.objectId}-${formatTimestampId(now)}`,
-    action: "rollback-gradebook-release",
-    actorId,
-    courseId: gradebookUpdate.courseId,
-    gradebookUpdateId: gradebookUpdate.objectId,
-    traceId: input.audit.traceId,
-    status: "persisted",
-    ...(providerRollback ?? {}),
-    storagePolicy: "local-json-teaching-operation-database",
-    storageWritePolicy: "atomic-json-file-replace",
-    responsibleSession: "S12",
-    createdAt: rolledBackAt,
-    redaction: createRedaction(),
-  };
-  const auditEvent = createGradebookReleaseAuditEvent({
-    audit: input.audit,
-    eventType: "teaching-gradebook-update.release-rolled-back",
-    actorId,
-    courseId: gradebookUpdate.courseId,
-    gradebookUpdateId: gradebookUpdate.objectId,
-    now,
-    createdAt: rolledBackAt,
+      const now = input.now ?? new Date();
+      const rolledBackAt = now.toISOString();
+      const providerRollback = input.providerRollback
+        ? normalizeTeachingGradebookReleaseRollbackProviderReceipt(input.providerRollback)
+        : undefined;
+      const gradebookUpdate: TeachingOperationGradebookUpdateProjection = {
+        ...existingProjection,
+        updateStatus: "release-rolled-back",
+        releaseRolledBackBy: actorId,
+        releaseRolledBackAt: rolledBackAt,
+        ...(providerRollback ?? {}),
+      };
+      const notification: TeachingOperationGradeReleaseRollbackNotificationProjection = {
+        objectId: `grade-release-rollback-notification-${gradebookUpdate.courseId}`,
+        objectType: "grade-release-rollback-notification",
+        courseId: gradebookUpdate.courseId,
+        gradebookUpdateId: gradebookUpdate.objectId,
+        queuedBy: actorId,
+        notificationStatus: "queued",
+        deliveryChannel: "student-grade-release-rollback-notification",
+        operationRecordId: gradebookUpdate.operationRecordId,
+        ...(gradebookUpdate.sourceAction ? { sourceAction: gradebookUpdate.sourceAction } : {}),
+        deliveryPolicy: "teacher-confirmed-grade-release-rollback-before-student-notification",
+        queuedAt: rolledBackAt,
+        storagePolicy: "domain-projection-teaching-grade-release-rollback-notification",
+        redaction: createRedaction(),
+      };
+      const receipt: TeachingGradebookReleaseRollbackReceipt = {
+        receiptId: `gradebook-release-rollback-${gradebookUpdate.objectId}-${formatTimestampId(now)}`,
+        action: "rollback-gradebook-release",
+        actorId,
+        courseId: gradebookUpdate.courseId,
+        gradebookUpdateId: gradebookUpdate.objectId,
+        traceId: input.audit.traceId,
+        status: "persisted",
+        ...(providerRollback ?? {}),
+        storagePolicy: "local-json-teaching-operation-database",
+        storageWritePolicy: "atomic-json-file-replace",
+        responsibleSession: "S12",
+        createdAt: rolledBackAt,
+        redaction: createRedaction(),
+      };
+      const auditEvent = createGradebookReleaseAuditEvent({
+        audit: input.audit,
+        eventType: "teaching-gradebook-update.release-rolled-back",
+        actorId,
+        courseId: gradebookUpdate.courseId,
+        gradebookUpdateId: gradebookUpdate.objectId,
+        now,
+        createdAt: rolledBackAt,
+      });
+      const notificationIndex = database.domainProjections.findIndex(
+        (item) =>
+          item.objectType === "grade-release-rollback-notification" &&
+          item.objectId === notification.objectId,
+      );
+
+      database.domainProjections[projectionIndex] = gradebookUpdate;
+      if (notificationIndex >= 0) {
+        database.domainProjections[notificationIndex] = notification;
+      } else {
+        database.domainProjections.push(notification);
+      }
+      database.auditEvents.push(auditEvent);
+      database.updatedAt = rolledBackAt;
+      return {
+        database,
+        result: { gradebookUpdate, notification, receipt },
+      };
+    },
   });
-  const notificationIndex = database.domainProjections.findIndex(
-    (item) =>
-      item.objectType === "grade-release-rollback-notification" &&
-      item.objectId === notification.objectId,
-  );
-
-  database.domainProjections[projectionIndex] = gradebookUpdate;
-  if (notificationIndex >= 0) {
-    database.domainProjections[notificationIndex] = notification;
-  } else {
-    database.domainProjections.push(notification);
-  }
-  database.auditEvents.push(auditEvent);
-  database.updatedAt = rolledBackAt;
-  await persistTeachingOperationDatabase({ dataDir, database });
-  return {
-    gradebookUpdate,
-    notification,
-    receipt,
-  };
-}
-
-export async function releaseExternalTeachingGradebookUpdate(input: {
-  gradebookUpdate: TeachingOperationGradebookUpdateProjection;
-  actorId: string;
-  audit: TeachingGradebookReleaseAuditInput;
-  appendExternalTeachingOperation: TeachingOperationExternalAppendAdapter;
-  providerRelease?: TeachingGradebookReleaseProviderReceipt;
-  now?: Date;
-}): Promise<{
-  gradebookUpdate: TeachingOperationGradebookUpdateProjection;
-  notification: TeachingOperationGradeReleaseNotificationProjection;
-  receipt: TeachingGradebookReleaseReceipt;
-}> {
-  const actorId = requireSafeId(input.actorId, "actor id");
-  const providerRelease = input.providerRelease
-    ? normalizeTeachingGradebookReleaseProviderReceipt(input.providerRelease)
-    : undefined;
-  const now = input.now ?? new Date();
-  const releasedAt = now.toISOString();
-  const gradebookUpdate: TeachingOperationGradebookUpdateProjection = {
-    ...input.gradebookUpdate,
-    updateStatus: "released",
-    releasedBy: input.gradebookUpdate.releasedBy ?? actorId,
-    releasedAt: input.gradebookUpdate.releasedAt ?? releasedAt,
-    ...(providerRelease ?? {}),
-  };
-  const notification: TeachingOperationGradeReleaseNotificationProjection = {
-    objectId: `grade-release-notification-${gradebookUpdate.courseId}`,
-    objectType: "grade-release-notification",
-    courseId: gradebookUpdate.courseId,
-    gradebookUpdateId: gradebookUpdate.objectId,
-    queuedBy: actorId,
-    notificationStatus: "queued",
-    deliveryChannel: "student-grade-release-notification",
-    operationRecordId: gradebookUpdate.operationRecordId,
-    ...(gradebookUpdate.sourceAction ? { sourceAction: gradebookUpdate.sourceAction } : {}),
-    deliveryPolicy: "teacher-confirmed-grade-release-before-student-notification",
-    queuedAt: releasedAt,
-    storagePolicy: "domain-projection-teaching-grade-release-notification",
-    redaction: createRedaction(),
-  };
-  const receipt: TeachingGradebookReleaseReceipt = {
-    receiptId: `gradebook-release-${gradebookUpdate.objectId}-${formatTimestampId(now)}`,
-    action: "release-gradebook-update",
-    actorId,
-    courseId: gradebookUpdate.courseId,
-    gradebookUpdateId: gradebookUpdate.objectId,
-    traceId: input.audit.traceId,
-    status: "persisted",
-    ...(providerRelease ?? {}),
-    storagePolicy: "external-redacted-teaching-operation-append",
-    storageWritePolicy: "external-append-only-operation-log",
-    responsibleSession: "S12",
-    createdAt: releasedAt,
-    redaction: createRedaction(),
-  };
-  const auditEvent = createGradebookReleaseAuditEvent({
-    audit: input.audit,
-    actorId,
-    courseId: gradebookUpdate.courseId,
-    gradebookUpdateId: gradebookUpdate.objectId,
-    now,
-    createdAt: releasedAt,
-  });
-  await input.appendExternalTeachingOperation({
-    record: createGradebookReleaseExternalRecord({
-      receiptId: receipt.receiptId,
-      actionId: "save-review-queue",
-      actorId,
-      courseId: gradebookUpdate.courseId,
-      sourceAction: gradebookUpdate.sourceAction,
-      createdAt: releasedAt,
-      domainProjections: [gradebookUpdate, notification],
-    }),
-    auditEvent,
-  });
-
-  return {
-    gradebookUpdate,
-    notification,
-    receipt,
-  };
-}
-
-export async function rollbackExternalTeachingGradebookRelease(input: {
-  gradebookUpdate: TeachingOperationGradebookUpdateProjection;
-  actorId: string;
-  audit: TeachingGradebookReleaseAuditInput;
-  appendExternalTeachingOperation: TeachingOperationExternalAppendAdapter;
-  providerRollback?: TeachingGradebookReleaseRollbackProviderReceipt;
-  now?: Date;
-}): Promise<{
-  gradebookUpdate: TeachingOperationGradebookUpdateProjection;
-  notification: TeachingOperationGradeReleaseRollbackNotificationProjection;
-  receipt: TeachingGradebookReleaseRollbackReceipt;
-}> {
-  if (input.gradebookUpdate.updateStatus !== "released") {
-    throw new TeachingOperationStoreError(409, "Gradebook update is not released.");
-  }
-
-  const actorId = requireSafeId(input.actorId, "actor id");
-  const now = input.now ?? new Date();
-  const rolledBackAt = now.toISOString();
-  const providerRollback = input.providerRollback
-    ? normalizeTeachingGradebookReleaseRollbackProviderReceipt(input.providerRollback)
-    : undefined;
-  const gradebookUpdate: TeachingOperationGradebookUpdateProjection = {
-    ...input.gradebookUpdate,
-    updateStatus: "release-rolled-back",
-    releaseRolledBackBy: actorId,
-    releaseRolledBackAt: rolledBackAt,
-    ...(providerRollback ?? {}),
-  };
-  const notification: TeachingOperationGradeReleaseRollbackNotificationProjection = {
-    objectId: `grade-release-rollback-notification-${gradebookUpdate.courseId}`,
-    objectType: "grade-release-rollback-notification",
-    courseId: gradebookUpdate.courseId,
-    gradebookUpdateId: gradebookUpdate.objectId,
-    queuedBy: actorId,
-    notificationStatus: "queued",
-    deliveryChannel: "student-grade-release-rollback-notification",
-    operationRecordId: gradebookUpdate.operationRecordId,
-    ...(gradebookUpdate.sourceAction ? { sourceAction: gradebookUpdate.sourceAction } : {}),
-    deliveryPolicy: "teacher-confirmed-grade-release-rollback-before-student-notification",
-    queuedAt: rolledBackAt,
-    storagePolicy: "domain-projection-teaching-grade-release-rollback-notification",
-    redaction: createRedaction(),
-  };
-  const receipt: TeachingGradebookReleaseRollbackReceipt = {
-    receiptId: `gradebook-release-rollback-${gradebookUpdate.objectId}-${formatTimestampId(now)}`,
-    action: "rollback-gradebook-release",
-    actorId,
-    courseId: gradebookUpdate.courseId,
-    gradebookUpdateId: gradebookUpdate.objectId,
-    traceId: input.audit.traceId,
-    status: "persisted",
-    ...(providerRollback ?? {}),
-    storagePolicy: "external-redacted-teaching-operation-append",
-    storageWritePolicy: "external-append-only-operation-log",
-    responsibleSession: "S12",
-    createdAt: rolledBackAt,
-    redaction: createRedaction(),
-  };
-  const auditEvent = createGradebookReleaseAuditEvent({
-    audit: input.audit,
-    eventType: "teaching-gradebook-update.release-rolled-back",
-    actorId,
-    courseId: gradebookUpdate.courseId,
-    gradebookUpdateId: gradebookUpdate.objectId,
-    now,
-    createdAt: rolledBackAt,
-  });
-  await input.appendExternalTeachingOperation({
-    record: createGradebookReleaseExternalRecord({
-      receiptId: receipt.receiptId,
-      actionId: "save-review-queue",
-      actorId,
-      courseId: gradebookUpdate.courseId,
-      sourceAction: gradebookUpdate.sourceAction,
-      createdAt: rolledBackAt,
-      domainProjections: [gradebookUpdate, notification],
-    }),
-    auditEvent,
-  });
-
-  return {
-    gradebookUpdate,
-    notification,
-    receipt,
-  };
-}
-
-function createGradebookReleaseExternalRecord(input: {
-  receiptId: string;
-  actionId: TeachingOperationActionId;
-  actorId: string;
-  courseId: string;
-  sourceAction?: string;
-  createdAt: string;
-  domainProjections: TeachingOperationDomainProjection[];
-}): TeachingOperationRecord {
-  return {
-    recordId: input.receiptId,
-    operationId: "grading",
-    actionSlot: "primary",
-    actionId: input.actionId,
-    actorId: input.actorId,
-    courseId: input.courseId,
-    ...(input.sourceAction ? { sourceAction: input.sourceAction } : {}),
-    createdAt: input.createdAt,
-    status: "persisted",
-    storagePolicy: "external-redacted-teaching-operation-append",
-    redaction: createRedaction(),
-    artifacts: input.domainProjections.map(createDomainProjectionArtifact),
-    domainProjections: input.domainProjections,
-  };
 }
 
 export async function readTeachingOperationExportManifest(
@@ -1315,16 +1331,6 @@ async function createArtifacts(input: {
   }
 
   return [databaseRecord];
-}
-
-function createDomainProjectionArtifact(
-  projection: TeachingOperationDomainProjection,
-): TeachingOperationArtifact {
-  return {
-    kind: "domain-object",
-    objectType: projection.objectType,
-    objectId: projection.objectId,
-  };
 }
 
 function createExportManifest(input: {
