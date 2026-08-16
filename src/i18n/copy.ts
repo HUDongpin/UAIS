@@ -28,11 +28,46 @@ export const copy = {
       light: "浅色",
       dark: "深色",
       user: "教师账号",
+      menu: "打开导航菜单",
+      menuClose: "关闭导航菜单",
+      menuTitle: "导航",
+    },
+    // Shared by every auth dead-end: the playback stage, the chatroom notices
+    // and the student dashboard all have to send an expired session to /login
+    // instead of leaving the learner on a surface that can no longer load.
+    auth: {
+      signIn: "重新登录",
+      sessionExpiredTitle: "登录状态已失效",
+      sessionExpiredBody:
+        "为了保护你的学习记录，请重新登录后再查看学生看板。",
+      // 这条文案原本承诺“稍后会自动重试”，但学生看板只在挂载时读一次课程接口，
+      // 没有任何重试循环——学生等下去只会一直看到示例课程。现在只说事实，并给出
+      // 真正可行的下一步。
+      networkRetry: "暂时无法连接服务器，下面显示的是示例内容；请刷新页面重试。",
+      // 每个报错都应当告诉学生下一步找谁。真正的支持渠道（邮箱/工单/企业微信）
+      // 尚未由项目负责人确定，所以这里先放一句中立的默认文案，并且只放这一处：
+      // 渠道确定后，只需要改这一个键，登录失败与聊天室不可用两处会同时更新。
+      supportChannel: "如果问题持续出现，请联系任课教师获取帮助。",
+      // 折叠起来的服务端原文。给排查问题的人看，不是给学生读的指令。
+      technicalDetail: "技术详情",
     },
     coursePlaza: {
       title: "课程广场",
       summary: "选择课程，进入清晰、节制、可继续扩展的大学课堂学习空间。",
       empty: "暂无更多课程。当前模板只展示两门示例课程。",
+      // 广场此前只渲染两门模板示例课程，学生已加入的真实班级一门都看不到。
+      // 真实班级排在最上方，示例课程降级到明确标注的示例区。
+      myCourses: "我的课程",
+      myCoursesSummary: "以下班级来自你已加入或已提交申请的邀请码。",
+      sampleCourses: "示例课程",
+      sampleCoursesSummary: "以下为模板示例课程，仅用于展示卡片样式，不代表真实课程或学习进度。",
+      membershipApproved: "已加入",
+      membershipPending: "等待教师审批",
+      // 被拒绝或被移出的班级此前会直接从列表里消失，学生只看到课程不见了，
+      // 却看不到原因。现在保留这一行并写明状态，但不再提供进入入口。
+      membershipRejected: "教师未通过申请",
+      membershipRemoved: "已被移出班级",
+      membershipClosedNote: "这个班级已不在你的学习列表中。如需重新加入，请联系任课教师。",
     },
     learning: {
       title: "我的学习",
@@ -59,8 +94,33 @@ export const copy = {
       agentAccessDenied:
         "你还没有这门课程的智能体使用权限，请先加入或创建这门课程后再试。",
       agentUnavailable: "智能服务暂时不可用，请稍后再试。",
+      // A 429 used to render as agentUnavailable, which blamed the AI service
+      // for the sender's own send rate and told them nothing about when to try
+      // again. {seconds} is filled from the response's Retry-After header.
+      agentRateLimited: "发送过于频繁，请在 {seconds} 秒后重试。",
+      agentRateLimitedShortly: "发送过于频繁，请稍后重试。",
       agentMessageTooLong: "单条消息不能超过 4000 字，请精简后再发送。",
       agentRequestInvalid: "消息未通过检查，请调整内容后重试。",
+      // 服务端的存档回执说这条消息没有写入聊天室，同学不会看到它。气泡保留在
+      // 屏幕上并提供重试，而不是伪装成已送达。
+      chatMessageUndelivered: "未送达，点按重试",
+      // 读得到接口、读不到存档：线程里已有的消息继续显示，只是提示可能不完整。
+      chatHistoryUnavailable: "历史记录暂不可用，当前仅显示本次会话的消息。",
+      // 聊天室是滚动窗口而不是档案馆：写满之后每条新消息都会挤掉最早的一条。
+      // 房间、导出文档、PDF 和分享页共用这一句，因为它们replay的是同一份记录。
+      chatroomWindowTrimmed: "较早的消息已滚动归档，导出与分享同样不含",
+      // 教师冻结了房间：学生仍然读得到全部记录，只是暂时不能发言。
+      chatroomFrozenNotice: "本聊天室已被授课教师暂时冻结，暂时无法发送新消息。",
+      chatroomModerationTitle: "教师管理",
+      chatroomModerationHide: "隐藏",
+      chatroomModerationHidden: "已隐藏，刷新后成员不再看到这条消息。",
+      chatroomModerationFreeze: "冻结聊天室",
+      chatroomModerationUnfreeze: "解除冻结",
+      chatroomModerationStateFrozen: "当前状态：已冻结",
+      chatroomModerationStateOpen: "当前状态：开放",
+      chatroomModerationFrozen: "聊天室已冻结，学生暂时无法发言。",
+      chatroomModerationUnfrozen: "聊天室已解除冻结。",
+      chatroomModerationFailed: "操作未生效，请稍后重试。",
       chatroomCoursePickerLabel: "选择聊天室课程",
       chatroomActiveCourseLabel: "当前课程",
       chatroomDemoCourseLabel: "示例课程：初等数学研究",
@@ -80,6 +140,15 @@ export const copy = {
       groupAgentStatusThinking: "思考中",
       groupAgentStatusReplied: "已回复",
       groupCardTitle: "我的小组",
+      // 手机上聊天线程排在最前，成员与智能体名单折叠在其下方。
+      groupRosterExpand: "展开成员与智能体",
+      groupRosterCollapse: "收起成员与智能体",
+      // 读者正在回看旧消息时不再强制滚动，改为提示有新消息。
+      chatroomJumpToLatest: "回到最新",
+      // 窄屏上的学习区域跳转：课件与讲解在上，智能导学面板在下。
+      playbackStageTab: "课件与讲解",
+      playbackCompanionTab: "智能导学",
+      playbackViewSwitchLabel: "学习区域快速跳转",
       exportPrintHint: "使用浏览器打印为 PDF",
       exportPageTitle: "聊天记录导出",
       exportPrint: "打印",
@@ -97,6 +166,16 @@ export const copy = {
       sharePageNotice: "这是只读分享页面，仅显示成员昵称，不包含账号信息。",
       shareSignInRequired: "请先登录，再生成分享链接。",
       shareFailed: "分享链接生成失败，请稍后再试。",
+      // 每条分享链接都会自己到期。把日期写在链接旁边，是为了让复制链接的人知道
+      // 它什么时候停止工作，而不是某天突然打不开。
+      shareExpiresLabel: "链接有效期至",
+      // 撤销是链接唯一的“反悔”方式：在此之前，链接一旦复制出去就只能等它自己过期。
+      shareRevoke: "撤销链接",
+      shareRevokeConfirmTitle: "撤销后，已复制这条链接的人将无法再打开。",
+      shareRevokeConfirm: "确认撤销",
+      shareRevokeCancel: "取消",
+      shareRevoked: "链接已撤销，之前复制的链接不再可用。",
+      shareRevokeFailed: "撤销失败，请稍后再试。",
     },
     teaching: {
       title: "我的教学",
@@ -144,6 +223,52 @@ export const copy = {
       groupMemberDuplicate: "小组成员不能重复。",
       groupMemberInvalid: "小组成员标识无效。",
       groupMemberNotApproved: "只能选择已批准加入课程的学生。",
+      groupMemberAlreadyGrouped: "该学生已在本课程的其他小组中，请先将其移出。",
+      groupMemberGroupedBadge: "已分组",
+      groupMemberFilterLabel: "按姓名筛选可选学生",
+      groupMemberFilterPlaceholder: "输入学生姓名",
+      groupMemberFilterEmpty: "没有匹配的学生。",
+      groupAutoSplitTitle: "自动分组",
+      groupAutoSplitSummary: "把尚未分组的已批准学生按每组人数自动切分，可随后手动调整。",
+      groupAutoSplitSizeLabel: "每组人数",
+      groupAutoSplitAction: "自动分组",
+      groupAutoSplitRunning: "正在自动分组…",
+      groupAutoSplitSizeInvalid: "每组人数需要在 2 到 12 之间。",
+      groupAutoSplitNoEligible: "没有足够的未分组学生，至少需要 2 人。",
+      rosterPanelTitle: "学生名单",
+      rosterFilterLabel: "按姓名筛选学生",
+      rosterFilterPlaceholder: "输入学生姓名",
+      rosterFilterEmpty: "没有匹配的学生。",
+      rosterPendingTitle: "待审批",
+      rosterApprovedTitle: "已批准",
+      rosterClosedTitle: "已关闭的申请",
+      rosterRejectedBadge: "已拒绝",
+      rosterRemovedBadge: "已移出",
+      rosterNoPending: "没有待审批的加入申请。",
+      rosterNoApproved: "还没有已批准的学生。",
+      rosterApprove: "批准加入",
+      rosterReject: "拒绝",
+      rosterRemove: "移出班级",
+      rosterApproveAll: "全部批准",
+      rosterApproveAllConfirmTitle: "确认批准全部待审批申请？",
+      rosterApproveAllConfirm: "确认批准",
+      rosterRemoveConfirm: "确认移出",
+      rosterCancel: "取消",
+      inviteScanHint: "扫描二维码、打开加入链接，或在课程广场页输入邀请码。",
+      inviteValidityLabel: "有效期",
+      inviteNoExpiry: "无过期时间",
+      inviteJoinLimitLabel: "加入上限",
+      inviteNoJoinLimit: "不限人数",
+      inviteAvailabilityLabel: "邀请码状态",
+      inviteExpiryFieldLabel: "有效期（留空表示不过期）",
+      inviteMaxJoinsFieldLabel: "加入上限（留空表示不限人数）",
+      inviteDisabledFieldLabel: "停用该邀请码",
+      workspaceCourseSelectLabel: "工作台操作课程",
+      workspaceCoursePlaceholder: "请选择课程",
+      inviteClassSelectLabel: "操作班级",
+      inviteClassPlaceholder: "请选择班级",
+      inviteTargetRequired: "请先选择课程和班级，再执行邀请码操作。",
+      inviteTargetPending: "选择班级后显示该邀请码的实际策略。",
     },
     common: {
       enterLearning: "进入学习",
@@ -175,11 +300,44 @@ export const copy = {
       light: "Light",
       dark: "Dark",
       user: "Teacher",
+      menu: "Open navigation menu",
+      menuClose: "Close navigation menu",
+      menuTitle: "Navigation",
+    },
+    auth: {
+      signIn: "Sign in again",
+      sessionExpiredTitle: "Your session has expired",
+      sessionExpiredBody:
+        "Sign in again to load your student dashboard. Until then this page cannot show your courses.",
+      // "This page will retry shortly" promised a retry loop that does not
+      // exist: the dashboard reads the courses endpoint once, on mount. The
+      // copy now states what is on screen and the one action that actually
+      // re-runs the read.
+      networkRetry:
+        "We could not reach the server, so the courses below are sample content. Refresh the page to try again.",
+      // One neutral default until the owner names a real support channel; every
+      // error surface reads this single key, so swapping it swaps them all.
+      supportChannel: "If this keeps happening, contact your course teacher for help.",
+      technicalDetail: "Technical details",
     },
     coursePlaza: {
       title: "Course Plaza",
       summary: "Choose a course and enter a calm university learning workspace.",
       empty: "No more courses. This template intentionally shows two sample courses.",
+      myCourses: "My Courses",
+      myCoursesSummary: "These classes come from invite codes you joined or applied to.",
+      sampleCourses: "Sample courses",
+      sampleCoursesSummary:
+        "These are template sample cards. They are not real courses and carry no learning progress.",
+      membershipApproved: "Joined",
+      membershipPending: "Waiting for Teacher Review",
+      // A declined or removed membership used to vanish from the list, so a
+      // student saw a class disappear with no explanation anywhere. The row
+      // stays and names the status; the entry link is what goes away.
+      membershipRejected: "Request Declined",
+      membershipRemoved: "Removed From Class",
+      membershipClosedNote:
+        "This class is no longer in your learning list. Ask your course teacher if you need to rejoin.",
     },
     learning: {
       title: "My Learning",
@@ -207,10 +365,29 @@ export const copy = {
       agentAccessDenied:
         "You need an approved membership in this course to use its AI agents. Join or create the course, then try again.",
       agentUnavailable: "The AI service is temporarily unavailable. Please try again.",
+      agentRateLimited: "You are sending too quickly. Try again in {seconds} seconds.",
+      agentRateLimitedShortly: "You are sending too quickly. Please try again shortly.",
       agentMessageTooLong:
         "A message cannot exceed 4000 characters. Please shorten it and send again.",
       agentRequestInvalid:
         "The message did not pass validation. Please adjust it and try again.",
+      chatMessageUndelivered: "Not delivered — tap to retry",
+      chatHistoryUnavailable:
+        "History temporarily unavailable — only this session's messages are shown.",
+      chatroomWindowTrimmed:
+        "Older messages have rolled out of the window; exports and shares omit them too",
+      chatroomFrozenNotice:
+        "This chatroom is frozen by the course teacher, so new messages cannot be sent right now.",
+      chatroomModerationTitle: "Teacher controls",
+      chatroomModerationHide: "Hide",
+      chatroomModerationHidden: "Hidden — members stop seeing it on their next refresh.",
+      chatroomModerationFreeze: "Freeze room",
+      chatroomModerationUnfreeze: "Unfreeze room",
+      chatroomModerationStateFrozen: "Status: frozen",
+      chatroomModerationStateOpen: "Status: open",
+      chatroomModerationFrozen: "The room is frozen. Students cannot post for now.",
+      chatroomModerationUnfrozen: "The room is open again.",
+      chatroomModerationFailed: "That did not go through. Please try again.",
       chatroomCoursePickerLabel: "Choose a chatroom course",
       chatroomActiveCourseLabel: "Current course",
       chatroomDemoCourseLabel: "Demo course: Elementary Math Research",
@@ -233,6 +410,12 @@ export const copy = {
       groupAgentStatusThinking: "Thinking",
       groupAgentStatusReplied: "Replied",
       groupCardTitle: "My Group",
+      groupRosterExpand: "Show members and agents",
+      groupRosterCollapse: "Hide members and agents",
+      chatroomJumpToLatest: "Jump to latest",
+      playbackStageTab: "Slides and narration",
+      playbackCompanionTab: "AI companion",
+      playbackViewSwitchLabel: "Jump to a learning section",
       exportPrintHint: "Use your browser's print dialog to save as PDF",
       exportPageTitle: "Chatroom transcript export",
       exportPrint: "Print",
@@ -252,6 +435,14 @@ export const copy = {
         "Read-only shared transcript. Display names only, no account identifiers.",
       shareSignInRequired: "Sign in to create a share link.",
       shareFailed: "The share link could not be created. Please try again later.",
+      shareExpiresLabel: "Link expires",
+      shareRevoke: "Revoke link",
+      shareRevokeConfirmTitle:
+        "Anyone who already copied this link will no longer be able to open it.",
+      shareRevokeConfirm: "Confirm revoke",
+      shareRevokeCancel: "Cancel",
+      shareRevoked: "Link revoked. The copied link no longer works.",
+      shareRevokeFailed: "The link could not be revoked. Please try again later.",
     },
     teaching: {
       title: "My Teaching",
@@ -305,6 +496,57 @@ export const copy = {
       groupMemberInvalid: "A group member id is invalid.",
       groupMemberNotApproved:
         "Only students with an approved course membership can be added.",
+      groupMemberAlreadyGrouped:
+        "That student already belongs to another group in this course. Remove them from it first.",
+      groupMemberGroupedBadge: "Already grouped",
+      groupMemberFilterLabel: "Filter selectable students by name",
+      groupMemberFilterPlaceholder: "Type a student name",
+      groupMemberFilterEmpty: "No students match that name.",
+      groupAutoSplitTitle: "Auto-split",
+      groupAutoSplitSummary:
+        "Split the approved students who are not in a group yet into groups of the chosen size; edit them afterwards.",
+      groupAutoSplitSizeLabel: "Students per group",
+      groupAutoSplitAction: "Auto-split into groups",
+      groupAutoSplitRunning: "Splitting into groups…",
+      groupAutoSplitSizeInvalid: "The group size must be between 2 and 12.",
+      groupAutoSplitNoEligible:
+        "There are not enough ungrouped students yet; at least 2 are needed.",
+      rosterPanelTitle: "Class roster",
+      rosterFilterLabel: "Filter students by name",
+      rosterFilterPlaceholder: "Type a student name",
+      rosterFilterEmpty: "No students match that name.",
+      rosterPendingTitle: "Waiting for review",
+      rosterApprovedTitle: "Approved",
+      rosterClosedTitle: "Closed requests",
+      rosterRejectedBadge: "Rejected",
+      rosterRemovedBadge: "Removed",
+      rosterNoPending: "No join requests are waiting for review.",
+      rosterNoApproved: "No approved students yet.",
+      rosterApprove: "Approve",
+      rosterReject: "Reject",
+      rosterRemove: "Remove from class",
+      rosterApproveAll: "Approve all",
+      rosterApproveAllConfirmTitle: "Approve every waiting join request?",
+      rosterApproveAllConfirm: "Confirm approval",
+      rosterRemoveConfirm: "Confirm removal",
+      rosterCancel: "Cancel",
+      inviteScanHint:
+        "Scan the QR code, open the join link, or enter the invite code on the course plaza page.",
+      inviteValidityLabel: "Valid until",
+      inviteNoExpiry: "No expiry",
+      inviteJoinLimitLabel: "Join limit",
+      inviteNoJoinLimit: "No limit",
+      inviteAvailabilityLabel: "Invite status",
+      inviteExpiryFieldLabel: "Expiry (leave blank for no expiry)",
+      inviteMaxJoinsFieldLabel: "Join limit (leave blank for no limit)",
+      inviteDisabledFieldLabel: "Disable this invite code",
+      workspaceCourseSelectLabel: "Course for workspace actions",
+      workspaceCoursePlaceholder: "Choose a course",
+      inviteClassSelectLabel: "Class for these actions",
+      inviteClassPlaceholder: "Choose a class",
+      inviteTargetRequired:
+        "Choose a course and a class before running an invite-code action.",
+      inviteTargetPending: "Choose a class to see the policy its invite code carries.",
     },
     common: {
       enterLearning: "Enter",

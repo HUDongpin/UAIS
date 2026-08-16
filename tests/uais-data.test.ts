@@ -67,6 +67,35 @@ describe("UAIS template data contract", () => {
     expect(copy["en-US"].coursePlaza).not.toHaveProperty("note");
   });
 
+  it("promises no automatic retry the dashboard never performs", () => {
+    // The only surface reading this key is the student dashboard, which fetches
+    // the courses endpoint exactly once, on mount. "稍后会自动重试" / "This page
+    // will retry shortly" described a retry loop that does not exist, so a
+    // student sat looking at sample courses waiting for a refresh that was never
+    // coming. The copy now names what is on screen and the action that re-runs
+    // the read.
+    for (const locale of supportedLocales) {
+      expect(copy[locale].auth.networkRetry).not.toMatch(/自动重试|will retry/);
+    }
+    expect(copy["zh-CN"].auth.networkRetry).toContain("刷新页面");
+    expect(copy["en-US"].auth.networkRetry).toContain("Refresh the page");
+  });
+
+  it("names a closed class membership in both locales instead of dropping it", () => {
+    // A declined or removed membership used to be filtered out of the student
+    // branch of the courses route, so the class vanished from the dashboard and
+    // the plaza with no statement anywhere. Both surfaces read these keys.
+    for (const locale of supportedLocales) {
+      for (const key of [
+        "membershipRejected",
+        "membershipRemoved",
+        "membershipClosedNote",
+      ] as const) {
+        expect(copy[locale].coursePlaza[key].trim().length).toBeGreaterThan(0);
+      }
+    }
+  });
+
   it("includes the required AI agents and a mixed group chat timeline", () => {
     expect(aiAgents.map((agent) => agent.handle)).toEqual([
       "@研究助教",

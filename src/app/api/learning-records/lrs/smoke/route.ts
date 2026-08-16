@@ -5,6 +5,7 @@ import {
   postXapiStatement,
   resolveLrsConfig,
 } from "@/lib/learning-records/lrs-client";
+import { getLearningRecordFlushFailures } from "@/lib/learning-records/lrs-recorder";
 import {
   assertUaisAiAdminAccess,
   createUaisAiAccessDeniedResponse,
@@ -37,6 +38,11 @@ export function createLrsSmokeGetHandler(deps: LrsSmokeRouteDeps = {}) {
         target: "learning-record-store-smoke",
         mode: "readiness",
         readiness: getRedactedLrsReadiness(env),
+        // Readiness used to answer only "are the credentials set", which stays
+        // green while every statement is being dropped after the 202. The
+        // recorder's tally of statements this process gave up on rides along, so
+        // the one endpoint an admin already polls can show the loss.
+        flushFailures: getLearningRecordFlushFailures(),
       });
     } catch (error) {
       if (isUaisAiAccessDeniedError(error)) {

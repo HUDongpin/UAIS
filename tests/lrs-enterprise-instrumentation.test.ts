@@ -6,7 +6,9 @@ import {
 } from "@/lib/learning-records/xapi-events";
 import {
   createLearningRecordQueue,
+  getLearningRecordFlushFailures,
   getXapiStatements,
+  resetLearningRecordFlushFailuresForTesting,
   type XapiStatementsQuery,
 } from "@/lib/learning-records/lrs-recorder";
 import {
@@ -452,6 +454,84 @@ describe("enterprise LRS/xAPI instrumentation", () => {
         rawResponsesOmitted: true,
       },
     });
+  });
+
+  // E16/PKG-10: the 202 the client receives means "queued", and the flush that
+  // follows used to be `flush().catch(() => undefined)` - every dropped
+  // statement vanished with no log line, no counter and no dead letter, so a
+  // deployment losing every write looked exactly like a healthy one.
+  it("logs the statements a post-response flush drops, with counts", async () => {
+    const studentCookie = createUaisAppSessionCookie(
+      {
+        account: "student-001",
+        role: "student",
+        displayName: "Student One",
+        department: "UAIS",
+      },
+      {
+        env: readyLrsEnv,
+        now: new Date("2026-06-27T14:00:00.000Z"),
+        ttlSeconds: 365 * 24 * 60 * 60,
+      },
+    );
+    resetLearningRecordFlushFailuresForTesting();
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    // Every attempt refused, so the recorder exhausts its retries and the
+    // statement stops existing anywhere.
+    const fetchMock = vi.fn(async () => new Response("upstream busy", { status: 503 }));
+    const postHandler = createLearningRecordEventPostHandler({
+      env: readyLrsEnv,
+      fetch: fetchMock,
+      now: () => "2026-06-27T14:50:00.000Z",
+      authorizeLearnerEvent: async () => ({
+        status: "authorized",
+        reasonCode: "learner-course-membership-approved",
+        responsibleSession: "S12",
+      }),
+    });
+
+    const queued = await postHandler(
+      new Request("http://localhost/api/learning-records/events", {
+        method: "POST",
+        headers: { cookie: studentCookie, "content-type": "application/json" },
+        body: JSON.stringify({
+          actorId: "student-001",
+          event: baseEvent,
+          idempotencyKey: "student-001:question-2:answered",
+        }),
+      }),
+    );
+    // The client is still told "queued": that contract is unchanged, which is
+    // exactly why the loss has to be visible on the server.
+    expect(queued.status).toBe(202);
+
+    await vi.waitFor(() => expect(errorSpy).toHaveBeenCalled());
+    const [prefix, payload] = errorSpy.mock.calls[0] as [string, Record<string, unknown>];
+    expect(prefix).toBe("[learning-record-events]");
+    expect(payload).toEqual(
+      expect.objectContaining({
+        phase: "flush",
+        status: "statements-dropped",
+        attempted: 1,
+        written: 0,
+        failed: 1,
+      }),
+    );
+    expect(getLearningRecordFlushFailures()).toEqual(
+      expect.objectContaining({
+        failedWrites: 1,
+        lastFailure: expect.objectContaining({
+          status: "recorded",
+          httpStatus: 503,
+        }),
+      }),
+    );
+    // Nothing about the log line names the endpoint or the credentials.
+    expect(JSON.stringify(payload)).not.toContain("lrs.example.test");
+    expect(JSON.stringify(payload)).not.toContain("lrs-password");
+
+    errorSpy.mockRestore();
+    resetLearningRecordFlushFailuresForTesting();
   });
 
   it("requires signed admin access and an audit reason for admin LRS analytics", async () => {

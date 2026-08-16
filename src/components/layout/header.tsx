@@ -16,6 +16,7 @@ import { Sun } from "@phosphor-icons/react/dist/ssr/Sun";
 import { Translate } from "@phosphor-icons/react/dist/ssr/Translate";
 import { UserCircle } from "@phosphor-icons/react/dist/ssr/UserCircle";
 import { UsersThree } from "@phosphor-icons/react/dist/ssr/UsersThree";
+import { HeaderMobileMenu } from "@/components/layout/header-mobile-menu";
 import { useAppPreferences } from "@/components/providers/app-preferences";
 import { getTeachingOperationHref } from "@/components/teaching/teaching-operation-data";
 import { getNavItemsForRole, teacherCourses, teacherSidebarItems } from "@/data/uais";
@@ -36,7 +37,14 @@ export function Header({
   const t = copy[locale];
   const accountMenuRef = useRef<HTMLDivElement>(null);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
-  const [sessionUser] = useState(() => initialSessionUser ?? null);
+  // Read straight from the prop instead of being frozen in `useState` at first
+  // render: a server-provided change (a fresh RSC payload for the root layout)
+  // now reaches the header instead of being outlived by a stale snapshot. The
+  // sign-out path below is unaffected — it hard-navigates, which replaces the
+  // whole tree. A focus-time re-read is NOT possible from here: the session
+  // cookie is HttpOnly and `/api/auth/app-session` exposes POST/DELETE only, so
+  // polling it back would mean adding a session-read route (S12 backend scope).
+  const sessionUser = initialSessionUser ?? null;
   const role = sessionUser?.role ?? "teacher";
   const navRole = role === "student" ? "student" : "teacher";
   const primaryNavItems = getNavItemsForRole(navRole);
@@ -52,9 +60,15 @@ export function Header({
         : role === "admin"
           ? "Admin"
           : "Teacher";
-  const defaultAccountDisplayName =
-    role === "student" ? "Peter" : role === "admin" ? "Admin" : "Phoebe";
-  const accountDisplayName = sessionUser?.displayName ?? defaultAccountDisplayName;
+  // No session means no name. The header used to fall back to the demo personas
+  // "Peter"/"Phoebe", so a visitor whose session had expired - or who had never
+  // signed in - read a stranger's name in the account control and could
+  // reasonably conclude they were logged in as someone. The only real identity
+  // available without a session is none, so the ladder goes: the name the
+  // session carries, then the account id behind it, then the neutral role label
+  // the control is already announced with. Nothing here is ever invented.
+  const accountDisplayName =
+    sessionUser?.displayName?.trim() || sessionUser?.account?.trim() || userControlLabel;
   const userDisplayName =
     locale === "zh-CN" ? userControlLabel : accountDisplayName;
   const accountMenuCopy =
@@ -163,25 +177,25 @@ export function Header({
     // Hard navigation instead of router.replace: the /login request must be
     // issued only after the sign-out Set-Cookie response has been processed,
     // otherwise the proxy still sees a valid session and bounces the user back
-    // to their role home. A full reload also resets client state, including the
-    // `sessionUser` snapshot frozen in this component.
+    // to their role home. A full reload also resets client state and re-runs the
+    // server layout, so the header is rebuilt from a freshly read cookie.
     window.location.assign("/login");
   }
 
   return (
-    <header className="sticky top-0 z-30 border-b border-[#e6eaf2] bg-white/92 backdrop-blur-xl">
+    <header className="sticky top-0 z-30 border-b border-[var(--border)] bg-[var(--surface)]/92 backdrop-blur-xl">
       <div className="relative mx-auto flex min-h-[72px] w-full max-w-[1608px] items-center justify-between gap-6 px-4 sm:px-6 lg:px-8">
         <Link
           href={getUaisHomeHrefForRole(role)}
-          className="flex shrink-0 items-center gap-3 rounded-2xl px-1 py-2 text-[#141833] outline-none transition focus-visible:ring-2 focus-visible:ring-[#1f6feb]"
+          className="flex shrink-0 items-center gap-3 rounded-2xl px-1 py-2 text-[var(--foreground)] outline-none transition focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
           aria-label="UAIS"
         >
-          <span className="flex size-10 items-center justify-center rounded-2xl bg-[#1f6ff2] text-white shadow-[0_12px_30px_rgba(31,111,242,0.2)]">
+          <span className="flex size-10 items-center justify-center rounded-2xl bg-[var(--accent)] text-white shadow-[0_12px_30px_var(--shadow-accent)]">
             <Sparkle size={22} weight="duotone" />
           </span>
           <span className="hidden leading-tight sm:block">
             <span className="block text-base font-semibold tracking-tight">UAIS</span>
-            <span className="block text-xs text-[#5e6680]">{t.brand.headerSubtitle}</span>
+            <span className="block text-xs text-[var(--muted)]">{t.brand.headerSubtitle}</span>
             <span className="sr-only">{t.brand.name}</span>
           </span>
         </Link>
@@ -200,23 +214,23 @@ export function Header({
                 key={item.href}
                 href={item.href}
                 className={[
-                  "relative flex h-[72px] items-center whitespace-nowrap px-1 text-base font-semibold outline-none transition focus-visible:ring-2 focus-visible:ring-[#1f6feb]",
-                  active ? "text-[#1f6feb]" : "text-[#303650] hover:text-[#1f6feb]",
+                  "relative flex h-[72px] items-center whitespace-nowrap px-1 text-base font-semibold outline-none transition focus-visible:ring-2 focus-visible:ring-[var(--accent)]",
+                  active ? "text-[var(--accent)]" : "text-[var(--foreground)] hover:text-[var(--accent)]",
                 ].join(" ")}
               >
                 {localizedText(item.label, locale)}
                 {active ? (
-                  <span className="absolute bottom-0 left-0 h-0.5 w-full rounded-full bg-[#1f6feb]" />
+                  <span className="absolute bottom-0 left-0 h-0.5 w-full rounded-full bg-[var(--accent)]" />
                 ) : null}
               </Link>
             );
           })}
         </nav>
 
-        <div className="flex shrink-0 items-center gap-2 text-[#202640]">
+        <div className="flex shrink-0 items-center gap-2 text-[var(--foreground)]">
           <button
             type="button"
-            className="hidden h-10 items-center gap-2 rounded-full px-3 text-sm font-medium outline-none transition hover:bg-[#f4f6fb] focus-visible:ring-2 focus-visible:ring-[#1f6feb] lg:inline-flex"
+            className="hidden h-10 items-center gap-2 rounded-full px-3 text-sm font-medium outline-none transition hover:bg-[var(--surface-soft)] focus-visible:ring-2 focus-visible:ring-[var(--accent)] lg:inline-flex"
             aria-label={locale === "zh-CN" ? "日历" : "Calendar"}
           >
             <CalendarBlank size={19} weight="duotone" />
@@ -224,7 +238,7 @@ export function Header({
           </button>
           <button
             type="button"
-            className="hidden size-10 items-center justify-center rounded-full outline-none transition hover:bg-[#f4f6fb] focus-visible:ring-2 focus-visible:ring-[#1f6feb] md:inline-flex"
+            className="hidden size-10 items-center justify-center rounded-full outline-none transition hover:bg-[var(--surface-soft)] focus-visible:ring-2 focus-visible:ring-[var(--accent)] md:inline-flex"
             aria-label={locale === "zh-CN" ? "通知" : "Notifications"}
           >
             <Bell size={19} weight="duotone" />
@@ -232,7 +246,7 @@ export function Header({
           <button
             type="button"
             onClick={toggleLocale}
-            className="inline-flex h-10 items-center gap-2 whitespace-nowrap rounded-full border border-[#dde3ee] bg-white px-3 text-sm font-medium text-[#202640] shadow-[0_8px_24px_rgba(46,58,91,0.06)] outline-none transition hover:bg-[#f4f6fb] active:translate-y-px focus-visible:ring-2 focus-visible:ring-[#1f6feb]"
+            className="inline-flex h-10 items-center gap-2 whitespace-nowrap rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 text-sm font-medium text-[var(--foreground)] shadow-[0_8px_24px_var(--shadow)] outline-none transition hover:bg-[var(--surface-soft)] active:translate-y-px focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
             aria-label={t.controls.language}
           >
             <Translate size={18} weight="duotone" />
@@ -241,7 +255,7 @@ export function Header({
           <button
             type="button"
             onClick={toggleTheme}
-            className="inline-flex size-10 items-center justify-center rounded-full border border-[#dde3ee] bg-white text-[#202640] shadow-[0_8px_24px_rgba(46,58,91,0.06)] outline-none transition hover:bg-[#f4f6fb] active:translate-y-px focus-visible:ring-2 focus-visible:ring-[#1f6feb]"
+            className="inline-flex size-10 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--surface)] text-[var(--foreground)] shadow-[0_8px_24px_var(--shadow)] outline-none transition hover:bg-[var(--surface-soft)] active:translate-y-px focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
             aria-label={t.controls.theme}
           >
             {theme === "dark" ? (
@@ -250,24 +264,36 @@ export function Header({
               <Moon size={18} weight="duotone" />
             )}
           </button>
+          {/* Phone-width nav and sign-out. The desktop nav above and the account
+              menu below are both hidden under `md`, so without this the header
+              carried no route affordance and no way out of the app. */}
+          <HeaderMobileMenu
+            locale={locale}
+            pathname={pathname}
+            navItems={primaryNavItems}
+            accountDisplayName={accountDisplayName}
+            accountRoleLabel={userControlLabel}
+            signOutLabel={accountMenuCopy.signOut}
+            onSignOut={() => void signOut()}
+          />
           <div ref={accountMenuRef} className="relative hidden md:block">
             <button
               type="button"
               onClick={() => setAccountMenuOpen((open) => !open)}
-              className="inline-flex h-11 items-center gap-2 rounded-full border border-[#dde3ee] bg-white px-2.5 pr-3 text-sm font-medium text-[#202640] shadow-[0_8px_24px_rgba(46,58,91,0.06)] outline-none transition hover:bg-[#f4f6fb] active:translate-y-px focus-visible:ring-2 focus-visible:ring-[#1f6feb]"
+              className="inline-flex h-11 items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface)] px-2.5 pr-3 text-sm font-medium text-[var(--foreground)] shadow-[0_8px_24px_var(--shadow)] outline-none transition hover:bg-[var(--surface-soft)] active:translate-y-px focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
               aria-controls="uais-account-menu"
               aria-expanded={accountMenuOpen}
               aria-haspopup="menu"
               aria-label={userControlLabel}
             >
-              <span className="grid size-8 place-items-center rounded-full bg-[#e9efff] text-[#2a61d8]">
+              <span className="grid size-8 place-items-center rounded-full bg-[var(--accent-soft)] text-[var(--accent)]">
                 <UserCircle size={20} weight="duotone" />
               </span>
               <span className="hidden text-left leading-tight lg:block">
                 <span className="block text-sm font-semibold">
                   {userDisplayName}
                 </span>
-                <span className="block text-[11px] text-[#697089]">
+                <span className="block text-[11px] text-[var(--muted)]">
                   {userControlLabel}
                 </span>
               </span>
@@ -283,19 +309,19 @@ export function Header({
                 id="uais-account-menu"
                 role="menu"
                 aria-label={userControlLabel}
-                className="absolute right-0 top-full z-50 mt-3 w-[336px] overflow-hidden rounded-2xl border border-[#d9e1ef] bg-white text-[#202640] shadow-[0_22px_60px_rgba(38,48,74,0.18)]"
+                className="absolute right-0 top-full z-50 mt-3 w-[336px] overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] text-[var(--foreground)] shadow-[0_22px_60px_var(--shadow-strong)]"
               >
-                <div className="border-b border-[#edf1f7] p-4">
+                <div className="border-b border-[var(--border)] p-4">
                   <div className="flex items-center gap-3">
-                    <span className="grid size-11 place-items-center rounded-2xl bg-[#e9efff] text-[#2a61d8]">
+                    <span className="grid size-11 place-items-center rounded-2xl bg-[var(--accent-soft)] text-[var(--accent)]">
                       <UserCircle size={26} weight="duotone" />
                     </span>
                     <span className="min-w-0">
                       <span className="block truncate text-base font-semibold">
                         {accountDisplayName}
                       </span>
-                      <span className="mt-1 inline-flex items-center gap-1.5 text-xs font-medium text-[#59647d]">
-                        <CheckCircle size={14} weight="duotone" className="text-[#16794c]" />
+                      <span className="mt-1 inline-flex items-center gap-1.5 text-xs font-medium text-[var(--muted)]">
+                        <CheckCircle size={14} weight="duotone" className="text-[#16794c] dark:text-[#6fd3a5]" />
                         {accountMenuCopy.signedIn}
                       </span>
                     </span>
@@ -303,8 +329,8 @@ export function Header({
                 </div>
 
                 {role === "teacher" ? (
-                  <div className="border-b border-[#edf1f7] p-4">
-                    <p className="text-xs font-semibold uppercase text-[#697089]">
+                  <div className="border-b border-[var(--border)] p-4">
+                    <p className="text-xs font-semibold uppercase text-[var(--muted)]">
                       {accountMenuCopy.overview}
                     </p>
                     <div className="mt-3 grid grid-cols-2 gap-2">
@@ -312,14 +338,14 @@ export function Header({
                       <AccountMenuMetric>{accountMenuCopy.students}</AccountMenuMetric>
                     </div>
                     {featuredCourse ? (
-                      <div className="mt-3 rounded-xl bg-[#f6f8fc] p-3">
-                        <p className="text-[11px] font-semibold text-[#697089]">
+                      <div className="mt-3 rounded-xl bg-[var(--surface-elevated)] p-3">
+                        <p className="text-[11px] font-semibold text-[var(--muted)]">
                           {accountMenuCopy.currentFocus}
                         </p>
                         <p className="mt-1 text-sm font-semibold">
                           {localizedText(featuredCourse.title, locale)}
                         </p>
-                        <p className="mt-1 text-xs leading-5 text-[#59647d]">
+                        <p className="mt-1 text-xs leading-5 text-[var(--muted)]">
                           {localizedText(featuredCourse.currentFocus, locale)}
                         </p>
                       </div>
@@ -328,8 +354,8 @@ export function Header({
                 ) : null}
 
                 {role === "teacher" ? (
-                  <div className="border-b border-[#edf1f7] p-2">
-                    <p className="px-2 pb-1 pt-2 text-xs font-semibold uppercase text-[#697089]">
+                  <div className="border-b border-[var(--border)] p-2">
+                    <p className="px-2 pb-1 pt-2 text-xs font-semibold uppercase text-[var(--muted)]">
                       {accountMenuCopy.shortcuts}
                     </p>
                     <div className="space-y-1">
@@ -352,7 +378,7 @@ export function Header({
                     type="button"
                     role="menuitem"
                     onClick={() => void signOut()}
-                    className="flex h-11 w-full items-center gap-2 rounded-xl px-3 text-left text-sm font-semibold text-[#b42318] outline-none transition hover:bg-[#fff1f0] active:translate-y-px focus-visible:ring-2 focus-visible:ring-[#b42318]"
+                    className="flex h-11 w-full items-center gap-2 rounded-xl px-3 text-left text-sm font-semibold text-[var(--danger)] outline-none transition hover:bg-[var(--surface-soft)] active:translate-y-px focus-visible:ring-2 focus-visible:ring-[var(--danger)]"
                   >
                     <SignOut size={17} weight="duotone" />
                     {accountMenuCopy.signOut}
@@ -369,7 +395,7 @@ export function Header({
 
 function AccountMenuMetric({ children }: { children: ReactNode }) {
   return (
-    <span className="rounded-xl border border-[#e3e8f2] bg-white px-3 py-2 text-sm font-semibold">
+    <span className="rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm font-semibold">
       {children}
     </span>
   );
@@ -391,9 +417,9 @@ function AccountMenuLink({
       role="menuitem"
       href={href}
       onClick={onClick}
-      className="flex h-11 items-center gap-2 rounded-xl px-3 text-sm font-semibold outline-none transition hover:bg-[#f4f6fb] active:translate-y-px focus-visible:ring-2 focus-visible:ring-[#1f6feb]"
+      className="flex h-11 items-center gap-2 rounded-xl px-3 text-sm font-semibold outline-none transition hover:bg-[var(--surface-soft)] active:translate-y-px focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
     >
-      <span className="grid size-7 place-items-center rounded-lg bg-[#edf3ff] text-[#2a61d8]">
+      <span className="grid size-7 place-items-center rounded-lg bg-[var(--accent-soft)] text-[var(--accent)]">
         {icon}
       </span>
       {children}

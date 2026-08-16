@@ -10,6 +10,18 @@ import { useAppPreferences } from "@/components/providers/app-preferences";
 import { localizedText } from "@/components/ui/localized-text";
 import { plazaCourses } from "@/data/uais";
 import { copy } from "@/i18n/copy";
+import { resolveLocalizedFailure } from "@/i18n/failure-reason-copy";
+import {
+  createLoginHandoffHref,
+  isSafeLoginReturnPath,
+} from "@/lib/auth/login-return-path";
+import {
+  createStudentClassMembershipItems,
+  createStudentMembershipLearningHref,
+  isClosedStudentMembership,
+  type StudentClassMembershipItem,
+  type StudentMembershipCourseResponse,
+} from "./student-membership-helpers";
 
 const courseVisualClass = {
   violet:
@@ -23,20 +35,13 @@ const courseDisplayOrder: Record<string, number> = {
   "research-methods": 1,
 };
 
-function parseProgress(progressText: string) {
-  const match =
-    /^Unit (\d+) of (\d+)$/.exec(progressText) ??
-    /^第\s*(\d+)\s*\/\s*(\d+)\s*单元$/.exec(progressText);
-  const current = match ? Number(match[1]) : 0;
-  const total = match ? Number(match[2]) : 1;
-  const percentage = total > 0 ? Math.round((current / total) * 100) : 0;
-
-  return { current, total, percentage };
-}
-
 function createLearningHref(learningCourseId: string) {
   return `/learning?courseId=${encodeURIComponent(learningCourseId)}`;
 }
+
+// The invite code shape the join route accepts, shared by the `?invite=` param
+// and the box a student types a code into.
+const inviteCodePattern = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$/;
 
 type InviteCodeEntryState =
   | { status: "absent" }
@@ -51,39 +56,61 @@ function resolveInviteCodeEntry(inviteParam: string | undefined): InviteCodeEntr
     return { status: "absent" };
   }
   const trimmedInviteParam = inviteParam.trim();
-  if (/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$/.test(trimmedInviteParam)) {
+  if (inviteCodePattern.test(trimmedInviteParam)) {
     return { status: "valid", inviteCode: trimmedInviteParam };
   }
 
   return { status: "invalid" };
 }
 
-function createInviteJoinFailureMessage(
+export function createInviteJoinPath(inviteCode: string) {
+  return `/courses?invite=${encodeURIComponent(inviteCode)}`;
+}
+
+// The sign-in handoff moved to `@/lib/auth/login-return-path` once the playback
+// stage, the chatroom notices and the student dashboard needed the same guard;
+// both names stay exported here so this page remains their documented home.
+export { createLoginHandoffHref, isSafeLoginReturnPath };
+
+// A refusal the student can read.
+//
+// This used to interpolate the route's raw English string straight into the
+// Chinese frame - "加入申请未提交：UAIS student authentication is required." - so
+// the actionable half of the sentence was in a language the reader had not
+// chosen. The routes answer with a structured `reasonCode` on every refusal that
+// has a student-facing explanation, so the mapping in `@/i18n/failure-reason-copy`
+// supplies the sentence and the raw string is demoted to a collapsed detail that
+// only appears when no code matched.
+function createInviteJoinFailure(
   body: InviteJoinResponse | undefined,
   traceId: string | undefined,
   locale: "zh-CN" | "en-US",
-) {
-  const reasonCode = body?.access?.reasonCode;
-  const detail =
-    reasonCode === "student-session-required"
-      ? {
-          "zh-CN": "需要登录学生账号。",
-          "en-US": "Student sign-in is required.",
-        }
-      : undefined;
-  const localizedDetail = detail ? localizedText(detail, locale) : body?.error;
-  const baseMessage = localizedDetail
-    ? locale === "zh-CN"
-      ? `加入申请未提交：${localizedDetail}`
-      : `Join request was not submitted: ${localizedDetail}`
+): InviteJoinStatus {
+  const failure = resolveLocalizedFailure({
+    body,
+    locale,
+    // No usable code: say only what is certainly true, and never dress the
+    // server's operator-facing English up as the student's next step.
+    fallbackMessage:
+      locale === "zh-CN"
+        ? "加入申请未提交，请稍后重试。"
+        : "Join request was not submitted. Please retry later.",
+  });
+  const baseMessage = failure.rawDetail
+    ? failure.message
     : locale === "zh-CN"
-      ? "加入申请未提交，请稍后重试。"
-      : "Join request was not submitted. Please retry later.";
-  if (!traceId) {
-    return baseMessage;
-  }
+      ? `加入申请未提交：${failure.message}`
+      : `Join request was not submitted: ${failure.message}`;
 
-  return locale === "zh-CN" ? `${baseMessage}追踪编号：${traceId}` : `${baseMessage} Trace ID: ${traceId}`;
+  return {
+    state: "failed",
+    message: traceId
+      ? locale === "zh-CN"
+        ? `${baseMessage}追踪编号：${traceId}`
+        : `${baseMessage} Trace ID: ${traceId}`
+      : baseMessage,
+    ...(failure.rawDetail ? { detail: failure.rawDetail } : {}),
+  };
 }
 
 type InviteJoinResponse = {
@@ -91,6 +118,9 @@ type InviteJoinResponse = {
     membershipStatus?: string;
   };
   error?: string;
+  // Store-level refusals (disabled/expired/at-capacity invite codes, snapshot
+  // contention) put the code at the top level; access refusals nest it.
+  reasonCode?: string;
   traceId?: string;
   access?: {
     reasonCode?: string;
@@ -100,7 +130,31 @@ type InviteJoinResponse = {
 type InviteJoinStatus = {
   state: "idle" | "pending" | "success" | "failed";
   message?: string;
+  // The server's own English string, kept only when the reason code was unknown.
+  // Rendered collapsed and secondary - evidence, not instruction.
+  detail?: string;
 };
+
+// Collapsed by default and never part of the sentence the student is asked to
+// act on. It exists so an unmapped refusal is still diagnosable from the browser.
+function InviteJoinFailureDetail({
+  detail,
+  label,
+}: {
+  detail?: string;
+  label: string;
+}) {
+  if (!detail) {
+    return null;
+  }
+
+  return (
+    <details className="mt-2 text-xs font-normal" data-uais-invite-join-failure-detail>
+      <summary className="cursor-pointer font-medium">{label}</summary>
+      <span className="mt-1 block break-words">{detail}</span>
+    </details>
+  );
+}
 
 // The join status belongs to one specific invite param. App Router client
 // navigation swaps the prop without remounting this component, so the status is
@@ -120,6 +174,16 @@ const inviteJoinStatusMessageId = "invite-join-status-message";
 type CoursePlazaPageProps = {
   inviteParam?: string;
 };
+
+// Same gate the student dashboard uses: only the real plaza route asks the
+// server who the visitor is, so rendering the component in isolation never
+// fires a courses read.
+function shouldLoadPlazaMemberships() {
+  if (typeof window === "undefined" || typeof fetch !== "function") {
+    return false;
+  }
+  return window.location.pathname === "/courses" || window.location.pathname === "/courses/";
+}
 
 export function CoursePlazaPage({ inviteParam }: CoursePlazaPageProps = {}) {
   const { locale } = useAppPreferences();
@@ -148,6 +212,15 @@ export function CoursePlazaPage({ inviteParam }: CoursePlazaPageProps = {}) {
   // the first is still open, which the server then rejects as a duplicate.
   const [isInviteJoinInFlight, setIsInviteJoinInFlight] = useState(false);
   const isInviteJoinInFlightRef = useRef(false);
+  // Manual entry keeps its own status line: it answers the box, not the panel the
+  // link opened, and the two can be on screen together.
+  const [manualInviteCode, setManualInviteCode] = useState("");
+  const [manualInviteJoinStatus, setManualInviteJoinStatus] =
+    useState<InviteJoinStatus>(idleInviteJoinStatus);
+  const [manualInviteJoinReturnPath, setManualInviteJoinReturnPath] = useState<string>();
+  // Set only by a `student-session-required` refusal, which is the server saying
+  // in so many words that signing in is the missing step.
+  const [inviteJoinRequiresSignIn, setInviteJoinRequiresSignIn] = useState(false);
   // Kept in step with the rendered param so an awaited response can ask whether
   // the invite it belongs to is still the one the student is looking at.
   const currentInviteParamRef = useRef(inviteParam);
@@ -171,6 +244,51 @@ export function CoursePlazaPage({ inviteParam }: CoursePlazaPageProps = {}) {
     (firstCourse, secondCourse) =>
       courseDisplayOrder[firstCourse.id] - courseDisplayOrder[secondCourse.id],
   );
+  // The plaza used to be nothing but the two template sample cards, so a student
+  // who had already joined a real class through an invite code came back here and
+  // found no trace of it. A signed-in visitor's own classes now come first, and
+  // the samples are demoted to a labelled example row behind them.
+  const [plazaMemberships, setPlazaMemberships] = useState<StudentClassMembershipItem[]>([]);
+  const hasPlazaMemberships = plazaMemberships.length > 0;
+
+  useEffect(() => {
+    if (!shouldLoadPlazaMemberships()) {
+      return;
+    }
+
+    let isCancelled = false;
+
+    async function loadPlazaMemberships() {
+      try {
+        const response = await fetch("/api/teaching/courses", {
+          method: "GET",
+          headers: { accept: "application/json" },
+        });
+        // A signed-out visitor is refused here, and that is the plaza's normal
+        // resting state: it keeps the samples and the join affordances rather
+        // than claiming an empty course list.
+        if (!response.ok) {
+          return;
+        }
+        const body = (await response.json().catch(() => null)) as
+          | StudentMembershipCourseResponse
+          | null;
+        if (isCancelled || !body) {
+          return;
+        }
+
+        setPlazaMemberships(createStudentClassMembershipItems(body));
+      } catch {
+        // Unreachable server: the samples and the invite box still work.
+      }
+    }
+
+    void loadPlazaMemberships();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, []);
 
   // A response may only write the status of the invite param it was submitted
   // for, and only while that param is still the current one. A superseded
@@ -194,6 +312,65 @@ export function CoursePlazaPage({ inviteParam }: CoursePlazaPageProps = {}) {
     });
   }
 
+  // One join request, whether the code arrived in the link or was typed into the
+  // box below. Both callers own their own status line; this owns the request, the
+  // sign-in signal, and the single-flight guard shared between them.
+  async function requestInviteJoin(
+    joinInviteCode: string,
+  ): Promise<{ status: InviteJoinStatus; requiresSignIn: boolean }> {
+    try {
+      const response = await fetch(
+        `/api/teaching/invite-codes/${encodeURIComponent(joinInviteCode)}/join`,
+        {
+          method: "POST",
+          headers: { accept: "application/json" },
+        },
+      );
+      const body = (await response.json().catch(() => undefined)) as InviteJoinResponse | undefined;
+      const traceId = body?.traceId ?? response.headers.get("x-uais-trace-id") ?? undefined;
+      if (!response.ok || !body?.membership) {
+        return {
+          status: createInviteJoinFailure(body, traceId, locale),
+          // The one refusal a student can actually fix themselves, and the only
+          // one worth putting a sign-in link next to.
+          requiresSignIn: body?.access?.reasonCode === "student-session-required",
+        };
+      }
+
+      const isPendingReview = body.membership.membershipStatus === "pending-teacher-review";
+      const baseMessage =
+        locale === "zh-CN"
+          ? isPendingReview
+            ? "加入申请已提交，等待教师审批。"
+            : "加入申请已提交，已直接加入班级。"
+          : isPendingReview
+            ? "Join request submitted and waiting for teacher review."
+            : "Join request submitted and the class membership is active.";
+      return {
+        status: {
+          state: "success",
+          message: traceId
+            ? locale === "zh-CN"
+              ? `${baseMessage}追踪编号：${traceId}`
+              : `${baseMessage} Trace ID: ${traceId}`
+            : baseMessage,
+        },
+        requiresSignIn: false,
+      };
+    } catch {
+      return {
+        status: {
+          state: "failed",
+          message:
+            locale === "zh-CN"
+              ? "加入申请未提交，请稍后重试。"
+              : "Join request was not submitted. Please retry later.",
+        },
+        requiresSignIn: false,
+      };
+    }
+  }
+
   async function submitInviteJoin() {
     if (!inviteCode || isInviteJoinInFlightRef.current) {
       return;
@@ -210,48 +387,49 @@ export function CoursePlazaPage({ inviteParam }: CoursePlazaPageProps = {}) {
           : "Submitting join request. Please wait.",
     });
     try {
-      const response = await fetch(
-        `/api/teaching/invite-codes/${encodeURIComponent(inviteCode)}/join`,
-        {
-          method: "POST",
-          headers: { accept: "application/json" },
-        },
-      );
-      const body = (await response.json().catch(() => undefined)) as InviteJoinResponse | undefined;
-      const traceId = body?.traceId ?? response.headers.get("x-uais-trace-id") ?? undefined;
-      if (!response.ok || !body?.membership) {
-        commitInviteJoinStatus(submissionInviteParam, {
-          state: "failed",
-          message: createInviteJoinFailureMessage(body, traceId, locale),
-        });
-        return;
-      }
+      const result = await requestInviteJoin(inviteCode);
+      setInviteJoinRequiresSignIn(result.requiresSignIn);
+      commitInviteJoinStatus(submissionInviteParam, result.status);
+    } finally {
+      isInviteJoinInFlightRef.current = false;
+      setIsInviteJoinInFlight(false);
+    }
+  }
 
-      const isPendingReview = body.membership.membershipStatus === "pending-teacher-review";
-      const baseMessage =
-        locale === "zh-CN"
-          ? isPendingReview
-            ? "加入申请已提交，等待教师审批。"
-            : "加入申请已提交，已直接加入班级。"
-          : isPendingReview
-            ? "Join request submitted and waiting for teacher review."
-            : "Join request submitted and the class membership is active.";
-      commitInviteJoinStatus(submissionInviteParam, {
-        state: "success",
-        message: traceId
-          ? locale === "zh-CN"
-            ? `${baseMessage}追踪编号：${traceId}`
-            : `${baseMessage} Trace ID: ${traceId}`
-          : baseMessage,
-      });
-    } catch {
-      commitInviteJoinStatus(submissionInviteParam, {
+  // The manual box. A student who was handed a code on a slide has no link to
+  // click, and before this there was nowhere on the site to type one - while the
+  // invitation dialog told them to do exactly that.
+  async function submitManualInviteJoin(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const typedInviteCode = manualInviteCode.trim();
+    if (isInviteJoinInFlightRef.current) {
+      return;
+    }
+    if (!inviteCodePattern.test(typedInviteCode)) {
+      setManualInviteJoinStatus({
         state: "failed",
         message:
           locale === "zh-CN"
-            ? "加入申请未提交，请稍后重试。"
-            : "Join request was not submitted. Please retry later.",
+            ? "邀请码格式无效，请检查后重试。"
+            : "That invite code is not a valid code. Check it and try again.",
       });
+      return;
+    }
+
+    isInviteJoinInFlightRef.current = true;
+    setIsInviteJoinInFlight(true);
+    setManualInviteJoinStatus({
+      state: "pending",
+      message:
+        locale === "zh-CN"
+          ? "正在提交加入申请，请稍候。"
+          : "Submitting join request. Please wait.",
+    });
+    try {
+      const result = await requestInviteJoin(typedInviteCode);
+      setManualInviteJoinReturnPath(createInviteJoinPath(typedInviteCode));
+      setInviteJoinRequiresSignIn(result.requiresSignIn);
+      setManualInviteJoinStatus(result.status);
     } finally {
       isInviteJoinInFlightRef.current = false;
       setIsInviteJoinInFlight(false);
@@ -287,7 +465,7 @@ export function CoursePlazaPage({ inviteParam }: CoursePlazaPageProps = {}) {
       {inviteCodeEntry.status === "invalid" ? (
         <section
           role="alert"
-          className="rounded-2xl border border-rose-200 bg-rose-50 p-5 text-sm font-medium text-rose-700 shadow-[0_18px_42px_var(--shadow)]"
+          className="rounded-2xl border border-rose-200 bg-rose-50 p-5 text-sm font-medium text-rose-700 shadow-[0_18px_42px_var(--shadow)] dark:border-rose-900 dark:bg-rose-950 dark:text-rose-200"
         >
           {locale === "zh-CN"
             ? "邀请码链接无效，请检查链接或向教师确认。"
@@ -306,43 +484,228 @@ export function CoursePlazaPage({ inviteParam }: CoursePlazaPageProps = {}) {
                 {locale === "zh-CN" ? `邀请码：${inviteCode}` : `Invite code: ${inviteCode}`}
               </p>
               {inviteJoinMessage ? (
-                <p
+                // A div rather than a p: the collapsed technical detail below is
+                // a <details>, which a paragraph may not contain.
+                <div
                   id={inviteJoinStatusMessageId}
                   role={inviteJoinStatus.state === "failed" ? "alert" : "status"}
                   className={[
                     "mt-3 rounded-xl border px-3 py-2 text-sm font-medium",
                     inviteJoinStatus.state === "failed"
-                      ? "border-rose-200 bg-rose-50 text-rose-700"
+                      ? "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-900 dark:bg-rose-950 dark:text-rose-200"
                       : "border-[var(--border)] bg-[var(--surface)] text-[var(--foreground)]",
                   ].join(" ")}
                 >
                   {inviteJoinMessage}
-                </p>
+                  {isBlockedByOtherInviteJoin ? null : (
+                    <InviteJoinFailureDetail
+                      detail={inviteJoinStatus.detail}
+                      label={t.auth.technicalDetail}
+                    />
+                  )}
+                </div>
               ) : null}
             </div>
-            <button
-              type="button"
-              disabled={isInviteJoinInFlight}
-              aria-describedby={inviteJoinMessage ? inviteJoinStatusMessageId : undefined}
-              className="inline-flex min-h-11 w-fit items-center justify-center rounded-full bg-[var(--accent)] px-5 text-sm font-semibold text-white shadow-[0_14px_28px_var(--shadow-accent)] outline-none transition hover:bg-[var(--accent-strong)] active:translate-y-px disabled:cursor-not-allowed disabled:opacity-60 focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]"
-              onClick={() => void submitInviteJoin()}
-            >
-              {inviteJoinStatus.state === "pending"
-                ? locale === "zh-CN"
-                  ? "正在提交"
-                  : "Submitting"
-                : locale === "zh-CN"
-                  ? "申请加入班级"
-                  : "Request to Join Class"}
-            </button>
+            <div className="flex flex-col items-start gap-2">
+              <button
+                type="button"
+                disabled={isInviteJoinInFlight}
+                aria-describedby={inviteJoinMessage ? inviteJoinStatusMessageId : undefined}
+                className="inline-flex min-h-11 w-fit items-center justify-center rounded-full bg-[var(--accent)] px-5 text-sm font-semibold text-white shadow-[0_14px_28px_var(--shadow-accent)] outline-none transition hover:bg-[var(--accent-strong)] active:translate-y-px disabled:cursor-not-allowed disabled:opacity-60 focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]"
+                onClick={() => void submitInviteJoin()}
+              >
+                {inviteJoinStatus.state === "pending"
+                  ? locale === "zh-CN"
+                    ? "正在提交"
+                    : "Submitting"
+                  : locale === "zh-CN"
+                    ? "申请加入班级"
+                    : "Request to Join Class"}
+              </button>
+              {inviteJoinRequiresSignIn ? (
+                <Link
+                  href={createLoginHandoffHref(createInviteJoinPath(inviteCode))}
+                  data-uais-invite-login-handoff={inviteCode}
+                  className="inline-flex min-h-11 w-fit items-center justify-center rounded-full border border-[var(--accent-border)] bg-[var(--surface)] px-5 text-sm font-semibold text-[var(--accent)] outline-none transition hover:bg-[var(--surface-soft)] focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+                >
+                  {locale === "zh-CN" ? "登录后继续加入" : "Sign in and continue"}
+                </Link>
+              ) : null}
+            </div>
           </div>
         </section>
       ) : null}
 
-      <section className="grid gap-5 md:grid-cols-2">
+      {/* The manual code box. It is always available, because a code handed out
+          on a slide arrives without a link, and it submits through exactly the
+          same join route the link does. */}
+      <section
+        data-uais-manual-invite-entry
+        className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5 shadow-[0_18px_42px_var(--shadow)]"
+      >
+        <h2 className="text-xl font-semibold tracking-tight text-[var(--foreground)]">
+          {locale === "zh-CN" ? "输入邀请码加入班级" : "Join a Class with an Invite Code"}
+        </h2>
+        <p className="mt-2 text-sm leading-6 text-[var(--muted)]">
+          {locale === "zh-CN"
+            ? "扫描教师提供的二维码、打开加入链接，或在这里输入邀请码。"
+            : "Scan the teacher's QR code, open the join link, or type the invite code here."}
+        </p>
+        <form className="mt-4 flex flex-wrap items-end gap-3" onSubmit={submitManualInviteJoin}>
+          <div className="min-w-0">
+            <label
+              htmlFor="manual-invite-code"
+              className="block text-sm font-semibold text-[var(--foreground)]"
+            >
+              {locale === "zh-CN" ? "邀请码" : "Invite code"}
+            </label>
+            <input
+              id="manual-invite-code"
+              value={manualInviteCode}
+              aria-label={locale === "zh-CN" ? "邀请码" : "Invite code"}
+              placeholder={locale === "zh-CN" ? "输入教师提供的邀请码" : "Enter the invite code"}
+              className="mt-2 h-11 w-64 max-w-full rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] px-3 text-sm font-medium text-[var(--foreground)] outline-none transition focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent)]/20"
+              onChange={(event) => setManualInviteCode(event.target.value)}
+            />
+          </div>
+          <button
+            type="submit"
+            disabled={isInviteJoinInFlight}
+            className="inline-flex min-h-11 items-center justify-center rounded-full bg-[var(--accent)] px-5 text-sm font-semibold text-white shadow-[0_14px_28px_var(--shadow-accent)] outline-none transition hover:bg-[var(--accent-strong)] active:translate-y-px disabled:cursor-not-allowed disabled:opacity-60 focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+          >
+            {/* Deliberately not the same label as the panel's button: with a
+                link-borne invite on screen there would be two controls with one
+                name, and neither the reader nor the screen reader could tell
+                which code each one submits. */}
+            {manualInviteJoinStatus.state === "pending"
+              ? locale === "zh-CN"
+                ? "正在提交"
+                : "Submitting"
+              : locale === "zh-CN"
+                ? "使用邀请码加入"
+                : "Join with This Code"}
+          </button>
+        </form>
+        {manualInviteJoinStatus.message ? (
+          <div
+            role={manualInviteJoinStatus.state === "failed" ? "alert" : "status"}
+            className={[
+              "mt-3 rounded-xl border px-3 py-2 text-sm font-medium",
+              manualInviteJoinStatus.state === "failed"
+                ? "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-900 dark:bg-rose-950 dark:text-rose-200"
+                : "border-[var(--border)] bg-[var(--surface-elevated)] text-[var(--foreground)]",
+            ].join(" ")}
+          >
+            {manualInviteJoinStatus.message}
+            <InviteJoinFailureDetail
+              detail={manualInviteJoinStatus.detail}
+              label={t.auth.technicalDetail}
+            />
+          </div>
+        ) : null}
+        {inviteJoinRequiresSignIn && manualInviteJoinReturnPath ? (
+          <Link
+            href={createLoginHandoffHref(manualInviteJoinReturnPath)}
+            data-uais-manual-invite-login-handoff
+            className="mt-3 inline-flex min-h-11 items-center justify-center rounded-full border border-[var(--accent-border)] bg-[var(--surface)] px-5 text-sm font-semibold text-[var(--accent)] outline-none transition hover:bg-[var(--surface-soft)] focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+          >
+            {locale === "zh-CN" ? "登录后继续加入" : "Sign in and continue"}
+          </Link>
+        ) : null}
+      </section>
+
+      {hasPlazaMemberships ? (
+        <section
+          data-uais-plaza-my-courses="true"
+          className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5 shadow-[0_18px_42px_var(--shadow)]"
+        >
+          <h2 className="text-xl font-semibold tracking-tight text-[var(--foreground)]">
+            {t.coursePlaza.myCourses}
+          </h2>
+          <p className="mt-2 text-sm leading-6 text-[var(--muted)]">
+            {t.coursePlaza.myCoursesSummary}
+          </p>
+          <div className="mt-4 grid gap-4 md:grid-cols-2">
+            {plazaMemberships.map((membership) => (
+              <article
+                key={membership.id}
+                data-uais-plaza-membership={membership.id}
+                className="flex flex-col justify-between rounded-2xl border border-[var(--border)] bg-[var(--surface-elevated)] p-4"
+              >
+                <div>
+                  <p className="text-sm font-semibold text-[var(--accent)]">
+                    {membership.courseName}
+                  </p>
+                  <h3 className="mt-1 text-lg font-semibold text-[var(--foreground)]">
+                    {membership.className}
+                  </h3>
+                  {membership.semester ? (
+                    <p className="mt-1 text-sm text-[var(--muted)]">{membership.semester}</p>
+                  ) : null}
+                  <span
+                    data-uais-plaza-membership-status={membership.membershipStatus}
+                    className={[
+                      "mt-3 inline-flex h-8 items-center rounded-full px-3 text-sm font-semibold",
+                      membership.membershipStatus === "approved"
+                        ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-200"
+                        : isClosedStudentMembership(membership)
+                          ? "bg-[var(--surface-soft)] text-[var(--muted)]"
+                          : "bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-200",
+                    ].join(" ")}
+                  >
+                    {membership.membershipStatus === "approved"
+                      ? t.coursePlaza.membershipApproved
+                      : membership.membershipStatus === "rejected"
+                        ? t.coursePlaza.membershipRejected
+                        : membership.membershipStatus === "removed"
+                          ? t.coursePlaza.membershipRemoved
+                          : t.coursePlaza.membershipPending}
+                  </span>
+                  {/* Declined and removed rows are reported precisely so a class
+                      leaving the list has an explanation attached to it. Subtle,
+                      and never accompanied by an entry link. */}
+                  {isClosedStudentMembership(membership) ? (
+                    <p className="mt-2 text-sm leading-6 text-[var(--muted)]">
+                      {t.coursePlaza.membershipClosedNote}
+                    </p>
+                  ) : null}
+                </div>
+                {/* Only an approved membership has a workspace to enter. A
+                    pending, declined or removed one links nowhere rather than
+                    to a 403. */}
+                {membership.membershipStatus === "approved" ? (
+                  <Link
+                    href={createStudentMembershipLearningHref(membership)}
+                    className="mt-4 inline-flex h-11 w-fit items-center gap-2 rounded-full bg-[var(--accent)] px-5 text-sm font-semibold text-white shadow-[0_14px_28px_var(--shadow-accent)] outline-none transition hover:bg-[var(--accent-strong)] active:translate-y-px focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface-elevated)]"
+                  >
+                    {t.common.enterLearning}
+                    <ArrowRight size={17} weight="bold" />
+                  </Link>
+                ) : null}
+              </article>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {/* Named as samples for EVERY visitor, not only once a real class is on
+          the page above. A signed-out visitor is exactly the person with no
+          other cards to compare these against, so leaving them unlabelled is
+          where "示例课程" is needed most. */}
+      <div data-uais-plaza-sample-heading="true">
+        <h2 className="text-xl font-semibold tracking-tight text-[var(--foreground)]">
+          {t.coursePlaza.sampleCourses}
+        </h2>
+        <p className="mt-2 text-sm leading-6 text-[var(--muted)]">
+          {t.coursePlaza.sampleCoursesSummary}
+        </p>
+      </div>
+
+      <section
+        data-uais-plaza-sample-courses={hasPlazaMemberships ? "demoted" : "primary"}
+        className="grid gap-5 md:grid-cols-2"
+      >
         {displayedCourses.map((course) => {
-          const progressText = localizedText(course.progressText, locale);
-          const progress = parseProgress(progressText);
           const courseTitle = localizedText(course.title, locale);
 
           return (
@@ -355,27 +718,12 @@ export function CoursePlazaPage({ inviteParam }: CoursePlazaPageProps = {}) {
                   <h2 className="text-2xl font-semibold tracking-tight text-[var(--foreground)]">
                     {courseTitle}
                   </h2>
-                  <div className="mt-3 space-y-2">
-                    <div className="flex items-center justify-between gap-3 text-sm font-medium">
-                      <span className="text-[var(--accent)]">{progressText}</span>
-                      <span className="text-[var(--muted)]">{progress.percentage}%</span>
-                    </div>
-                    <div
-                      role="progressbar"
-                      aria-label={`${courseTitle} progress`}
-                      aria-valuemin={0}
-                      aria-valuemax={progress.total}
-                      aria-valuenow={progress.current}
-                      aria-valuetext={`${progressText}, ${progress.percentage}%`}
-                      className="h-2 overflow-hidden rounded-full bg-[var(--accent-soft)]"
-                    >
-                      <div
-                        className="h-full rounded-full bg-[var(--accent)] shadow-[0_4px_12px_var(--shadow-accent)]"
-                        style={{ width: `${progress.percentage}%` }}
-                      />
-                      <span className="sr-only">{progress.percentage}%</span>
-                    </div>
-                  </div>
+                  {/* The sample cards' "第 1 / 12 单元, 8%" bar was template art,
+                      not a record of anything: nobody had ever completed a unit
+                      of these. It used to be hidden only once the visitor's own
+                      classes appeared above it, which left the fabricated figure
+                      showing to precisely the visitors who could not tell it was
+                      fabricated - signed-out ones. It is gone for everyone. */}
                 </div>
 
                 <div

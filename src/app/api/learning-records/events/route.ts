@@ -1,6 +1,9 @@
 import { after } from "next/server";
 import {
   createLearningRecordQueue,
+  getLearningRecordFlushFailures,
+  recordLearningRecordFlushFailure,
+  type LearningRecordFlushResult,
   type LearningRecordQueueResult,
 } from "@/lib/learning-records/lrs-recorder";
 import type {
@@ -172,16 +175,61 @@ function createDefaultEnqueue(input: {
   };
 }
 
-function scheduleLearningRecordFlush(queue: { flush: () => Promise<unknown> }) {
+function scheduleLearningRecordFlush(queue: {
+  flush: () => Promise<LearningRecordFlushResult>;
+}) {
   // Keep the async LRS write alive past the response so serverless runtimes do
   // not freeze the function before the flush completes; fall back to a detached
   // flush when `after` is unavailable (e.g. outside a request scope).
   try {
     after(async () => {
-      await queue.flush().catch(() => undefined);
+      await runLearningRecordFlush(queue);
     });
   } catch {
-    void queue.flush().catch(() => undefined);
+    void runLearningRecordFlush(queue);
+  }
+}
+
+// The route answers 202 "queued" BEFORE this runs, so a statement lost here is
+// lost after the client has already been told the write was accepted. The flush
+// result used to be discarded entirely (`.catch(() => undefined)`), which made
+// that loss invisible in every deployment log. It is now counted twice over: in
+// the recorder's process-wide tally, which the admin smoke route reports, and
+// in one server log line per lossy flush carrying the event counts.
+//
+// Out of scope by design (they need storage this route does not have): durable
+// retry across instances, a dead-letter queue, and per-actor loss attribution.
+async function runLearningRecordFlush(queue: {
+  flush: () => Promise<LearningRecordFlushResult>;
+}) {
+  try {
+    const result = await queue.flush();
+    if (result.failed > 0) {
+      const failures = getLearningRecordFlushFailures();
+      console.error("[learning-record-events]", {
+        phase: "flush",
+        status: "statements-dropped",
+        attempted: result.attempted,
+        written: result.written,
+        failed: result.failed,
+        processFailedWrites: failures.failedWrites,
+        lastFailure: failures.lastFailure,
+        redaction: createRedaction(),
+      });
+    }
+  } catch (error) {
+    // `flush()` resolves for an unwritable statement, so reaching here means the
+    // queue itself broke (a malformed event, a runtime fault): the whole batch
+    // is gone and the count is unknown, which is worth exactly one loud line.
+    recordLearningRecordFlushFailure(error);
+    const failures = getLearningRecordFlushFailures();
+    console.error("[learning-record-events]", {
+      phase: "flush",
+      status: "flush-failed",
+      processFailedWrites: failures.failedWrites,
+      lastFailure: failures.lastFailure,
+      redaction: createRedaction(),
+    });
   }
 }
 

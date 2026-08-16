@@ -227,14 +227,17 @@ describe("learning page learning-record emission", () => {
     expect(learningEventCalls).toHaveLength(0);
   });
 
-  it("emits ai.feedback.requested with a unique key when the student asks the AI guide", async () => {
-    const { learningEventCalls } = stubFetch({ playback: "pending" });
+  it("emits ai.feedback.requested with a unique key when a published deck attributes the course", async () => {
+    const { learningEventCalls } = stubFetch({ playback: "ready" });
     render(
       <SessionUserProvider initialSessionUser={studentUser}>
         <LearningPage />
       </SessionUserProvider>,
     );
 
+    // Wait for the deck: without it there is no course this student is known to
+    // be in, and the guide question is deliberately not recorded (below).
+    await screen.findAllByText("第一节");
     const guideInput = screen.getByLabelText("向智能助教提问");
     fireEvent.change(guideInput, { target: { value: "什么是梯度下降？" } });
     fireEvent.submit(guideInput.closest("form") as HTMLFormElement);
@@ -246,10 +249,10 @@ describe("learning page learning-record emission", () => {
         event: expect.objectContaining({
           type: "ai.feedback.requested",
           object: expect.objectContaining({
-            id: expect.stringContaining("research-methods-learning/ai-guide/"),
+            id: expect.stringContaining("elementary-math-research/ai-guide/"),
           }),
           context: expect.objectContaining({
-            courseId: "research-methods-learning",
+            courseId: "elementary-math-research",
           }),
         }),
       }),
@@ -257,6 +260,34 @@ describe("learning page learning-record emission", () => {
     expect(String(learningEventCalls[0].body.idempotencyKey)).toContain(
       ":ai.feedback.requested:",
     );
+  });
+
+  // A bare /learning with no published deck falls back to the TEMPLATE's demo
+  // course (`research-methods-learning`), which a real student has never joined.
+  // Stamping their guide questions, notes exports and checkpoint attempts with
+  // that id wrote a course they are not in into their own learning record - and
+  // the events route refuses them anyway
+  // (`learner-course-membership-required`), so the calls were pure noise.
+  it("emits no learning record on a bare /learning the student is not enrolled in", async () => {
+    const { learningEventCalls } = stubFetch({ playback: "pending" });
+    render(
+      <SessionUserProvider initialSessionUser={studentUser}>
+        <LearningPage />
+      </SessionUserProvider>,
+    );
+
+    const guideInput = screen.getByLabelText("向智能助教提问");
+    fireEvent.change(guideInput, { target: { value: "什么是梯度下降？" } });
+    fireEvent.submit(guideInput.closest("form") as HTMLFormElement);
+
+    // The guide answer proves the interaction completed; the record did not.
+    await screen.findByText("好的，我来解释。");
+    expect(learningEventCalls).toHaveLength(0);
+    expect(
+      learningEventCalls.some((call) =>
+        JSON.stringify(call.body).includes("research-methods-learning"),
+      ),
+    ).toBe(false);
   });
 
   it("emits narration progress and course.completed once every slide narration finishes", async () => {

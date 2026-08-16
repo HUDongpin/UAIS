@@ -8,6 +8,10 @@ import {
   resolveLrsConfig,
 } from "@/lib/learning-records/lrs-client";
 import {
+  createLearningRecordQueue,
+  resetLearningRecordFlushFailuresForTesting,
+} from "@/lib/learning-records/lrs-recorder";
+import {
   createLrsSmokeGetHandler,
   createLrsSmokePostHandler,
 } from "@/app/api/learning-records/lrs/smoke/route";
@@ -241,6 +245,81 @@ describe("UAIS Learning Record Store xAPI connection", () => {
     expect(JSON.stringify(live)).not.toContain("https://lrs.example.test");
     expect(JSON.stringify(live)).not.toContain("lrs-user");
     expect(JSON.stringify(live)).not.toContain("lrs-password");
+  });
+
+  // E16/PKG-10: the events route answers 202 "queued" and flushes afterwards, so
+  // a statement the recorder gives up on is dropped after the client has already
+  // been told the write was accepted. Readiness stays green through all of it -
+  // the credentials are still set - so the loss has to ride on the same probe.
+  it("reports the recorder's dropped-statement tally on the admin smoke readiness", async () => {
+    const env = {
+      NODE_ENV: "development",
+      UAIS_AI_ACCESS_SIGNING_SECRET: aiAccessSigningSecret,
+      UAIS_LRS_ENDPOINT: "https://lrs.example.test/xapi/",
+      UAIS_LRS_USERNAME: "lrs-user",
+      UAIS_LRS_PASSWORD: "lrs-password",
+    };
+    const getHandler = createLrsSmokeGetHandler({ env });
+    resetLearningRecordFlushFailuresForTesting();
+
+    const cleanResponse = await getHandler(
+      new Request("http://localhost/api/learning-records/lrs/smoke", {
+        headers: signedAdminAiAccessHeaders,
+      }),
+    );
+    expect(await cleanResponse.json()).toEqual(
+      expect.objectContaining({
+        flushFailures: expect.objectContaining({
+          failedWrites: 0,
+          lastFailure: { status: "none" },
+        }),
+      }),
+    );
+
+    // Two statements the recorder could not write, exactly as `flush()` counts
+    // them when `postWithRetry` runs out of attempts.
+    const queue = createLearningRecordQueue({
+      env,
+      fetch: vi.fn(async () => new Response("upstream busy", { status: 503 })),
+      now: () => "2026-08-16T00:00:00.000Z",
+      maxAttempts: 1,
+    });
+    for (const objectId of ["unit-3/question-2", "unit-3/question-3"]) {
+      queue.enqueue({
+        actor: { id: "student-001", role: "learner" },
+        event: {
+          type: "question.answered",
+          object: { id: objectId, name: "Check" },
+          context: { courseId: "research-methods" },
+        },
+        idempotencyKey: `student-001:${objectId}`,
+      });
+    }
+    await queue.flush();
+
+    const lossyResponse = await getHandler(
+      new Request("http://localhost/api/learning-records/lrs/smoke", {
+        headers: signedAdminAiAccessHeaders,
+      }),
+    );
+    const lossy = await lossyResponse.json();
+    expect(lossy.readiness.status).toBe("ready");
+    expect(lossy.flushFailures).toEqual(
+      expect.objectContaining({
+        target: "learning-record-store",
+        failedWrites: 2,
+        lastFailure: {
+          status: "recorded",
+          reason: "LRS statement write failed with HTTP 503.",
+          httpStatus: 503,
+        },
+      }),
+    );
+    // The reason is redacted to the client's own fixed message shape, so a
+    // transport error carrying the endpoint host never reaches an HTTP response.
+    expect(JSON.stringify(lossy)).not.toContain("https://lrs.example.test");
+    expect(JSON.stringify(lossy)).not.toContain("lrs-password");
+    resetLearningRecordFlushFailuresForTesting();
   });
 
   it("rejects local LRS smoke readiness and approved writes without signed admin session claims", async () => {

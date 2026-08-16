@@ -52,9 +52,10 @@ export async function reportLearningEvent(
         ...(input.idempotencyKey ? { idempotencyKey: input.idempotencyKey } : {}),
       }),
     });
-    if (response.status >= 500) {
-      // Server-side failure: allow a later interaction to retry. Client and
-      // 424 (LRS unconfigured) responses stay deduplicated to avoid hammering.
+    if (response.status >= 500 || isRecoverableSessionDenial(response.status)) {
+      // Server-side failure, or a refusal the learner can clear: allow a later
+      // interaction to retry. Every other client response - including 424 (LRS
+      // unconfigured) - stays deduplicated to avoid hammering.
       reportedEventKeys.delete(clientKey);
     }
   } catch {
@@ -64,6 +65,18 @@ export async function reportLearningEvent(
 
 export function resetReportedLearningEventsForTesting() {
   reportedEventKeys.clear();
+}
+
+// 401 and 403 are the two refusals the learner can clear without the event
+// changing at all: the app session expired mid-page, or it had not been
+// established yet when the event fired. The dedupe key used to survive them for
+// the whole page session, so an expired cookie swallowed that event key
+// permanently - including after the learner signed back in in another tab, when
+// the very next attempt would have been accepted. 424 (the LRS is not
+// configured) and the remaining 4xx keep their key on purpose: nothing the
+// learner does changes those answers, and retrying would only hammer the route.
+function isRecoverableSessionDenial(status: number) {
+  return status === 401 || status === 403;
 }
 
 function createUniqueKeySuffix() {

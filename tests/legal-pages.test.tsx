@@ -77,13 +77,17 @@ describe("legal policy pages", () => {
   it("keeps the login consent links wired to the legal pages", () => {
     render(<LoginPage />);
 
-    const consent = screen.getByText("我已阅读并同意").closest("p");
+    // The line asserts an implicit agreement now: no checkbox is rendered and the
+    // submit handler reads no consent state, so "我已阅读并同意" claimed something
+    // the page never collected.
+    const consent = screen.getByText("登录即表示同意").closest("p");
     expect(consent).toBeTruthy();
+    // The link text names each destination exactly as that page titles itself.
     expect(
-      within(consent as HTMLElement).getByRole("link", { name: "用户协议" }).getAttribute("href"),
+      within(consent as HTMLElement).getByRole("link", { name: "《用户协议》" }).getAttribute("href"),
     ).toBe("/terms");
     expect(
-      within(consent as HTMLElement).getByRole("link", { name: "隐私政策" }).getAttribute("href"),
+      within(consent as HTMLElement).getByRole("link", { name: "《隐私政策》" }).getAttribute("href"),
     ).toBe("/privacy");
   });
 

@@ -86,11 +86,79 @@ export type XapiStatementsResult = {
   };
 };
 
+// What an operator can see about statements this process gave up on.
+//
+// The events route answers 202 "queued" and flushes after the response, so a
+// write that exhausts `postWithRetry` used to disappear with no counter, no log
+// and no dead letter: the learner's record was simply gone and nothing in the
+// deployment could say how often that happened. This is the minimum that makes
+// the loss countable - a process-wide tally plus the last redacted reason - and
+// it is deliberately NOT a queue redesign: durable retry, a dead-letter store
+// and cross-instance aggregation remain out of scope (they need a backing store
+// this route does not have).
+export type LearningRecordFlushFailureSnapshot = {
+  target: "learning-record-store";
+  // Statements this process attempted and could not write, since it started.
+  failedWrites: number;
+  lastFailure:
+    | { status: "none" }
+    | {
+        status: "recorded";
+        // Redacted to the same shape the smoke route reports: an LRS HTTP status
+        // when the client produced one, and a generic string otherwise, so a
+        // network error carrying the endpoint host never reaches a response.
+        reason: string;
+        httpStatus?: number;
+      };
+  redaction: LearningRecordRedaction;
+};
+
 const redaction: LearningRecordRedaction = {
   endpoint: "fingerprinted",
   credentials: "omitted",
   rawStatement: "omitted",
 };
+
+let flushFailureCount = 0;
+let lastFlushFailure: LearningRecordFlushFailureSnapshot["lastFailure"] = {
+  status: "none",
+};
+
+export function recordLearningRecordFlushFailure(error: unknown) {
+  flushFailureCount += 1;
+  lastFlushFailure = {
+    status: "recorded",
+    reason: redactLearningRecordFlushError(error),
+    ...(error instanceof LrsWriteError ? { httpStatus: error.httpStatus } : {}),
+  };
+}
+
+export function getLearningRecordFlushFailures(): LearningRecordFlushFailureSnapshot {
+  return {
+    target: "learning-record-store",
+    failedWrites: flushFailureCount,
+    lastFailure: lastFlushFailure,
+    redaction,
+  };
+}
+
+export function resetLearningRecordFlushFailuresForTesting() {
+  flushFailureCount = 0;
+  lastFlushFailure = { status: "none" };
+}
+
+// Mirrors the smoke route's redaction: only the client's own fixed message shape
+// is passed through, because a transport error message can carry the endpoint
+// host and this string is served to an admin over HTTP.
+export function redactLearningRecordFlushError(error: unknown): string {
+  if (
+    error instanceof Error &&
+    /^LRS statement write failed with HTTP \d+\.$/.test(error.message)
+  ) {
+    return error.message;
+  }
+  return "LRS statement write failed.";
+}
 
 export function createLearningRecordQueue(input: {
   env: Record<string, string | undefined>;
@@ -171,16 +239,20 @@ export function createLearningRecordQueue(input: {
           statementId: createIdempotentStatementId(item.idempotencyKey),
           timestamp: input.now?.(),
         });
-        const success = await postWithRetry({
+        const attempt = await postWithRetry({
           config: config.config,
           statement,
           fetch: input.fetch,
           maxAttempts: input.maxAttempts ?? 3,
         });
-        if (success) {
+        if (attempt.status === "written") {
           written += 1;
         } else {
           failed += 1;
+          // Counted here rather than by the caller: this is the exact point the
+          // statement stops existing anywhere, and `flush()` is awaited by a
+          // scheduler that used to swallow its result whole.
+          recordLearningRecordFlushFailure(attempt.error);
         }
       }
 
@@ -258,7 +330,10 @@ async function postWithRetry(input: {
   statement: XapiStatement;
   fetch?: typeof fetch;
   maxAttempts: number;
-}) {
+}): Promise<{ status: "written" } | { status: "failed"; error: unknown }> {
+  // The reason the LAST attempt gave up, carried out so the give-up is
+  // countable with a cause instead of a bare boolean.
+  let lastError: unknown;
   for (let attempt = 1; attempt <= input.maxAttempts; attempt += 1) {
     try {
       await postXapiStatement({
@@ -266,20 +341,21 @@ async function postWithRetry(input: {
         statement: input.statement,
         fetch: input.fetch,
       });
-      return true;
+      return { status: "written" };
     } catch (error) {
+      lastError = error;
       // A same-id conflict means this deterministic statement id is already
       // stored (idempotent re-emission, possibly with an older body shape);
       // the record exists, so treat it as written instead of retrying.
       if (error instanceof LrsWriteError && error.httpStatus === 409) {
-        return true;
+        return { status: "written" };
       }
       if (attempt === input.maxAttempts) {
-        return false;
+        return { status: "failed", error };
       }
     }
   }
-  return false;
+  return { status: "failed", error: lastError };
 }
 
 function assertTargetedQuery(query: XapiStatementsQuery) {

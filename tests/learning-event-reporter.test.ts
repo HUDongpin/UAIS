@@ -73,7 +73,7 @@ describe("learning event client reporter", () => {
   it("keeps client-side denials deduplicated but retries server failures", async () => {
     const fetchMock = vi
       .fn()
-      .mockResolvedValueOnce(Response.json({ error: "denied" }, { status: 403 }))
+      .mockResolvedValueOnce(Response.json({ error: "invalid" }, { status: 400 }))
       .mockResolvedValue(Response.json({ error: "upstream" }, { status: 503 }));
     vi.stubGlobal("fetch", fetchMock);
 
@@ -85,6 +85,44 @@ describe("learning event client reporter", () => {
     await reportLearningEvent({ actorId: "student-001", event: baseEvent });
     await reportLearningEvent({ actorId: "student-001", event: baseEvent });
     expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  // E16/PKG-10: the dedupe key used to survive a session refusal for the whole
+  // page session, so an expired cookie blackholed that event key permanently -
+  // including after the learner had signed back in in another tab, when the very
+  // next attempt would have been accepted.
+  it.each([401, 403])(
+    "clears the dedupe key on a %i so a re-authenticated learner can retry",
+    async (status) => {
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(Response.json({ error: "denied" }, { status }))
+        .mockResolvedValue(Response.json({ status: "queued" }, { status: 202 }));
+      vi.stubGlobal("fetch", fetchMock);
+
+      await reportLearningEvent({ actorId: "student-001", event: baseEvent });
+      await reportLearningEvent({ actorId: "student-001", event: baseEvent });
+
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      // And the accepted attempt re-arms the dedupe: one record, not a loop.
+      await reportLearningEvent({ actorId: "student-001", event: baseEvent });
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    },
+  );
+
+  // The other direction, kept exactly as designed: 424 means the deployment has
+  // no LRS configured, which nothing the learner does will change.
+  it("keeps a 424 deduplicated so an unconfigured LRS is not hammered", async () => {
+    const fetchMock = vi.fn(async () =>
+      Response.json({ status: "blocked" }, { status: 424 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await reportLearningEvent({ actorId: "student-001", event: baseEvent });
+    await reportLearningEvent({ actorId: "student-001", event: baseEvent });
+    await reportLearningEvent({ actorId: "student-001", event: baseEvent });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it("swallows network failures and allows a later retry", async () => {

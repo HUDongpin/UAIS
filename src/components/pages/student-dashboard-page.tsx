@@ -15,10 +15,19 @@ import { Sparkle } from "@phosphor-icons/react/dist/ssr/Sparkle";
 import { Target } from "@phosphor-icons/react/dist/ssr/Target";
 import { UsersThree } from "@phosphor-icons/react/dist/ssr/UsersThree";
 import { useAppPreferences } from "@/components/providers/app-preferences";
+import { useSessionUser } from "@/components/providers/session-user";
 import { localizedText } from "@/components/ui/localized-text";
 import { aiAgents, chatMessages, learningCourses, plazaCourses } from "@/data/uais";
 import { copy } from "@/i18n/copy";
 import type { Locale } from "@/i18n/copy";
+import { createLoginHandoffHref } from "@/lib/auth/login-return-path";
+import {
+  createStudentClassMembershipItems,
+  createStudentMembershipLearningHref,
+  isClosedStudentMembership,
+  type StudentClassMembershipItem,
+  type StudentMembershipCourseResponse,
+} from "./student-membership-helpers";
 
 const dashboardCopy = {
   "zh-CN": {
@@ -38,6 +47,10 @@ const dashboardCopy = {
     aiReadyNote: "4 个智能体可用于研究、方法、数学和写作支持",
     quickActions: "学生看板快捷入口",
     continueLearning: "继续学习",
+    // The hero action when the student has no approved class yet. "继续学习"
+    // pointing at bare /learning opened the template's demo course id, which the
+    // playback route then refuses - a 403 as the first thing a new student clicks.
+    joinCourse: "加入课程",
     openChatroom: "进入聊天室",
     browseCourses: "浏览课程",
     learningSnapshot: "我的学习快照",
@@ -69,6 +82,7 @@ const dashboardCopy = {
     aiReadyNote: "4 agents support research, methods, math, and writing",
     quickActions: "Student dashboard shortcuts",
     continueLearning: "Continue",
+    joinCourse: "Join a Course",
     openChatroom: "Open Chatroom",
     browseCourses: "Browse Courses",
     learningSnapshot: "My Learning Snapshot",
@@ -92,28 +106,10 @@ const sidebarItems = [
   { id: "collaboration", icon: ChatTeardropText, labelKey: "collaboration" },
 ] as const;
 
-type StudentMembershipCourseResponse = {
-  courses?: Array<{
-    courseId?: string;
-    courseName?: string;
-    semester?: string;
-  }>;
-  classes?: Array<{
-    classId?: string;
-    courseId?: string;
-    className?: string;
-    semester?: string;
-  }>;
-  memberships?: Array<{
-    membershipId?: string;
-    courseId?: string;
-    classId?: string;
-    membershipStatus?: string;
-    joinedAt?: string;
-    approvedAt?: string;
-  }>;
-  // Student projection of the teacher-owned learning groups: only groups the
-  // caller belongs to, co-members by display name only, self flagged server-side.
+// The dashboard reads one field the plaza does not: the student projection of
+// the teacher-owned learning groups - only groups the caller belongs to,
+// co-members by display name only, self flagged server-side.
+type StudentDashboardCourseResponse = StudentMembershipCourseResponse & {
   learningGroups?: Array<{
     groupId?: string;
     courseId?: string;
@@ -133,26 +129,52 @@ type StudentLearningGroupItem = {
   members: Array<{ displayName: string; isSelf: boolean }>;
 };
 
-type StudentClassMembershipItem = {
-  id: string;
-  courseId: string;
-  classId: string;
-  courseName: string;
-  className: string;
-  semester: string;
-  membershipStatus: "approved" | "pending-teacher-review";
-};
+// What the signed-student read said about the session behind it. A refusal and
+// an unreachable server are different facts and used to be the same silent
+// `return`: an expired session was shown the demo dashboard as if it were the
+// student's own courses.
+type StudentDashboardSessionState = "ok" | "signed-out" | "unreachable";
+
+const studentDashboardLoginHref = createLoginHandoffHref("/student-dashboard");
 
 export function StudentDashboardPage() {
   const { locale } = useAppPreferences();
+  const sessionUser = useSessionUser();
   const t = dashboardCopy[locale];
+  const authCopy = copy[locale].auth;
+  // The closed-membership wording lives with the plaza's membership copy, which
+  // renders the same rows: one class leaving a student's list must not be
+  // described in two different ways on two pages.
+  const plazaCopy = copy[locale].coursePlaza;
   const [classMemberships, setClassMemberships] = useState<StudentClassMembershipItem[]>([]);
   const [learningGroups, setLearningGroups] = useState<StudentLearningGroupItem[]>([]);
+  const [sessionState, setSessionState] = useState<StudentDashboardSessionState>("ok");
   const activeCourse = learningCourses[0];
   const nextCourse = learningCourses[1];
   const recommendedCourse = plazaCourses[0];
   const latestGroupMessage =
     chatMessages.find((message) => message.kind === "student") ?? chatMessages[0];
+  const approvedMembership = classMemberships.find(
+    (membership) => membership.membershipStatus === "approved",
+  );
+  const continueLearningHref = approvedMembership
+    ? createStudentMembershipLearningHref(approvedMembership)
+    : "/courses";
+  const continueLearningDetail = approvedMembership ? "/learning" : "/courses";
+  // The eyebrow above the dashboard title. The English copy was the hardcoded
+  // "Peter's learning home" - the demo student's name, printed over every real
+  // learner's dashboard - while the Chinese copy said nothing about who was
+  // reading. Both locales now name the signed-in learner and both fall back to
+  // the first person when the session carries no name; neither ever names
+  // somebody else.
+  const learnerDisplayName = sessionUser?.displayName?.trim();
+  const learningHomeLabel = learnerDisplayName
+    ? locale === "zh-CN"
+      ? `${learnerDisplayName}的学习首页`
+      : `${learnerDisplayName}'s learning home`
+    : locale === "zh-CN"
+      ? "我的学习首页"
+      : "My learning home";
 
   useEffect(() => {
     if (!shouldLoadStudentClassMemberships() || typeof fetch !== "function") {
@@ -168,16 +190,32 @@ export function StudentDashboardPage() {
           headers: { accept: "application/json" },
         });
         const body = (await response.json().catch(() => null)) as
-          | StudentMembershipCourseResponse
+          | StudentDashboardCourseResponse
           | null;
-        if (isCancelled || !response.ok || !body) {
+        if (isCancelled) {
           return;
         }
 
+        // A refused read means this browser is not (or no longer) a signed-in
+        // student. Rendering the demo dashboard here would tell an expired
+        // session that its courses and groups are fine.
+        if (response.status === 401 || response.status === 403) {
+          setSessionState("signed-out");
+          return;
+        }
+        if (!response.ok || !body) {
+          setSessionState("unreachable");
+          return;
+        }
+
+        setSessionState("ok");
         setClassMemberships(createStudentClassMembershipItems(body));
         setLearningGroups(createStudentLearningGroupItems(body));
       } catch {
-        // Keep the static learning dashboard usable if the signed student read is unavailable.
+        // Reachability, not authorization: the dashboard stays up and says so.
+        if (!isCancelled) {
+          setSessionState("unreachable");
+        }
       }
     }
 
@@ -188,13 +226,51 @@ export function StudentDashboardPage() {
     };
   }, []);
 
+  if (sessionState === "signed-out") {
+    return (
+      <div className="space-y-6" data-uais-student-dashboard>
+        <section
+          data-uais-student-dashboard-signed-out="true"
+          className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5 shadow-[0_18px_48px_var(--shadow)] md:p-7"
+        >
+          <p className="text-sm font-semibold text-[var(--accent)]">{t.title}</p>
+          <h1 className="mt-2 text-2xl font-semibold tracking-tight text-[var(--foreground)] sm:text-3xl">
+            {authCopy.sessionExpiredTitle}
+          </h1>
+          <p className="mt-3 max-w-2xl text-base leading-7 text-[var(--muted)]">
+            {authCopy.sessionExpiredBody}
+          </p>
+          <Link
+            href={studentDashboardLoginHref}
+            data-uais-student-dashboard-sign-in="true"
+            className="mt-5 inline-flex h-11 items-center gap-2 rounded-full bg-[var(--accent)] px-5 text-sm font-semibold text-white outline-none transition hover:bg-[var(--accent-strong)] active:translate-y-px focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]"
+          >
+            <ArrowRight size={17} weight="bold" />
+            {authCopy.signIn}
+          </Link>
+        </section>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6" data-uais-student-dashboard>
+      {/* Reachability only: the courses below are the template's own sample
+          content, and the read that would have replaced them can be retried. */}
+      {sessionState === "unreachable" ? (
+        <p
+          data-uais-student-dashboard-unreachable="true"
+          role="status"
+          className="rounded-2xl border border-dashed border-[var(--border)] bg-[var(--surface-elevated)] px-4 py-3 text-sm leading-6 text-[var(--muted)]"
+        >
+          {authCopy.networkRetry}
+        </p>
+      ) : null}
       <section className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5 shadow-[0_18px_48px_var(--shadow)] md:p-7">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <p className="text-sm font-semibold text-[var(--accent)]">
-              {locale === "zh-CN" ? "我的学习首页" : "Peter's learning home"}
+              {learningHomeLabel}
             </p>
             <h1 className="mt-2 text-3xl font-semibold tracking-tight text-[var(--foreground)] sm:text-4xl">
               {t.title}
@@ -207,11 +283,16 @@ export function StudentDashboardPage() {
             aria-label={t.quickActions}
             className="flex flex-wrap gap-2"
           >
+            {/* The one CTA a student is most likely to press, and it used to
+                point at bare /learning - which resolves to the template's demo
+                course id and is refused for a real student. It now opens the
+                first class the teacher actually approved, or, when there is
+                none yet, the page where a class can be joined. */}
             <DashboardAction
-              href="/learning"
-              label={t.continueLearning}
+              href={continueLearningHref}
+              label={approvedMembership ? t.continueLearning : t.joinCourse}
               icon={ArrowRight}
-              detail={locale === "zh-CN" ? "已连接入口" : "/learning"}
+              detail={locale === "zh-CN" ? "已连接入口" : continueLearningDetail}
             />
             <DashboardAction
               href="/learning/chatroom"
@@ -371,18 +452,34 @@ export function StudentDashboardPage() {
                           </p>
                         </div>
                         <span
+                          data-uais-student-membership-status={membership.membershipStatus}
                           className={[
                             "inline-flex h-8 shrink-0 items-center rounded-full px-3 text-sm font-semibold",
                             membership.membershipStatus === "approved"
                               ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-200"
-                              : "bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-200",
+                              : isClosedStudentMembership(membership)
+                                ? "bg-[var(--surface)] text-[var(--muted)]"
+                                : "bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-200",
                           ].join(" ")}
                         >
                           {membership.membershipStatus === "approved"
                             ? t.approvedMembership
-                            : t.pendingMembership}
+                            : membership.membershipStatus === "rejected"
+                              ? plazaCopy.membershipRejected
+                              : membership.membershipStatus === "removed"
+                                ? plazaCopy.membershipRemoved
+                                : t.pendingMembership}
                         </span>
                       </div>
+                      {/* A class that left the list says so, quietly, in place
+                          of the entry link it no longer has. Without this the
+                          class simply vanished and the student had nothing to
+                          read anywhere. */}
+                      {isClosedStudentMembership(membership) ? (
+                        <p className="mt-2 text-sm leading-6 text-[var(--muted)]">
+                          {plazaCopy.membershipClosedNote}
+                        </p>
+                      ) : null}
                       {membership.membershipStatus === "approved" ? (
                         <Link
                           href={createStudentMembershipLearningHref(membership)}
@@ -466,89 +563,8 @@ function shouldLoadStudentClassMemberships() {
   );
 }
 
-function createStudentClassMembershipItems(
-  response: StudentMembershipCourseResponse,
-): StudentClassMembershipItem[] {
-  const coursesById = new Map(
-    (response.courses ?? [])
-      .map((course) => {
-        const courseId = course.courseId?.trim();
-        const courseName = course.courseName?.trim();
-        if (!courseId || !courseName) {
-          return undefined;
-        }
-        return [
-          courseId,
-          {
-            courseName,
-            semester: course.semester?.trim() ?? "",
-          },
-        ] as const;
-      })
-      .filter((course): course is readonly [string, { courseName: string; semester: string }] =>
-        Boolean(course),
-      ),
-  );
-  const classesById = new Map(
-    (response.classes ?? [])
-      .map((classItem) => {
-        const classId = classItem.classId?.trim();
-        const courseId = classItem.courseId?.trim();
-        const className = classItem.className?.trim();
-        if (!classId || !courseId || !className) {
-          return undefined;
-        }
-        return [
-          classId,
-          {
-            courseId,
-            className,
-            semester: classItem.semester?.trim() ?? "",
-          },
-        ] as const;
-      })
-      .filter(
-        (
-          classItem,
-        ): classItem is readonly [
-          string,
-          { courseId: string; className: string; semester: string },
-        ] => Boolean(classItem),
-      ),
-  );
-
-  return (response.memberships ?? [])
-    .map((membership) => {
-      const membershipId = membership.membershipId?.trim();
-      const classId = membership.classId?.trim();
-      if (!membershipId || !classId) {
-        return undefined;
-      }
-      const classItem = classesById.get(classId);
-      if (!classItem) {
-        return undefined;
-      }
-      const course = coursesById.get(classItem.courseId);
-      if (!course) {
-        return undefined;
-      }
-
-      return {
-        id: membershipId,
-        courseId: classItem.courseId,
-        classId,
-        courseName: course.courseName,
-        className: classItem.className,
-        semester: classItem.semester || course.semester,
-        membershipStatus:
-          membership.membershipStatus === "approved" ? "approved" : "pending-teacher-review",
-      } satisfies StudentClassMembershipItem;
-    })
-    .filter((membership): membership is StudentClassMembershipItem => Boolean(membership));
-}
-
 function createStudentLearningGroupItems(
-  response: StudentMembershipCourseResponse,
+  response: StudentDashboardCourseResponse,
 ): StudentLearningGroupItem[] {
   return (response.learningGroups ?? [])
     .map((group) => {
@@ -655,14 +671,6 @@ function StudentGroupSignalCard({
       </div>
     </article>
   );
-}
-
-function createStudentMembershipLearningHref(membership: StudentClassMembershipItem) {
-  const params = new URLSearchParams({
-    courseId: membership.courseId,
-    classId: membership.classId,
-  });
-  return `/learning?${params.toString()}`;
 }
 
 function DashboardAction({
