@@ -53,29 +53,29 @@ export function LangGraphTracePanel({
   return (
     <div
       data-uais-langgraph-trace={graphId}
-      className="mt-3 border-t border-[#dce2ef] pt-3 text-xs leading-5 text-[#4f5670]"
+      className="mt-3 border-t border-[var(--border)] pt-3 text-xs leading-5 text-[var(--muted)]"
     >
-      <div className="flex items-center gap-2 font-semibold text-[#26314f]">
-        <Sparkle size={14} weight="fill" className="text-[#1f6feb]" />
+      <div className="flex items-center gap-2 font-semibold text-[var(--foreground)]">
+        <Sparkle size={14} weight="fill" className="text-[var(--accent)]" />
         <span>{traceTitle}</span>
       </div>
-      <div className="mt-2 grid gap-2 rounded-lg border border-[#dfe5f2] bg-white/70 p-2">
+      <div className="mt-2 grid gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface)]/70 p-2">
         <div className="grid grid-cols-[76px_minmax(0,1fr)] gap-2">
-          <span className="text-[#7a8299]">Graph</span>
-          <span className="break-words font-semibold text-[#303650]">{graphId}</span>
+          <span className="text-[var(--muted)]">Graph</span>
+          <span className="break-words font-semibold text-[var(--foreground)]">{graphId}</span>
         </div>
         {supervisorNodeId ? (
           <div className="grid grid-cols-[76px_minmax(0,1fr)] gap-2">
-            <span className="text-[#7a8299]">{supervisorLabel}</span>
-            <span className="break-words font-semibold text-[#303650]">
+            <span className="text-[var(--muted)]">{supervisorLabel}</span>
+            <span className="break-words font-semibold text-[var(--foreground)]">
               {supervisorNodeId}
             </span>
           </div>
         ) : null}
         {runtime ? (
           <div className="grid grid-cols-[76px_minmax(0,1fr)] gap-2">
-            <span className="text-[#7a8299]">{runtimeLabel}</span>
-            <span className="break-words text-[#303650]">
+            <span className="text-[var(--muted)]">{runtimeLabel}</span>
+            <span className="break-words text-[var(--foreground)]">
               {runtime.status ?? "completed"}
               {typeof runtime.eventCount === "number"
                 ? ` · ${runtime.eventCount} events`
@@ -85,8 +85,8 @@ export function LangGraphTracePanel({
         ) : null}
         {memory ? (
           <div className="grid grid-cols-[76px_minmax(0,1fr)] gap-2">
-            <span className="text-[#7a8299]">{memoryLabel}</span>
-            <span className="break-words text-[#303650]">
+            <span className="text-[var(--muted)]">{memoryLabel}</span>
+            <span className="break-words text-[var(--foreground)]">
               {memory.mode ?? "thread-checkpoint"}
               {memory.threadId ? ` · ${memory.threadId}` : ""}
               {memory.store ? ` · ${memory.store}` : ""}
@@ -95,22 +95,22 @@ export function LangGraphTracePanel({
         ) : null}
         {humanInTheLoop ? (
           <div className="grid grid-cols-[76px_minmax(0,1fr)] gap-2">
-            <span className="text-[#7a8299]">HITL</span>
-            <span className="break-words text-[#303650]">
+            <span className="text-[var(--muted)]">HITL</span>
+            <span className="break-words text-[var(--foreground)]">
               Human-in-the-loop · {humanInTheLoop.status ?? "ready"}
               {humanInTheLoop.resumeMode ? ` · ${humanInTheLoop.resumeMode}` : ""}
             </span>
           </div>
         ) : null}
         {currentHumanReview ? (
-          <div className="grid gap-2 border-t border-[#e4e8f2] pt-2">
-            <div className="break-words text-[#303650]">{humanReviewText}</div>
+          <div className="grid gap-2 border-t border-[var(--border)] pt-2">
+            <div className="break-words text-[var(--foreground)]">{humanReviewText}</div>
             {humanReviewAction && onHumanReviewAction ? (
               <button
                 type="button"
                 disabled={currentHumanReview.busy}
                 onClick={() => onHumanReviewAction(humanReviewAction)}
-                className="w-fit rounded-md border border-[#bfdbfe] bg-[#eff6ff] px-2.5 py-1 text-xs font-semibold text-[#1f6feb] outline-none transition hover:border-[#1f6feb] focus-visible:ring-2 focus-visible:ring-[#1f6feb] disabled:cursor-not-allowed disabled:opacity-60"
+                className="w-fit rounded-md border border-[var(--accent-border)] bg-[var(--accent-soft)] px-2.5 py-1 text-xs font-semibold text-[var(--accent)] outline-none transition hover:border-[var(--accent)] focus-visible:ring-2 focus-visible:ring-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {getHumanReviewActionLabel(locale, humanReviewAction, currentHumanReview.busy)}
               </button>
@@ -124,13 +124,13 @@ export function LangGraphTracePanel({
           {turns.map((turn, index) => (
             <div
               key={`${turn.agentId ?? "agent"}-${index}`}
-              className="rounded-md bg-white/60 px-2 py-1"
+              className="rounded-md bg-[var(--surface)]/60 px-2 py-1"
             >
-              <span className="font-semibold text-[#303650]">
+              <span className="font-semibold text-[var(--foreground)]">
                 {turn.label ?? turn.agentId ?? "Agent"} · {turn.providerRole ?? "agent"}
               </span>
               {turn.content ? (
-                <span className="ml-1 text-[#6c748b]">{turn.content}</span>
+                <span className="ml-1 text-[var(--muted)]">{turn.content}</span>
               ) : null}
             </div>
           ))}
@@ -142,7 +142,7 @@ export function LangGraphTracePanel({
           {handoffs.slice(0, 3).map((handoff, index) => (
             <div
               key={`${handoff.fromNodeId ?? "from"}-${handoff.toNodeId ?? "to"}-${index}`}
-              className="break-words rounded-md bg-[#f8fbff] px-2 py-1 text-[#5b647d]"
+              className="break-words rounded-md bg-[var(--surface-elevated)] px-2 py-1 text-[var(--muted)]"
             >
               {handoffLabel}: {handoff.fromNodeId ?? "node"} →{" "}
               {handoff.toNodeId ?? "node"}

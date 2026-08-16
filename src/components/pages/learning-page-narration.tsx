@@ -205,7 +205,7 @@ export function NarrationDock({
   return (
     <section
       data-uais-learning-narration-dock="compact"
-      className="mt-10 min-w-0 w-full rounded-2xl border border-[#e2e6f0] bg-white p-3 shadow-[0_18px_44px_rgba(46,58,91,0.08)] xl:mt-20 xl:min-h-0"
+      className="mt-10 min-w-0 w-full rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-3 shadow-[0_18px_44px_var(--shadow)] xl:mt-20 xl:min-h-0"
     >
       <div
         data-uais-learning-narration-dock-layout="desktop"
@@ -241,16 +241,16 @@ export function NarrationDock({
             style={
               publishedPlayback
                 ? {
-                    background: `conic-gradient(from 0deg, #1f6feb ${teacherAvatarProgress}%, #dbeafe ${teacherAvatarProgress}% 100%)`,
+                    background: `conic-gradient(from 0deg, var(--accent) ${teacherAvatarProgress}%, var(--accent-soft) ${teacherAvatarProgress}% 100%)`,
                   }
                 : undefined
             }
             className={[
-              "grid size-18 shrink-0 place-items-center rounded-full p-1 text-lg font-semibold text-[#1f6feb] transition-[background] duration-200",
-              publishedPlayback ? "shadow-[0_0_0_3px_rgba(219,234,254,0.55)]" : "bg-[linear-gradient(135deg,#eff6ff,#dbeafe)]",
+              "grid size-18 shrink-0 place-items-center rounded-full p-1 text-lg font-semibold text-[var(--accent)] transition-[background] duration-200",
+              publishedPlayback ? "shadow-[0_0_0_3px_var(--accent-soft)]" : "bg-[linear-gradient(135deg,var(--surface-elevated),var(--accent-soft))]",
             ].join(" ")}
           >
-            <span className="grid size-16 place-items-center overflow-hidden rounded-full bg-[linear-gradient(135deg,#eff6ff,#dbeafe)] ring-2 ring-white">
+            <span className="grid size-16 place-items-center overflow-hidden rounded-full bg-[linear-gradient(135deg,var(--surface-elevated),var(--accent-soft))] ring-2 ring-[var(--surface)]">
               {publishedPlayback ? (
                 <Image
                   src="/learning/teacher-avatar-kang-xia-comic.png"
@@ -270,11 +270,11 @@ export function NarrationDock({
             </span>
           </span>
           <div className="min-w-0">
-            <p className="truncate text-lg font-semibold text-[#222842]">
+            <p className="truncate text-lg font-semibold text-[var(--foreground)]">
               {publishedPlayback?.teacherName ??
                 (locale === "zh-CN" ? "李明远 教授" : "Prof. Li Mingyuan")}
             </p>
-            <p className="mt-1 truncate text-base text-[#697089]">
+            <p className="mt-1 truncate text-base text-[var(--muted)]">
               {publishedPlayback?.courseTitle ??
                 (locale === "zh-CN" ? "机器学习导论" : "Machine Learning")}
             </p>
@@ -310,13 +310,13 @@ export function NarrationDock({
               />
               <div
                 data-uais-learning-audio-controls="custom"
-                className="grid gap-2 rounded-2xl border border-[#e4e8f2] bg-[#f4f6fb] px-3 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.75)] sm:grid-cols-[44px_104px_minmax(160px,520px)_40px] sm:items-center sm:justify-start sm:gap-3"
+                className="grid gap-2 rounded-2xl border border-[var(--border)] bg-[var(--surface-elevated)] px-3 py-2 shadow-[inset_0_1px_0_var(--shadow)] sm:grid-cols-[44px_104px_minmax(160px,520px)_40px] sm:items-center sm:justify-start sm:gap-3"
               >
                 <button
                   type="button"
                   onClick={handlePrimaryNarrationToggle}
                   aria-pressed={isNarrationPlaying}
-                  className="grid size-11 place-items-center rounded-full bg-[#1f6feb] text-white shadow-[0_14px_28px_rgba(31,111,235,0.24)] outline-none transition hover:bg-[#1759c8] active:translate-y-px focus-visible:ring-2 focus-visible:ring-[#1f6feb] focus-visible:ring-offset-2"
+                  className="grid size-11 place-items-center rounded-full bg-[var(--accent)] text-white shadow-[0_14px_28px_var(--shadow-accent)] outline-none transition hover:bg-[var(--accent-strong)] active:translate-y-px focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2"
                   aria-label={primaryNarrationLabel}
                   title={primaryNarrationLabel}
                 >
@@ -328,7 +328,7 @@ export function NarrationDock({
                 </button>
                 <span
                   data-uais-learning-audio-time="elapsed"
-                  className="min-w-[92px] text-left text-sm font-semibold tabular-nums text-[#252a40] sm:text-center"
+                  className="min-w-[92px] text-left text-sm font-semibold tabular-nums text-[var(--foreground)] sm:text-center"
                 >
                   {narrationTimeText}
                 </span>
@@ -344,7 +344,7 @@ export function NarrationDock({
                     step={0.1}
                     value={narrationCurrentTime}
                     onChange={handleNarrationProgressChange}
-                    className="h-2 w-full cursor-pointer accent-[#1f6feb]"
+                    className="h-2 w-full cursor-pointer accent-[var(--accent)]"
                   />
                 </div>
                 <button
@@ -352,7 +352,7 @@ export function NarrationDock({
                   aria-label={muteLabel}
                   title={muteLabel}
                   onClick={handleNarrationMuteToggle}
-                  className="grid size-10 place-items-center rounded-full text-[#141833] outline-none transition hover:bg-white focus-visible:ring-2 focus-visible:ring-[#1f6feb]"
+                  className="grid size-10 place-items-center rounded-full text-[var(--foreground)] outline-none transition hover:bg-[var(--surface)] focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
                 >
                   {isNarrationMuted ? (
                     <SpeakerSlash size={23} weight="bold" />
@@ -369,13 +369,13 @@ export function NarrationDock({
                   (height, index) => (
                     <span
                       key={`${height}-${index}`}
-                      className={index < 15 ? "w-1.5 rounded-full bg-[#1f6feb]" : "w-1.5 rounded-full bg-[#dfe3ee]"}
+                      className={index < 15 ? "w-1.5 rounded-full bg-[var(--accent)]" : "w-1.5 rounded-full bg-[var(--border)]"}
                       style={{ height }}
                     />
                   ),
                 )}
               </div>
-              <p className="text-center text-sm text-[#858ca4]">{locale === "zh-CN" ? "12:45 / 35:20" : "12:45 / 35:20"}</p>
+              <p className="text-center text-sm text-[var(--muted)]">{locale === "zh-CN" ? "12:45 / 35:20" : "12:45 / 35:20"}</p>
             </>
           )}
         </div>
@@ -389,10 +389,10 @@ export function NarrationDock({
             onClick={onPreviousPublishedSlide}
             disabled={!canShowPrevious}
             className={[
-              "grid size-9 place-items-center rounded-full border outline-none transition focus-visible:ring-2 focus-visible:ring-[#1f6feb]",
+              "grid size-9 place-items-center rounded-full border outline-none transition focus-visible:ring-2 focus-visible:ring-[var(--accent)]",
               canShowPrevious
-                ? "border-[#e1e5ef] bg-white text-[#252a40] hover:border-[#1f6feb] hover:text-[#1f6feb]"
-                : "cursor-not-allowed border-[#e6e9f2] bg-[#f4f6fb] text-[#a5abc0]",
+                ? "border-[var(--border)] bg-[var(--surface)] text-[var(--foreground)] hover:border-[var(--accent)] hover:text-[var(--accent)]"
+                : "cursor-not-allowed border-[var(--border)] bg-[var(--surface-elevated)] text-[var(--placeholder)]",
             ].join(" ")}
             aria-label={locale === "zh-CN" ? "上一段" : "Previous"}
           >
@@ -403,18 +403,18 @@ export function NarrationDock({
             onClick={onNextPublishedSlide}
             disabled={!canShowNext}
             className={[
-              "grid size-9 place-items-center rounded-full border outline-none transition focus-visible:ring-2 focus-visible:ring-[#1f6feb]",
+              "grid size-9 place-items-center rounded-full border outline-none transition focus-visible:ring-2 focus-visible:ring-[var(--accent)]",
               canShowNext
-                ? "border-[#e1e5ef] bg-white text-[#252a40] hover:border-[#1f6feb] hover:text-[#1f6feb]"
-                : "cursor-not-allowed border-[#e6e9f2] bg-[#f4f6fb] text-[#a5abc0]",
+                ? "border-[var(--border)] bg-[var(--surface)] text-[var(--foreground)] hover:border-[var(--accent)] hover:text-[var(--accent)]"
+                : "cursor-not-allowed border-[var(--border)] bg-[var(--surface-elevated)] text-[var(--placeholder)]",
             ].join(" ")}
             aria-label={locale === "zh-CN" ? "下一段" : "Next"}
           >
             <CaretRight size={18} weight="bold" />
           </button>
-          <span className="h-9 w-px bg-[#e4e7f0]" />
+          <span className="h-9 w-px bg-[var(--border)]" />
           <button
-            className="inline-flex h-9 items-center justify-center rounded-lg border border-[#e1e5ef] bg-white px-2 text-sm font-semibold text-[#3d435a] outline-none transition hover:border-[#1f6feb] hover:text-[#1f6feb] focus-visible:ring-2 focus-visible:ring-[#1f6feb]"
+            className="inline-flex h-9 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2 text-sm font-semibold text-[var(--foreground)] outline-none transition hover:border-[var(--accent)] hover:text-[var(--accent)] focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
             type="button"
             onClick={handleNarrationSpeedToggle}
             aria-label={narrationSpeedTitle}
@@ -430,10 +430,10 @@ export function NarrationDock({
             title={locale === "zh-CN" ? "学习工具" : "Study Tools"}
             onClick={onOpenStudyTools}
             className={[
-              "inline-flex h-9 w-full min-w-0 items-center justify-between gap-2 rounded-lg border px-3 text-left text-sm font-semibold outline-none transition focus-visible:ring-2 focus-visible:ring-[#1f6feb]",
+              "inline-flex h-9 w-full min-w-0 items-center justify-between gap-2 rounded-lg border px-3 text-left text-sm font-semibold outline-none transition focus-visible:ring-2 focus-visible:ring-[var(--accent)]",
               studyToolsOpen
-                ? "border-[#bfdbfe] bg-[#eff6ff] text-[#1f6feb]"
-                : "border-[#e1e5ef] bg-white text-[#4f5670] hover:border-[#bfdbfe] hover:text-[#1f6feb]",
+                ? "border-[var(--accent-border)] bg-[var(--accent-soft)] text-[var(--accent)]"
+                : "border-[var(--border)] bg-[var(--surface)] text-[var(--muted)] hover:border-[var(--accent-border)] hover:text-[var(--accent)]",
             ].join(" ")}
           >
             <span className="inline-flex min-w-0 items-center gap-2">
@@ -442,7 +442,7 @@ export function NarrationDock({
             </span>
             <span
               aria-hidden="true"
-              className="hidden min-w-0 truncate text-xs font-medium text-[#7b8399] min-[1440px]:inline"
+              className="hidden min-w-0 truncate text-xs font-medium text-[var(--muted)] min-[1440px]:inline"
             >
               {locale === "zh-CN" ? "本页笔记 · 检查点 · 概念卡" : "Notes · Check · Concepts"}
             </span>

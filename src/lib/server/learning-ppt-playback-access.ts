@@ -105,9 +105,12 @@ export async function authorizeLearningPptPlaybackAccess(input: {
   if (!repository) {
     assertTeachingCourseManagementLocalJsonRuntimeAllowed(input.env);
   }
+  // One course's row: playback access is a question about the requested course
+  // and nothing else. See the per-course re-key in the Postgres store.
   const { database } = await readTeachingCourseManagementSnapshot({
     dataDir: resolveTeachingCourseManagementDataDir(input.env.UAIS_TEACHING_COURSES_DATA_DIR),
     repository,
+    courseId: input.courseId,
   });
 
   if (actor.role === "teacher") {

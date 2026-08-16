@@ -13,10 +13,13 @@ import { PlayCircle } from "@phosphor-icons/react/dist/ssr/PlayCircle";
 import { Robot } from "@phosphor-icons/react/dist/ssr/Robot";
 import { SlidersHorizontal } from "@phosphor-icons/react/dist/ssr/SlidersHorizontal";
 import { Sparkle } from "@phosphor-icons/react/dist/ssr/Sparkle";
-import { Target } from "@phosphor-icons/react/dist/ssr/Target";
 import { useAppPreferences } from "@/components/providers/app-preferences";
 import { useSessionUser } from "@/components/providers/session-user";
 import { copy, type Locale } from "@/i18n/copy";
+import {
+  createLearningReturnPath,
+  createLoginHandoffHref,
+} from "@/lib/auth/login-return-path";
 import {
   createUniqueLearningEventKey,
   reportLearningEvent,
@@ -35,10 +38,14 @@ import {
 } from "./learning-page-content";
 import {
   createAskThisSlidePrompt,
+  createCompletedNarrationStorageKey,
   createSlideStudyContent,
   exportSlideStudyNotes,
+  formatSlideDurationLabel,
   getPlaybackContent,
   getPublishedPlaybackError,
+  readCompletedNarrationSlideIds,
+  resolveLearningEventCourseId,
   type SlideStudyContent,
   type PublishedPlaybackError,
   type StudyAction,
@@ -49,6 +56,9 @@ import { NarrationDock } from "./learning-page-narration";
 import { StudyToolsPanel } from "./learning-page-study-tools";
 import { LangGraphTracePanel } from "./learning-page-trace-panel";
 
+
+const playbackJumpLinkClassName =
+  "inline-flex h-10 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 text-sm font-semibold text-[var(--foreground)] outline-none transition hover:border-[var(--accent-border)] hover:text-[var(--accent)] focus-visible:ring-2 focus-visible:ring-[var(--accent)]";
 
 type PrimaryCompanionView = "ai" | "subtitles" | "outline";
 
@@ -288,8 +298,14 @@ export function LearningPage({ initialCourseId, initialClassId }: LearningPagePr
   function handleStudyAction(action: StudyAction) {
     if (action === "export") {
       exportSlideStudyNotes(studyContent, locale);
-      if (learnerAccount) {
-        const eventCourseId = publishedPlayback?.courseId ?? selectedCourseId;
+      const eventCourseId = resolveLearningEventCourseId({
+        publishedPlaybackCourseId: publishedPlayback?.courseId,
+        selectedCourseId,
+        approvedMembershipCourseId: visibleApprovedInviteLearningContext?.courseId,
+      });
+      // The export itself always runs; only its learning record is conditional.
+      // A student browsing the template's sample deck still gets their notes.
+      if (learnerAccount && eventCourseId) {
         void reportLearningEvent({
           actorId: learnerAccount,
           event: {
@@ -370,6 +386,20 @@ export function LearningPage({ initialCourseId, initialClassId }: LearningPagePr
     };
   }, [initialClassId, initialCourseId]);
 
+  // The course whose lesson this page plays.
+  //
+  // This used to be the demo course id, unconditionally: `/learning` fetched
+  // `elementary-math-research` no matter which course the student had actually
+  // enrolled in, and the effect did not even depend on the course. A student in
+  // the real September course therefore got a 403
+  // (`student-course-membership-required` - their membership is for a different
+  // courseId) over content that was not theirs anyway.
+  //
+  // The demo id remains the fallback for a bare `/learning` with no query, which
+  // is what the course plaza links to today and what keeps the demo walkthrough
+  // working.
+  const playbackCourseId = initialCourseId ?? publishedLearningPptCourseId;
+
   useEffect(() => {
     let cancelled = false;
 
@@ -377,7 +407,7 @@ export function LearningPage({ initialCourseId, initialClassId }: LearningPagePr
       try {
         setPublishedPlaybackError(undefined);
         const response = await fetch(
-          `/api/learning/ppt-playback/${publishedLearningPptCourseId}?locale=${encodeURIComponent(locale)}`,
+          `/api/learning/ppt-playback/${encodeURIComponent(playbackCourseId)}?locale=${encodeURIComponent(locale)}`,
         );
         if (!response.ok) {
           if (!cancelled) {
@@ -407,12 +437,19 @@ export function LearningPage({ initialCourseId, initialClassId }: LearningPagePr
       }
     }
 
+    // A course switch starts a new deck, so the narration dedupe set must not
+    // carry over: a slideId that collides with one already seen would otherwise
+    // suppress the new course's completion event. A ref, not state - the slide
+    // index is already reset inside `loadPublishedPlayback` on success, which
+    // keeps this effect free of a synchronous setState.
+    completedNarrationSlideIdsRef.current = new Set<string>();
+
     void loadPublishedPlayback();
 
     return () => {
       cancelled = true;
     };
-  }, [locale]);
+  }, [locale, playbackCourseId]);
 
   const visibleApprovedInviteLearningContext =
     approvedInviteLearningContext?.courseId === initialCourseId &&
@@ -451,24 +488,14 @@ export function LearningPage({ initialCourseId, initialClassId }: LearningPagePr
     if (!learnerAccount || !publishedPlayback) {
       return completedNarrationSlideIdsRef.current;
     }
-    const storageKey = [
-      "uais-completed-narration",
+    const storageKey = createCompletedNarrationStorageKey({
       learnerAccount,
-      publishedPlayback.courseId,
-      publishedPlayback.audioManifestId,
-    ].join(":");
+      courseId: publishedPlayback.courseId,
+      audioManifestId: publishedPlayback.audioManifestId,
+    });
     const completedSlideIds = new Set(completedNarrationSlideIdsRef.current);
-    try {
-      const stored = JSON.parse(window.localStorage.getItem(storageKey) ?? "[]") as unknown;
-      if (Array.isArray(stored)) {
-        for (const value of stored) {
-          if (typeof value === "string") {
-            completedSlideIds.add(value);
-          }
-        }
-      }
-    } catch {
-      // Storage unavailable or corrupted: fall back to in-memory tracking.
+    for (const storedSlideId of readCompletedNarrationSlideIds(storageKey)) {
+      completedSlideIds.add(storedSlideId);
     }
     completedSlideIds.add(slideId);
     completedNarrationSlideIdsRef.current = completedSlideIds;
@@ -563,43 +590,64 @@ export function LearningPage({ initialCourseId, initialClassId }: LearningPagePr
     ? `${locale === "zh-CN" ? "当前课程：" : "Current course: "}${publishedPlayback.courseTitle}`
     : playback.liveHint;
   const visibleCourseContextSlideTitle = activePublishedSlide?.slideTitle ?? playback.slideTitle;
+  // A 401 on the deck used to render as a dead label. The return path is built
+  // from the route's own props rather than `window.location`, so the href is the
+  // same string on the server render and on the first client render.
+  const playbackSignInHref = createLoginHandoffHref(
+    createLearningReturnPath({ courseId: initialCourseId, classId: initialClassId }),
+  );
 
   return (
-    <div className="relative left-1/2 -my-6 w-screen -translate-x-1/2 bg-[#f7f8fd] px-3 py-3 text-[#141833] sm:px-4 lg:px-5">
+    <div className="relative left-1/2 -my-6 w-screen -translate-x-1/2 bg-[var(--background)] px-3 py-3 text-[var(--foreground)] sm:px-4 lg:px-5">
       <div
         data-uais-learning-course-context="selected-course"
-        className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1 px-1 text-sm font-semibold text-[#303650]"
+        className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1 px-1 text-sm font-semibold text-[var(--foreground)]"
       >
         <span>{visibleCourseContextTitle}</span>
-        <span className="text-[#9aa2b8]">/</span>
-        <span className="text-[#697089]">{visibleCourseContextSlideTitle}</span>
+        <span className="text-[var(--placeholder)]">/</span>
+        <span className="text-[var(--muted)]">{visibleCourseContextSlideTitle}</span>
         {visibleApprovedInviteLearningContext ? (
           <>
-            <span className="text-[#9aa2b8]">/</span>
-            <span className="text-[#1f6feb]">
+            <span className="text-[var(--placeholder)]">/</span>
+            <span className="text-[var(--accent)]">
               {visibleApprovedInviteLearningContext.courseName}
             </span>
-            <span className="text-[#697089]">
+            <span className="text-[var(--muted)]">
               {visibleApprovedInviteLearningContext.className}
             </span>
             {visibleApprovedInviteLearningContext.semester ? (
-              <span className="text-[#697089]">
+              <span className="text-[var(--muted)]">
                 {visibleApprovedInviteLearningContext.semester}
               </span>
             ) : null}
-            <span className="rounded-md border border-[#bfdbfe] bg-[#eff6ff] px-2 py-0.5 text-xs font-semibold text-[#1f6feb]">
+            <span className="rounded-md border border-[var(--accent-border)] bg-[var(--accent-soft)] px-2 py-0.5 text-xs font-semibold text-[var(--accent)]">
               {locale === "zh-CN" ? "已通过邀请码加入" : "Joined by approved invite code"}
             </span>
           </>
         ) : null}
         <Link
           href="/learning/chatroom"
-          className="ml-auto inline-flex h-8 items-center gap-1.5 rounded-full border border-[#bfdbfe] bg-[#eff6ff] px-3 text-xs font-semibold text-[#1f6feb] outline-none transition hover:bg-[#dbeafe] active:translate-y-px focus-visible:ring-2 focus-visible:ring-[#1f6feb]"
+          className="ml-auto inline-flex h-8 items-center gap-1.5 rounded-full border border-[var(--accent-border)] bg-[var(--accent-soft)] px-3 text-xs font-semibold text-[var(--accent)] outline-none transition hover:bg-[var(--surface-soft)] active:translate-y-px focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
         >
           <ChatsCircle size={15} weight="duotone" aria-hidden="true" />
           {t.learning.openChatroom}
         </Link>
       </div>
+      {/* Below `xl` the three columns stack, which used to bury the AI guide,
+          subtitles and outline far under the narration dock with nothing on
+          screen pointing at them. Two anchors, not a redesign. */}
+      <nav
+        data-uais-learning-mobile-jump="true"
+        aria-label={t.learning.playbackViewSwitchLabel}
+        className="mb-3 grid grid-cols-2 gap-2 xl:hidden"
+      >
+        <a href="#uais-learning-stage" className={playbackJumpLinkClassName}>
+          {t.learning.playbackStageTab}
+        </a>
+        <a href="#uais-learning-companion" className={playbackJumpLinkClassName}>
+          {t.learning.playbackCompanionTab}
+        </a>
+      </nav>
       <section
         data-uais-learning-layout="page-right-companion"
         className="grid w-full items-start gap-3 xl:grid-cols-[156px_minmax(0,1fr)_420px]"
@@ -611,8 +659,9 @@ export function LearningPage({ initialCourseId, initialClassId }: LearningPagePr
           onSelectPublishedSlide={setActivePublishedSlideIndex}
         />
         <div
+          id="uais-learning-stage"
           data-uais-learning-playback-workspace="single-viewport"
-          className="grid min-w-0 gap-6 xl:max-h-[calc(100dvh-6.5rem)] xl:grid-rows-[minmax(0,1fr)_auto] xl:overflow-hidden"
+          className="grid min-w-0 scroll-mt-20 gap-6 xl:max-h-[calc(100dvh-6.5rem)] xl:grid-rows-[minmax(0,1fr)_auto] xl:overflow-hidden"
         >
           <PptStage
             locale={locale}
@@ -621,6 +670,7 @@ export function LearningPage({ initialCourseId, initialClassId }: LearningPagePr
             publishedPlaybackError={publishedPlaybackError}
             conceptCount={studyContent.concepts.length}
             onStudyAction={handleStudyAction}
+            signInHref={playbackSignInHref}
           />
           <NarrationDock
             locale={locale}
@@ -698,6 +748,13 @@ function LearningCompanionPanel({
     approvedInviteContext?.courseId === eventCourseId
       ? approvedInviteContext.classId
       : undefined;
+  // `undefined` when nothing on screen belongs to a course this learner is in -
+  // see resolveLearningEventCourseId. Every learning record below is gated on it.
+  const eventCourseId = resolveLearningEventCourseId({
+    publishedPlaybackCourseId: publishedPlayback?.courseId,
+    selectedCourseId: courseId,
+    approvedMembershipCourseId: approvedInviteContext?.courseId,
+  });
   const [guideMessages, setGuideMessages] = useState<AiGuideMessage[]>([]);
   const [guideError, setGuideError] = useState("");
   const [activeGuideAgentId, setActiveGuideAgentId] =
@@ -712,7 +769,16 @@ function LearningCompanionPanel({
   const activeGuideAgent =
     guideCopy.agentCards.find((agent) => agent.id === activeGuideAgentId) ??
     guideCopy.agentCards[0];
-  const transcript = publishedPlayback
+  // Annotated rather than inferred: the fallback is now `[]`, and without the
+  // annotation TypeScript infers `Line[] | never[]` and narrows the mapped
+  // element to `never`.
+  const transcript: Array<{
+    time: string;
+    title: string;
+    text: string;
+    active: boolean;
+    slideIndex: number;
+  }> = publishedPlayback
     ? publishedPlayback.slides.map((slide, index) => ({
         time: locale === "zh-CN" ? `第 ${slide.slideNumber} 页` : `Slide ${slide.slideNumber}`,
         title: slide.slideTitle,
@@ -720,44 +786,12 @@ function LearningCompanionPanel({
         active: slide.slideId === activePublishedSlide?.slideId,
         slideIndex: index,
       }))
-    : [
-    {
-      time: "12:18",
-      text:
-        locale === "zh-CN"
-          ? "我们回顾一下损失函数的定义，它衡量了模型预测值与真实值之间的差距。"
-          : "We review the definition of loss: the gap between prediction and truth.",
-    },
-    {
-      time: "12:32",
-      text:
-        locale === "zh-CN"
-          ? "为了找到使损失最小的参数，我们需要一种优化方法，梯度下降就是其中最经典的一种。"
-          : "To find parameters with the smallest loss, gradient descent is the classic optimizer.",
-    },
-    {
-      time: "12:45",
-      text:
-        locale === "zh-CN"
-          ? "梯度下降的核心思想是：沿着损失函数下降最快的方向不断前进，直到收敛。"
-          : "The core idea: move in the fastest descending direction until convergence.",
-      active: true,
-    },
-    {
-      time: "13:02",
-      text:
-        locale === "zh-CN"
-          ? "右侧图展示了参数空间中的损失曲面，黑色虚线表示梯度下降的迭代路径。"
-          : "The diagram shows the loss surface and the dashed path of gradient descent.",
-    },
-    {
-      time: "13:30",
-      text:
-        locale === "zh-CN"
-          ? "学习率控制了每一步的步长，过大可能越过最优点，过小则收敛缓慢。"
-          : "Learning rate controls step size: too large overshoots, too small converges slowly.",
-    },
-  ];
+    : // No deck, no subtitles. This list used to invent five timestamped
+      // subtitle rows ("12:18" through "13:30") describing a loss function,
+      // gradient descent and the learning rate - to a student in a mathematics-
+      // education course, with fabricated timestamps that made them look like a
+      // real recording. The panel renders an empty state instead.
+      [];
 
   const primaryTabs = [
     { view: "ai" as const, label: locale === "zh-CN" ? "智能导学" : "AI Guide" },
@@ -829,8 +863,7 @@ function LearningCompanionPanel({
     onGuideDraftChange("");
     setGuideError("");
 
-    if (learnerAccount) {
-      const eventCourseId = publishedPlayback?.courseId ?? courseId;
+    if (learnerAccount && eventCourseId) {
       void reportLearningEvent({
         actorId: learnerAccount,
         event: {
@@ -1023,13 +1056,16 @@ function LearningCompanionPanel({
   }
 
   return (
-    <aside className="overflow-hidden rounded-2xl border border-[#e2e6f0] bg-white shadow-[0_18px_44px_rgba(46,58,91,0.08)] xl:sticky xl:top-20 xl:h-[calc(100dvh-6.5rem)]">
+    <aside
+      id="uais-learning-companion"
+      className="scroll-mt-20 overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-[0_18px_44px_var(--shadow)] xl:sticky xl:top-20 xl:h-[calc(100dvh-6.5rem)]"
+    >
       <div className="grid h-full grid-rows-[auto_minmax(0,1fr)]">
-        <div className="border-b border-[#e9ecf4] p-3">
+        <div className="border-b border-[var(--border)] p-3">
           <div
             role="group"
             aria-label={locale === "zh-CN" ? "我的学习右侧栏目切换" : "My Learning right column switcher"}
-            className="grid grid-cols-3 gap-2 rounded-lg border border-[#dfe4ef] bg-[#f7f9fd] p-1"
+            className="grid grid-cols-3 gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] p-1"
           >
           {primaryTabs.map((tab) => {
             const active = activeView === tab.view;
@@ -1040,10 +1076,10 @@ function LearningCompanionPanel({
                 aria-pressed={active}
                 onClick={() => showPrimaryView(tab.view)}
                 className={[
-                  "h-11 rounded-md border px-2 text-sm font-semibold outline-none transition focus-visible:ring-2 focus-visible:ring-[#1f6feb]",
+                  "h-11 rounded-md border px-2 text-sm font-semibold outline-none transition focus-visible:ring-2 focus-visible:ring-[var(--accent)]",
                   active && !studyToolsOpen
-                    ? "border-[#1f6feb] bg-[#1f6feb] text-white shadow-[0_8px_18px_rgba(31,111,235,0.2)]"
-                    : "border-transparent bg-white text-[#4f5670] hover:border-[#bfdbfe] hover:text-[#1f6feb]",
+                    ? "border-[var(--accent)] bg-[var(--accent)] text-white shadow-[0_8px_18px_var(--shadow-accent)]"
+                    : "border-transparent bg-[var(--surface)] text-[var(--muted)] hover:border-[var(--accent-border)] hover:text-[var(--accent)]",
                 ].join(" ")}
               >
                 {tab.label}
@@ -1073,8 +1109,7 @@ function LearningCompanionPanel({
                 setExpandedCheckpointId((current) =>
                   current === checkpointId ? undefined : checkpointId,
                 );
-                if (expanding && learnerAccount) {
-                  const eventCourseId = publishedPlayback?.courseId ?? courseId;
+                if (expanding && learnerAccount && eventCourseId) {
                   void reportLearningEvent({
                     actorId: learnerAccount,
                     event: {
@@ -1104,12 +1139,12 @@ function LearningCompanionPanel({
           {!studyToolsOpen && activeView === "ai" ? (
             <div className="flex h-full min-h-0 flex-col">
               <div className="flex gap-3">
-                <span className="grid size-10 shrink-0 place-items-center rounded-full bg-[#dbeafe] text-[#1f6feb]">
+                <span className="grid size-10 shrink-0 place-items-center rounded-full bg-[var(--accent-soft)] text-[var(--accent)]">
                   <Robot size={22} weight="duotone" />
                 </span>
-                <div className="rounded-xl bg-[#f0f1f7] px-4 py-3 text-sm leading-6 text-[#303650]">
+                <div className="rounded-xl bg-[var(--surface-elevated)] px-4 py-3 text-sm leading-6 text-[var(--foreground)]">
                   <p>{guideCopy.greeting}</p>
-                  <p className="mt-2 text-xs leading-5 text-[#68708a]">
+                  <p className="mt-2 text-xs leading-5 text-[var(--muted)]">
                     {guideCopy.contextHint}
                   </p>
                 </div>
@@ -1125,7 +1160,7 @@ function LearningCompanionPanel({
                       setGuideError("");
                       guideInputRef.current?.focus();
                     }}
-                    className="w-fit rounded-lg border border-[#dfe4ef] bg-white px-4 py-2 text-left text-sm font-medium text-[#444b66] shadow-[0_4px_12px_rgba(46,58,91,0.04)]"
+                    className="w-fit rounded-lg border border-[var(--border)] bg-[var(--surface)] px-4 py-2 text-left text-sm font-medium text-[var(--foreground)] shadow-[0_4px_12px_var(--shadow)]"
                   >
                     {prompt}
                   </button>
@@ -1138,7 +1173,7 @@ function LearningCompanionPanel({
                 tabIndex={0}
                 aria-label={locale === "zh-CN" ? "智能导学对话" : "AI guide conversation"}
                 aria-live="polite"
-                className="mt-4 min-h-0 flex-1 space-y-2 overflow-y-auto pr-1 outline-none focus-visible:ring-2 focus-visible:ring-[#1f6feb]"
+                className="mt-4 min-h-0 flex-1 space-y-2 overflow-y-auto pr-1 outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
               >
                 {guideMessages.map((message) => (
                   <div
@@ -1146,8 +1181,8 @@ function LearningCompanionPanel({
                     className={[
                       "max-w-[92%] rounded-xl px-4 py-3 text-sm leading-6",
                       message.kind === "user"
-                        ? "ml-auto bg-[#1f6feb] text-white"
-                        : "bg-[#f0f1f7] text-[#303650]",
+                        ? "ml-auto bg-[var(--accent)] text-white"
+                        : "bg-[var(--surface-elevated)] text-[var(--foreground)]",
                     ].join(" ")}
                   >
                     <p className="whitespace-pre-line">{message.text}</p>
@@ -1179,16 +1214,16 @@ function LearningCompanionPanel({
                     disabled={pendingGuideAgentId !== null}
                     onClick={() => void requestGuideAgent(agent, agent.prompt)}
                     className={[
-                      "rounded-xl border p-3 text-left outline-none transition focus-visible:ring-2 focus-visible:ring-[#1f6feb]",
+                      "rounded-xl border p-3 text-left outline-none transition focus-visible:ring-2 focus-visible:ring-[var(--accent)]",
                       active
-                        ? "border-[#1f6feb] bg-[#f8fbff] shadow-[0_10px_22px_rgba(31,111,235,0.12)]"
-                        : "border-[#e1e5ef] bg-[#fbfcff] hover:border-[#1f6feb]",
+                        ? "border-[var(--accent)] bg-[var(--surface-elevated)] shadow-[0_10px_22px_var(--shadow-accent)]"
+                        : "border-[var(--border)] bg-[var(--surface)] hover:border-[var(--accent)]",
                       pendingGuideAgentId !== null && !pending ? "opacity-70" : "",
                     ].join(" ")}
                   >
-                    <Icon size={18} weight="duotone" className="text-[#1f6feb]" />
-                    <p className="mt-2 text-xs font-semibold text-[#303650]">{agent.label}</p>
-                    <p className="mt-1 text-[11px] text-[#7b8399]">
+                    <Icon size={18} weight="duotone" className="text-[var(--accent)]" />
+                    <p className="mt-2 text-xs font-semibold text-[var(--foreground)]">{agent.label}</p>
+                    <p className="mt-1 text-[11px] text-[var(--muted)]">
                       {pending
                         ? locale === "zh-CN"
                           ? "正在连接"
@@ -1202,7 +1237,7 @@ function LearningCompanionPanel({
 
               <form
                 onSubmit={handleGuideSend}
-                className="mt-4 shrink-0 rounded-xl border border-[#dfe4ef] bg-white p-3 shadow-[0_8px_18px_rgba(46,58,91,0.05)]"
+                className="mt-4 shrink-0 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3 shadow-[0_8px_18px_var(--shadow)]"
               >
               <div className="flex items-center gap-2">
                 <input
@@ -1214,13 +1249,13 @@ function LearningCompanionPanel({
                     setGuideError("");
                   }}
                   placeholder={locale === "zh-CN" ? "向智能助教提问..." : "Ask the AI assistant..."}
-                  className="h-10 min-w-0 flex-1 rounded-lg bg-[#fafbff] px-3 text-sm outline-none placeholder:text-[#a4aabd] focus:ring-2 focus:ring-[#1f6feb]"
+                  className="h-10 min-w-0 flex-1 rounded-lg bg-[var(--surface-elevated)] px-3 text-sm outline-none placeholder:text-[var(--placeholder)] focus:ring-2 focus:ring-[var(--accent)]"
                 />
                 <button
                   type="submit"
                   disabled={pendingGuideAgentId !== null}
                   aria-busy={pendingGuideAgentId === "multi-agent"}
-                  className="grid size-10 place-items-center rounded-full bg-[#1f6feb] text-white outline-none transition hover:bg-[#1759c8] active:translate-y-px focus-visible:ring-2 focus-visible:ring-[#1f6feb] focus-visible:ring-offset-2"
+                  className="grid size-10 place-items-center rounded-full bg-[var(--accent)] text-white outline-none transition hover:bg-[var(--accent-strong)] active:translate-y-px focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2"
                   aria-label={locale === "zh-CN" ? "发送" : "Send"}
                 >
                   <PaperPlaneTilt size={18} weight="fill" />
@@ -1239,50 +1274,45 @@ function LearningCompanionPanel({
           {!studyToolsOpen && activeView === "subtitles" ? (
           <div>
             <div className="space-y-4">
+              {transcript.length === 0 ? (
+                <p className="px-2 py-6 text-center text-sm leading-6 text-[var(--muted)]">
+                  {locale === "zh-CN"
+                    ? "本课程暂无字幕，课件发布后会在这里显示讲解文本。"
+                    : "No subtitles yet. Narration text appears here once a lesson is published."}
+                </p>
+              ) : null}
+              {/*
+                Every row is now a real published slide, so every row is
+                clickable. The previous `isPublishedLine` branch existed only to
+                render the fabricated timestamped rows as inert <div>s; with
+                those gone it narrowed to `never`.
+              */}
               {transcript.map((line) => {
-                const isPublishedLine = "slideIndex" in line;
                 const rowClassName = [
-                  "grid grid-cols-[72px_minmax(0,1fr)] gap-3 rounded-lg px-2 py-1 text-sm leading-6",
-                  line.active ? "bg-[#dbeafe] text-[#1f6feb]" : "text-[#535b76]",
-                  isPublishedLine
-                    ? "w-full text-left outline-none transition hover:bg-[#eff6ff] focus-visible:ring-2 focus-visible:ring-[#1f6feb]"
-                    : "",
+                  "grid w-full grid-cols-[72px_minmax(0,1fr)] gap-3 rounded-lg px-2 py-1 text-left text-sm leading-6 outline-none transition hover:bg-[var(--accent-soft)] focus-visible:ring-2 focus-visible:ring-[var(--accent)]",
+                  line.active ? "bg-[var(--accent-soft)] text-[var(--accent)]" : "text-[var(--muted)]",
                 ].join(" ");
                 const timeClassName = line.active
-                  ? "font-semibold text-[#1f6feb]"
-                  : "text-[#8991a8]";
-                const rowContent = (
-                  <>
-                    <span className={timeClassName}>{line.time}</span>
-                    <p>{line.text}</p>
-                  </>
-                );
-
-                if (isPublishedLine) {
-                  const jumpLabel =
-                    locale === "zh-CN"
-                      ? `跳转到${line.time}：${line.title}`
-                      : `Jump to ${line.time}: ${line.title}`;
-
-                  return (
-                    <button
-                      key={line.time}
-                      type="button"
-                      aria-label={jumpLabel}
-                      aria-current={line.active ? "page" : undefined}
-                      data-uais-learning-subtitle-page={line.time}
-                      onClick={() => onSelectPublishedSlide(line.slideIndex)}
-                      className={rowClassName}
-                    >
-                      {rowContent}
-                    </button>
-                  );
-                }
+                  ? "font-semibold text-[var(--accent)]"
+                  : "text-[var(--muted)]";
+                const jumpLabel =
+                  locale === "zh-CN"
+                    ? `跳转到${line.time}：${line.title}`
+                    : `Jump to ${line.time}: ${line.title}`;
 
                 return (
-                  <div key={line.time} className={rowClassName}>
-                    {rowContent}
-                  </div>
+                  <button
+                    key={line.time}
+                    type="button"
+                    aria-label={jumpLabel}
+                    aria-current={line.active ? "page" : undefined}
+                    data-uais-learning-subtitle-page={line.time}
+                    onClick={() => onSelectPublishedSlide(line.slideIndex)}
+                    className={rowClassName}
+                  >
+                    <span className={timeClassName}>{line.time}</span>
+                    <p>{line.text}</p>
+                  </button>
                 );
               })}
             </div>
@@ -1290,16 +1320,24 @@ function LearningCompanionPanel({
               <input
                 aria-label={locale === "zh-CN" ? "搜索当前页字幕" : "Search subtitles"}
                 placeholder={locale === "zh-CN" ? "搜索当前页字幕" : "Search subtitles"}
-                className="h-10 min-w-0 flex-1 rounded-lg border border-[#e1e5ef] bg-white px-3 text-sm outline-none placeholder:text-[#a4aabd] focus:ring-2 focus:ring-[#1f6feb]"
+                className="h-10 min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 text-sm outline-none placeholder:text-[var(--placeholder)] focus:ring-2 focus:ring-[var(--accent)]"
               />
-              <button type="button" className="grid size-10 place-items-center rounded-lg border border-[#e1e5ef] bg-white text-[#1f6feb]" aria-label={locale === "zh-CN" ? "筛选字幕" : "Filter subtitles"}>
+              <button type="button" className="grid size-10 place-items-center rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--accent)]" aria-label={locale === "zh-CN" ? "筛选字幕" : "Filter subtitles"}>
                 <SlidersHorizontal size={18} weight="duotone" />
               </button>
             </div>
           </div>
           ) : null}
 
-          {!studyToolsOpen && activeView === "outline" ? <CourseDirectoryView locale={locale} /> : null}
+          {!studyToolsOpen && activeView === "outline" ? (
+            <CourseDirectoryView
+              locale={locale}
+              learnerAccount={learnerAccount}
+              publishedPlayback={publishedPlayback}
+              activePublishedSlide={activePublishedSlide}
+              onSelectPublishedSlide={onSelectPublishedSlide}
+            />
+          ) : null}
         </div>
       </div>
     </aside>
@@ -1391,108 +1429,239 @@ function getAiGuideCopy(
         prompt: `Explain the core idea, misconception, and example for "${slideTitle}"`,
       },
       {
+        // Was "Teaching TA", with a prompt asking for a classroom question and a
+        // teaching example. Both the zh-CN card and the server persona
+        // (`learningGuideAgents` in src/lib/ai/orchestration/learning-guide-graph.ts)
+        // call this agent the Code Assistant, so an English-locale student picked
+        // a card promising teaching examples and got steps and pseudocode back.
         id: "code-assistant" as const,
-        label: "Teaching TA",
-        sub: "Examples and questions",
-        icon: Target,
-        prompt: `Create a classroom question and teaching example for "${slideTitle}"`,
+        label: "Code Assistant",
+        sub: "Algorithms and code",
+        icon: GearSix,
+        prompt: `Turn "${slideTitle}" into steps, pseudocode, or a short code example`,
       },
     ],
     multiAgentLabel: "LangGraph multi-agent guide",
     buildReceipt: (question: string) =>
       `AI Guide received: ${question}. I will connect ${courseTitle}, the current ${slidePosition} "${slideTitle}", subtitles, and outline for you.`,
     buildMultiAgentReceipt: (question: string) =>
-      `The multi-agent chain received: ${question}. Study Advisor, Concept Explainer, and Teaching TA will work together.`,
+      `The multi-agent chain received: ${question}. Study Advisor, Concept Explainer, and Code Assistant will work together.`,
   };
 }
 
-function CourseDirectoryView({ locale }: { locale: Locale }) {
-  const chapters = courseDirectoryChapters.map((chapter, chapterIndex) => ({
+// The outline tab, which used to be the same demo course for everybody.
+//
+// Whatever deck the learner had open, this panel announced "初等数学研究（2024
+// 春）", "康霞博士", a 42% progress bar hard-coded as `w-[42%]`, and the static
+// six-chapter syllabus with every lesson but one flagged done. A student in a
+// different course read another teacher's course card over their own lesson, and
+// a student in *this* course read a completion record nobody had earned.
+//
+// With a published deck the panel is now built from that deck's manifest, and the
+// only progress it shows is the narration the learner actually finished. Without
+// one it still shows the template's sample syllabus - clearly labelled as a
+// sample, with no progress bar and no done marks.
+function CourseDirectoryView({
+  locale,
+  learnerAccount,
+  publishedPlayback,
+  activePublishedSlide,
+  onSelectPublishedSlide,
+}: {
+  locale: Locale;
+  learnerAccount?: string;
+  publishedPlayback?: LearningPptPlaybackManifest;
+  activePublishedSlide?: LearningPptPlaybackSlide;
+  onSelectPublishedSlide: (index: number) => void;
+}) {
+  const zh = locale === "zh-CN";
+  const courseId = publishedPlayback?.courseId;
+  const audioManifestId = publishedPlayback?.audioManifestId;
+  const activeSlideId = activePublishedSlide?.slideId;
+
+  // The narration dock is the writer; this panel only reads, on every render, so
+  // a slide finished in this session shows up without a reload. Safe to read
+  // during render: the panel is only reached by clicking the outline tab, and the
+  // published branch needs a deck that arrives from a client fetch, so neither
+  // runs during the server render.
+  const completedSlideIds =
+    learnerAccount && courseId && audioManifestId
+      ? readCompletedNarrationSlideIds(
+          createCompletedNarrationStorageKey({ learnerAccount, courseId, audioManifestId }),
+        )
+      : new Set<string>();
+
+  if (publishedPlayback) {
+    const completedSlideCount = publishedPlayback.slides.filter((slide) =>
+      completedSlideIds.has(slide.slideId),
+    ).length;
+    const completedPercentage =
+      publishedPlayback.slideCount > 0
+        ? Math.round((completedSlideCount / publishedPlayback.slideCount) * 100)
+        : 0;
+    const deckDurationSeconds = publishedPlayback.slides.reduce(
+      (total, slide) => total + (Number.isFinite(slide.durationSeconds) ? slide.durationSeconds : 0),
+      0,
+    );
+
+    return (
+      <div data-uais-learning-outline="published">
+        <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
+          <div className="flex gap-3">
+            <div className="grid size-16 place-items-center rounded-lg bg-[linear-gradient(135deg,var(--accent),var(--accent-border))] text-white">
+              <BookOpen size={24} weight="duotone" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <h2 className="text-base font-semibold text-[var(--foreground)]">
+                {publishedPlayback.courseTitle}
+              </h2>
+              <p className="mt-2 text-sm text-[var(--muted)]">{publishedPlayback.teacherName}</p>
+              {/* Only a signed-in learner has a progress record to report. For
+                  everyone else the panel says nothing about progress rather than
+                  drawing a bar nobody's listening to. */}
+              {learnerAccount ? (
+                <div className="mt-3" data-uais-learning-outline-progress="narration-completion">
+                  <div className="flex items-center justify-between text-xs font-semibold text-[var(--muted)]">
+                    <span>{zh ? "讲解完成进度" : "Narration progress"}</span>
+                    <span className="text-[var(--accent)]">
+                      {zh
+                        ? `${completedSlideCount} / ${publishedPlayback.slideCount} 页 · ${completedPercentage}%`
+                        : `${completedSlideCount} / ${publishedPlayback.slideCount} slides · ${completedPercentage}%`}
+                    </span>
+                  </div>
+                  <div className="mt-2 h-1.5 rounded-full bg-[var(--border)]">
+                    <div
+                      className="h-1.5 rounded-full bg-[var(--accent)]"
+                      style={{ width: `${completedPercentage}%` }}
+                    />
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-4 space-y-1">
+          <div className="border-b border-[var(--border)] py-3 last:border-b-0">
+            <div className="flex items-center justify-between gap-3 text-sm font-semibold text-[var(--foreground)]">
+              <span>
+                {zh
+                  ? `课件 · 共 ${publishedPlayback.slideCount} 页`
+                  : `Slides · ${publishedPlayback.slideCount} pages`}
+              </span>
+              <span className="shrink-0 text-[var(--muted)]">
+                {formatSlideDurationLabel(deckDurationSeconds)}
+              </span>
+            </div>
+            <div className="mt-3 space-y-1">
+              {publishedPlayback.slides.map((slide, index) => {
+                const active = slide.slideId === activeSlideId;
+                const done = completedSlideIds.has(slide.slideId);
+
+                return (
+                  <button
+                    type="button"
+                    key={slide.slideId}
+                    aria-current={active ? "page" : undefined}
+                    // "done" is now a fact about this learner's narration record,
+                    // so it is worth being able to read back directly.
+                    data-uais-learning-outline-lesson={
+                      active ? "active" : done ? "completed" : "pending"
+                    }
+                    onClick={() => onSelectPublishedSlide(index)}
+                    className={[
+                      "flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-left text-sm outline-none transition focus-visible:ring-2 focus-visible:ring-[var(--accent)]",
+                      active
+                        ? "bg-[var(--accent-soft)] text-[var(--accent)]"
+                        : "text-[var(--foreground)] hover:bg-[var(--background)]",
+                    ].join(" ")}
+                  >
+                    <span className="min-w-0 truncate">
+                      {zh
+                        ? `第 ${slide.slideNumber} 页 ${slide.slideTitle}`
+                        : `${slide.slideNumber}. ${slide.slideTitle}`}
+                    </span>
+                    <span className="flex shrink-0 items-center gap-2 text-[var(--muted)]">
+                      {formatSlideDurationLabel(slide.durationSeconds)}
+                      {active ? (
+                        <PlayCircle size={18} weight="fill" className="text-[var(--accent)]" />
+                      ) : done ? (
+                        <CheckCircle size={16} weight="duotone" />
+                      ) : null}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const chapters = courseDirectoryChapters.map((chapter) => ({
     title: chapter.title[locale],
     time: chapter.time,
-    lessons: chapter.lessons.map((lesson, lessonIndex) => {
-      const active = chapterIndex === 0 && lessonIndex === 1;
-
-      return {
-        title: lesson.title[locale],
-        time: courseDirectoryLessonTimes[lessonIndex % courseDirectoryLessonTimes.length],
-        active,
-        done: !active,
-      };
-    }),
+    lessons: chapter.lessons.map((lesson, lessonIndex) => ({
+      title: lesson.title[locale],
+      time: courseDirectoryLessonTimes[lessonIndex % courseDirectoryLessonTimes.length],
+    })),
   }));
 
   return (
-    <div>
-      <div className="rounded-xl border border-[#e8ebf4] bg-white p-4">
+    <div data-uais-learning-outline="sample">
+      <div className="rounded-xl border border-dashed border-[var(--border)] bg-[var(--surface-elevated)] p-4">
+        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--muted)]">
+          {zh ? "示例课程目录" : "Sample course outline"}
+        </p>
+        <p className="mt-2 text-sm leading-6 text-[var(--muted)]">
+          {zh
+            ? "本课程暂无已发布课件，以下为模板示例目录，不代表你的学习进度。"
+            : "This course has no published lesson yet. The outline below is a template sample and is not your progress."}
+        </p>
+      </div>
+
+      <div className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
         <div className="flex gap-3">
-          <div className="grid size-16 place-items-center rounded-lg bg-[linear-gradient(135deg,#1f6feb,#93c5fd)] text-white">
+          <div className="grid size-16 place-items-center rounded-lg bg-[linear-gradient(135deg,var(--accent),var(--accent-border))] text-white">
             <BookOpen size={24} weight="duotone" />
           </div>
           <div className="min-w-0 flex-1">
-            <h2 className="text-base font-semibold text-[#222842]">
-              {locale === "zh-CN"
-                ? "初等数学研究（2024 春）"
-                : "Elementary Mathematics Research (Spring 2024)"}
+            <h2 className="text-base font-semibold text-[var(--foreground)]">
+              {zh ? "初等数学研究（2024 春）" : "Elementary Mathematics Research (Spring 2024)"}
             </h2>
-            <p className="mt-2 text-sm text-[#697089]">
-              {locale === "zh-CN" ? "康霞博士" : "Dr. Kang Xia"}
-            </p>
-            <div className="mt-3">
-              <div className="flex items-center justify-between text-xs font-semibold text-[#697089]">
-                <span>{locale === "zh-CN" ? "学习进度" : "Progress"}</span>
-                <span className="text-[#1f6feb]">42%</span>
-              </div>
-              <div className="mt-2 h-1.5 rounded-full bg-[#e7eaf2]">
-                <div className="h-1.5 w-[42%] rounded-full bg-[#1f6feb]" />
-              </div>
-            </div>
+            <p className="mt-2 text-sm text-[var(--muted)]">{zh ? "康霞博士" : "Dr. Kang Xia"}</p>
           </div>
         </div>
       </div>
 
       <div className="mt-4 space-y-1">
         {chapters.map((chapter) => (
-          <div key={chapter.title} className="border-b border-[#eceff5] py-3 last:border-b-0">
-            <div className="flex items-center justify-between gap-3 text-sm font-semibold text-[#303650]">
+          <div key={chapter.title} className="border-b border-[var(--border)] py-3 last:border-b-0">
+            <div className="flex items-center justify-between gap-3 text-sm font-semibold text-[var(--foreground)]">
               <span>{chapter.title}</span>
-              <span className="shrink-0 text-[#858ca4]">{chapter.time}</span>
+              <span className="shrink-0 text-[var(--muted)]">{chapter.time}</span>
             </div>
-            {chapter.lessons ? (
-              <div className="mt-3 space-y-1">
-                {chapter.lessons.map((lesson) => (
-                  <button
-                    type="button"
-                    key={lesson.title}
-                    className={[
-                      "flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm outline-none transition",
-                      lesson.active ? "bg-[#dbeafe] text-[#1f6feb]" : "text-[#4d5570] hover:bg-[#f7f8fd]",
-                    ].join(" ")}
-                  >
-                    <span>{lesson.title}</span>
-                    <span className="flex items-center gap-2 text-[#858ca4]">
-                      {lesson.time}
-                      {lesson.active ? (
-                        <PlayCircle size={18} weight="fill" className="text-[#1f6feb]" />
-                      ) : lesson.done ? (
-                        <CheckCircle size={16} weight="duotone" />
-                      ) : null}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            ) : (
-              <p className="mt-2 text-xs text-[#858ca4]">›</p>
-            )}
+            <div className="mt-3 space-y-1">
+              {chapter.lessons.map((lesson) => (
+                <div
+                  key={lesson.title}
+                  className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm text-[var(--foreground)]"
+                >
+                  <span>{lesson.title}</span>
+                  <span className="text-[var(--muted)]">{lesson.time}</span>
+                </div>
+              ))}
+            </div>
           </div>
         ))}
       </div>
 
-      <div className="mt-4 border-t border-[#eceff5] pt-4">
-        <button type="button" className="flex h-12 w-full items-center justify-between rounded-xl border border-[#e1e5ef] bg-white px-4 text-sm font-semibold text-[#4a5068]">
+      <div className="mt-4 border-t border-[var(--border)] pt-4">
+        <button type="button" className="flex h-12 w-full items-center justify-between rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 text-sm font-semibold text-[var(--foreground)]">
           <span className="inline-flex items-center gap-2">
             <FilePdf size={18} weight="duotone" />
-            {locale === "zh-CN" ? "课程资料" : "Course materials"}
+            {zh ? "课程资料" : "Course materials"}
           </span>
           <ArrowRight size={17} weight="bold" />
         </button>

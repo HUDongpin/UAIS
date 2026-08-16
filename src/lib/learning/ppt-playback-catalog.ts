@@ -1,4 +1,5 @@
 import type { Locale } from "@/i18n/copy";
+import { readPublishedPlaybackFiles } from "@/lib/learning/published-playback-store";
 
 type PublishedPptPlayback = {
   courseId: string;
@@ -308,9 +309,29 @@ const publishedPlaybacks: PublishedPptPlayback[] = [
   },
 ];
 
+// Every lookup goes through here.
+//
+// File-published decks come FIRST and the compiled-in demo deck last, so a JSON
+// file can override the demo course by re-using its courseId - which is how a
+// real September deck replaces the placeholder without a code change. Deduped
+// by courseId so the override is total rather than ambiguous.
+//
+// Synchronous by design: see published-playback-store.ts for why the whole
+// chain from `authorizeLearningPptPlaybackAccess` down must stay sync.
+function readAllPublishedPlaybacks(): PublishedPptPlayback[] {
+  const merged = [...readPublishedPlaybackFiles(), ...publishedPlaybacks];
+  const byCourseId = new Map<string, PublishedPptPlayback>();
+  for (const playback of merged) {
+    if (!byCourseId.has(playback.courseId)) {
+      byCourseId.set(playback.courseId, playback);
+    }
+  }
+  return [...byCourseId.values()];
+}
+
 export function findPublishedPlaybackByCourseId(courseId: string) {
   const safeCourseId = requireSafeId(courseId, "course id");
-  return publishedPlaybacks.find((playback) => playback.courseId === safeCourseId);
+  return readAllPublishedPlaybacks().find((playback) => playback.courseId === safeCourseId);
 }
 
 export function assertPublishedLearningPptPlaybackAudio(input: {
@@ -319,7 +340,7 @@ export function assertPublishedLearningPptPlaybackAudio(input: {
 }) {
   const manifestId = requireSafeId(input.manifestId, "manifest id");
   const audioId = requireSafeId(input.audioId, "audio id");
-  const published = publishedPlaybacks.find(
+  const published = readAllPublishedPlaybacks().find(
     (playback) => playback.audioManifestId === manifestId,
   );
   if (!published) {
@@ -341,7 +362,7 @@ export function findPublishedLearningPptPlaybackAudio(input: {
   assertPublishedLearningPptPlaybackAudio(input);
   const manifestId = requireSafeId(input.manifestId, "manifest id");
   const audioId = requireSafeId(input.audioId, "audio id");
-  const published = publishedPlaybacks.find(
+  const published = readAllPublishedPlaybacks().find(
     (playback) => playback.audioManifestId === manifestId,
   );
   if (!published) {

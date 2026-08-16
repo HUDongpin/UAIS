@@ -614,6 +614,220 @@ describe("deployed learning PPT playback smoke", () => {
     expect(output).not.toContain("ECONNREFUSED");
   });
 
+  it("attaches a session cookie to every request without printing it", async () => {
+    // Unauthenticated, this smoke read an auth redirect as a playback failure -
+    // so the audio-tracing fix could not be verified on a deployment that
+    // enforces sign-in at all.
+    const cookieHeaders: Array<string | undefined> = [];
+    const sessionCookie = "uais_app_session=smoke-session-value-not-for-logs";
+    const server = createServer((request, response) => {
+      cookieHeaders.push(request.headers.cookie);
+      if (request.headers.cookie !== sessionCookie) {
+        response.writeHead(302, { location: "/login" });
+        response.end();
+        return;
+      }
+      respondWithDemoPlayback(request, response);
+    });
+    const baseUrl = await listenForTest(server);
+
+    const output = await execFileForTest("node", [
+      "scripts/learning-ppt-playback-deployment-smoke.mjs",
+      "--live",
+      "--approved",
+      "--environment",
+      "local-production",
+      "--base-url",
+      baseUrl,
+      "--session-cookie",
+      sessionCookie,
+    ]);
+    const body = JSON.parse(output);
+
+    expect(body.status).toBe("passed");
+    expect(cookieHeaders).toEqual([sessionCookie, sessionCookie, sessionCookie]);
+    expect(body.sessionCookie).toEqual({ status: "present", valueRedacted: true });
+    expect(output).not.toContain("smoke-session-value-not-for-logs");
+    expect(output).not.toContain(sessionCookie);
+  });
+
+  it("reads the session cookie from the environment so it can arrive by --env-file", async () => {
+    const cookieHeaders: Array<string | undefined> = [];
+    const sessionCookie = "uais_app_session=env-file-session-value";
+    const server = createServer((request, response) => {
+      cookieHeaders.push(request.headers.cookie);
+      respondWithDemoPlayback(request, response);
+    });
+    const baseUrl = await listenForTest(server);
+    const tmpDir = mkdtempSync(join(tmpdir(), "uais-learning-playback-cookie-"));
+    const envFile = join(tmpDir, "smoke.env");
+    writeFileSync(envFile, `UAIS_DEPLOYMENT_SESSION_COOKIE=${sessionCookie}\n`);
+
+    const output = await execFileForTest("node", [
+      "scripts/learning-ppt-playback-deployment-smoke.mjs",
+      "--live",
+      "--approved",
+      "--environment",
+      "local-production",
+      "--base-url",
+      baseUrl,
+      "--env-file",
+      envFile,
+    ]);
+
+    expect(JSON.parse(output).status).toBe("passed");
+    expect(cookieHeaders).toEqual([sessionCookie, sessionCookie, sessionCookie]);
+    expect(output).not.toContain("env-file-session-value");
+  });
+
+  it("refuses a session cookie that would split the request into two", async () => {
+    const result = await execFileResultForTest("node", [
+      "scripts/learning-ppt-playback-deployment-smoke.mjs",
+      "--dry-run",
+      "--environment",
+      "local-production",
+      "--base-url",
+      "https://learning.example.test",
+      "--session-cookie",
+      "uais_app_session=a\r\nx-injected: 1",
+    ]);
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain("single-line cookie header value");
+    expect(result.stderr).not.toContain("x-injected");
+  });
+
+  it("smokes a non-demo course against expectations derived from its own manifest", async () => {
+    // The pinned Kang Xia constants made the FIRST REAL published lecture
+    // unsmokeable: a correct deployment of the autumn course failed every check.
+    const requests: string[] = [];
+    const server = createServer((request, response) => {
+      requests.push(`${request.method ?? "UNKNOWN"} ${request.url ?? "/"}`);
+      if (request.url === "/learning") {
+        response.writeHead(200, { "content-type": "text/html" });
+        response.end("<main>我的学习</main>");
+        return;
+      }
+      if (request.url === "/api/learning/ppt-playback/autumn-2026-research-methods") {
+        response.writeHead(200, { "content-type": "application/json" });
+        response.end(JSON.stringify(createAutumnPlaybackManifest()));
+        return;
+      }
+      if (
+        request.url ===
+        "/api/learning/ppt-playback/audio/audio-manifest-autumn-2026-week-01/tts_autumn-2026-week-01_slide-01"
+      ) {
+        response.writeHead(200, { "content-type": "audio/wav", "content-length": "2048" });
+        response.end(createWavBytes(2048));
+        return;
+      }
+      response.writeHead(404);
+      response.end("not found");
+    });
+    const baseUrl = await listenForTest(server);
+
+    const output = await execFileForTest("node", [
+      "scripts/learning-ppt-playback-deployment-smoke.mjs",
+      "--live",
+      "--approved",
+      "--environment",
+      "local-production",
+      "--base-url",
+      baseUrl,
+      "--course-id",
+      "autumn-2026-research-methods",
+    ]);
+    const body = JSON.parse(output);
+
+    expect(body.status).toBe("passed");
+    expect(body.expectations).toBe("derived");
+    expect(body.checks).toEqual([
+      "learning-page-http-200",
+      "published-manifest-self-consistent",
+      "student-safe-manifest-redaction",
+      "first-slide-audio-wav-response",
+    ]);
+    expect(body.playback).toMatchObject({
+      courseId: "autumn-2026-research-methods",
+      audioManifestId: "audio-manifest-autumn-2026-week-01",
+      teacherName: "康霞博士",
+      slideCount: 3,
+      firstSlideTitle: "研究问题从哪里来",
+      lastSlideTitle: "本周作业",
+    });
+    expect(requests).toEqual([
+      "GET /learning",
+      "GET /api/learning/ppt-playback/autumn-2026-research-methods",
+      "GET /api/learning/ppt-playback/audio/audio-manifest-autumn-2026-week-01/tts_autumn-2026-week-01_slide-01",
+    ]);
+  });
+
+  it("fails a derived-expectation smoke when the deployed manifest contradicts itself", async () => {
+    // A slideCount that disagrees with the slide list is what a half-published
+    // deck looks like from outside.
+    const server = createServer((request, response) => {
+      if (request.url === "/learning") {
+        response.writeHead(200, { "content-type": "text/html" });
+        response.end("<main>我的学习</main>");
+        return;
+      }
+      if (request.url === "/api/learning/ppt-playback/autumn-2026-research-methods") {
+        const manifest = createAutumnPlaybackManifest();
+        manifest.playback.slideCount = 19;
+        response.writeHead(200, { "content-type": "application/json" });
+        response.end(JSON.stringify(manifest));
+        return;
+      }
+      if (
+        request.url ===
+        "/api/learning/ppt-playback/audio/audio-manifest-autumn-2026-week-01/tts_autumn-2026-week-01_slide-01"
+      ) {
+        response.writeHead(200, { "content-type": "audio/wav", "content-length": "2048" });
+        response.end(createWavBytes(2048));
+        return;
+      }
+      response.writeHead(404);
+      response.end("not found");
+    });
+    const baseUrl = await listenForTest(server);
+
+    const output = await execFileForTest(
+      "node",
+      [
+        "scripts/learning-ppt-playback-deployment-smoke.mjs",
+        "--live",
+        "--approved",
+        "--environment",
+        "local-production",
+        "--base-url",
+        baseUrl,
+        "--course-id",
+        "autumn-2026-research-methods",
+      ],
+      { reject: false },
+    );
+    const body = JSON.parse(output);
+
+    expect(body.status).toBe("failed");
+    expect(body.blockedReasons).toEqual(["playbackManifestSlideCount-failed"]);
+  });
+
+  it("refuses a course id that would escape into the request path", async () => {
+    const result = await execFileResultForTest("node", [
+      "scripts/learning-ppt-playback-deployment-smoke.mjs",
+      "--dry-run",
+      "--environment",
+      "local-production",
+      "--base-url",
+      "https://learning.example.test",
+      "--course-id",
+      "../../etc/passwd",
+    ]);
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain("--course-id must match the published course id charset");
+  });
+
   it("blocks production live smoke for non-remote-HTTPS deployment origins before requests", async () => {
     const requests: string[] = [];
     const server = createServer((request, response) => {
@@ -683,6 +897,71 @@ function createPlaybackManifest() {
       teacherName: "康霞博士",
       voiceLabel: "康霞博士克隆声音",
       slideCount: 19,
+      slides,
+      redaction: {
+        secrets: "omitted",
+        localFiles: "omitted",
+        assets: "published-learning-ids-only",
+      },
+    },
+  };
+}
+
+function respondWithDemoPlayback(
+  request: { url?: string },
+  response: {
+    writeHead: (status: number, headers?: Record<string, string>) => void;
+    end: (body?: string | Buffer) => void;
+  },
+) {
+  if (request.url === "/learning") {
+    response.writeHead(200, { "content-type": "text/html" });
+    response.end("<main>我的学习</main>");
+    return;
+  }
+  if (request.url === "/api/learning/ppt-playback/elementary-math-research") {
+    response.writeHead(200, { "content-type": "application/json" });
+    response.end(JSON.stringify(createPlaybackManifest()));
+    return;
+  }
+  if (
+    request.url ===
+    "/api/learning/ppt-playback/audio/audio-manifest-elementary-math-research-natural-number-ordinal-theory-ppt1/tts_natural-number-ordinal-theory-ppt1_slide-01"
+  ) {
+    response.writeHead(200, { "content-type": "audio/wav", "content-length": "2048" });
+    response.end(createWavBytes(2048));
+    return;
+  }
+  response.writeHead(404);
+  response.end("not found");
+}
+
+/** A three-slide published lecture that shares nothing with the demo constants. */
+function createAutumnPlaybackManifest() {
+  const titles = ["研究问题从哪里来", "可观察证据", "本周作业"];
+  const slides = titles.map((slideTitle, index) => {
+    const slideNumber = String(index + 1).padStart(2, "0");
+    return {
+      slideId: `slide-${slideNumber}`,
+      slideNumber: index + 1,
+      slideTitle,
+      narrationText: "student-safe narration",
+      imageUrl: `/learning/ppt-playback/slides/autumn-2026-week-01/page-${slideNumber}.jpg`,
+      audioId: `tts_autumn-2026-week-01_slide-${slideNumber}`,
+      audioUrl: `/api/learning/ppt-playback/audio/audio-manifest-autumn-2026-week-01/tts_autumn-2026-week-01_slide-${slideNumber}`,
+      durationSeconds: 15,
+    };
+  });
+  return {
+    playback: {
+      status: "ready",
+      courseId: "autumn-2026-research-methods",
+      courseTitle: "大学研究方法",
+      sourceDeckTitle: "第一周：研究问题",
+      audioManifestId: "audio-manifest-autumn-2026-week-01",
+      teacherName: "康霞博士",
+      voiceLabel: "康霞博士克隆声音",
+      slideCount: slides.length,
       slides,
       redaction: {
         secrets: "omitted",

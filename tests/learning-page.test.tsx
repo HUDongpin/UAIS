@@ -3,6 +3,8 @@ import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import LearningRoutePage from "@/app/learning/page";
 import { LearningPage } from "@/components/pages/learning-page";
+import { SessionUserProvider } from "@/components/providers/session-user";
+import type { UaisAppSessionUser } from "@/lib/auth/uais-app-session";
 
 const mockPreferences = vi.hoisted(() => ({
   locale: "zh-CN" as "zh-CN" | "en-US",
@@ -46,8 +48,58 @@ vi.mock("@/components/providers/app-preferences", () => ({
   }),
 }));
 
+// A published deck that is deliberately NOT the demo mathematics course, so the
+// outline has something to be wrong about if it falls back to demo identity.
+const outlineManifest = {
+  status: "ready",
+  courseId: "autumn-2026-research-methods",
+  courseTitle: "大学研究方法",
+  sourceDeckTitle: "第一周：研究问题",
+  audioManifestId: "audio-manifest-autumn-2026-week-01",
+  teacherName: "吴亚军博士",
+  voiceLabel: "吴亚军博士克隆声音",
+  slideCount: 2,
+  slides: [
+    {
+      slideId: "slide-01",
+      slideNumber: 1,
+      slideTitle: "研究问题从哪里来",
+      narrationText: "同学们好，这一周我们讨论研究问题的来源。",
+      imageUrl: "/learning/ppt-playback/slides/autumn-2026-week-01/page-01.jpg",
+      audioId: "tts_autumn-2026-week-01_slide-01",
+      audioUrl:
+        "/api/learning/ppt-playback/audio/audio-manifest-autumn-2026-week-01/tts_autumn-2026-week-01_slide-01",
+      durationSeconds: 18.4,
+    },
+    {
+      slideId: "slide-02",
+      slideNumber: 2,
+      slideTitle: "证据与论证",
+      narrationText: "第二页我们讨论证据如何支撑论证。",
+      imageUrl: "/learning/ppt-playback/slides/autumn-2026-week-01/page-02.jpg",
+      audioId: "tts_autumn-2026-week-01_slide-02",
+      audioUrl:
+        "/api/learning/ppt-playback/audio/audio-manifest-autumn-2026-week-01/tts_autumn-2026-week-01_slide-02",
+      durationSeconds: 22.1,
+    },
+  ],
+  redaction: {
+    secrets: "omitted",
+    localFiles: "omitted",
+    assets: "published-learning-ids-only",
+  },
+};
+
+const outlineStudentUser: UaisAppSessionUser = {
+  account: "student-001",
+  role: "student",
+  displayName: "Student One",
+  department: "UAIS",
+};
+
 afterEach(() => {
   mockPreferences.locale = "zh-CN";
+  window.localStorage.clear();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
   delete (HTMLElement.prototype as Partial<HTMLElement>).requestFullscreen;
@@ -97,8 +149,98 @@ describe("LearningPage", () => {
 
     render(<LearningPage />);
 
-    expect(await screen.findByText("当前账号无权访问此数学课件")).toBeTruthy();
+    // E14/PKG-8b: course-neutral. The refusal is about this course's slides,
+    // whichever course the learner opened, and it used to name the mathematics
+    // deck to every one of them.
+    expect(await screen.findByText("当前账号无权访问此课程课件")).toBeTruthy();
+    expect(screen.queryByText(/数学课件/)).toBeNull();
     expect(screen.queryByText("配音资源准备中")).toBeNull();
+  });
+
+  // E12/PKG-7: "sign in again to access the PPT" used to be a label with nowhere
+  // to go, on the one surface where the learner cannot do anything else.
+  it("sends a signed-out playback refusal to /login and back to this course", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json({ error: "sign in required" }, { status: 401 }),
+      ),
+    );
+
+    const { container } = render(
+      <LearningPage
+        initialCourseId="math-pedagogy-learning"
+        initialClassId="math-pedagogy-learning-class-1"
+      />,
+    );
+
+    expect(await screen.findByText("请重新登录后访问课程课件")).toBeTruthy();
+    const signInLink = container.querySelector<HTMLAnchorElement>(
+      '[data-uais-learning-ppt-sign-in="true"]',
+    );
+    expect(signInLink?.textContent).toContain("重新登录");
+    expect(signInLink?.getAttribute("href")).toBe(
+      "/login?from=%2Flearning%3FcourseId%3Dmath-pedagogy-learning%26classId%3Dmath-pedagogy-learning-class-1",
+    );
+  });
+
+  it("does not offer a sign-in handoff on a playback failure that is not an auth refusal", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => Response.json({ error: "boom" }, { status: 500 })),
+    );
+
+    const { container } = render(<LearningPage />);
+
+    expect(await screen.findByText("课程课件资源暂时不可用")).toBeTruthy();
+    expect(
+      container.querySelector('[data-uais-learning-ppt-sign-in="true"]'),
+    ).toBeNull();
+  });
+
+  // E12/PKG-7: the playback surfaces carried 52 hardcoded light hex classes and
+  // zero dark handling, so the dark theme rendered a white workspace.
+  it("paints the playback shell and companion panel from the shared theme tokens", () => {
+    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => {})));
+
+    const { container } = render(<LearningPage />);
+
+    const shell = container.firstElementChild as HTMLElement;
+    expect(shell.className).toContain("bg-[var(--background)]");
+    expect(shell.className).toContain("text-[var(--foreground)]");
+    expect(
+      container.querySelector("#uais-learning-companion")?.className,
+    ).toContain("bg-[var(--surface)]");
+    // The rendered English slide keeps its document white deliberately, and the
+    // amber "resources unavailable" pill keeps a literal warning hue with an
+    // explicit dark pairing. Nothing else may carry a bare hex.
+    const hexClasses = Array.from(container.querySelectorAll<HTMLElement>("*"))
+      .flatMap((element) =>
+        typeof element.className === "string" ? element.className.split(" ") : [],
+      )
+      .filter((token) => /#[0-9a-fA-F]{6}/.test(token) && !token.startsWith("dark:"));
+    expect(hexClasses).toEqual([]);
+  });
+
+  it("keeps the companion panel reachable below the xl three-column layout", async () => {
+    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => {})));
+
+    const { container } = render(<LearningPage />);
+
+    const jump = container.querySelector<HTMLElement>(
+      '[data-uais-learning-mobile-jump="true"]',
+    );
+    expect(jump).toBeTruthy();
+    // Hidden exactly where the three columns exist and the companion is already
+    // on screen.
+    expect(jump?.className).toContain("xl:hidden");
+    expect(
+      Array.from(jump?.querySelectorAll("a") ?? []).map((link) =>
+        link.getAttribute("href"),
+      ),
+    ).toEqual(["#uais-learning-stage", "#uais-learning-companion"]);
+    expect(container.querySelector("#uais-learning-stage")).toBeTruthy();
+    expect(container.querySelector("#uais-learning-companion")).toBeTruthy();
   });
 
   it("hydrates an approved invite-code course context when opened from the student dashboard", async () => {
@@ -246,11 +388,16 @@ describe("LearningPage", () => {
     expect(screen.queryByRole("button", { name: "本页笔记" })).toBeNull();
     expect(screen.queryByRole("button", { name: "检查点" })).toBeNull();
     expect(screen.queryByRole("button", { name: "概念卡" })).toBeNull();
-    expect(screen.queryByText(/梯度下降的核心思想/)).toBeNull();
+    expect(screen.queryByText(/本课程暂无字幕/)).toBeNull();
     expect(screen.queryByText(/第三章/)).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "全部字幕" }));
-    expect(screen.getByText(/梯度下降的核心思想/)).toBeTruthy();
+    // With no published deck the subtitles tab shows an honest empty state. It
+    // used to show five fabricated timestamped rows ("12:18" .. "13:30") about
+    // gradient descent and the learning rate, invented for a student enrolled
+    // in a mathematics-education course.
+    expect(screen.getByText(/本课程暂无字幕/)).toBeTruthy();
+    expect(screen.queryByText(/梯度下降的核心思想/)).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "课程目录" }));
     expect(screen.getByText(/第三章/)).toBeTruthy();
@@ -280,6 +427,15 @@ describe("LearningPage", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "课程目录" }));
 
+    // E14/PKG-8b: with no published deck this really is the template's sample
+    // syllabus, so it now says so. What it must not do is dress the sample up as
+    // a record: the hard-coded `w-[42%]` bar and the done ticks on every lesson
+    // but one are gone.
+    expect(container.querySelector('[data-uais-learning-outline="sample"]')).toBeTruthy();
+    expect(screen.getByText("示例课程目录")).toBeTruthy();
+    expect(container.textContent).not.toContain("42%");
+    expect(container.querySelector(".w-\\[42\\%\\]")).toBeNull();
+    expect(container.querySelector("[data-uais-learning-outline-progress]")).toBeNull();
     expect(screen.getByText("初等数学研究（2024 春）")).toBeTruthy();
     expect(screen.getByText("康霞博士")).toBeTruthy();
     expect(screen.queryByText("机器学习导论（2024 春）")).toBeNull();
@@ -312,6 +468,80 @@ describe("LearningPage", () => {
     ].forEach((text) => {
       expect(screen.getAllByText(text).length).toBeGreaterThan(0);
     });
+  });
+
+  // E14/PKG-8b: whatever deck was on the stage, the outline tab announced
+  // "初等数学研究（2024 春）", "康霞博士", a literal 42% bar and the static demo
+  // syllabus with every lesson but one ticked done.
+  it("derives the course outline from the published deck instead of the demo syllabus", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({ playback: outlineManifest })));
+
+    const { container } = render(<LearningPage />);
+
+    await screen.findByText("当前课程：大学研究方法");
+    fireEvent.click(screen.getByRole("button", { name: "课程目录" }));
+
+    const outline = container.querySelector<HTMLElement>(
+      '[data-uais-learning-outline="published"]',
+    );
+    expect(outline).toBeTruthy();
+    expect(outline?.textContent).toContain("大学研究方法");
+    expect(outline?.textContent).toContain("吴亚军博士");
+    expect(outline?.textContent).toContain("课件 · 共 2 页");
+    expect(outline?.textContent).toContain("第 1 页 研究问题从哪里来");
+    expect(outline?.textContent).toContain("第 2 页 证据与论证");
+    // Real slide lengths from the manifest, not the sample syllabus's timings.
+    expect(outline?.textContent).toContain("00:18");
+    expect(outline?.textContent).toContain("00:22");
+
+    expect(outline?.textContent).not.toContain("初等数学研究（2024 春）");
+    expect(outline?.textContent).not.toContain("康霞博士");
+    expect(outline?.textContent).not.toContain("第一章 数系");
+    expect(container.textContent).not.toContain("42%");
+    expect(container.querySelector(".w-\\[42\\%\\]")).toBeNull();
+    // No signed-in learner, so there is no completion record to report and the
+    // panel says nothing about progress rather than drawing a bar.
+    expect(container.querySelector("[data-uais-learning-outline-progress]")).toBeNull();
+    expect(
+      Array.from(
+        container.querySelectorAll<HTMLElement>("[data-uais-learning-outline-lesson]"),
+      ).map((lesson) => lesson.dataset.uaisLearningOutlineLesson),
+    ).toEqual(["active", "pending"]);
+  });
+
+  it("reports the narration the learner actually finished instead of a fixed progress bar", async () => {
+    window.localStorage.setItem(
+      "uais-completed-narration:student-001:autumn-2026-research-methods:audio-manifest-autumn-2026-week-01",
+      JSON.stringify(["slide-02"]),
+    );
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({ playback: outlineManifest })));
+
+    const { container } = render(
+      <SessionUserProvider initialSessionUser={outlineStudentUser}>
+        <LearningPage />
+      </SessionUserProvider>,
+    );
+
+    await screen.findByText("当前课程：大学研究方法");
+    fireEvent.click(screen.getByRole("button", { name: "课程目录" }));
+
+    const progress = await waitFor(() => {
+      const panel = container.querySelector<HTMLElement>(
+        '[data-uais-learning-outline-progress="narration-completion"]',
+      );
+      expect(panel?.textContent).toContain("1 / 2 页 · 50%");
+      return panel as HTMLElement;
+    });
+    expect(progress.querySelector<HTMLElement>("div[style]")?.style.width).toBe("50%");
+
+    // Exactly one lesson is marked done, and it is the one whose narration this
+    // learner finished. The demo syllabus used to mark every lesson but the
+    // active one done, for everybody.
+    expect(
+      Array.from(
+        container.querySelectorAll<HTMLElement>("[data-uais-learning-outline-lesson]"),
+      ).map((lesson) => lesson.dataset.uaisLearningOutlineLesson),
+    ).toEqual(["active", "completed"]);
   });
 
   it("keeps the learner question visible without a premature AI bubble", () => {
@@ -875,8 +1105,13 @@ describe("LearningPage", () => {
 
     const { container } = render(<LearningPage />);
 
+    // E16/R2: the trail is read off the published deck - its course, its own
+    // title, and where in it the learner is - instead of announcing every deck
+    // as "Lecture 1 / Section 1", a position nothing in the manifest supports.
     expect(
-      await screen.findByText("Elementary Mathematics Research / Lecture 1 / Section 1"),
+      await screen.findByText(
+        "Elementary Mathematics Research / Elementary Mathematics Research PPT 1 Ordinal Theory of Natural Numbers / Slide 1 of 2",
+      ),
     ).toBeTruthy();
     expect(screen.getAllByText("Dr. Kang Xia").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Ordinal theory of natural numbers").length).toBeGreaterThan(0);
@@ -885,10 +1120,17 @@ describe("LearningPage", () => {
         name: 'Explain the core idea of "Ordinal theory of natural numbers"',
       }),
     ).toBeTruthy();
-    const activeSlideFrame = screen.getByRole("img", {
+    // E14/PKG-8b: the English branch used to be taken *before* the image branch,
+    // so an en-US learner never saw `slide.imageUrl` - they got a generated card
+    // in place of the deck their teacher published.
+    const activeSlideImage = screen.getByRole("img", {
       name: "PPT slide 1: Ordinal theory of natural numbers",
     });
-    expect(activeSlideFrame.getAttribute("data-uais-english-slide")).toBe("active");
+    expect(activeSlideImage.tagName).toBe("IMG");
+    expect(activeSlideImage.getAttribute("src")).toBe(
+      "/learning/ppt-playback/slides/natural-number-ordinal-theory-ppt1/page-01.jpg",
+    );
+    expect(container.querySelector('[data-uais-english-slide="active"]')).toBeNull();
     const workspace = container.querySelector(
       '[data-uais-learning-playback-workspace="single-viewport"]',
     );
@@ -896,6 +1138,144 @@ describe("LearningPage", () => {
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/learning/ppt-playback/elementary-math-research?locale=en-US",
     );
+  });
+
+  // The en-US card used to be "Teaching TA / Examples and questions", promising a
+  // classroom question and a teaching example. The zh-CN card and the server
+  // persona (`learningGuideAgents`) both call this agent the Code Assistant, so an
+  // English-locale student picked a teaching-assistant card and got steps and
+  // pseudocode back from an agent that had never been a TA.
+  it("names the third guide agent Code Assistant in English, matching the server persona", () => {
+    mockPreferences.locale = "en-US";
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({}, { status: 404 })));
+
+    render(<LearningPage />);
+
+    expect(screen.getByText("Code Assistant")).toBeTruthy();
+    expect(screen.getByText("Algorithms and code")).toBeTruthy();
+    expect(screen.queryByText("Teaching TA")).toBeNull();
+    expect(screen.queryByText("Examples and questions")).toBeNull();
+    // The card's prompt must ask for what the code assistant actually does.
+    const promptButton = screen.getByRole("button", { name: /Code Assistant/ });
+    expect(promptButton).toBeTruthy();
+    expect(document.body.textContent).not.toContain(
+      "Create a classroom question and teaching example",
+    );
+  });
+
+  // E14/PKG-8b: the English stand-in frame hardcoded the eyebrow "Elementary
+  // Mathematics Research" and the footer "Dr. Kang Xia", so an en-US learner in
+  // any other course read the demo course's branding across their own lesson.
+  it("builds the English slide fallback from the played deck's own manifest", async () => {
+    mockPreferences.locale = "en-US";
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json({
+          playback: {
+            status: "ready",
+            courseId: "autumn-2026-research-methods",
+            courseTitle: "University Research Methods",
+            sourceDeckTitle: "Week 1 Research Questions",
+            audioManifestId: "audio-manifest-autumn-2026-week-01",
+            teacherName: "Prof. Wu",
+            voiceLabel: "Prof. Wu cloned voice",
+            slideCount: 1,
+            slides: [
+              {
+                slideId: "slide-01",
+                slideNumber: 1,
+                slideTitle: "Where research questions come from",
+                narrationText: "Hello everyone. This week we discuss where research questions come from.",
+                imageUrl: "/learning/ppt-playback/slides/autumn-2026-week-01/page-01.jpg",
+                audioId: "tts_autumn-2026-week-01_slide-01",
+                audioUrl:
+                  "/api/learning/ppt-playback/audio/audio-manifest-autumn-2026-week-01/tts_autumn-2026-week-01_slide-01",
+                durationSeconds: 18.4,
+              },
+            ],
+            redaction: {
+              secrets: "omitted",
+              localFiles: "omitted",
+              assets: "published-learning-ids-only",
+            },
+          },
+        }),
+      ),
+    );
+
+    const { container } = render(<LearningPage />);
+
+    const slideImage = await screen.findByAltText(
+      "PPT slide 1: Where research questions come from",
+    );
+
+    fireEvent.error(slideImage);
+
+    const englishFrame = await waitFor(() => {
+      const frame = container.querySelector('[data-uais-english-slide="active"]');
+      expect(frame).toBeTruthy();
+      return frame as HTMLElement;
+    });
+    expect(englishFrame.textContent).toContain("University Research Methods");
+    expect(englishFrame.textContent).toContain("Prof. Wu");
+    expect(englishFrame.textContent).toContain("Where research questions come from");
+    expect(container.textContent).not.toContain("Elementary Mathematics Research");
+    expect(container.textContent).not.toContain("Dr. Kang Xia");
+  });
+
+  it("falls back to the slide placeholder when a published page image is missing", async () => {
+    // `imageUrl` is built from the pptAssetId for every slide unconditionally,
+    // so it is never empty and the "课件图片准备中" branch below it was
+    // unreachable: a deck published without its page images showed a broken
+    // image icon to the student instead of the frame written for that case.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json({
+          playback: {
+            status: "ready",
+            courseId: "autumn-2026-research-methods",
+            courseTitle: "大学研究方法",
+            sourceDeckTitle: "第一周：研究问题",
+            audioManifestId: "audio-manifest-autumn-2026-week-01",
+            teacherName: "康霞博士",
+            voiceLabel: "康霞博士克隆声音",
+            slideCount: 1,
+            slides: [
+              {
+                slideId: "slide-01",
+                slideNumber: 1,
+                slideTitle: "研究问题从哪里来",
+                narrationText: "同学们好，这一周我们讨论研究问题的来源。",
+                imageUrl: "/learning/ppt-playback/slides/autumn-2026-week-01/page-01.jpg",
+                audioId: "tts_autumn-2026-week-01_slide-01",
+                audioUrl:
+                  "/api/learning/ppt-playback/audio/audio-manifest-autumn-2026-week-01/tts_autumn-2026-week-01_slide-01",
+                durationSeconds: 18.4,
+              },
+            ],
+            redaction: {
+              secrets: "omitted",
+              localFiles: "omitted",
+              assets: "published-learning-ids-only",
+            },
+          },
+        }),
+      ),
+    );
+
+    const { container } = render(<LearningPage />);
+
+    const slideImage = await screen.findByAltText("课件第 1 页：研究问题从哪里来");
+    expect(container.textContent).not.toContain("课件图片准备中");
+
+    fireEvent.error(slideImage);
+
+    await waitFor(() => {
+      expect(screen.getByText("课件图片准备中")).toBeTruthy();
+    });
+    expect(screen.queryByAltText("课件第 1 页：研究问题从哪里来")).toBeNull();
   });
 
   it("keeps the published PPT and narration controls in one desktop playback workspace", async () => {
@@ -955,7 +1335,11 @@ describe("LearningPage", () => {
 
     const { container } = render(<LearningPage />);
 
-    expect(await screen.findByText("初等数学研究 / 第一讲 / 第一节")).toBeTruthy();
+    expect(
+      await screen.findByText(
+        "初等数学研究 / 初等数学研究+PPT1+自然数的序数理论 / 第 1 页，共 2 页",
+      ),
+    ).toBeTruthy();
     expect(screen.queryByText("初等数学研究+PPT1+自然数的序数理论.pptx")).toBeNull();
     expect(screen.queryByText("康霞博士克隆声音")).toBeNull();
     const staticVoiceSwitch = Array.from(container.querySelectorAll("span")).find(
@@ -1080,7 +1464,11 @@ describe("LearningPage", () => {
 
     const { container } = render(<LearningPage />);
 
-    expect(await screen.findByText("初等数学研究 / 第一讲 / 第一节")).toBeTruthy();
+    expect(
+      await screen.findByText(
+        "初等数学研究 / 初等数学研究+PPT1+自然数的序数理论 / 第 1 页，共 2 页",
+      ),
+    ).toBeTruthy();
     expect(screen.queryByText("初等数学研究+PPT1+自然数的序数理论.pptx")).toBeNull();
     expect(screen.queryByText("康霞博士克隆声音")).toBeNull();
     expect(screen.getAllByText("自然数的序数理论").length).toBeGreaterThan(0);
@@ -1364,7 +1752,11 @@ describe("LearningPage", () => {
 
     const { container } = render(<LearningPage />);
 
-    expect(await screen.findByText("初等数学研究 / 第一讲 / 第一节")).toBeTruthy();
+    expect(
+      await screen.findByText(
+        "初等数学研究 / 初等数学研究+PPT1+自然数的序数理论 / 第 1 页，共 2 页",
+      ),
+    ).toBeTruthy();
     expect(screen.queryByText("初等数学研究+PPT1+自然数的序数理论.pptx")).toBeNull();
     expect(screen.queryByText("康霞博士克隆声音")).toBeNull();
 
@@ -1377,6 +1769,13 @@ describe("LearningPage", () => {
       "/api/learning/ppt-playback/audio/audio-manifest-elementary-math-research-natural-number-ordinal-theory-ppt1/tts_natural-number-ordinal-theory-ppt1_slide-02",
     );
     expect(screen.getByText("2 / 2")).toBeTruthy();
+    // E16/R2: the trail follows the learner. The fabricated "第一讲 / 第一节" it
+    // replaced said section one on slide nineteen just as readily as on slide
+    // one, so the position has to be pinned as MOVING, not merely as present.
+    expect(
+      container.querySelector('[data-uais-learning-course-path="published-ppt"]')
+        ?.textContent,
+    ).toContain("第 2 页，共 2 页");
     expect(
       container.querySelector('[data-uais-learning-audio-controls="custom"]')?.parentElement
         ?.textContent,
@@ -1395,6 +1794,10 @@ describe("LearningPage", () => {
       "/api/learning/ppt-playback/audio/audio-manifest-elementary-math-research-natural-number-ordinal-theory-ppt1/tts_natural-number-ordinal-theory-ppt1_slide-01",
     );
     expect(screen.getByText("1 / 2")).toBeTruthy();
+    expect(
+      container.querySelector('[data-uais-learning-course-path="published-ppt"]')
+        ?.textContent,
+    ).toContain("第 1 页，共 2 页");
     expect(
       container.querySelector('[data-uais-learning-audio-controls="custom"]')?.parentElement
         ?.textContent,
@@ -1518,5 +1921,66 @@ describe("LearningPage", () => {
     expect(createObjectUrl).toHaveBeenCalledWith(expect.any(Blob));
     expect(anchorClick).toHaveBeenCalledTimes(1);
     expect(revokeObjectUrl).toHaveBeenCalledWith("blob:uais-study-notes");
+  });
+});
+
+// /learning was hardwired to fetch the demo course's deck no matter which course
+// the student had actually enrolled in, and the effect did not even depend on
+// the course. A student in the real September course got a 403
+// (`student-course-membership-required`, because their membership is for a
+// different courseId) over content that was not theirs anyway.
+describe("LearningPage playback routing", () => {
+  function stubPlaybackFetch() {
+    const requested: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.startsWith("/api/learning/ppt-playback/")) {
+          requested.push(url);
+          return new Response(JSON.stringify({ playback: undefined }), { status: 404 });
+        }
+        return new Response(JSON.stringify({}), { status: 200 });
+      }),
+    );
+    return requested;
+  }
+
+  it("fetches the playback for the course the learner arrived with", async () => {
+    const requested = stubPlaybackFetch();
+
+    render(<LearningPage initialCourseId="autumn-2026-research-methods" />);
+
+    await waitFor(() => expect(requested.length).toBeGreaterThan(0));
+    expect(requested[0]).toBe(
+      "/api/learning/ppt-playback/autumn-2026-research-methods?locale=zh-CN",
+    );
+  });
+
+  it("falls back to the demo course when no course is supplied", async () => {
+    const requested = stubPlaybackFetch();
+
+    render(<LearningPage />);
+
+    await waitFor(() => expect(requested.length).toBeGreaterThan(0));
+    expect(requested[0]).toBe(
+      "/api/learning/ppt-playback/elementary-math-research?locale=zh-CN",
+    );
+  });
+
+  it("shows an honest empty state rather than a fabricated lecture when no deck loads", async () => {
+    stubPlaybackFetch();
+
+    const { container } = render(<LearningPage initialCourseId="autumn-2026-research-methods" />);
+
+    await waitFor(() =>
+      expect(container.querySelector("[data-uais-learning-ppt-empty]")).toBeTruthy(),
+    );
+    expect(screen.getByText(/本课程暂无已发布课件/)).toBeTruthy();
+    // The invented machine-learning lesson that used to render here.
+    expect(screen.queryByText(/梯度下降算法/)).toBeNull();
+    expect(screen.queryByText(/最小二乘法原理/)).toBeNull();
+    expect(screen.queryByText("30 / 68")).toBeNull();
+    expect(screen.queryByText(/章节 3 \/ 8/)).toBeNull();
   });
 });

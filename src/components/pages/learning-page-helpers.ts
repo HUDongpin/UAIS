@@ -212,23 +212,131 @@ export function getPublishedPlaybackError(status: number): PublishedPlaybackErro
   return "unavailable";
 }
 
+// Course-neutral on purpose. These three labels are rendered on every course's
+// playback stage, and they used to name the mathematics deck - "此数学课件" /
+// "the mathematics PPT" - to a student whose deck refusal had nothing to do with
+// mathematics. The failure is about *this* course's slides, whichever course the
+// learner opened.
 export function getPublishedPlaybackErrorLabel(
   locale: Locale,
   error: PublishedPlaybackError,
 ) {
   if (error === "auth-required") {
     return locale === "zh-CN"
-      ? "请重新登录后访问数学课件"
-      : "Sign in again to access the mathematics PPT";
+      ? "请重新登录后访问课程课件"
+      : "Sign in again to access the course slides";
   }
   if (error === "access-denied") {
     return locale === "zh-CN"
-      ? "当前账号无权访问此数学课件"
-      : "This account cannot access the mathematics PPT";
+      ? "当前账号无权访问此课程课件"
+      : "This account cannot access the course slides";
   }
   return locale === "zh-CN"
-    ? "数学课件资源暂时不可用"
-    : "Mathematics PPT resources are temporarily unavailable";
+    ? "课程课件资源暂时不可用"
+    : "The course slides are temporarily unavailable";
+}
+
+// Per-learner, per-course, per-manifest narration completion, persisted by the
+// playback surface so finishing a deck across several visits still adds up.
+// Exported so the outline can report the learner's *real* progress from the same
+// key the narration dock writes, instead of inventing one.
+export function createCompletedNarrationStorageKey({
+  learnerAccount,
+  courseId,
+  audioManifestId,
+}: {
+  learnerAccount: string;
+  courseId: string;
+  audioManifestId: string;
+}) {
+  return ["uais-completed-narration", learnerAccount, courseId, audioManifestId].join(":");
+}
+
+export function readCompletedNarrationSlideIds(storageKey: string): Set<string> {
+  const completedSlideIds = new Set<string>();
+  if (typeof window === "undefined") {
+    return completedSlideIds;
+  }
+  try {
+    const stored = JSON.parse(window.localStorage.getItem(storageKey) ?? "[]") as unknown;
+    if (Array.isArray(stored)) {
+      for (const value of stored) {
+        if (typeof value === "string") {
+          completedSlideIds.add(value);
+        }
+      }
+    }
+  } catch {
+    // Storage unavailable or corrupted: an empty set is the honest answer.
+  }
+
+  return completedSlideIds;
+}
+
+// `durationSeconds` is real manifest data, so the outline can show a real slide
+// length instead of the sample syllabus's placeholder timings.
+export function formatSlideDurationLabel(durationSeconds: number) {
+  if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) {
+    return "--:--";
+  }
+  const totalSeconds = Math.round(durationSeconds);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+}
+
+// The honest empty state that replaced a fabricated lecture.
+//
+// When no deck loaded, the stage used to render a complete, invented machine-
+// learning lesson - "3.2 梯度下降算法", a goal, an update rule, a θ/η/∇J bullet
+// list, a diagram and a "30 / 68" slide counter - to a student enrolled in a
+// mathematics-education course. It was indistinguishable from real content, and
+// the first thing a student would do with it is screenshot it.
+//
+// These two say what is actually true: either the deck could not be loaded (the
+// error label above says why), or this course has no published lesson yet.
+export function getPublishedPlaybackEmptyTitle(locale: Locale) {
+  return locale === "zh-CN" ? "本课程暂无已发布课件" : "No published lesson yet";
+}
+
+export function getPublishedPlaybackEmptyDescription(locale: Locale) {
+  return locale === "zh-CN"
+    ? "教师发布课件后，这里会显示本节课的幻灯片与讲解音频。"
+    : "Once your teacher publishes a deck, its slides and narration appear here.";
+}
+
+// The course a learning record may name, or `undefined` when there is none.
+//
+// The study-tool, AI-guide and checkpoint events used to fall back to
+// `selectedCourseId`, which on a bare `/learning` is the template's demo course
+// (`research-methods-learning` - see `fallbackCourseId`). A real student who had
+// never joined that course therefore had their notes exports, guide questions and
+// checkpoint attempts written to the LRS stamped with a demo course id, polluting
+// their own learning record and that course's analytics with activity that never
+// happened there.
+//
+// `LearningRecordEventInput["context"].courseId` is a required string, so there is
+// no null-course statement to fall back to: the xAPI statement builder always
+// creates a course activity from it (`createCourseActivityId`). The event is
+// therefore suppressed instead. That also matches the server, which authorizes
+// every event against course membership and answers 403
+// (`learner-course-membership-required`) for exactly this case - so the suppressed
+// calls were never going to be recorded anyway, only retried.
+//
+// A published deck is proof enough on its own: the playback route only serves one
+// to a learner the course actually admits. Without a deck, an approved invite
+// membership for the very course on screen is the other legitimate attribution.
+export function resolveLearningEventCourseId(input: {
+  publishedPlaybackCourseId?: string;
+  selectedCourseId: string;
+  approvedMembershipCourseId?: string;
+}): string | undefined {
+  if (input.publishedPlaybackCourseId) {
+    return input.publishedPlaybackCourseId;
+  }
+  return input.approvedMembershipCourseId === input.selectedCourseId
+    ? input.selectedCourseId
+    : undefined;
 }
 
 export type StudyAction = "ask" | "notes" | "checkpoint" | "concepts" | "export";

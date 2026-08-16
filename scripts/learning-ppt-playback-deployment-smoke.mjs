@@ -1,5 +1,31 @@
 #!/usr/bin/env node
 
+// Deployed-learning-playback smoke.
+//
+//   node -- scripts/learning-ppt-playback-deployment-smoke.mjs --dry-run
+//   node -- scripts/learning-ppt-playback-deployment-smoke.mjs --live --approved \
+//     --environment production --base-url https://… --release-run-id … \
+//     [--course-id autumn-2026-research-methods] [--session-cookie "<cookie>"]
+//
+// With no course and no cookie it checks the compiled-in Kang Xia demo deck
+// against pinned constants, which is what every release-gate invocation of this
+// script has always done.
+//
+// Two things it could not do before. It sent no credentials, so on a deployment
+// that enforces authentication every request came back as a redirect to the
+// login page and the smoke reported a playback failure that was really an
+// unauthenticated request - the audio-tracing fix could not be verified at all.
+// And it compared the manifest against nineteen hardcoded demo values, so the
+// FIRST REAL published lecture was unsmokeable: a correct deployment of the
+// autumn course failed every check.
+//
+// `--session-cookie` (or UAIS_DEPLOYMENT_SESSION_COOKIE, so the value can arrive
+// through --env-file rather than a shell history) attaches a session to every
+// request. `--course-id` points the smoke at any published course and switches
+// the expectations from pinned to DERIVED: slide count, titles and teacher come
+// from the deployed manifest itself, and the checks verify the manifest is
+// internally consistent and its first WAV really streams. Cookie values are
+// never printed, and neither is the course id's response body.
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { request as httpRequest } from "node:http";
@@ -25,9 +51,19 @@ const publishedPlayback = {
 
 const minimumFirstSlideAudioContentLength = 1024;
 
-const checks = [
+const pinnedChecks = [
   "learning-page-http-200",
   "kang-xia-manifest-19-slides",
+  "student-safe-manifest-redaction",
+  "first-slide-audio-wav-response",
+];
+
+// The derived set asserts the same properties without naming the lecture: a
+// manifest whose slide count matches its own slide list, whose slides are
+// slide-01..slide-NN in order, and whose first audio URL streams a real WAV.
+const derivedChecks = [
+  "learning-page-http-200",
+  "published-manifest-self-consistent",
   "student-safe-manifest-redaction",
   "first-slide-audio-wav-response",
 ];
@@ -53,6 +89,12 @@ try {
   };
   const mode = options.live ? "live" : "dry-run";
   const baseUrl = options.baseUrl || env.UAIS_DEPLOYMENT_BASE_URL;
+  const sessionCookie = normalizeSessionCookie(
+    options.sessionCookie ?? env.UAIS_DEPLOYMENT_SESSION_COOKIE,
+  );
+  // A course id lands in a request path, so it gets the catalog's own charset.
+  const courseId = options.courseId ?? publishedPlayback.courseId;
+  const expectations = options.courseId ? "derived" : "pinned";
   const vercelProductionDeployment = readJsonEvidence(options.vercelProductionDeployment);
   const plan = buildPlan({
     mode,
@@ -61,6 +103,8 @@ try {
     resolvedAddress: options.resolvedAddress,
     releaseRunId: options.releaseRunId,
     vercelProductionDeployment,
+    expectations,
+    sessionCookie,
   });
 
   if (mode === "dry-run") {
@@ -72,7 +116,13 @@ try {
     process.stdout.write(`${JSON.stringify(plan, null, 2)}\n`);
     process.exitCode = 1;
   } else {
-    const result = await executeLiveSmoke({ baseUrl, resolvedAddress: options.resolvedAddress });
+    const result = await executeLiveSmoke({
+      baseUrl,
+      resolvedAddress: options.resolvedAddress,
+      courseId,
+      expectations,
+      sessionCookie,
+    });
     process.stdout.write(`${JSON.stringify({ ...plan, ...result }, null, 2)}\n`);
     if (result.status !== "passed") {
       process.exitCode = 1;
@@ -92,6 +142,8 @@ function buildPlan({
   resolvedAddress,
   releaseRunId,
   vercelProductionDeployment,
+  expectations,
+  sessionCookie,
 }) {
   const deploymentOrigin = describeDeploymentOrigin(baseUrl);
   const deploymentFingerprint = createDeploymentFingerprint(baseUrl);
@@ -145,9 +197,13 @@ function buildPlan({
     ...(vercelProductionDeploymentEvidence
       ? { vercelProductionDeploymentEvidence }
       : {}),
+    // Reported only when one was supplied, so the release-gate invocation's
+    // output shape is unchanged. The value itself never appears.
+    ...(sessionCookie ? { sessionCookie: { status: "present", valueRedacted: true } } : {}),
+    ...(expectations === "derived" ? { expectations } : {}),
     networkRetryPolicy,
     prerequisites,
-    checks,
+    checks: expectations === "derived" ? derivedChecks : pinnedChecks,
     blockedReasons,
     safety: {
       valuesRedacted: true,
@@ -257,22 +313,28 @@ function readProductionDeploymentOriginBlockedReasons({ environment, deploymentO
   return ["production-deployment-origin-not-remote-https"];
 }
 
-async function executeLiveSmoke({ baseUrl, resolvedAddress }) {
+async function executeLiveSmoke({
+  baseUrl,
+  resolvedAddress,
+  courseId,
+  expectations,
+  sessionCookie,
+}) {
   let lastError;
   for (let attempt = 1; attempt <= networkRetryPolicy.maxAttempts; attempt += 1) {
     try {
       const learningPage = await requestDeploymentResource(
         `${stripTrailingSlashes(baseUrl)}${routes.learningPage}`,
         {
-        headers: { accept: "text/html" },
+          headers: withSessionCookie({ accept: "text/html" }, sessionCookie),
           resolvedAddress,
           timeoutMs: networkRetryPolicy.perAttemptTimeoutMs,
         },
       );
       const manifestResponse = await requestDeploymentResource(
-        `${stripTrailingSlashes(baseUrl)}/api/learning/ppt-playback/${publishedPlayback.courseId}`,
+        `${stripTrailingSlashes(baseUrl)}/api/learning/ppt-playback/${courseId}`,
         {
-          headers: { accept: "application/json" },
+          headers: withSessionCookie({ accept: "application/json" }, sessionCookie),
           resolvedAddress,
           timeoutMs: networkRetryPolicy.perAttemptTimeoutMs,
         },
@@ -282,27 +344,35 @@ async function executeLiveSmoke({ baseUrl, resolvedAddress }) {
       const slides = Array.isArray(playback?.slides) ? playback.slides : [];
       const firstSlide = isRecord(slides[0]) ? slides[0] : undefined;
       const lastSlide = isRecord(slides.at(-1)) ? slides.at(-1) : undefined;
-      const manifestMatchesPublishedPlayback =
-        manifestResponse.ok &&
-        playback?.status === "ready" &&
-        playback.courseId === publishedPlayback.courseId &&
-        playback.audioManifestId === publishedPlayback.manifestId &&
-        playback.teacherName === publishedPlayback.teacherName &&
-        playback.voiceLabel === publishedPlayback.voiceLabel &&
-        firstSlide?.slideId === publishedPlayback.firstSlideId &&
-        firstSlide?.slideTitle === publishedPlayback.firstSlideTitle &&
-        firstSlide?.audioId === publishedPlayback.firstAudioId &&
-        typeof firstSlide?.audioUrl === "string" &&
-        firstSlide.audioUrl.startsWith("/api/learning/ppt-playback/audio/") &&
-        lastSlide?.slideTitle === publishedPlayback.lastSlideTitle;
+      const manifestMatchesPublishedPlayback = manifestResponse.ok
+        ? expectations === "derived"
+          ? isSelfConsistentPlaybackManifest({ playback, slides, firstSlide, lastSlide, courseId })
+          : playback?.status === "ready" &&
+            playback.courseId === publishedPlayback.courseId &&
+            playback.audioManifestId === publishedPlayback.manifestId &&
+            playback.teacherName === publishedPlayback.teacherName &&
+            playback.voiceLabel === publishedPlayback.voiceLabel &&
+            firstSlide?.slideId === publishedPlayback.firstSlideId &&
+            firstSlide?.slideTitle === publishedPlayback.firstSlideTitle &&
+            firstSlide?.audioId === publishedPlayback.firstAudioId &&
+            typeof firstSlide?.audioUrl === "string" &&
+            firstSlide.audioUrl.startsWith("/api/learning/ppt-playback/audio/") &&
+            lastSlide?.slideTitle === publishedPlayback.lastSlideTitle
+        : false;
+      // Derived mode takes the count from the deployment's own manifest: the
+      // property worth checking is that `slideCount` and `slides` agree, since a
+      // disagreement is what a half-published deck looks like.
       const manifestSlideCount =
-        playback?.slideCount === publishedPlayback.slideCount &&
-        slides.length === publishedPlayback.slideCount;
+        expectations === "derived"
+          ? slides.length > 0 && playback?.slideCount === slides.length
+          : playback?.slideCount === publishedPlayback.slideCount &&
+            slides.length === publishedPlayback.slideCount;
       const studentSafeRedaction = isStudentSafePlaybackManifest(playback);
       const audio = await verifyFirstSlideAudio({
         baseUrl,
         audioUrl: typeof firstSlide?.audioUrl === "string" ? firstSlide.audioUrl : undefined,
         resolvedAddress,
+        sessionCookie,
       });
       const results = {
         learningPageHttp200: learningPage.ok ? "passed" : "failed",
@@ -322,6 +392,7 @@ async function executeLiveSmoke({ baseUrl, resolvedAddress }) {
           playbackManifest: manifestResponse.status,
           firstSlideAudio: audio.httpStatus,
         },
+        ...(expectations === "derived" ? { expectations } : {}),
         playback: playback
           ? {
               courseId: playback.courseId,
@@ -371,7 +442,7 @@ function createNetworkAttempts(attempted) {
   };
 }
 
-async function verifyFirstSlideAudio({ baseUrl, audioUrl, resolvedAddress }) {
+async function verifyFirstSlideAudio({ baseUrl, audioUrl, resolvedAddress, sessionCookie }) {
   if (!audioUrl) {
     return {
       status: "failed",
@@ -383,7 +454,7 @@ async function verifyFirstSlideAudio({ baseUrl, audioUrl, resolvedAddress }) {
   }
 
   const response = await requestDeploymentResource(new URL(audioUrl, baseUrl), {
-    headers: { accept: "audio/wav" },
+    headers: withSessionCookie({ accept: "audio/wav" }, sessionCookie),
     resolvedAddress,
     timeoutMs: networkRetryPolicy.perAttemptTimeoutMs,
   });
@@ -416,6 +487,49 @@ function isWavContentType(contentType) {
   return /^audio\/(wav|wave|x-wav)(?:\s*;|$)/i.test(contentType);
 }
 
+// What "this deck is really published" looks like without knowing which deck it
+// is: the manifest answers for the course that was asked for, its slide list is
+// slide-01..slide-NN in the order audio lookup indexes by, its teacher and voice
+// are filled in, and its first slide points at the audio route.
+function isSelfConsistentPlaybackManifest({ playback, slides, firstSlide, lastSlide, courseId }) {
+  return (
+    playback?.status === "ready" &&
+    playback.courseId === courseId &&
+    hasValue(playback.audioManifestId) &&
+    hasValue(playback.teacherName) &&
+    hasValue(playback.voiceLabel) &&
+    slides.length > 0 &&
+    slides.every(
+      (slide, index) =>
+        isRecord(slide) && slide.slideId === `slide-${String(index + 1).padStart(2, "0")}`,
+    ) &&
+    hasValue(firstSlide?.slideTitle) &&
+    hasValue(lastSlide?.slideTitle) &&
+    typeof firstSlide?.audioUrl === "string" &&
+    firstSlide.audioUrl.startsWith(
+      `/api/learning/ppt-playback/audio/${playback.audioManifestId}/`,
+    )
+  );
+}
+
+function withSessionCookie(headers, sessionCookie) {
+  return sessionCookie ? { ...headers, cookie: sessionCookie } : headers;
+}
+
+// Shape-checked, never printed. A value carrying CR or LF would split the
+// request into two, so it is refused rather than sanitized - an operator pasting
+// a mangled cookie should hear about it before a release gate records a pass.
+function normalizeSessionCookie(value) {
+  if (!hasValue(value)) {
+    return undefined;
+  }
+  const sessionCookie = value.trim();
+  if (/[\r\n\0]/.test(sessionCookie)) {
+    throw new Error("--session-cookie must be a single-line cookie header value.");
+  }
+  return sessionCookie;
+}
+
 function isStudentSafePlaybackManifest(playback) {
   const serializedPlayback = JSON.stringify(playback ?? {});
   return (
@@ -436,6 +550,8 @@ function parseArgs(args) {
     baseUrl: undefined,
     resolvedAddress: undefined,
     releaseRunId: undefined,
+    courseId: undefined,
+    sessionCookie: undefined,
   };
 
   for (let index = 0; index < args.length; index += 1) {
@@ -461,15 +577,24 @@ function parseArgs(args) {
     } else if (arg === "--release-run-id") {
       options.releaseRunId = normalizeReleaseRunId(readArgValue(args, index, arg));
       index += 1;
+    } else if (arg === "--course-id") {
+      options.courseId = normalizeCourseId(readArgValue(args, index, arg));
+      index += 1;
+    } else if (arg === "--session-cookie") {
+      options.sessionCookie = readArgValue(args, index, arg);
+      index += 1;
     } else if (arg === "--vercel-production-deployment") {
       options.vercelProductionDeployment = readArgValue(args, index, arg);
       index += 1;
     } else if (arg === "--help" || arg === "-h") {
       process.stdout.write(
         [
-          "Usage: node -- scripts/learning-ppt-playback-deployment-smoke.mjs [--dry-run] [--live --approved --base-url URL] [--resolved-address IP] [--environment production|preview|local-production|unspecified] [--env-file PATH] [--release-run-id ID] [--vercel-production-deployment PATH]",
+          "Usage: node -- scripts/learning-ppt-playback-deployment-smoke.mjs [--dry-run] [--live --approved --base-url URL] [--resolved-address IP] [--environment production|preview|local-production|unspecified] [--env-file PATH] [--release-run-id ID] [--course-id COURSE] [--session-cookie COOKIE] [--vercel-production-deployment PATH]",
           "",
           "Outputs redacted deployed /learning Kang Xia PPT playback smoke JSON. Dry-run never uses network; live mode checks public playback manifest and first WAV without printing URLs or response bodies.",
+          "",
+          "--course-id smokes any published course and derives its expectations - slide count, titles, teacher - from the deployed manifest instead of the pinned Kang Xia demo values. With no --course-id the pinned demo expectations apply, unchanged.",
+          "--session-cookie (or UAIS_DEPLOYMENT_SESSION_COOKIE via --env-file) attaches a session to every request, so an auth-enforcing deployment can be smoked. The value is never printed.",
         ].join("\n"),
       );
       process.exit(0);
@@ -508,6 +633,15 @@ function normalizeReleaseRunId(value) {
     throw new Error("--release-run-id must be a non-secret release identifier.");
   }
   return releaseRunId;
+}
+
+// The catalog's own charset: a course id is interpolated into a request path.
+function normalizeCourseId(value) {
+  const courseId = value.trim();
+  if (!/^[A-Za-z0-9_-]+$/.test(courseId)) {
+    throw new Error("--course-id must match the published course id charset.");
+  }
+  return courseId;
 }
 
 function normalizeResolvedAddress(value) {

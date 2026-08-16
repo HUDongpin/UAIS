@@ -8,6 +8,9 @@ import {
   findPublishedPlaybackByCourseId,
   type PublishedPptPlayback,
 } from "@/lib/learning/ppt-playback-catalog";
+// Shared with the publish script, so the duration a deck is published with and
+// the duration this builds from the same WAV cannot drift apart.
+import { durationSecondsFromPcmWavBytes } from "@/lib/learning/published-deck-validation.mjs";
 
 export function createLearningPptPlaybackManifestForCourse(input: {
   courseId: string;
@@ -166,11 +169,6 @@ function buildLearningAudioUrl(manifestId: string, audioId: string) {
 function buildLearningSlideImageUrl(pptAssetId: string, slideId: string) {
   const pageId = slideId.replace(/^slide-/, "page-");
   return `/learning/ppt-playback/slides/${pptAssetId}/${pageId}.jpg`;
-}
-
-function durationSecondsFromPcmWavBytes(byteLength: number, sampleRateHz: number) {
-  const pcmBytes = Math.max(byteLength - 44, 0);
-  return Math.round((pcmBytes / (sampleRateHz * 2)) * 100) / 100;
 }
 
 function assertLearningPlaybackIsDisplaySafe(value: LearningPptPlaybackManifest) {
