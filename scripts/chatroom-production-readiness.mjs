@@ -328,6 +328,10 @@ async function main() {
 
   const blocked = checks.filter((check) => check.blockedReasons.length > 0);
   const report = {
+    // Named the way every other evidence file in the release chain is named, so
+    // the aggregate gate can refuse a file that is not this report rather than
+    // accepting any JSON that happens to carry `status: "ready"`.
+    target: "chatroom-production-readiness",
     generatedAt: new Date().toISOString(),
     source: options.envFile ? "env-file" : "process-env",
     probed: options.probe,

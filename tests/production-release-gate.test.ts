@@ -1083,6 +1083,26 @@ const acceptedOidcVercelEnvNames = [
   "UAIS_TEACHER_AUTH_OIDC_JWKS_URL",
   "UAIS_TEACHER_AUTH_OIDC_TEACHER_ID_CLAIM",
 ];
+// The group-chatroom preflight the aggregate gate now inherits. Shaped the way
+// scripts/chatroom-production-readiness.mjs prints it for a durable, probed,
+// switched-on room: B2 durable storage, B3 transcript schema v2, B4 the literal
+// `on` flag, and at least one agent provider.
+const acceptedChatroomProductionReadiness = {
+  target: "chatroom-production-readiness",
+  status: "ready",
+  probed: true,
+  checks: [
+    { blocker: "B2", status: "ready", blockedReasons: [] },
+    { blocker: "B3", status: "ready", blockedReasons: [] },
+    { blocker: "B4", status: "ready", blockedReasons: [] },
+    { blocker: "provider", status: "ready", blockedReasons: [] },
+  ],
+  blockedReasons: [],
+  safety: {
+    secretsPrinted: false,
+    valuesRedacted: true,
+  },
+};
 const acceptedVercelEnvSafety = {
   valuesRedacted: true,
   applyRequiresApproval: true,
@@ -15082,6 +15102,7 @@ describe("UAIS production E2E release gate", () => {
           "teaching-operations-route-smoke-evidence-missing",
           "teaching-operation-detail-browser-smoke-not-live-passed",
           "teaching-course-management-route-smoke-evidence-missing",
+          "chatroom-production-readiness-missing",
           "external-storage-smoke-not-live-passed",
           "manual-ppt-playback-not-accepted",
           "enterprise-live-evidence-audit-missing",
@@ -17573,6 +17594,306 @@ describe("UAIS production E2E release gate", () => {
     expect(output).not.toContain("secret-");
   });
 
+  // The September launch configuration. It reads no external account service,
+  // no external storage service and no enterprise integration, so the gate must
+  // require none of them - and must require the database URL that everything
+  // here actually depends on. The old flat list did the opposite: this plan
+  // failed on roughly thirty variables it never reads, while a plan with no
+  // database at all passed.
+  it("accepts database-backed Vercel env placement and requires the core database instead of an external account service", () => {
+    const tmpDir = mkdtempSync(join(tmpdir(), "uais-release-gate-vercel-env-database-"));
+    const databaseVercelEnvNames = [
+      "UAIS_LIVE_AI_APPROVAL_TOKEN",
+      "UAIS_AI_ACCESS_SIGNING_SECRET",
+      "UAIS_APP_SESSION_SIGNING_SECRET",
+      "UAIS_APP_AUTH_PROVIDER",
+      "UAIS_CORE_DATABASE_URL",
+      "UAIS_TEACHER_AUTH_PROVIDER",
+      "UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET",
+      "DEEPSEEK_API_KEY",
+      "DASHSCOPE_API_KEY",
+    ];
+    const vercelEnvSync = writeJson(tmpDir, "vercel-env-sync.json", {
+      target: "vercel-env-sync",
+      mode: "apply",
+      authProviderMode: "database-account-cookie",
+      appAuthProviderMode: "database-accounts",
+      storageBackendMode: "core-database",
+      productionDemoAuthFlag: {
+        status: "unset",
+        requiredForProduction: "unset",
+        valueRedacted: true,
+      },
+      projectReadinessEvidenceStatus: "ready",
+      targets: acceptedVercelEnvTargets,
+      safety: acceptedVercelEnvSafety,
+      applySummary: acceptedVercelApplySummary,
+      applyPreflight: acceptedVercelApplyPreflight,
+      secretStrength: acceptedVercelSecretStrength,
+      entries: databaseVercelEnvNames.map((name) => ({ name, status: "present" })),
+    });
+    const vercelEnvInventory = writeJson(tmpDir, "vercel-env-inventory.json", {
+      ...acceptedVercelEnvInventory,
+      remoteEnvCounts: {
+        production: databaseVercelEnvNames.length,
+        preview: databaseVercelEnvNames.length,
+      },
+      remoteEnvNames: {
+        production: databaseVercelEnvNames,
+        preview: databaseVercelEnvNames,
+      },
+      requiredEnvCoverage: {
+        production: { present: databaseVercelEnvNames, missing: [] },
+        preview: { present: databaseVercelEnvNames, missing: [] },
+      },
+    });
+
+    const output = execFileSync("node", [
+      "scripts/production-e2e-release-gate.mjs",
+      "--vercel-env-sync",
+      vercelEnvSync,
+      "--vercel-env-inventory",
+      vercelEnvInventory,
+    ], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    });
+    const body = JSON.parse(output);
+
+    expect(body.requirements).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "vercel-env-placement",
+          status: "satisfied",
+          authProviderMode: "database-account-cookie",
+          requiredEnv: expect.arrayContaining(["UAIS_CORE_DATABASE_URL"]),
+        }),
+      ]),
+    );
+    const envPlacement = body.requirements.find(
+      (requirement: { id: string }) => requirement.id === "vercel-env-placement",
+    ) as { requiredEnv: string[] };
+    // Neither the external account service nor the external storage service nor
+    // any enterprise triplet is demanded of a deployment that runs none of them.
+    for (const name of [
+      "UAIS_APP_AUTH_PROVIDER_URL",
+      "UAIS_APP_AUTH_PROVIDER_TOKEN",
+      "UAIS_EXTERNAL_STORAGE_BASE_URL",
+      "UAIS_EXTERNAL_STORAGE_ACCESS_TOKEN",
+      "UAIS_COLLABORATION_INVITE_EMAIL_PROVIDER_URL",
+      "UAIS_GRADEBOOK_RELEASE_PROVIDER_TOKEN",
+      "UAIS_TEACHER_AUTH_ISSUER_SECRET",
+    ]) {
+      expect(envPlacement.requiredEnv).not.toContain(name);
+    }
+    expect(body.blockedReasons).not.toContain("vercel-env-not-applied");
+    expect(output).not.toContain(tmpDir);
+  });
+
+  // A configuration with no durable store at all used to pass the env
+  // requirement, because nothing in the required list named a database.
+  it("blocks database-backed Vercel env placement that never places the core database URL", () => {
+    const tmpDir = mkdtempSync(join(tmpdir(), "uais-release-gate-vercel-env-no-database-"));
+    const vercelEnvSync = writeJson(tmpDir, "vercel-env-sync.json", {
+      target: "vercel-env-sync",
+      mode: "apply",
+      authProviderMode: "database-account-cookie",
+      appAuthProviderMode: "database-accounts",
+      storageBackendMode: "core-database",
+      projectReadinessEvidenceStatus: "ready",
+      targets: acceptedVercelEnvTargets,
+      safety: acceptedVercelEnvSafety,
+      applySummary: acceptedVercelApplySummary,
+      applyPreflight: acceptedVercelApplyPreflight,
+      secretStrength: acceptedVercelSecretStrength,
+      entries: [
+        { name: "UAIS_LIVE_AI_APPROVAL_TOKEN", status: "present" },
+        { name: "UAIS_AI_ACCESS_SIGNING_SECRET", status: "present" },
+        { name: "UAIS_APP_SESSION_SIGNING_SECRET", status: "present" },
+        { name: "UAIS_APP_AUTH_PROVIDER", status: "present" },
+        { name: "UAIS_TEACHER_AUTH_PROVIDER", status: "present" },
+        { name: "UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET", status: "present" },
+        { name: "DEEPSEEK_API_KEY", status: "present" },
+        { name: "DASHSCOPE_API_KEY", status: "present" },
+      ],
+    });
+
+    const output = execFileSync("node", [
+      "scripts/production-e2e-release-gate.mjs",
+      "--vercel-env-sync",
+      vercelEnvSync,
+    ], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    });
+    const body = JSON.parse(output);
+
+    expect(body.requirements).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "vercel-env-placement",
+          status: "blocked",
+          missingEnv: ["UAIS_CORE_DATABASE_URL"],
+        }),
+      ]),
+    );
+  });
+
+  // The escape hatch that turns the repo's two public demo logins into real
+  // accounts on the deployed site. It is set on production right now, and no
+  // gate refused it.
+  it("hard-blocks the release when the production demo-auth flag is placed in the env plan", () => {
+    const tmpDir = mkdtempSync(join(tmpdir(), "uais-release-gate-demo-flag-plan-"));
+    const vercelEnvSync = writeJson(tmpDir, "vercel-env-sync.json", {
+      target: "vercel-env-sync",
+      mode: "apply",
+      authProviderMode: "database-account-cookie",
+      appAuthProviderMode: "database-accounts",
+      storageBackendMode: "core-database",
+      productionDemoAuthFlag: {
+        status: "set",
+        requiredForProduction: "unset",
+        valueRedacted: true,
+      },
+      projectReadinessEvidenceStatus: "ready",
+      targets: acceptedVercelEnvTargets,
+      safety: acceptedVercelEnvSafety,
+      applySummary: acceptedVercelApplySummary,
+      applyPreflight: acceptedVercelApplyPreflight,
+      secretStrength: acceptedVercelSecretStrength,
+      entries: [],
+    });
+
+    const output = execFileSync("node", [
+      "scripts/production-e2e-release-gate.mjs",
+      "--vercel-env-sync",
+      vercelEnvSync,
+    ], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    });
+    const body = JSON.parse(output);
+
+    expect(body.blockedReasons).toContain("production-demo-auth-flag-set");
+    expect(body.requirements).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "production-demo-auth-tripwire",
+          status: "blocked",
+          blockedReason: "production-demo-auth-flag-set",
+          flagName: "UAIS_APP_ALLOW_PRODUCTION_DEMO_AUTH",
+          placedIn: ["vercelEnvSync"],
+        }),
+      ]),
+    );
+  });
+
+  it("hard-blocks the release when the production demo-auth flag is observed on the remote project", () => {
+    const tmpDir = mkdtempSync(join(tmpdir(), "uais-release-gate-demo-flag-remote-"));
+    const vercelEnvInventory = writeJson(tmpDir, "vercel-env-inventory.json", {
+      ...acceptedVercelEnvInventory,
+      remoteEnvNames: {
+        production: [
+          ...acceptedTrustedCookieIssuerVercelEnvNames,
+          "UAIS_APP_ALLOW_PRODUCTION_DEMO_AUTH",
+        ],
+        preview: acceptedTrustedCookieIssuerVercelEnvNames,
+      },
+    });
+
+    const output = execFileSync("node", [
+      "scripts/production-e2e-release-gate.mjs",
+      "--vercel-env-inventory",
+      vercelEnvInventory,
+    ], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    });
+    const body = JSON.parse(output);
+
+    expect(body.requirements).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "production-demo-auth-tripwire",
+          status: "blocked",
+          placedIn: ["vercelEnvInventory"],
+        }),
+      ]),
+    );
+  });
+
+  // The group-chatroom preflight decided whether a deployed room could store a
+  // message at all, and nothing consumed it: a release could be declared ready
+  // while every room 503'd on a learner's first message.
+  it("inherits the group-chatroom production readiness preflight", () => {
+    const tmpDir = mkdtempSync(join(tmpdir(), "uais-release-gate-chatroom-readiness-"));
+    const ready = writeJson(
+      tmpDir,
+      "chatroom-ready.json",
+      acceptedChatroomProductionReadiness,
+    );
+    const blocked = writeJson(tmpDir, "chatroom-blocked.json", {
+      ...acceptedChatroomProductionReadiness,
+      status: "blocked",
+      checks: [
+        {
+          blocker: "B2",
+          status: "blocked",
+          blockedReasons: ["local-json-backend-refused-in-production"],
+        },
+        { blocker: "B3", status: "ready", blockedReasons: [] },
+        { blocker: "B4", status: "ready", blockedReasons: [] },
+        { blocker: "provider", status: "ready", blockedReasons: [] },
+      ],
+      blockedReasons: ["local-json-backend-refused-in-production"],
+    });
+
+    const readyBody = JSON.parse(
+      execFileSync(
+        "node",
+        [
+          "scripts/production-e2e-release-gate.mjs",
+          "--chatroom-production-readiness",
+          ready,
+        ],
+        { cwd: process.cwd(), encoding: "utf8" },
+      ),
+    );
+    const blockedBody = JSON.parse(
+      execFileSync(
+        "node",
+        [
+          "scripts/production-e2e-release-gate.mjs",
+          "--chatroom-production-readiness",
+          blocked,
+        ],
+        { cwd: process.cwd(), encoding: "utf8" },
+      ),
+    );
+
+    expect(readyBody.requirements).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "chatroom-production-readiness",
+          status: "satisfied",
+        }),
+      ]),
+    );
+    expect(blockedBody.blockedReasons).toContain(
+      "chatroom-production-readiness-not-proven",
+    );
+    expect(blockedBody.requirements).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "chatroom-production-readiness",
+          status: "blocked",
+          chatroomBlockedReasons: ["local-json-backend-refused-in-production"],
+        }),
+      ]),
+    );
+  });
+
+
   it("accepts OIDC Vercel env placement without the trusted issuer secret when OIDC env is present", () => {
     const tmpDir = mkdtempSync(join(tmpdir(), "uais-release-gate-vercel-env-oidc-"));
     const vercelEnvSync = writeJson(tmpDir, "vercel-env-sync.json", {
@@ -18763,6 +19084,10 @@ describe("UAIS production E2E release gate", () => {
       mode: "apply",
       releaseRunId: acceptedReleaseRunId,
       authProviderMode: "trusted-cookie-issuer",
+      // Declared, because the app auth requirement follows the selected
+      // provider: only trusted-account-provider needs the provider URL and
+      // token this plan places.
+      appAuthProviderMode: "trusted-account-provider",
       projectReadinessEvidenceStatus: "ready",
       targets: acceptedVercelEnvTargets,
       safety: acceptedVercelEnvSafety,
@@ -19183,6 +19508,12 @@ describe("UAIS production E2E release gate", () => {
       pptAcceptance,
       "--enterprise-live-evidence-audit",
       enterpriseLiveEvidenceAudit,
+      "--chatroom-production-readiness",
+      writeJson(
+        tmpDir,
+        "chatroom-production-readiness.json",
+        acceptedChatroomProductionReadiness,
+      ),
     ], {
       cwd: process.cwd(),
       encoding: "utf8",
@@ -24817,6 +25148,9 @@ describe("UAIS production E2E release gate", () => {
     expect(body.status).toBe("blocked");
     expect(body.blockedReasons).toEqual([
       "deployed-teacher-workflow-page-not-production",
+      // The aggregate gate now inherits the group-chatroom preflight, which
+      // this fixture does not supply.
+      "chatroom-production-readiness-missing",
       "enterprise-live-evidence-audit-missing",
     ]);
     expect(body.requirements).toEqual(
@@ -25939,6 +26273,9 @@ describe("UAIS production E2E release gate", () => {
     expect(body.status).toBe("blocked");
     expect(body.blockedReasons).toEqual([
       "deployment-route-smoke-not-production",
+      // The aggregate gate now inherits the group-chatroom preflight, which
+      // this fixture does not supply.
+      "chatroom-production-readiness-missing",
       "enterprise-live-evidence-audit-missing",
     ]);
     expect(body.requirements).toEqual(
@@ -28922,6 +29259,9 @@ describe("UAIS production E2E release gate", () => {
 
     expect(body.status).toBe("blocked");
     expect(body.blockedReasons).toEqual([
+      // The aggregate gate now inherits the group-chatroom preflight, which
+      // this fixture does not supply.
+      "chatroom-production-readiness-missing",
       "external-storage-smoke-not-production",
       "enterprise-live-evidence-audit-missing",
     ]);

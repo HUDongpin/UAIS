@@ -35,12 +35,47 @@ or optional live AI work. It does not contain real values and it does not inspec
   guard that is already enforced with safe defaults when they are unset, so
   leaving them unconfigured is safe and setting the mode to `off` is not. The
   reserved group-chatroom names below also sit in this tier.
-- `quarantined-legacy`: older teacher-auth split, the remaining external-storage
-  service-side names, ordinary teaching provider, and enterprise evidence-gate
-  variables, plus the local JSON
+- `quarantined-legacy`: the teacher-auth issuer/OIDC split, the remaining
+  external-storage service-side names, the external-append teaching provider, and
+  enterprise evidence-gate variables, plus the local JSON
   data-directory paths that only apply outside production. They are retained for
   historical scripts/tests and local/test persistence, but are not required for
   the core POC production surface.
+
+## Launch Auth Selectors
+
+The launch configuration authenticates against the managed Postgres the
+deployment already requires, so it needs no external identity service:
+
+- `UAIS_APP_AUTH_PROVIDER=database-accounts` — logins are checked against the
+  `uais_users` rows. `UAIS_APP_AUTH_PROVIDER_URL` and
+  `UAIS_APP_AUTH_PROVIDER_TOKEN` are read only by `trusted-account-provider` and
+  are therefore conditional, not required — the same treatment the
+  external-storage endpoint pair gets. Provisioning and password resets for those
+  rows are `scripts/seed-uais-accounts.mjs` and
+  `scripts/reset-uais-account-password.mjs`; see `docs/auth-contract.md`.
+- `UAIS_APP_SESSION_SIGNING_SECRET` — at least 32 characters, the same floor the
+  teacher session secret carries. A deployed runtime refuses a shorter value and
+  mints no session at all, so this is a launch-blocking value rather than a
+  best-effort one; a local runtime still accepts anything.
+- `UAIS_TEACHER_AUTH_PROVIDER=database-account-cookie` — teacher sessions are
+  minted at login for accounts already verified as `role = 'teacher'`. It needs
+  `UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET` (at least 32 characters) and
+  nothing else: no issuer URL, no second secret. Both names left quarantine
+  because a deployment without them serves a teacher who can read the course
+  list and then 401s on every write.
+- `UAIS_APP_ALLOW_PRODUCTION_DEMO_AUTH` — must be unset in production. It is the
+  only switch that lets the `local-demo` provider (the fallback for an unset
+  `UAIS_APP_AUTH_PROVIDER`) mint sessions in a production runtime, which would
+  put the repo's public demo accounts on the live site.
+- `trusted-account-provider`, `trusted-cookie-issuer` and `oidc-jwks` stay
+  supported and catalogued as future options; none of them has a deployed
+  service today.
+
+`UAIS_CORE_DATABASE_URL` is required in the BUILD environment as well as at
+runtime: `npm run vercel-build` applies the migrations from there, and `/healthz`
+reports `checks.migrations` as `behind` (503) for a deployment whose database
+never received them.
 
 ## Local JSON Data Directories
 

@@ -45,10 +45,15 @@ without changing the chatroom UI.
 npm run dev
 npm run test
 npm run test:critical
+npm run test:db
 npm run lint
 npm run build
 npm run db:migrate
 ```
+
+`npm run test:db` is the database lane: the Postgres integration suites skip
+themselves unless `UAIS_CORE_DATABASE_URL` points at a reachable Postgres. See
+`docs/runbooks/pre-deploy-checklist.md` for the throwaway-instance recipe.
 
 ## Operator Docs
 

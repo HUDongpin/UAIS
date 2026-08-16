@@ -5,6 +5,30 @@ import { readFileSync } from "node:fs";
 
 const teacherAuthIssuerProofTtlSeconds = 300;
 
+// Mirrors resolveUaisTeacherAuthProviderContract in
+// src/lib/server/teacher-auth-provider-contract.ts. `database-account-cookie`
+// mints the teacher session inside the app's own login route for an account
+// already verified as role = 'teacher', so this smoke cannot issue one - it has
+// no password and must never hold one. An operator supplies the minted cookie.
+const supportedTeacherAuthProviders = [
+  "trusted-cookie-issuer",
+  "oidc-jwks",
+  "database-account-cookie",
+];
+
+const teacherAuthProviderRequiredSmokeEnvNames = {
+  "trusted-cookie-issuer": ["UAIS_TEACHER_AUTH_ISSUER_SECRET"],
+  "oidc-jwks": [
+    "UAIS_TEACHER_AUTH_OIDC_ISSUER",
+    "UAIS_TEACHER_AUTH_OIDC_AUDIENCE",
+    "UAIS_TEACHER_AUTH_OIDC_JWKS_URL",
+    "UAIS_TEACHER_AUTH_OIDC_TEACHER_ID_CLAIM",
+    "UAIS_TEACHER_AUTH_OIDC_SMOKE_BEARER_TOKEN",
+    "UAIS_TEACHER_AUTH_OIDC_SMOKE_TEACHER_ID",
+  ],
+  "database-account-cookie": ["UAIS_TEACHER_AUTH_ROUTE_SMOKE_SESSION_COOKIE"],
+};
+
 const routeChecks = [
   {
     id: "s22-retention-readiness-route",
@@ -175,6 +199,7 @@ try {
       aiAccessSigningSecret: env.UAIS_AI_ACCESS_SIGNING_SECRET,
       teacherAuthIssuerSecret: env.UAIS_TEACHER_AUTH_ISSUER_SECRET,
       oidcSmokeBearerToken: env.UAIS_TEACHER_AUTH_OIDC_SMOKE_BEARER_TOKEN,
+      teacherAuthSessionCookie: env.UAIS_TEACHER_AUTH_ROUTE_SMOKE_SESSION_COOKIE,
       teacherId: readRouteSmokeTeacherId({ env, authProviderMode }),
     });
     const status = results.every((result) => result.status === "ok") ? "passed" : "failed";
@@ -201,6 +226,16 @@ function buildRouteChecks(authProviderMode, { teacherAuthIssuerOnly = false } = 
         ...check,
         action: "verify-oidc-teacher-auth-issuer-route",
         auth: "oidc-jwks-bearer-token",
+      };
+    }
+    if (authProviderMode === "database-account-cookie") {
+      // There is no issuer endpoint to call: the session was minted at login
+      // and the smoke presents it, so the route is exercised as the holder of
+      // that cookie rather than as a party proving an issuer signature.
+      return {
+        ...check,
+        action: "verify-database-account-teacher-auth-session",
+        auth: "database-account-session-cookie",
       };
     }
     return {
@@ -321,6 +356,23 @@ function buildRouteSmokePlan({
       status: hasValue(env.UAIS_TEACHER_AUTH_ISSUER_SECRET) ? "present" : "missing",
     },
   ];
+  // `database-account-cookie` verifies the session with the shared signing
+  // secret already listed above and mints it inside the app's own login route,
+  // so it needs neither an issuer secret nor an OIDC endpoint. What it does need
+  // is the one credential this smoke cannot produce: a cookie an operator minted
+  // at login. Listed for the same reason the OIDC branch lists its bearer token
+  // - a plan that stays silent about it reports "ready" and then the live run
+  // throws in assertLivePrerequisites.
+  const databaseAccountCookiePrerequisites = [
+    {
+      id: "s22-teacher-auth-route-smoke-session-cookie",
+      responsibleSession: "S22",
+      requiredEnv: "UAIS_TEACHER_AUTH_ROUTE_SMOKE_SESSION_COOKIE",
+      status: hasValue(env.UAIS_TEACHER_AUTH_ROUTE_SMOKE_SESSION_COOKIE)
+        ? "present"
+        : "missing",
+    },
+  ];
   const oidcPrerequisites = [
     {
       id: "s12-teacher-auth-oidc-issuer",
@@ -365,9 +417,18 @@ function buildRouteSmokePlan({
         : "missing",
     },
   ];
+  // Keyed on the SELECTED provider, three ways. A two-way oidc-vs-issuer split
+  // sent database-account-cookie down the issuer branch, so a first-party
+  // deployment was told it was blocked on a secret that selector never reads and
+  // no service anywhere holds. An unset or unrecognised provider still lands on
+  // the issuer branch, which is the default the rest of this script assumes.
   const prerequisites = [
     ...sharedPrerequisites,
-    ...(authProviderMode === "oidc-jwks" ? oidcPrerequisites : trustedIssuerPrerequisites),
+    ...(authProviderMode === "oidc-jwks"
+      ? oidcPrerequisites
+      : authProviderMode === "database-account-cookie"
+        ? databaseAccountCookiePrerequisites
+        : trustedIssuerPrerequisites),
   ];
   const blockedReasons = [
     ...prerequisites.flatMap((prerequisite) => {
@@ -694,11 +755,15 @@ async function executeRouteSmoke({
   aiAccessSigningSecret,
   teacherAuthIssuerSecret,
   oidcSmokeBearerToken,
+  teacherAuthSessionCookie,
   teacherId,
 }) {
   const normalizedBaseUrl = stripTrailingSlash(baseUrl);
   const results = [];
-  let issuedTeacherCookieHeader;
+  // For database-account-cookie the session is not issued during this run; the
+  // operator supplies one minted at login, and every downstream route reuses it
+  // exactly as it reuses an issued cookie.
+  let issuedTeacherCookieHeader = teacherAuthSessionCookie;
   let issuedTeacherAiAccessHeaders;
   let derivedTeacherAiSessionResource;
 
@@ -712,7 +777,8 @@ async function executeRouteSmoke({
           })
         : undefined;
       const headers =
-        check.auth === "issued-teacher-auth-cookie"
+        check.auth === "issued-teacher-auth-cookie" ||
+        check.auth === "database-account-session-cookie"
           ? createIssuedTeacherCookieHeaders(issuedTeacherCookieHeader)
           : check.auth === "oidc-jwks-bearer-token"
             ? createOidcBearerTokenHeaders(oidcSmokeBearerToken)
@@ -1865,27 +1931,20 @@ function assertLivePrerequisites({ baseUrl, env }) {
   }
   if (!isSupportedTeacherAuthProvider(authProviderMode)) {
     throw new Error(
-      "Protected route smoke requires UAIS_TEACHER_AUTH_PROVIDER=trusted-cookie-issuer or oidc-jwks.",
+      `Protected route smoke requires UAIS_TEACHER_AUTH_PROVIDER to be one of ${supportedTeacherAuthProviders.join(", ")}.`,
     );
   }
   if (!hasValue(env.UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET)) {
     throw new Error("Protected route smoke requires UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET.");
   }
-  if (authProviderMode === "trusted-cookie-issuer" && !hasValue(env.UAIS_TEACHER_AUTH_ISSUER_SECRET)) {
-    throw new Error("Protected route smoke requires UAIS_TEACHER_AUTH_ISSUER_SECRET.");
-  }
-  if (authProviderMode === "oidc-jwks") {
-    for (const envName of [
-      "UAIS_TEACHER_AUTH_OIDC_ISSUER",
-      "UAIS_TEACHER_AUTH_OIDC_AUDIENCE",
-      "UAIS_TEACHER_AUTH_OIDC_JWKS_URL",
-      "UAIS_TEACHER_AUTH_OIDC_TEACHER_ID_CLAIM",
-      "UAIS_TEACHER_AUTH_OIDC_SMOKE_BEARER_TOKEN",
-      "UAIS_TEACHER_AUTH_OIDC_SMOKE_TEACHER_ID",
-    ]) {
-      if (!hasValue(env[envName])) {
-        throw new Error(`Protected OIDC route smoke requires ${envName}.`);
-      }
+  // Keyed on the SELECTED provider. Demanding the trusted issuer secret of a
+  // database-account-cookie deployment asked it for a secret that selector does
+  // not read and no service anywhere holds.
+  for (const envName of readTeacherAuthProviderRequiredSmokeEnvNames(authProviderMode)) {
+    if (!hasValue(env[envName])) {
+      throw new Error(
+        `Protected ${authProviderMode} route smoke requires ${envName}.`,
+      );
     }
   }
 }
@@ -1895,7 +1954,11 @@ function normalizeTeacherAuthProvider(value) {
 }
 
 function isSupportedTeacherAuthProvider(value) {
-  return value === "trusted-cookie-issuer" || value === "oidc-jwks";
+  return supportedTeacherAuthProviders.includes(value);
+}
+
+function readTeacherAuthProviderRequiredSmokeEnvNames(authProviderMode) {
+  return teacherAuthProviderRequiredSmokeEnvNames[authProviderMode] ?? [];
 }
 
 function teacherAuthProviderBlockedReason(value) {

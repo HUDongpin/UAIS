@@ -36,47 +36,30 @@ function extractConstStringObject(source, name) {
   );
 }
 
-const commonRequiredVercelEnvNames = [
+// What every production-capable configuration needs, whichever selectors it
+// chose. Everything else below is conditional, because the previous flat list
+// required an external account service, an external storage service and nine
+// enterprise provider triplets from EVERY deployment - so the launch
+// configuration failed on roughly thirty variables it never reads, while a
+// deployment with no database at all passed.
+const coreRequiredVercelEnvNames = [
   "UAIS_LIVE_AI_APPROVAL_TOKEN",
   "UAIS_AI_ACCESS_SIGNING_SECRET",
   "UAIS_APP_SESSION_SIGNING_SECRET",
   "UAIS_APP_AUTH_PROVIDER",
-  "UAIS_APP_AUTH_PROVIDER_URL",
-  "UAIS_APP_AUTH_PROVIDER_TOKEN",
   "UAIS_TEACHER_AUTH_PROVIDER",
   "UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET",
-  "UAIS_TEACHER_AI_OWNERSHIP_BACKEND",
-  "UAIS_VOICE_LIFECYCLE_AUDIT_BACKEND",
-  "UAIS_TEACHING_OPERATIONS_BACKEND",
-  "UAIS_TEACHING_COURSE_MANAGEMENT_BACKEND",
-  "UAIS_TEACHING_COURSE_ASSETS_BACKEND",
-  "UAIS_EXTERNAL_STORAGE_BASE_URL",
-  "UAIS_EXTERNAL_STORAGE_ACCESS_TOKEN",
-  "UAIS_COLLABORATION_INVITE_EMAIL_PROVIDER",
-  "UAIS_COLLABORATION_INVITE_EMAIL_PROVIDER_URL",
-  "UAIS_COLLABORATION_INVITE_EMAIL_PROVIDER_TOKEN",
-  "UAIS_COLLABORATION_INVITE_EMAIL_CALLBACK_TOKEN",
-  "UAIS_STUDENT_ROSTER_SYNC_PROVIDER",
-  "UAIS_STUDENT_ROSTER_SYNC_PROVIDER_URL",
-  "UAIS_STUDENT_ROSTER_SYNC_PROVIDER_TOKEN",
-  "UAIS_KNOWLEDGE_INDEX_SYNC_PROVIDER",
-  "UAIS_KNOWLEDGE_INDEX_SYNC_PROVIDER_URL",
-  "UAIS_KNOWLEDGE_INDEX_SYNC_PROVIDER_TOKEN",
-  "UAIS_GRADEBOOK_RELEASE_PROVIDER",
-  "UAIS_GRADEBOOK_RELEASE_PROVIDER_URL",
-  "UAIS_GRADEBOOK_RELEASE_PROVIDER_TOKEN",
-  "UAIS_COURSE_CONTENT_PUBLISH_PROVIDER",
-  "UAIS_COURSE_CONTENT_PUBLISH_PROVIDER_URL",
-  "UAIS_COURSE_CONTENT_PUBLISH_PROVIDER_TOKEN",
-  "UAIS_COURSE_EXPORT_PROVIDER",
-  "UAIS_COURSE_EXPORT_PROVIDER_URL",
-  "UAIS_COURSE_EXPORT_PROVIDER_TOKEN",
-  "UAIS_GRADING_FEEDBACK_PROVIDER",
-  "UAIS_GRADING_FEEDBACK_PROVIDER_URL",
-  "UAIS_GRADING_FEEDBACK_PROVIDER_TOKEN",
   "DEEPSEEK_API_KEY",
   "DASHSCOPE_API_KEY",
 ];
+
+const appAuthProviderRequiredVercelEnvNames = {
+  "trusted-account-provider": [
+    "UAIS_APP_AUTH_PROVIDER_URL",
+    "UAIS_APP_AUTH_PROVIDER_TOKEN",
+  ],
+  "database-accounts": ["UAIS_CORE_DATABASE_URL"],
+};
 
 const authProviderRequiredVercelEnvNames = {
   "trusted-cookie-issuer": ["UAIS_TEACHER_AUTH_ISSUER_SECRET"],
@@ -86,29 +69,185 @@ const authProviderRequiredVercelEnvNames = {
     "UAIS_TEACHER_AUTH_OIDC_JWKS_URL",
     "UAIS_TEACHER_AUTH_OIDC_TEACHER_ID_CLAIM",
   ],
+  // Needs nothing beyond the session signing secret already in the core list:
+  // the account row is the authority and the login route is the only mint
+  // point, so there is no second party to authenticate.
+  "database-account-cookie": [],
 };
 
+const externalStorageRequiredVercelEnvNames = [
+  "UAIS_TEACHER_AI_OWNERSHIP_BACKEND",
+  "UAIS_VOICE_LIFECYCLE_AUDIT_BACKEND",
+  "UAIS_TEACHING_OPERATIONS_BACKEND",
+  "UAIS_TEACHING_COURSE_MANAGEMENT_BACKEND",
+  "UAIS_TEACHING_COURSE_ASSETS_BACKEND",
+  "UAIS_EXTERNAL_STORAGE_BASE_URL",
+  "UAIS_EXTERNAL_STORAGE_ACCESS_TOKEN",
+];
+const coreDatabaseRequiredVercelEnvNames = ["UAIS_CORE_DATABASE_URL"];
+
+// Each enterprise integration is required as a WHOLE once its selector has been
+// placed, and not at all before. Requiring the triplet unconditionally is what
+// let "thirty missing variables" hide the ones that mattered; requiring only
+// the URL and token once the selector is present still catches the real error,
+// which is half an integration.
+const enterpriseProviderVercelEnvIntegrations = [
+  {
+    selector: "UAIS_COLLABORATION_INVITE_EMAIL_PROVIDER",
+    names: [
+      "UAIS_COLLABORATION_INVITE_EMAIL_PROVIDER_URL",
+      "UAIS_COLLABORATION_INVITE_EMAIL_PROVIDER_TOKEN",
+      "UAIS_COLLABORATION_INVITE_EMAIL_CALLBACK_TOKEN",
+    ],
+    secretNames: [
+      "UAIS_COLLABORATION_INVITE_EMAIL_PROVIDER_TOKEN",
+      "UAIS_COLLABORATION_INVITE_EMAIL_CALLBACK_TOKEN",
+    ],
+  },
+  {
+    selector: "UAIS_STUDENT_ROSTER_SYNC_PROVIDER",
+    names: [
+      "UAIS_STUDENT_ROSTER_SYNC_PROVIDER_URL",
+      "UAIS_STUDENT_ROSTER_SYNC_PROVIDER_TOKEN",
+    ],
+    secretNames: ["UAIS_STUDENT_ROSTER_SYNC_PROVIDER_TOKEN"],
+  },
+  {
+    selector: "UAIS_KNOWLEDGE_INDEX_SYNC_PROVIDER",
+    names: [
+      "UAIS_KNOWLEDGE_INDEX_SYNC_PROVIDER_URL",
+      "UAIS_KNOWLEDGE_INDEX_SYNC_PROVIDER_TOKEN",
+    ],
+    secretNames: ["UAIS_KNOWLEDGE_INDEX_SYNC_PROVIDER_TOKEN"],
+  },
+  {
+    selector: "UAIS_GRADEBOOK_RELEASE_PROVIDER",
+    names: [
+      "UAIS_GRADEBOOK_RELEASE_PROVIDER_URL",
+      "UAIS_GRADEBOOK_RELEASE_PROVIDER_TOKEN",
+    ],
+    secretNames: ["UAIS_GRADEBOOK_RELEASE_PROVIDER_TOKEN"],
+  },
+  {
+    selector: "UAIS_COURSE_CONTENT_PUBLISH_PROVIDER",
+    names: [
+      "UAIS_COURSE_CONTENT_PUBLISH_PROVIDER_URL",
+      "UAIS_COURSE_CONTENT_PUBLISH_PROVIDER_TOKEN",
+    ],
+    secretNames: ["UAIS_COURSE_CONTENT_PUBLISH_PROVIDER_TOKEN"],
+  },
+  {
+    selector: "UAIS_COURSE_EXPORT_PROVIDER",
+    names: [
+      "UAIS_COURSE_EXPORT_PROVIDER_URL",
+      "UAIS_COURSE_EXPORT_PROVIDER_TOKEN",
+    ],
+    secretNames: ["UAIS_COURSE_EXPORT_PROVIDER_TOKEN"],
+  },
+  {
+    selector: "UAIS_GRADING_FEEDBACK_PROVIDER",
+    names: [
+      "UAIS_GRADING_FEEDBACK_PROVIDER_URL",
+      "UAIS_GRADING_FEEDBACK_PROVIDER_TOKEN",
+    ],
+    secretNames: ["UAIS_GRADING_FEEDBACK_PROVIDER_TOKEN"],
+  },
+];
+
 const minimumProductionSecretLength = 32;
-const commonProductionSecretStrengthNames = [
+const coreProductionSecretStrengthNames = [
   "UAIS_LIVE_AI_APPROVAL_TOKEN",
   "UAIS_AI_ACCESS_SIGNING_SECRET",
   "UAIS_APP_SESSION_SIGNING_SECRET",
-  "UAIS_APP_AUTH_PROVIDER_TOKEN",
   "UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET",
+];
+const appAuthProviderProductionSecretStrengthNames = {
+  "trusted-account-provider": ["UAIS_APP_AUTH_PROVIDER_TOKEN"],
+  "database-accounts": [],
+};
+const externalStorageProductionSecretStrengthNames = [
   "UAIS_EXTERNAL_STORAGE_ACCESS_TOKEN",
-  "UAIS_COLLABORATION_INVITE_EMAIL_PROVIDER_TOKEN",
-  "UAIS_COLLABORATION_INVITE_EMAIL_CALLBACK_TOKEN",
-  "UAIS_STUDENT_ROSTER_SYNC_PROVIDER_TOKEN",
-  "UAIS_KNOWLEDGE_INDEX_SYNC_PROVIDER_TOKEN",
-  "UAIS_GRADEBOOK_RELEASE_PROVIDER_TOKEN",
-  "UAIS_COURSE_CONTENT_PUBLISH_PROVIDER_TOKEN",
-  "UAIS_COURSE_EXPORT_PROVIDER_TOKEN",
-  "UAIS_GRADING_FEEDBACK_PROVIDER_TOKEN",
 ];
 const authProviderProductionSecretStrengthNames = {
   "trusted-cookie-issuer": ["UAIS_TEACHER_AUTH_ISSUER_SECRET"],
   "oidc-jwks": [],
+  "database-account-cookie": [],
 };
+
+// The flag that turns the repo's two public demo logins into real accounts on
+// the deployed site. Nothing in this chain refused it before, and it is set on
+// production right now.
+const productionDemoAuthFlagName = "UAIS_APP_ALLOW_PRODUCTION_DEMO_AUTH";
+
+// The group-chatroom preflight (blockers B2/B3/B4) already decides whether a
+// deployed room can store a message, speak transcript schema v2 and be switched
+// on at all. It ran as its own command and nothing consumed it, so a release
+// could be declared ready while every room 503'd on the first message.
+const requiredChatroomProductionReadinessBlockers = ["B2", "B3", "B4", "provider"];
+
+// Resolves the same way scripts/chatroom-production-readiness.mjs and the
+// runtime do. Follows the sync plan's own declaration when it makes one, and
+// otherwise infers it from the placement the plan already reports, so evidence
+// produced before this field existed keeps its meaning.
+function readVercelEnvStorageBackendMode(evidence, presentNames) {
+  const declared = isRecord(evidence) ? evidence.storageBackendMode : undefined;
+  if (
+    declared === "external" ||
+    declared === "core-database" ||
+    declared === "local-json"
+  ) {
+    return declared;
+  }
+  // Evidence written before the sync plan declared this field still SHOWS which
+  // backend it placed: an external-storage plan carries the endpoint, both as
+  // an entry and as the classified origin it proves.
+  return presentNames.has("UAIS_EXTERNAL_STORAGE_BASE_URL") ||
+    readExternalStorageEndpoint(evidence).endpointClass !== "missing"
+    ? "external"
+    : "core-database";
+}
+
+function readRequiredVercelEnvNames({
+  authProviderMode,
+  appAuthProviderMode,
+  storageBackendMode,
+  presentNames,
+}) {
+  return [
+    ...new Set([
+      ...coreRequiredVercelEnvNames,
+      ...(appAuthProviderRequiredVercelEnvNames[appAuthProviderMode] ?? []),
+      ...(authProviderRequiredVercelEnvNames[authProviderMode] ?? []),
+      ...(storageBackendMode === "external"
+        ? externalStorageRequiredVercelEnvNames
+        : coreDatabaseRequiredVercelEnvNames),
+      ...enterpriseProviderVercelEnvIntegrations.flatMap((integration) =>
+        presentNames.has(integration.selector) ? integration.names : [],
+      ),
+    ]),
+  ];
+}
+
+function readRequiredProductionSecretStrengthNames({
+  authProviderMode,
+  appAuthProviderMode,
+  storageBackendMode,
+  presentNames,
+}) {
+  return [
+    ...new Set([
+      ...coreProductionSecretStrengthNames,
+      ...(appAuthProviderProductionSecretStrengthNames[appAuthProviderMode] ?? []),
+      ...(authProviderProductionSecretStrengthNames[authProviderMode] ?? []),
+      ...(storageBackendMode === "external"
+        ? externalStorageProductionSecretStrengthNames
+        : []),
+      ...enterpriseProviderVercelEnvIntegrations.flatMap((integration) =>
+        presentNames.has(integration.selector) ? integration.secretNames : [],
+      ),
+    ]),
+  ];
+}
 
 const requiredVercelEnvTargets = ["production", "preview"];
 
@@ -248,8 +387,21 @@ function readEnterpriseLiveEvidenceAuditExpectedTargetContractStatus(target) {
     : "not-required";
 }
 
-const acceptedTeacherAuthProviderModes = ["trusted-cookie-issuer", "oidc-jwks"];
-const acceptedAppAuthProviderModes = ["trusted-account-provider"];
+// Every production-capable selector each contract implements. The two database
+// selectors are the launch configuration: they authenticate against uais_users
+// on the core database this deployment already runs. The trusted-provider,
+// trusted-issuer and OIDC selectors stay accepted as future options - the
+// defect was that they were the ONLY accepted values while no such external
+// service exists anywhere, so the one configuration that works was refused.
+const acceptedTeacherAuthProviderModes = [
+  "trusted-cookie-issuer",
+  "oidc-jwks",
+  "database-account-cookie",
+];
+const acceptedAppAuthProviderModes = [
+  "trusted-account-provider",
+  "database-accounts",
+];
 const acceptedOidcEndpointClasses = [
   "remote-https",
   "insecure-http",
@@ -269,6 +421,10 @@ const acceptedStorageNetworkClasses = [
 const expectedIssuerRouteAuthByProvider = {
   "trusted-cookie-issuer": "signed-admin-ai-access",
   "oidc-jwks": "oidc-jwks-bearer-token",
+  // The session is minted inside the app's own login route against a verified
+  // uais_users row, so the smoke authenticates as that session rather than
+  // presenting an external issuer's proof.
+  "database-account-cookie": "database-account-session-cookie",
 };
 
 const requiredTeacherAuthIssuerHeaderChecks = [
@@ -1472,6 +1628,7 @@ try {
     externalStorageSmoke: readOptionalJson(options.externalStorageSmoke),
     pptAcceptance: readOptionalJson(options.pptAcceptance),
     enterpriseLiveEvidenceAudit: readOptionalJson(options.enterpriseLiveEvidenceAudit),
+    chatroomProductionReadiness: readOptionalJson(options.chatroomProductionReadiness),
     localProductionE2eSmoke: readOptionalJson(options.localProductionE2eSmoke),
   };
   const requirements = [
@@ -1520,6 +1677,12 @@ try {
     evaluateTeachingCourseManagementRouteSmoke(
       evidence.teachingCourseManagementRouteSmoke,
     ),
+    evaluateChatroomProductionReadiness(evidence.chatroomProductionReadiness),
+    evaluateProductionDemoAuthTripwire({
+      vercelEnvSync: evidence.vercelEnvSync,
+      vercelEnvInventory: evidence.vercelEnvInventory,
+      appAuthProviderReadiness: evidence.appAuthProviderReadiness,
+    }),
     evaluateExternalStorageSmoke(evidence.externalStorageSmoke),
     evaluateExternalStorageServiceConsistency({
       vercelEnvSync: evidence.vercelEnvSync,
@@ -1864,6 +2027,7 @@ function parseArgs(args) {
     externalStorageSmoke: undefined,
     pptAcceptance: undefined,
     enterpriseLiveEvidenceAudit: undefined,
+    chatroomProductionReadiness: undefined,
     localProductionE2eSmoke: undefined,
   };
 
@@ -1935,13 +2099,16 @@ function parseArgs(args) {
     } else if (arg === "--enterprise-live-evidence-audit") {
       options.enterpriseLiveEvidenceAudit = readArgValue(args, index, arg);
       index += 1;
+    } else if (arg === "--chatroom-production-readiness") {
+      options.chatroomProductionReadiness = readArgValue(args, index, arg);
+      index += 1;
     } else if (arg === "--local-production-e2e-smoke") {
       options.localProductionE2eSmoke = readArgValue(args, index, arg);
       index += 1;
     } else if (arg === "--help" || arg === "-h") {
       process.stdout.write(
         [
-          "Usage: node -- scripts/production-e2e-release-gate.mjs [--teacher-workflow-ui PATH] [--deployed-teacher-workflow-ui PATH] [--teacher-workflow-browser-ui PATH] [--teacher-workflow-live-generation PATH] [--learning-ppt-playback PATH] [--vercel-project-readiness PATH] [--vercel-env-sync PATH] [--vercel-env-inventory PATH] [--app-auth-provider-readiness PATH] [--trusted-teacher-auth-route-chain PATH] [--teacher-auth-provider-readiness PATH] [--external-storage-production-launch-contract PATH] [--external-storage-container-build-readiness PATH] [--external-storage-service-readiness PATH] [--vercel-production-deployment PATH] [--route-smoke PATH] [--teaching-operations-route-smoke PATH] [--teaching-operation-detail-browser-smoke PATH] [--teaching-course-management-route-smoke PATH] [--external-storage-smoke PATH] [--ppt-acceptance PATH] [--enterprise-live-evidence-audit PATH] [--local-production-e2e-smoke PATH]",
+          "Usage: node -- scripts/production-e2e-release-gate.mjs [--teacher-workflow-ui PATH] [--deployed-teacher-workflow-ui PATH] [--teacher-workflow-browser-ui PATH] [--teacher-workflow-live-generation PATH] [--learning-ppt-playback PATH] [--vercel-project-readiness PATH] [--vercel-env-sync PATH] [--vercel-env-inventory PATH] [--app-auth-provider-readiness PATH] [--trusted-teacher-auth-route-chain PATH] [--teacher-auth-provider-readiness PATH] [--external-storage-production-launch-contract PATH] [--external-storage-container-build-readiness PATH] [--external-storage-service-readiness PATH] [--vercel-production-deployment PATH] [--route-smoke PATH] [--teaching-operations-route-smoke PATH] [--teaching-operation-detail-browser-smoke PATH] [--teaching-course-management-route-smoke PATH] [--external-storage-smoke PATH] [--ppt-acceptance PATH] [--enterprise-live-evidence-audit PATH] [--chatroom-production-readiness PATH] [--local-production-e2e-smoke PATH]",
           "",
           "Aggregates redacted UAIS production E2E evidence. Dry-run or missing evidence keeps the gate blocked.",
           "Local-production E2E smoke is summarized as pre-production proof only and never satisfies production-live acceptance.",
@@ -3995,16 +4162,18 @@ function evaluateAppAuthProviderReadiness(evidence) {
   const evidenceEnvironment =
     typeof evidence.environment === "string" ? evidence.environment : "missing";
   const appAuthProviderMode =
-    evidence.appAuthProviderMode === "trusted-account-provider"
-      ? "trusted-account-provider"
-      : typeof evidence.appAuthProviderMode === "string"
-        ? evidence.appAuthProviderMode
-        : "missing";
+    typeof evidence.appAuthProviderMode === "string"
+      ? evidence.appAuthProviderMode
+      : "missing";
+  const databaseAccounts = appAuthProviderMode === "database-accounts";
   const endpointSecurity =
     typeof evidence.endpointSecurity === "string" ? evidence.endpointSecurity : "missing";
   const appSessionCookieContract = readAppSessionCookieContract(evidence);
   const trustedAccountProviderContract =
     readTrustedAccountProviderContract(evidence);
+  const databaseAccountProviderContract =
+    readDatabaseAccountProviderContract(evidence);
+  const productionDemoAuthFlag = readAppAuthProductionDemoAuthFlag(evidence);
   const vercelEnvSyncEvidence = readAppAuthProviderVercelEnvSyncEvidence(evidence);
   const redactionSafety = readAppAuthProviderReadinessSafety(evidence);
   const redactionSafetyProved =
@@ -4013,21 +4182,28 @@ function evaluateAppAuthProviderReadiness(evidence) {
         ? status === "proved-not-performed"
         : status === "proved",
     );
-  const trustedAccountProviderProved =
-    trustedAccountProviderContract.providerKind === "trusted-account-provider" &&
-    trustedAccountProviderContract.endpoint === "configured" &&
-    trustedAccountProviderContract.bearerCredential === "configured" &&
-    trustedAccountProviderContract.accessTokenStrength === "sufficient" &&
-    trustedAccountProviderContract.requestMethod === "POST" &&
-    trustedAccountProviderContract.responseUserShape === "proved" &&
-    trustedAccountProviderContract.valueRedacted === true;
+  // Whichever selector was chosen, this is "the provider-specific contract is
+  // proved". For the database selector that is the core database plus a seeded
+  // roster; there is no endpoint and no bearer credential to hold.
+  const appAuthProviderContractProved = databaseAccounts
+    ? isDatabaseAccountProviderContractProved(databaseAccountProviderContract)
+    : trustedAccountProviderContract.providerKind === "trusted-account-provider" &&
+      trustedAccountProviderContract.endpoint === "configured" &&
+      trustedAccountProviderContract.bearerCredential === "configured" &&
+      trustedAccountProviderContract.accessTokenStrength === "sufficient" &&
+      trustedAccountProviderContract.requestMethod === "POST" &&
+      trustedAccountProviderContract.responseUserShape === "proved" &&
+      trustedAccountProviderContract.valueRedacted === true;
+  const endpointSecurityProved = databaseAccounts || endpointSecurity === "remote-https";
 
   const details = {
     evidenceEnvironment,
     appAuthProviderMode,
     endpointSecurity,
+    productionDemoAuthFlag,
     appSessionCookieContract,
     trustedAccountProviderContract,
+    databaseAccountProviderContract,
     vercelEnvSyncEvidence,
     redactionSafety,
   };
@@ -4043,7 +4219,7 @@ function evaluateAppAuthProviderReadiness(evidence) {
   if (
     evidence.mode === "live" &&
     evidence.status === "ready" &&
-    appAuthProviderMode !== "trusted-account-provider"
+    !acceptedAppAuthProviderModes.includes(appAuthProviderMode)
   ) {
     return blockedRequirement(
       id,
@@ -4052,10 +4228,26 @@ function evaluateAppAuthProviderReadiness(evidence) {
       details,
     );
   }
+  // A production deployment that carries the demo-auth escape hatch is one
+  // variable away from serving the repo's two public demo logins as real
+  // accounts, whatever else it proved.
   if (
     evidence.mode === "live" &&
     evidence.status === "ready" &&
-    endpointSecurity !== "remote-https"
+    evidenceEnvironment === "production" &&
+    productionDemoAuthFlag === "set"
+  ) {
+    return blockedRequirement(
+      id,
+      "app-auth-production-demo-auth-flag-set",
+      readEvidenceStatus(evidence),
+      details,
+    );
+  }
+  if (
+    evidence.mode === "live" &&
+    evidence.status === "ready" &&
+    !endpointSecurityProved
   ) {
     return blockedRequirement(
       id,
@@ -4118,7 +4310,7 @@ function evaluateAppAuthProviderReadiness(evidence) {
   if (
     evidence.mode === "live" &&
     evidence.status === "ready" &&
-    !trustedAccountProviderProved
+    !appAuthProviderContractProved
   ) {
     return blockedRequirement(
       id,
@@ -4139,12 +4331,13 @@ function evaluateAppAuthProviderReadiness(evidence) {
     evidence.mode === "live" &&
     evidence.status === "ready" &&
     evidenceEnvironment === "production" &&
-    appAuthProviderMode === "trusted-account-provider" &&
-    endpointSecurity === "remote-https" &&
+    acceptedAppAuthProviderModes.includes(appAuthProviderMode) &&
+    productionDemoAuthFlag !== "set" &&
+    endpointSecurityProved &&
     appSessionCookieContract.signingSecretStrength === "sufficient" &&
     appSessionCookieContract.cookiePair === "proved" &&
     isAppAuthProviderVercelEnvSyncEvidenceProved(vercelEnvSyncEvidence) &&
-    trustedAccountProviderProved &&
+    appAuthProviderContractProved &&
     redactionSafetyProved
   ) {
     return satisfiedRequirement(id, readEvidenceStatus(evidence), details);
@@ -4699,8 +4892,14 @@ function isVercelEnvSyncProductionApplied(evidence) {
       .map((entry) => entry.name),
   );
   const authProviderMode = readVercelEnvAuthProviderMode(evidence);
-  const requiredAuthProviderEnv = authProviderRequiredVercelEnvNames[authProviderMode] ?? [];
-  const requiredEnv = [...commonRequiredVercelEnvNames, ...requiredAuthProviderEnv];
+  const appAuthProviderMode = readVercelEnvAppAuthProviderMode(evidence);
+  const storageBackendMode = readVercelEnvStorageBackendMode(evidence, presentNames);
+  const requiredEnv = readRequiredVercelEnvNames({
+    authProviderMode,
+    appAuthProviderMode,
+    storageBackendMode,
+    presentNames,
+  });
   const missingEnv = requiredEnv.filter((name) => !presentNames.has(name));
   const targets = Array.isArray(evidence.targets)
     ? evidence.targets.filter((target) => typeof target === "string")
@@ -4720,10 +4919,12 @@ function isVercelEnvSyncProductionApplied(evidence) {
     authProviderMode !== "oidc-jwks" ||
     (oidcEndpointSecurity.issuer === "remote-https" &&
       oidcEndpointSecurity.jwks === "remote-https");
-  const requiredSecretStrengthNames = [
-    ...commonProductionSecretStrengthNames,
-    ...(authProviderProductionSecretStrengthNames[authProviderMode] ?? []),
-  ];
+  const requiredSecretStrengthNames = readRequiredProductionSecretStrengthNames({
+    authProviderMode,
+    appAuthProviderMode,
+    storageBackendMode,
+    presentNames,
+  });
   const secretStrength = readVercelSecretStrength(evidence, requiredSecretStrengthNames);
   const applySummary = readVercelApplySummary(evidence);
   const applyPreflight = readVercelApplyPreflight(evidence);
@@ -4735,12 +4936,39 @@ function isVercelEnvSyncProductionApplied(evidence) {
     projectReadinessEvidenceStatus === "ready" &&
     requiredVercelEnvTargets.every((target) => targets.includes(target)) &&
     localOnlySmokeEnvNotSynced === "proved" &&
-    externalStorageEndpoint.endpointClass === "remote-https" &&
-    Boolean(externalStorageServiceFingerprint) &&
+    // Only an external-storage deployment has an endpoint to prove. One that
+    // keeps its data on the core database has nothing here, and demanding a
+    // remote-https storage origin of it blocked a durable configuration for
+    // lacking a service it deliberately does not run.
+    (storageBackendMode !== "external" ||
+      (externalStorageEndpoint.endpointClass === "remote-https" &&
+        Boolean(externalStorageServiceFingerprint))) &&
+    !isProductionDemoAuthFlagPlaced(evidence) &&
     oidcEndpointSecurityProved &&
     secretStrength.insufficientSecrets.length === 0 &&
     isVercelApplySummaryProved(applySummary) &&
     isVercelApplyPreflightProved(applyPreflight)
+  );
+}
+
+// True when a production env plan carries the demo-auth escape hatch, whether
+// it declared the flag on the plan or merely placed it as an entry.
+function isProductionDemoAuthFlagPlaced(evidence) {
+  if (!isRecord(evidence)) {
+    return false;
+  }
+  if (
+    isRecord(evidence.productionDemoAuthFlag) &&
+    evidence.productionDemoAuthFlag.status === "set"
+  ) {
+    return true;
+  }
+  const entries = Array.isArray(evidence.entries) ? evidence.entries : [];
+  return entries.some(
+    (entry) =>
+      isRecord(entry) &&
+      entry.name === productionDemoAuthFlagName &&
+      entry.status === "present",
   );
 }
 
@@ -4947,6 +5175,164 @@ function readTrustedAccountProviderContract(evidence) {
       : "missing",
     valueRedacted: contract.valueRedacted === true,
   };
+}
+
+function evaluateChatroomProductionReadiness(evidence) {
+  const id = "chatroom-production-readiness";
+  if (!isRecord(evidence)) {
+    return blockedRequirement(id, "chatroom-production-readiness-missing", "missing");
+  }
+  if (evidence.target !== "chatroom-production-readiness") {
+    return blockedRequirement(
+      id,
+      "chatroom-production-readiness-target-mismatch",
+      readEvidenceStatus(evidence),
+      {
+        evidenceTarget: typeof evidence.target === "string" ? evidence.target : "missing",
+      },
+    );
+  }
+  const checks = Array.isArray(evidence.checks) ? evidence.checks.filter(isRecord) : [];
+  const byBlocker = new Map(
+    checks
+      .filter((check) => typeof check.blocker === "string")
+      .map((check) => [check.blocker, check]),
+  );
+  const blockerStatuses = Object.fromEntries(
+    requiredChatroomProductionReadinessBlockers.map((blocker) => [
+      blocker,
+      typeof byBlocker.get(blocker)?.status === "string"
+        ? byBlocker.get(blocker).status
+        : "missing",
+    ]),
+  );
+  const missingBlockers = requiredChatroomProductionReadinessBlockers.filter(
+    (blocker) => blockerStatuses[blocker] === "missing",
+  );
+  const blockedReasons = Array.isArray(evidence.blockedReasons)
+    ? evidence.blockedReasons.filter((reason) => typeof reason === "string")
+    : [];
+  const details = {
+    evidenceStatus: typeof evidence.status === "string" ? evidence.status : "missing",
+    probed: evidence.probed === true,
+    blockerStatuses,
+    missingBlockers,
+    chatroomBlockedReasons: blockedReasons,
+  };
+
+  if (missingBlockers.length > 0) {
+    return blockedRequirement(
+      id,
+      "chatroom-production-readiness-blocker-coverage-not-proven",
+      readEvidenceStatus(evidence),
+      details,
+    );
+  }
+  if (evidence.status !== "ready" || blockedReasons.length > 0) {
+    return blockedRequirement(
+      id,
+      "chatroom-production-readiness-not-proven",
+      readEvidenceStatus(evidence),
+      details,
+    );
+  }
+  return satisfiedRequirement(id, readEvidenceStatus(evidence), details);
+}
+
+// One requirement whose whole job is the escape hatch, so the reason surfaces
+// at the top of the aggregate report instead of only inside whichever sub-check
+// happened to notice. It reads every piece of evidence that can carry the flag.
+function evaluateProductionDemoAuthTripwire({
+  vercelEnvSync,
+  vercelEnvInventory,
+  appAuthProviderReadiness,
+}) {
+  const id = "production-demo-auth-tripwire";
+  const sources = {
+    vercelEnvSync: isProductionDemoAuthFlagPlaced(vercelEnvSync) ? "set" : "unset",
+    vercelEnvInventory: isRemoteProductionDemoAuthFlagPlaced(vercelEnvInventory)
+      ? "set"
+      : "unset",
+    appAuthProviderReadiness: readAppAuthProductionDemoAuthFlag(appAuthProviderReadiness),
+  };
+  const placedIn = Object.entries(sources)
+    .filter(([, status]) => status === "set")
+    .map(([source]) => source);
+  const details = {
+    flagName: productionDemoAuthFlagName,
+    sources,
+    placedIn,
+    valueRedacted: true,
+  };
+  if (placedIn.length > 0) {
+    return blockedRequirement(id, "production-demo-auth-flag-set", "placed", details);
+  }
+  return satisfiedRequirement(id, "not-placed", details);
+}
+
+function isRemoteProductionDemoAuthFlagPlaced(evidence) {
+  if (!isRecord(evidence) || !isRecord(evidence.remoteEnvNames)) {
+    return false;
+  }
+  return requiredVercelEnvTargets.some((target) => {
+    const names = evidence.remoteEnvNames[target];
+    return Array.isArray(names) && names.includes(productionDemoAuthFlagName);
+  });
+}
+
+function readAppAuthProductionDemoAuthFlag(evidence) {
+  const flag = isRecord(evidence) ? evidence.productionDemoAuthFlag : undefined;
+  if (!isRecord(flag)) {
+    // Evidence produced before the readiness script reported this flag cannot
+    // prove it was unset, and "not reported" must not read as "safe".
+    return "missing";
+  }
+  return flag.status === "set" ? "set" : flag.status === "unset" ? "unset" : "missing";
+}
+
+function readDatabaseAccountProviderContract(evidence) {
+  if (!isRecord(evidence.databaseAccountProviderContract)) {
+    return {
+      providerKind: "missing",
+      source: "missing",
+      accountTable: "missing",
+      coreDatabase: "missing",
+      rosterSeeding: "missing",
+      valueRedacted: false,
+    };
+  }
+  const contract = evidence.databaseAccountProviderContract;
+  return {
+    providerKind:
+      contract.providerKind === "database-accounts" ? "database-accounts" : "missing",
+    source: contract.source === "uais-core-database" ? "uais-core-database" : "missing",
+    accountTable: contract.accountTable === "uais_users" ? "uais_users" : "missing",
+    coreDatabase: contract.coreDatabase === "configured" ? "configured" : "missing",
+    // Counts, never rows: the readiness script reports how many active accounts
+    // and teachers exist, and this carries only the verdict.
+    rosterSeeding: readAccountRosterSeedingStatus(contract.rosterSeeding),
+    valueRedacted: contract.valueRedacted === true,
+  };
+}
+
+function readAccountRosterSeedingStatus(value) {
+  const status = isRecord(value) ? value.status : undefined;
+  return status === "seeded" || status === "empty" || status === "unverified"
+    ? status
+    : "missing";
+}
+
+function isDatabaseAccountProviderContractProved(contract) {
+  return (
+    contract.providerKind === "database-accounts" &&
+    contract.source === "uais-core-database" &&
+    contract.accountTable === "uais_users" &&
+    contract.coreDatabase === "configured" &&
+    // An empty or unread uais_users passes every other check in this chain and
+    // fails every login, so the roster is part of the proof.
+    contract.rosterSeeding === "seeded" &&
+    contract.valueRedacted === true
+  );
 }
 
 function isTrustedAccountProviderResponseShapeProved(value) {
@@ -6435,10 +6821,18 @@ function evaluateVercelEnvSync(evidence, vercelEnvInventory) {
       .map((entry) => entry.name),
   );
   const authProviderMode = readVercelEnvAuthProviderMode(evidence);
+  const appAuthProviderMode = readVercelEnvAppAuthProviderMode(evidence);
+  const storageBackendMode = readVercelEnvStorageBackendMode(evidence, presentNames);
   const requiredAuthProviderEnv = authProviderRequiredVercelEnvNames[authProviderMode] ?? [];
-  const requiredEnv = [...commonRequiredVercelEnvNames, ...requiredAuthProviderEnv];
+  const requiredEnv = readRequiredVercelEnvNames({
+    authProviderMode,
+    appAuthProviderMode,
+    storageBackendMode,
+    presentNames,
+  });
   const missingEnv = requiredEnv.filter((name) => !presentNames.has(name));
   const authProviderModeProved = acceptedTeacherAuthProviderModes.includes(authProviderMode);
+  const productionDemoAuthFlagPlaced = isProductionDemoAuthFlagPlaced(evidence);
   const envTargets = Array.isArray(evidence.targets)
     ? evidence.targets.filter((target) => typeof target === "string")
     : [];
@@ -6457,22 +6851,31 @@ function evaluateVercelEnvSync(evidence, vercelEnvInventory) {
     (oidcEndpointSecurity.issuer === "remote-https" &&
       oidcEndpointSecurity.jwks === "remote-https");
   const externalStorageEndpoint = readExternalStorageEndpoint(evidence);
+  // Every external-storage proof below is scoped to a deployment that actually
+  // selected that backend. A core-database deployment has no service to reach,
+  // no origin to fingerprint and no adapter proof to hold.
+  const externalStorageSelected = storageBackendMode === "external";
   const externalStorageEndpointProved =
-    externalStorageEndpoint.endpointClass === "remote-https";
+    !externalStorageSelected || externalStorageEndpoint.endpointClass === "remote-https";
   const externalStorageServiceFingerprint = readVercelExternalStorageServiceFingerprint(evidence);
   const externalStorageServiceFingerprintStatus = externalStorageServiceFingerprint
     ? "present"
     : "missing";
+  const externalStorageServiceFingerprintProved =
+    !externalStorageSelected || externalStorageServiceFingerprintStatus === "present";
   const externalStorageDatabaseAdapterProof =
     readVercelExternalStorageDatabaseAdapterProof(evidence);
   const externalStorageDatabaseAdapterProofProved =
+    !externalStorageSelected ||
     isVercelExternalStorageDatabaseAdapterProofReady(
       externalStorageDatabaseAdapterProof,
     );
-  const requiredSecretStrengthNames = [
-    ...commonProductionSecretStrengthNames,
-    ...(authProviderProductionSecretStrengthNames[authProviderMode] ?? []),
-  ];
+  const requiredSecretStrengthNames = readRequiredProductionSecretStrengthNames({
+    authProviderMode,
+    appAuthProviderMode,
+    storageBackendMode,
+    presentNames,
+  });
   const secretStrength = readVercelSecretStrength(evidence, requiredSecretStrengthNames);
   const secretStrengthProved = secretStrength.insufficientSecrets.length === 0;
   const applySummary = readVercelApplySummary(evidence);
@@ -6490,6 +6893,24 @@ function evaluateVercelEnvSync(evidence, vercelEnvInventory) {
     externalStorageDatabaseAdapterProof,
     ...oidcEndpointDetails,
   };
+  // First, because a plan that carries the demo-auth escape hatch is unsafe to
+  // apply whatever else it got right.
+  if (evidence.mode === "apply" && productionDemoAuthFlagPlaced) {
+    return blockedRequirement(
+      id,
+      "vercel-env-production-demo-auth-flag-set",
+      readEvidenceStatus(evidence),
+      {
+        ...remoteEnvInventoryDetails,
+        authProviderMode,
+        appAuthProviderMode,
+        productionDemoAuthFlag: productionDemoAuthFlagName,
+        requiredEnv,
+        missingEnv,
+        ...endpointDetails,
+      },
+    );
+  }
   if (evidence.mode === "apply" && missingEnv.length === 0 && !authProviderModeProved) {
     return blockedRequirement(id, "vercel-env-auth-provider-mode-not-proven", readEvidenceStatus(evidence), {
       ...remoteEnvInventoryDetails,
@@ -6585,7 +7006,7 @@ function evaluateVercelEnvSync(evidence, vercelEnvInventory) {
     missingTargets.length === 0 &&
     localOnlySmokeEnvNotSynced === "proved" &&
     externalStorageEndpointProved &&
-    externalStorageServiceFingerprintStatus !== "present"
+    !externalStorageServiceFingerprintProved
   ) {
     return blockedRequirement(id, "vercel-env-external-storage-fingerprint-not-proven", readEvidenceStatus(evidence), {
       ...remoteEnvInventoryDetails,
@@ -6608,7 +7029,7 @@ function evaluateVercelEnvSync(evidence, vercelEnvInventory) {
     missingTargets.length === 0 &&
     localOnlySmokeEnvNotSynced === "proved" &&
     externalStorageEndpointProved &&
-    externalStorageServiceFingerprintStatus === "present" &&
+    externalStorageServiceFingerprintProved &&
     !externalStorageDatabaseAdapterProofProved
   ) {
     return blockedRequirement(
@@ -6637,7 +7058,7 @@ function evaluateVercelEnvSync(evidence, vercelEnvInventory) {
     missingTargets.length === 0 &&
     localOnlySmokeEnvNotSynced === "proved" &&
     externalStorageEndpointProved &&
-    externalStorageServiceFingerprintStatus === "present" &&
+    externalStorageServiceFingerprintProved &&
     externalStorageDatabaseAdapterProofProved &&
     !oidcEndpointSecurityProved
   ) {
@@ -6662,7 +7083,7 @@ function evaluateVercelEnvSync(evidence, vercelEnvInventory) {
     missingTargets.length === 0 &&
     localOnlySmokeEnvNotSynced === "proved" &&
     externalStorageEndpointProved &&
-    externalStorageServiceFingerprintStatus === "present" &&
+    externalStorageServiceFingerprintProved &&
     externalStorageDatabaseAdapterProofProved &&
     oidcEndpointSecurityProved &&
     !secretStrengthProved
@@ -6689,7 +7110,7 @@ function evaluateVercelEnvSync(evidence, vercelEnvInventory) {
     missingTargets.length === 0 &&
     localOnlySmokeEnvNotSynced === "proved" &&
     externalStorageEndpointProved &&
-    externalStorageServiceFingerprintStatus === "present" &&
+    externalStorageServiceFingerprintProved &&
     externalStorageDatabaseAdapterProofProved &&
     oidcEndpointSecurityProved &&
     secretStrengthProved &&
@@ -6717,7 +7138,7 @@ function evaluateVercelEnvSync(evidence, vercelEnvInventory) {
     missingTargets.length === 0 &&
     localOnlySmokeEnvNotSynced === "proved" &&
     externalStorageEndpointProved &&
-    externalStorageServiceFingerprintStatus === "present" &&
+    externalStorageServiceFingerprintProved &&
     externalStorageDatabaseAdapterProofProved &&
     oidcEndpointSecurityProved &&
     secretStrengthProved &&
@@ -6747,7 +7168,7 @@ function evaluateVercelEnvSync(evidence, vercelEnvInventory) {
     missingTargets.length === 0 &&
     localOnlySmokeEnvNotSynced === "proved" &&
     externalStorageEndpointProved &&
-    externalStorageServiceFingerprintStatus === "present" &&
+    externalStorageServiceFingerprintProved &&
     externalStorageDatabaseAdapterProofProved &&
     oidcEndpointSecurityProved &&
     secretStrengthProved &&
@@ -6778,7 +7199,7 @@ function evaluateVercelEnvSync(evidence, vercelEnvInventory) {
     missingTargets.length === 0 &&
     localOnlySmokeEnvNotSynced === "proved" &&
     externalStorageEndpointProved &&
-    externalStorageServiceFingerprintStatus === "present" &&
+    externalStorageServiceFingerprintProved &&
     externalStorageDatabaseAdapterProofProved &&
     oidcEndpointSecurityProved &&
     secretStrengthProved &&
@@ -7111,6 +7532,17 @@ function readVercelEnvAuthProviderMode(evidence) {
     return evidence.authProviderMode;
   }
   return typeof evidence.authProviderMode === "string" ? "unsupported" : "missing";
+}
+
+function readVercelEnvAppAuthProviderMode(evidence) {
+  const mode = isRecord(evidence) ? evidence.appAuthProviderMode : undefined;
+  if (typeof mode === "string" && acceptedAppAuthProviderModes.includes(mode)) {
+    return mode;
+  }
+  if (mode === "missing" || mode === "unsupported") {
+    return mode;
+  }
+  return typeof mode === "string" ? "unsupported" : "missing";
 }
 
 function readVercelSecretStrength(evidence, requiredNames) {

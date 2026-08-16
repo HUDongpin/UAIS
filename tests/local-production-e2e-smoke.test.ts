@@ -23,6 +23,30 @@ describe("local production E2E smoke harness", () => {
     expect(source).toContain('audioManifestId: "audio-manifest-kang-xia-ppt-19"');
   });
 
+  it("reports required smoke env for the provider the route smoke actually used", () => {
+    const source = readFileSync("scripts/local-production-e2e-smoke.mjs", "utf8");
+
+    // The map is keyed on the selected provider, but every call site passed no
+    // argument, so the default - this lane's pinned trusted-cookie-issuer - was
+    // the only reachable entry. A lane pointed at a database-account-cookie
+    // deployment therefore published "requires the issuer secret" as its
+    // evidence, naming a secret that selector never reads.
+    const providerMap = source
+      .split("const LOCAL_PRODUCTION_ROUTE_SMOKE_PROVIDER_REQUIRED_ENV = {")[1]
+      .split("};")[0];
+    expect([...providerMap.matchAll(/^ {2}"([a-z-]+)":/gm)].map(([, key]) => key)).toEqual([
+      "trusted-cookie-issuer",
+      "oidc-jwks",
+      "database-account-cookie",
+    ]);
+    expect(providerMap).toContain("UAIS_TEACHER_AUTH_ROUTE_SMOKE_SESSION_COOKIE");
+    // The plan is written before anything runs, so it still speaks for the
+    // pinned provider; the evidence is written from a run that reported one.
+    expect(source).toMatch(
+      /readLocalProductionRouteSmokeRequiredEnv\(\s*result\.body\.authProviderMode,?\s*\)/,
+    );
+  });
+
   it("prints a redacted dry-run plan for local production build and smoke checks", () => {
     const output = execFileSync("node", [
       "scripts/local-production-e2e-smoke.mjs",
@@ -187,16 +211,18 @@ describe("local production E2E smoke harness", () => {
           "teacher-ai-session",
           "teacher-ppt-workflow",
         ],
+        // Keyed on the provider the fixture selects: the issuer secret comes
+        // last because it belongs to trusted-cookie-issuer, not to the smoke.
         requiredFixtureEnv: [
           "UAIS_AI_ACCESS_SIGNING_SECRET",
           "UAIS_TEACHER_AUTH_PROVIDER",
           "UAIS_TEACHER_AUTH_ROUTE_SMOKE_TEACHER_ID",
           "UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET",
-          "UAIS_TEACHER_AUTH_ISSUER_SECRET",
           "UAIS_TEACHER_AI_OWNERSHIP_BACKEND",
           "UAIS_VOICE_LIFECYCLE_AUDIT_BACKEND",
           "UAIS_EXTERNAL_STORAGE_BASE_URL",
           "UAIS_EXTERNAL_STORAGE_ACCESS_TOKEN",
+          "UAIS_TEACHER_AUTH_ISSUER_SECRET",
         ],
         storageBackends: [
           "teacher-ai-ownership:external",

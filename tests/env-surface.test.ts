@@ -34,12 +34,19 @@ describe("B-21 environment surface", () => {
     // 21 -> 24 when durable storage stopped being optional: group chatrooms
     // refuse local JSON in production, so the backend selector, the storage
     // endpoint and its token are required for a core production surface rather
-    // than "retained for a future enterprise module".
-    expect(summary.counts["active-production"]).toBeLessThanOrEqual(24);
+    // than "retained for a future enterprise module". It moved 24 -> 28 for the
+    // launch auth surface: the teacher provider and its signing secret (a
+    // deployed teacher could read courses and 401 on every write while they sat
+    // in quarantine), the demo-auth escape hatch that had no catalog entry at
+    // all, and the teaching-operations snapshot selector that live code reads.
+    expect(summary.counts["active-production"]).toBeLessThanOrEqual(28);
     expect(summary.activeProductionNames).toEqual(
       expect.arrayContaining([
         "UAIS_APP_SESSION_SIGNING_SECRET",
         "UAIS_APP_AUTH_PROVIDER",
+        "UAIS_APP_ALLOW_PRODUCTION_DEMO_AUTH",
+        "UAIS_TEACHER_AUTH_PROVIDER",
+        "UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET",
         "UAIS_CORE_DATABASE_URL",
         "UAIS_LANGGRAPH_PERSISTENCE_BACKEND",
         "UAIS_LRS_ENDPOINT",
@@ -47,6 +54,7 @@ describe("B-21 environment surface", () => {
         "NEXT_PUBLIC_SENTRY_DSN",
         "UAIS_UPTIME_CHECK_URL",
         "UAIS_TEACHING_COURSE_MANAGEMENT_BACKEND",
+        "UAIS_TEACHING_OPERATIONS_SNAPSHOT_BACKEND",
         "UAIS_EXTERNAL_STORAGE_BASE_URL",
         "UAIS_EXTERNAL_STORAGE_ACCESS_TOKEN",
       ]),
@@ -56,10 +64,85 @@ describe("B-21 environment surface", () => {
     );
     expect(summary.quarantinedLegacyNames).toEqual(
       expect.arrayContaining([
-        "UAIS_TEACHER_AUTH_PROVIDER",
+        // The provider kinds that still need a service nobody has deployed.
+        "UAIS_TEACHER_AUTH_ISSUER_SECRET",
+        "UAIS_TEACHER_AUTH_OIDC_JWKS_URL",
         "UAIS_EXTERNAL_STORAGE_DATABASE_ADAPTER_PROVIDER_CLASS",
         "UAIS_COLLABORATION_INVITE_EMAIL_PROVIDER",
       ]),
+    );
+    // Not merely present in the active tier - gone from quarantine, so a reader
+    // of the legacy block cannot conclude the teacher surface is deferrable.
+    expect(summary.quarantinedLegacyNames).not.toContain("UAIS_TEACHER_AUTH_PROVIDER");
+    expect(summary.quarantinedLegacyNames).not.toContain(
+      "UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET",
+    );
+  });
+
+  // The September launch configuration, name by name. The catalog described a
+  // production surface that required an external account service which has never
+  // been deployed, and said nothing about the selectors that actually ship.
+  it("tiers the launch auth selectors and leaves the external-service pair conditional", () => {
+    const appProvider = classifyUaisEnvName("UAIS_APP_AUTH_PROVIDER");
+    const teacherProvider = classifyUaisEnvName("UAIS_TEACHER_AUTH_PROVIDER");
+    const teacherSecret = classifyUaisEnvName("UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET");
+
+    // Greppable: an operator searching the catalog for the selector they are
+    // about to set must find the entry that documents it.
+    expect(appProvider?.purpose).toContain("database-accounts");
+    expect(appProvider?.productionDefault).toBe("required");
+    expect(teacherProvider?.purpose).toContain("database-account-cookie");
+    expect(teacherProvider?.productionDefault).toBe("required");
+    expect(teacherSecret?.productionDefault).toBe("required");
+    expect(teacherSecret?.valueKind).toBe("secret");
+    // The legacy selectors stay documented as supported future options rather
+    // than being deleted.
+    expect(appProvider?.purpose).toContain("trusted-account-provider");
+    expect(teacherProvider?.purpose).toContain("oidc-jwks");
+
+    // Required only for `trusted-account-provider`, catalogued exactly like the
+    // external-storage endpoint pair: `optional`, with the condition in the
+    // purpose. Marking them `required` made a launch deployment look
+    // misconfigured for lacking a service it never calls.
+    for (const name of ["UAIS_APP_AUTH_PROVIDER_URL", "UAIS_APP_AUTH_PROVIDER_TOKEN"]) {
+      const entry = classifyUaisEnvName(name);
+      expect(entry?.tier).toBe("active-production");
+      expect(entry?.productionDefault).toBe("optional");
+      expect(entry?.purpose).toContain("Required ONLY when UAIS_APP_AUTH_PROVIDER is");
+      expect(entry?.purpose).toContain("trusted-account-provider");
+    }
+  });
+
+  it("catalogs the demo-auth escape hatch as something production must not set", () => {
+    const demoAuth = classifyUaisEnvName("UAIS_APP_ALLOW_PRODUCTION_DEMO_AUTH");
+
+    // It was absent from the catalog entirely while being the one variable that
+    // can put the repo's public demo accounts on the live site.
+    expect(demoAuth).toMatchObject({
+      tier: "active-production",
+      serverOnly: true,
+      productionDefault: "blocked-until-approved",
+    });
+    expect(demoAuth?.purpose).toContain("MUST be unset in production");
+    // No live value, only the name and the shape.
+    expect(JSON.stringify(demoAuth)).not.toContain("12345");
+  });
+
+  it("catalogs the teaching-operations snapshot selector, not only its external-append sibling", () => {
+    const snapshotBackend = classifyUaisEnvName("UAIS_TEACHING_OPERATIONS_SNAPSHOT_BACKEND");
+
+    // Live code reads it (teaching-operations-store.ts,
+    // teaching-operations-postgres-store.ts); only the near-identically named
+    // UAIS_TEACHING_OPERATIONS_BACKEND was catalogued, and that one does not
+    // move the data.
+    expect(snapshotBackend).toMatchObject({
+      tier: "active-production",
+      valueKind: "storage-backend",
+      productionDefault: "optional",
+    });
+    expect(snapshotBackend?.purpose).toContain("UAIS_TEACHING_OPERATIONS_BACKEND");
+    expect(classifyUaisEnvName("UAIS_TEACHING_OPERATIONS_BACKEND")?.tier).toBe(
+      "quarantined-legacy",
     );
   });
 

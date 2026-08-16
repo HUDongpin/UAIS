@@ -33,6 +33,23 @@ npm run build
 If `npm run build` hangs or cannot finish, do not claim release readiness.
 Record the exact last output and hand the blocker to S22.
 
+`npm run test:db` is the database lane. The Postgres-backed stores - teaching
+course management, chatroom transcripts, chatroom shares, and first-party
+accounts with their login-failure lockout - have integration suites that skip
+themselves unless `UAIS_CORE_DATABASE_URL` points at a reachable Postgres, which
+is why `npm run test` alone never exercises a real database. Run this lane before
+promoting any change to a migration, a Postgres store, or the login path, against
+a throwaway instance rather than a deployment lane: `docker run --rm -d --name
+uais-local-pg -e POSTGRES_PASSWORD=<local-only> -e POSTGRES_DB=uais_core -p
+127.0.0.1:55432:5432 postgres:16`, then
+`UAIS_CORE_DATABASE_URL="postgresql://postgres:<local-only>@127.0.0.1:55432/uais_core"
+npm run test:db`. The suites apply the migrations themselves through
+`scripts/apply-core-migrations.mjs`, so a schema drift fails the lane instead of
+the deploy; the lane runs its files serially because they share one database and
+concurrent first-time migration runs race each other. Never point this lane at
+staging or production: it writes and deletes its own rows. Reported skips are not
+passes - if the output says the suites were skipped, the lane did not run.
+
 ## Smoke Checks
 
 For a preview or staging deployment:

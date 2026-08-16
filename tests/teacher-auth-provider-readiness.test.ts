@@ -1626,6 +1626,93 @@ describe("teacher auth provider production readiness evidence", () => {
       );
     }
   });
+
+  // The selector that makes a deployed teacher able to WRITE. The other two
+  // production-capable kinds each need something that does not exist - a
+  // separate issuer service, or a campus identity provider - so refusing this
+  // one left www.uais.top with a teacher who could list courses read-only and
+  // then 401 on create-course, invite codes, approvals and groups.
+  it("accepts the database-account-cookie selector on the session signing secret alone", () => {
+    const tmpDir = mkdtempSync(join(tmpdir(), "uais-teacher-auth-database-account-"));
+    const envFile = join(tmpDir, "teacher-auth.env");
+    writeFileSync(
+      envFile,
+      [
+        "UAIS_TEACHER_AUTH_PROVIDER=database-account-cookie",
+        "UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET=secret-teacher-auth-session-fixture-strong",
+      ].join("\n"),
+    );
+
+    const output = execFileSync("node", [
+      "scripts/teacher-auth-provider-readiness.mjs",
+      "--dry-run",
+      "--environment",
+      "production",
+      "--env-file",
+      envFile,
+    ], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    });
+    const body = JSON.parse(output);
+
+    expect(body.authProviderMode).toBe("database-account-cookie");
+    expect(body.databaseAccountCookieContract).toEqual({
+      sessionSecretStrength: "sufficient",
+      accountAuthority: "uais_users",
+      sessionMintPoint: "app-session-login-route",
+      issuerServiceRequired: false,
+      identityProviderRequired: false,
+      valueRedacted: true,
+    });
+    // No issuer secret is asked for, and no OIDC endpoint: the only blocker
+    // left is that this was a dry-run.
+    expect(body.blockedReasons).toEqual([
+      "teacher-auth-provider-live-readiness-not-run",
+    ]);
+    expect(body.results.teacherAuthProviderModeSupported).toBe("passed");
+    expect(body.results.teacherAuthProviderSpecificContract).toBe("passed");
+    // There is no separate issuer route to bind to; the session is minted
+    // inside the login route it shares a deployment with.
+    expect(body.results.teacherAuthProviderRouteBinding).toBe("passed");
+    expect(body.trustedIssuerContract).toBeUndefined();
+    expect(body.oidcEndpointSecurity).toBeUndefined();
+    expect(output).not.toContain("secret-teacher-auth-session");
+    expect(output).not.toContain(tmpDir);
+  });
+
+  it("blocks the database-account-cookie selector on a signing secret below the 32-character floor", () => {
+    const tmpDir = mkdtempSync(join(tmpdir(), "uais-teacher-auth-database-weak-"));
+    const envFile = join(tmpDir, "teacher-auth.env");
+    writeFileSync(
+      envFile,
+      [
+        "UAIS_TEACHER_AUTH_PROVIDER=database-account-cookie",
+        "UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET=too-short",
+      ].join("\n"),
+    );
+
+    const output = execFileSync("node", [
+      "scripts/teacher-auth-provider-readiness.mjs",
+      "--dry-run",
+      "--environment",
+      "production",
+      "--env-file",
+      envFile,
+    ], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    });
+    const body = JSON.parse(output);
+
+    // The signing secret is the whole trust chain for this selector, so a weak
+    // one is a forgery key for every teacher write.
+    expect(body.blockedReasons).toContain(
+      "teacher-auth-session-signing-secret-not-sufficient",
+    );
+    expect(body.results.teacherAuthProviderSpecificContract).toBe("blocked");
+  });
+
 });
 
 function writeTrustedTeacherAuthRouteChainEvidenceForTest(

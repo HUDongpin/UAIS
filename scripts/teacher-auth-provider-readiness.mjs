@@ -5,6 +5,20 @@ import { readFileSync } from "node:fs";
 
 const minimumProductionSecretLength = 32;
 const teacherAuthIssuerProofTtlSeconds = 300;
+
+// Mirrors resolveUaisTeacherAuthProviderContract in
+// src/lib/server/teacher-auth-provider-contract.ts. All three are
+// production-capable; they differ in how much has to exist outside this
+// deployment. `database-account-cookie` mints the teacher session at login for
+// an account the first-party provider already verified as role = 'teacher', so
+// its entire requirement is UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET at >= 32
+// characters - there is no second party to authenticate, hence no issuer secret
+// and no identity provider.
+const acceptedTeacherAuthProviderModes = [
+  "trusted-cookie-issuer",
+  "oidc-jwks",
+  "database-account-cookie",
+];
 const teacherAuthSessionCookiePair = [
   {
     name: "uais_teacher_auth_claims",
@@ -152,6 +166,27 @@ function buildTeacherAuthProviderReadinessPlan({
     classifySecretStrength(sessionSecret) === "sufficient"
       ? createTrustedCookieSessionRoundTripProof({ sessionSecret })
       : undefined;
+  // No issuer secret, no endpoint, no round-trip against a second party: the
+  // account row is the authority and the login route is the only mint point, so
+  // the signing secret is the whole trust chain. Deliberately no development
+  // fallback - a committed constant here would be a published forgery key for
+  // every teacher write.
+  const databaseAccountCookieContract =
+    authProviderMode === "database-account-cookie"
+      ? {
+          sessionSecretStrength: classifySecretStrength(sessionSecret),
+          accountAuthority: "uais_users",
+          sessionMintPoint: "app-session-login-route",
+          issuerServiceRequired: false,
+          identityProviderRequired: false,
+          valueRedacted: true,
+        }
+      : undefined;
+  const databaseAccountCookieSessionRoundTrip =
+    authProviderMode === "database-account-cookie" &&
+    classifySecretStrength(sessionSecret) === "sufficient"
+      ? createTrustedCookieSessionRoundTripProof({ sessionSecret })
+      : undefined;
   const oidcEndpointSecurity =
     authProviderMode === "oidc-jwks"
       ? {
@@ -259,6 +294,10 @@ function buildTeacherAuthProviderReadinessPlan({
       authProviderMode,
       trustedCookieSessionRoundTrip,
     }),
+    ...readDatabaseAccountCookieBlockedReasons({
+      authProviderMode,
+      databaseAccountCookieSessionRoundTrip,
+    }),
     ...readOidcBlockedReasons({
       environment,
       authProviderMode,
@@ -292,6 +331,10 @@ function buildTeacherAuthProviderReadinessPlan({
     sessionCookieContract,
     ...(trustedIssuerContract ? { trustedIssuerContract } : {}),
     ...(trustedCookieSessionRoundTrip ? { trustedCookieSessionRoundTrip } : {}),
+    ...(databaseAccountCookieContract ? { databaseAccountCookieContract } : {}),
+    ...(databaseAccountCookieSessionRoundTrip
+      ? { databaseAccountCookieSessionRoundTrip }
+      : {}),
     ...(oidcEndpointSecurity ? { oidcEndpointSecurity } : {}),
     ...(oidcProviderContract ? { oidcProviderContract } : {}),
     ...(vercelEnvSyncEvidence ? { vercelEnvSyncEvidence } : {}),
@@ -317,8 +360,7 @@ function withTeacherAuthProviderReadinessResults(evidence) {
 function buildTeacherAuthProviderReadinessResults(evidence) {
   return {
     [teacherAuthProviderReadinessResultKeys[0]]: resultStatus(
-      evidence.authProviderMode === "trusted-cookie-issuer" ||
-        evidence.authProviderMode === "oidc-jwks",
+      acceptedTeacherAuthProviderModes.includes(evidence.authProviderMode),
     ),
     [teacherAuthProviderReadinessResultKeys[1]]: resultStatus(
       isTeacherAuthSessionCookieContractProved(evidence.sessionCookieContract),
@@ -377,6 +419,12 @@ function isTeacherAuthProviderSpecificContractProved(evidence) {
     return isTrustedIssuerContractProved(evidence.trustedIssuerContract) &&
       isTrustedCookieSessionRoundTripProved(evidence.trustedCookieSessionRoundTrip);
   }
+  if (evidence.authProviderMode === "database-account-cookie") {
+    return isDatabaseAccountCookieContractProved(evidence.databaseAccountCookieContract) &&
+      isTrustedCookieSessionRoundTripProved(
+        evidence.databaseAccountCookieSessionRoundTrip,
+      );
+  }
   if (evidence.authProviderMode === "oidc-jwks") {
     return evidence.oidcEndpointSecurity?.issuer === "remote-https" &&
       evidence.oidcEndpointSecurity?.jwks === "remote-https" &&
@@ -389,6 +437,15 @@ function isTeacherAuthProviderSpecificContractProved(evidence) {
       evidence.oidcJwksReadiness?.signingKeys === "present";
   }
   return false;
+}
+
+function isDatabaseAccountCookieContractProved(contract) {
+  return contract?.sessionSecretStrength === "sufficient" &&
+    contract.accountAuthority === "uais_users" &&
+    contract.sessionMintPoint === "app-session-login-route" &&
+    contract.issuerServiceRequired === false &&
+    contract.identityProviderRequired === false &&
+    contract.valueRedacted === true;
 }
 
 function isTrustedIssuerContractProved(contract) {
@@ -414,7 +471,14 @@ function isTrustedCookieSessionRoundTripProved(proof) {
 }
 
 function isTeacherAuthProviderRouteBindingProved(evidence) {
-  if (evidence.authProviderMode === "oidc-jwks") {
+  // Neither of these has a separate issuer route to bind to: OIDC verifies a
+  // bearer token from the identity provider, and the database selector mints
+  // the cookie inside the login route it already shares a deployment with. Only
+  // trusted-cookie-issuer has an issuer endpoint whose chain has to be proved.
+  if (
+    evidence.authProviderMode === "oidc-jwks" ||
+    evidence.authProviderMode === "database-account-cookie"
+  ) {
     return true;
   }
   if (evidence.authProviderMode !== "trusted-cookie-issuer") {
@@ -1041,10 +1105,26 @@ function readTrustedTeacherAuthRouteSmokeBlockedReasons({
 }
 
 function readAuthProviderBlockedReasons(authProviderMode) {
-  if (authProviderMode === "trusted-cookie-issuer" || authProviderMode === "oidc-jwks") {
+  return acceptedTeacherAuthProviderModes.includes(authProviderMode)
+    ? []
+    : ["teacher-auth-provider-selector-not-proven"];
+}
+
+function readDatabaseAccountCookieBlockedReasons({
+  authProviderMode,
+  databaseAccountCookieSessionRoundTrip,
+}) {
+  if (authProviderMode !== "database-account-cookie") {
     return [];
   }
-  return ["teacher-auth-provider-selector-not-proven"];
+  // Absent because the secret was already reported as insufficient, which
+  // readSessionSecretBlockedReasons names on its own.
+  if (!databaseAccountCookieSessionRoundTrip) {
+    return [];
+  }
+  return databaseAccountCookieSessionRoundTrip.status === "proved"
+    ? []
+    : ["teacher-auth-session-cookie-round-trip-not-proven"];
 }
 
 function readSessionSecretBlockedReasons(sessionCookieContract) {
@@ -1158,7 +1238,7 @@ function normalizeTeacherAuthProvider(value) {
     return "missing";
   }
   const provider = value.trim();
-  if (provider === "trusted-cookie-issuer" || provider === "oidc-jwks") {
+  if (acceptedTeacherAuthProviderModes.includes(provider)) {
     return provider;
   }
   return "unsupported";

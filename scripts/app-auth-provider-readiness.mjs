@@ -2,13 +2,41 @@
 
 import { readFileSync } from "node:fs";
 
+// Matches minimumUaisAppSessionSecretLength in src/lib/server/uais-app-session.ts
+// and minimumTeacherAuthSecretLength in src/lib/server/teacher-auth-provider-contract.ts.
+// This script graded `weak` here long before the runtime refused it; a deployed
+// runtime now refuses the same values, so a deployment that skipped this gate no
+// longer signs sessions with a key this script would have blocked.
 const minimumProductionSecretLength = 32;
-const requiredAppAuthEnvNames = [
+
+// Mirrors resolveUaisAppAuthProviderContract in
+// src/lib/server/uais-app-auth-provider.ts. `database-accounts` authenticates
+// against the uais_users rows on the core database the deployment already has,
+// so it reads neither UAIS_APP_AUTH_PROVIDER_URL nor _TOKEN;
+// `trusted-account-provider` calls an external account service and needs both.
+// Both are production-capable selectors, and this script must not demand one
+// selector's environment from the other - which is what made a correct
+// `database-accounts` deployment fail readiness on two variables it never reads.
+const acceptedAppAuthProviderModes = ["trusted-account-provider", "database-accounts"];
+
+// Same order and names as scripts/apply-core-migrations.mjs and
+// scripts/seed-uais-accounts.mjs, so "which URL did it use" has one answer
+// across the chain.
+const coreDatabaseUrlEnvNames = ["UAIS_CORE_DATABASE_URL", "DATABASE_URL", "POSTGRES_URL"];
+
+// Required for EVERY production-capable selector: the session cookie is signed
+// the same way whichever provider verified the password.
+const commonRequiredAppAuthEnvNames = [
   "UAIS_APP_SESSION_SIGNING_SECRET",
   "UAIS_APP_AUTH_PROVIDER",
-  "UAIS_APP_AUTH_PROVIDER_URL",
-  "UAIS_APP_AUTH_PROVIDER_TOKEN",
 ];
+const appAuthProviderRequiredEnvNames = {
+  "trusted-account-provider": [
+    "UAIS_APP_AUTH_PROVIDER_URL",
+    "UAIS_APP_AUTH_PROVIDER_TOKEN",
+  ],
+  "database-accounts": ["UAIS_CORE_DATABASE_URL"],
+};
 const appSessionCookiePair = [
   {
     name: "uais_app_session",
@@ -45,6 +73,21 @@ try {
   const endpoint = options.providerUrl || env.UAIS_APP_AUTH_PROVIDER_URL;
   const accessToken = options.providerToken || env.UAIS_APP_AUTH_PROVIDER_TOKEN;
   const vercelEnvSync = readJsonEvidence(options.vercelEnvSync);
+  const coreDatabaseUrl = readCoreDatabaseUrl(env);
+  // Never read from an argument. A DSN passed on the command line lands in
+  // shell history and in the process table, where the rest of this script's
+  // redaction cannot reach it.
+  const rosterSeeding =
+    providerMode === "database-accounts"
+      ? await readAccountRosterSeeding({
+          databaseUrl: coreDatabaseUrl,
+          // A dry-run must stay hermetic: it is run in CI and on laptops that
+          // may have an unrelated DATABASE_URL exported, and opening a
+          // connection there would be a surprise, not a check. Live mode
+          // already requires --approved, so that is where the probe belongs.
+          probe: mode === "live" || options.rosterProbe,
+        })
+      : undefined;
   const plan = buildAppAuthProviderReadinessPlan({
     mode,
     environment: options.environment,
@@ -52,6 +95,9 @@ try {
     sessionSecret: options.sessionSecret || env.UAIS_APP_SESSION_SIGNING_SECRET,
     endpoint,
     accessToken,
+    coreDatabaseUrl,
+    rosterSeeding,
+    productionDemoAuthFlag: env.UAIS_APP_ALLOW_PRODUCTION_DEMO_AUTH,
     releaseRunId: normalizeReleaseRunId(options.releaseRunId),
     vercelEnvSync,
   });
@@ -74,10 +120,14 @@ function buildAppAuthProviderReadinessPlan({
   sessionSecret,
   endpoint,
   accessToken,
+  coreDatabaseUrl,
+  rosterSeeding,
+  productionDemoAuthFlag,
   releaseRunId,
   vercelEnvSync,
 }) {
   const endpointSecurity = classifyEndpointSecurity(endpoint);
+  const demoAuthFlag = classifyProductionDemoAuthFlag(productionDemoAuthFlag);
   const appSessionCookieContract = {
     signingSecretStrength: classifySecretStrength(sessionSecret),
     httpOnly: "required",
@@ -108,6 +158,22 @@ function buildAppAuthProviderReadinessPlan({
           valueRedacted: true,
         }
       : undefined;
+  // The first-party selector's whole contract is "the account rows and the
+  // login route live in the same deployment", so its readiness is the database
+  // URL plus a roster that actually has someone in it. There is no endpoint and
+  // no second credential to classify.
+  const databaseAccountProviderContract =
+    appAuthProviderMode === "database-accounts"
+      ? {
+          providerKind: "database-accounts",
+          source: "uais-core-database",
+          accountTable: "uais_users",
+          coreDatabase: coreDatabaseUrl ? "configured" : "missing",
+          externalProviderRequired: false,
+          ...(rosterSeeding ? { rosterSeeding } : {}),
+          valueRedacted: true,
+        }
+      : undefined;
   const vercelEnvSyncEvidence = evaluateVercelEnvSyncEvidence({
     evidence: vercelEnvSync,
     appAuthProviderMode,
@@ -122,16 +188,20 @@ function buildAppAuthProviderReadinessPlan({
     ...(mode === "live" && environment === "production" && !releaseRunId
       ? ["app-auth-provider-release-run-id-missing"]
       : []),
+    ...readProductionDemoAuthBlockedReasons({ environment, demoAuthFlag }),
     ...readVercelEnvSyncBlockedReasons(vercelEnvSyncEvidence),
     ...readProviderBlockedReasons({
       appAuthProviderMode,
       environment,
       endpointSecurity,
       trustedAccountProviderContract,
+      databaseAccountProviderContract,
+      rosterSeedingRequired: mode === "live",
     }),
     ...readSessionCookieBlockedReasons(appSessionCookieContract),
     ...(mode === "dry-run" ? ["app-auth-provider-live-readiness-not-run"] : []),
   ];
+  const warnings = readAppAuthProviderWarnings({ appAuthProviderMode, rosterSeeding });
   const safety = {
     valuesRedacted: true,
     secretsOmitted: true,
@@ -150,6 +220,7 @@ function buildAppAuthProviderReadinessPlan({
     endpointSecurity,
     appSessionCookieContract,
     trustedAccountProviderContract,
+    databaseAccountProviderContract,
     vercelEnvSyncEvidence,
     safety,
   });
@@ -158,34 +229,52 @@ function buildAppAuthProviderReadinessPlan({
     target: "app-auth-provider-readiness",
     mode,
     environment,
+    // Reports whether the app auth PROVIDER was called, which is what the
+    // redaction contract is about. The optional roster probe is a query against
+    // the deployment's own database and is reported separately, under
+    // databaseAccountProviderContract.rosterSeeding.
     network: "disabled",
     status: blockedReasons.length === 0 ? "ready" : "blocked",
     ...(releaseRunId ? { releaseRunId } : {}),
     responsibleSession: "S12/S19/S22",
     appAuthProviderMode,
     endpointSecurity,
+    productionDemoAuthFlag: demoAuthFlag,
     appSessionCookieContract,
     ...(trustedAccountProviderContract ? { trustedAccountProviderContract } : {}),
+    ...(databaseAccountProviderContract ? { databaseAccountProviderContract } : {}),
     ...(vercelEnvSyncEvidence ? { vercelEnvSyncEvidence } : {}),
     results,
     blockedReasons,
+    ...(warnings.length > 0 ? { warnings } : {}),
     safety,
   };
 }
 
+// The key NAMES are a cross-script contract (enterprise-live-evidence-audit and
+// the release gate both pin them), so they keep the trusted-provider wording
+// even though they now carry two selectors. What each one MEANS is per selector:
+// the database provider has no endpoint to be remote-https and no bearer
+// credential to classify, because the account lookup never leaves the
+// deployment - so those two keys are satisfied by construction there, and the
+// provider-specific key proves the database contract instead.
 function buildAppAuthProviderReadinessResults({
   appAuthProviderMode,
   endpointSecurity,
   appSessionCookieContract,
   trustedAccountProviderContract,
+  databaseAccountProviderContract,
   vercelEnvSyncEvidence,
   safety,
 }) {
+  const databaseAccounts = appAuthProviderMode === "database-accounts";
   return {
     [appAuthProviderReadinessResultKeys[0]]: resultStatus(
-      appAuthProviderMode === "trusted-account-provider",
+      acceptedAppAuthProviderModes.includes(appAuthProviderMode),
     ),
-    [appAuthProviderReadinessResultKeys[1]]: resultStatus(endpointSecurity === "remote-https"),
+    [appAuthProviderReadinessResultKeys[1]]: resultStatus(
+      databaseAccounts || endpointSecurity === "remote-https",
+    ),
     [appAuthProviderReadinessResultKeys[2]]: resultStatus(
       isAppSessionCookieContractProved(appSessionCookieContract),
     ),
@@ -196,7 +285,9 @@ function buildAppAuthProviderReadinessResults({
         vercelEnvSyncEvidence.requiredAppAuthEnvStatus === "present",
     ),
     [appAuthProviderReadinessResultKeys[4]]: resultStatus(
-      isTrustedAccountProviderContractProved(trustedAccountProviderContract),
+      databaseAccounts
+        ? isDatabaseAccountProviderContractProved(databaseAccountProviderContract)
+        : isTrustedAccountProviderContractProved(trustedAccountProviderContract),
     ),
     [appAuthProviderReadinessResultKeys[5]]: resultStatus(
       isAppAuthReadinessSafetyProved(safety),
@@ -238,6 +329,19 @@ function isTrustedAccountProviderContractProved(contract) {
     ["account", "role", "displayName", "department"].every((field) =>
       responseUserShape.includes(field)
     ) &&
+    contract.valueRedacted === true;
+}
+
+function isDatabaseAccountProviderContractProved(contract) {
+  return contract?.providerKind === "database-accounts" &&
+    contract.source === "uais-core-database" &&
+    contract.accountTable === "uais_users" &&
+    contract.coreDatabase === "configured" &&
+    contract.externalProviderRequired === false &&
+    // A seeded roster is part of the contract, not a nicety: flipping the
+    // selector on against an empty uais_users passes every other check in the
+    // chain and fails every single login.
+    contract.rosterSeeding?.status === "seeded" &&
     contract.valueRedacted === true;
 }
 
@@ -330,7 +434,7 @@ function evaluateVercelEnvSyncEvidence({
     };
   }
 
-  const missingAppAuthEnvNames = readMissingAppAuthEnvNames(evidence);
+  const missingAppAuthEnvNames = readMissingAppAuthEnvNames(evidence, appAuthProviderMode);
   if (missingAppAuthEnvNames.length > 0) {
     return {
       ...summary,
@@ -351,7 +455,14 @@ function evaluateVercelEnvSyncEvidence({
   };
 }
 
-function readMissingAppAuthEnvNames(evidence) {
+function readRequiredAppAuthEnvNames(appAuthProviderMode) {
+  return [
+    ...commonRequiredAppAuthEnvNames,
+    ...(appAuthProviderRequiredEnvNames[appAuthProviderMode] ?? []),
+  ];
+}
+
+function readMissingAppAuthEnvNames(evidence, appAuthProviderMode) {
   const entryNames = new Set();
   if (Array.isArray(evidence.entries)) {
     for (const entry of evidence.entries) {
@@ -365,7 +476,7 @@ function readMissingAppAuthEnvNames(evidence) {
   }
   const envStatus = isRecord(evidence.envStatus) ? evidence.envStatus : {};
   const requiredEnv = isRecord(evidence.requiredEnv) ? evidence.requiredEnv : {};
-  return requiredAppAuthEnvNames.filter((name) => {
+  return readRequiredAppAuthEnvNames(appAuthProviderMode).filter((name) => {
     if (entryNames.has(name)) {
       return false;
     }
@@ -400,11 +511,19 @@ function readProviderBlockedReasons({
   environment,
   endpointSecurity,
   trustedAccountProviderContract,
+  databaseAccountProviderContract,
+  rosterSeedingRequired,
 }) {
   if (appAuthProviderMode === "local-demo") {
     return environment === "production"
       ? ["app-auth-provider-local-demo-not-production"]
       : [];
+  }
+  if (appAuthProviderMode === "database-accounts") {
+    return readDatabaseAccountProviderBlockedReasons({
+      databaseAccountProviderContract,
+      rosterSeedingRequired,
+    });
   }
   if (appAuthProviderMode !== "trusted-account-provider") {
     return ["app-auth-provider-selector-not-proven"];
@@ -426,10 +545,126 @@ function readProviderBlockedReasons({
   ];
 }
 
+function readDatabaseAccountProviderBlockedReasons({
+  databaseAccountProviderContract,
+  rosterSeedingRequired,
+}) {
+  const rosterStatus = databaseAccountProviderContract?.rosterSeeding?.status;
+  return [
+    ...(databaseAccountProviderContract?.coreDatabase === "configured"
+      ? []
+      : ["app-auth-database-accounts-core-database-missing"]),
+    ...(rosterStatus === "empty" ? ["app-auth-database-accounts-roster-empty"] : []),
+    // Unverified is a warning in a dry-run, which is already blocked for not
+    // having been run live. A live run that could not read the roster has not
+    // proved the thing it exists to prove.
+    ...(rosterSeedingRequired && rosterStatus !== "seeded" && rosterStatus !== "empty"
+      ? ["app-auth-database-accounts-roster-unverified"]
+      : []),
+  ];
+}
+
+// The one flag in the surface that can put the repo's public demo credentials
+// on the live site. Nothing in the release chain refused it before, and it is
+// set on production today.
+function readProductionDemoAuthBlockedReasons({ environment, demoAuthFlag }) {
+  return environment === "production" && demoAuthFlag.status === "set"
+    ? ["app-auth-production-demo-auth-flag-set"]
+    : [];
+}
+
+function classifyProductionDemoAuthFlag(value) {
+  return {
+    // The value is a mode name, not a secret, but only its presence is reported
+    // so the shape of this report never depends on what was written there.
+    status: hasValue(value) ? "set" : "unset",
+    requiredForProduction: "unset",
+    valueRedacted: true,
+  };
+}
+
+function readAppAuthProviderWarnings({ appAuthProviderMode, rosterSeeding }) {
+  if (appAuthProviderMode !== "database-accounts") {
+    return [];
+  }
+  return rosterSeeding?.status === "unverified" ? ["unverified: roster seeding"] : [];
+}
+
 function readSessionCookieBlockedReasons(appSessionCookieContract) {
   return appSessionCookieContract.signingSecretStrength === "sufficient"
     ? []
     : ["app-auth-session-signing-secret-not-sufficient"];
+}
+
+function readCoreDatabaseUrl(env) {
+  for (const name of coreDatabaseUrlEnvNames) {
+    const value = env[name]?.trim();
+    if (value) {
+      return value;
+    }
+  }
+  return undefined;
+}
+
+// Counts what the login route would actually accept. The predicate mirrors
+// findUaisAppAccountByIdentifier in src/lib/server/uais-app-account-store.ts:
+// `status = 'active'` is the disable switch and `password_hash IS NOT NULL`
+// excludes the 'invited' rows a roster import leaves behind - a table full of
+// those looks seeded and cannot log anyone in.
+//
+// Reports counts only. No account, address, name or hash is read, so the result
+// is safe to paste into a release report.
+async function readAccountRosterSeeding({ databaseUrl, probe }) {
+  if (!databaseUrl) {
+    return {
+      status: "unverified",
+      reason: "core-database-url-missing",
+      valueRedacted: true,
+    };
+  }
+  if (!probe) {
+    return {
+      status: "unverified",
+      reason: "roster-probe-not-requested",
+      valueRedacted: true,
+    };
+  }
+
+  let sql;
+  try {
+    const { default: postgres } = await import("postgres");
+    sql = postgres(databaseUrl, { max: 1, prepare: false });
+    const [row] = await sql`
+      SELECT
+        count(*) FILTER (
+          WHERE status = 'active' AND password_hash IS NOT NULL
+        ) AS active_accounts,
+        count(*) FILTER (
+          WHERE status = 'active' AND password_hash IS NOT NULL AND role = 'teacher'
+        ) AS active_teachers
+      FROM uais_users
+    `;
+    const activeAccounts = Number(row?.active_accounts ?? 0);
+    const activeTeachers = Number(row?.active_teachers ?? 0);
+    return {
+      // A cohort with no teacher can sign in and then 401 on every write, so
+      // both counts have to be non-zero before this reads as seeded.
+      status: activeAccounts > 0 && activeTeachers > 0 ? "seeded" : "empty",
+      activeAccounts,
+      activeTeachers,
+      accountTable: "uais_users",
+      valueRedacted: true,
+    };
+  } catch {
+    // The failure mode is reportable; the DSN and the driver's message are not.
+    return {
+      status: "unverified",
+      reason: "core-database-unreachable",
+      valueRedacted: true,
+    };
+  } finally {
+    await sql?.end({ timeout: 5 }).catch(() => {});
+  }
 }
 
 function normalizeAppAuthProvider(value) {
@@ -437,7 +672,7 @@ function normalizeAppAuthProvider(value) {
     return "local-demo";
   }
   const provider = value.trim();
-  if (provider === "local-demo" || provider === "trusted-account-provider") {
+  if (provider === "local-demo" || acceptedAppAuthProviderModes.includes(provider)) {
     return provider;
   }
   return "unsupported";
@@ -543,6 +778,7 @@ function parseArgs(args) {
     sessionSecret: undefined,
     releaseRunId: undefined,
     vercelEnvSync: undefined,
+    rosterProbe: false,
   };
 
   for (let index = 0; index < args.length; index += 1) {
@@ -553,6 +789,8 @@ function parseArgs(args) {
       options.live = true;
     } else if (arg === "--approved") {
       options.approved = true;
+    } else if (arg === "--roster-probe") {
+      options.rosterProbe = true;
     } else if (arg === "--environment") {
       options.environment = readArgValue(args, index, arg);
       index += 1;
@@ -580,9 +818,11 @@ function parseArgs(args) {
     } else if (arg === "--help" || arg === "-h") {
       process.stdout.write(
         [
-          "Usage: node -- scripts/app-auth-provider-readiness.mjs [--dry-run] [--live --approved] [--environment production|preview|local-production|unspecified] [--env-file PATH] [--vercel-env-sync PATH]",
+          "Usage: node -- scripts/app-auth-provider-readiness.mjs [--dry-run] [--live --approved] [--environment production|preview|local-production|unspecified] [--env-file PATH] [--vercel-env-sync PATH] [--roster-probe]",
           "",
           "Checks redacted UAIS app auth provider readiness without printing secrets, provider URLs, passwords, cookie values, or local private paths.",
+          "UAIS_APP_AUTH_PROVIDER=database-accounts needs UAIS_CORE_DATABASE_URL and a seeded uais_users roster; trusted-account-provider needs the provider URL and token instead.",
+          "--roster-probe counts active uais_users rows in a dry-run; a live run always probes. Counts only - no account, address or hash is read.",
         ].join("\n"),
       );
       process.exit(0);

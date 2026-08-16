@@ -3947,6 +3947,62 @@ describe("UAIS AI environment and provider smoke plan", () => {
     expect(output).not.toContain("/Users/");
   });
 
+  it("plans a database-account-cookie route smoke without the trusted issuer secret", () => {
+    // The prerequisite split used to be two-way, oidc versus issuer, so a
+    // first-party deployment landed on the issuer branch and was reported as
+    // blocked on a secret that selector never reads and no service anywhere
+    // holds. What it actually needs is the session signing secret it verifies
+    // with - already shared - plus the one credential this smoke cannot mint.
+    const tmpDir = mkdtempSync(join(tmpdir(), "uais-route-smoke-database-"));
+    const envFile = join(tmpDir, "route-smoke-database.test.env");
+    writeFileSync(
+      envFile,
+      [
+        "UAIS_DEPLOYMENT_BASE_URL=https://uais.example.test",
+        "UAIS_AI_ACCESS_SIGNING_SECRET=secret-route-smoke-database-ai-access",
+        "UAIS_TEACHER_AUTH_PROVIDER=database-account-cookie",
+        "UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET=secret-route-smoke-database-session",
+      ].join("\n"),
+    );
+
+    const output = execFileSync("node", [
+      "scripts/ai-route-smoke.mjs",
+      "--dry-run",
+      "--environment",
+      "local-production",
+      "--env-file",
+      envFile,
+    ], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    });
+    const body = JSON.parse(output);
+
+    expect(body.authProviderMode).toBe("database-account-cookie");
+    expect(
+      body.prerequisites.map((prerequisite: { requiredEnv?: string }) => prerequisite.requiredEnv),
+    ).not.toContain("UAIS_TEACHER_AUTH_ISSUER_SECRET");
+    expect(body.blockedReasons).not.toContain("missing-UAIS_TEACHER_AUTH_ISSUER_SECRET");
+    // The operator-minted cookie is named for the same reason the OIDC branch
+    // names its bearer token: a plan that stays silent about it reports "ready"
+    // and then the live run throws.
+    expect(body.prerequisites).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "s22-teacher-auth-route-smoke-session-cookie",
+          requiredEnv: "UAIS_TEACHER_AUTH_ROUTE_SMOKE_SESSION_COOKIE",
+          status: "missing",
+        }),
+      ]),
+    );
+    expect(body.blockedReasons).toEqual([
+      "missing-UAIS_TEACHER_AUTH_ROUTE_SMOKE_SESSION_COOKIE",
+    ]);
+    expect(output).not.toContain("secret-route-smoke-database-ai-access");
+    expect(output).not.toContain("secret-route-smoke-database-session");
+    expect(output).not.toContain("/Users/");
+  });
+
   it("prints Node v24-safe help usage for protected route smoke env-file arguments", () => {
     const output = execFileSync("node", [
       "scripts/ai-route-smoke.mjs",
@@ -6174,7 +6230,7 @@ describe("UAIS AI environment and provider smoke plan", () => {
       source: "origin",
       valueRedacted: true,
     });
-    expect(body.entries).toHaveLength(57);
+    expect(body.entries).toHaveLength(58);
     expect(
       body.entries.some((entry: { defaultValue?: string }) => entry.defaultValue),
     ).toBe(false);
@@ -6564,15 +6620,16 @@ describe("UAIS AI environment and provider smoke plan", () => {
       status: "blocked",
       valuesRedacted: true,
       deploymentEntries: {
-        total: 57,
+        total: 58,
         present: 3,
-        missing: 54,
+        missing: 55,
         missingNames: expect.arrayContaining([
           "UAIS_AI_ACCESS_SIGNING_SECRET",
           "UAIS_APP_SESSION_SIGNING_SECRET",
           "UAIS_APP_AUTH_PROVIDER",
           "UAIS_APP_AUTH_PROVIDER_URL",
           "UAIS_APP_AUTH_PROVIDER_TOKEN",
+          "UAIS_CORE_DATABASE_URL",
           "UAIS_TEACHER_AUTH_PROVIDER",
           "UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET",
           "UAIS_TEACHING_OPERATIONS_BACKEND",
@@ -6612,26 +6669,21 @@ describe("UAIS AI environment and provider smoke plan", () => {
           "UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET",
         ],
       },
+      // Only the four secrets every production-capable configuration signs or
+      // verifies with. This environment selects no app auth provider, no
+      // durable backend and no enterprise integration, so none of those
+      // tokens is graded: an unselected integration's missing token is not a
+      // release blocker, and reporting it as one buried the four that are.
       productionSecretStrength: {
         minimumLength: 32,
         sufficient: 0,
         weak: 1,
-        missing: 13,
+        missing: 3,
         weakNames: ["UAIS_LIVE_AI_APPROVAL_TOKEN"],
         missingNames: [
           "UAIS_AI_ACCESS_SIGNING_SECRET",
           "UAIS_APP_SESSION_SIGNING_SECRET",
-          "UAIS_APP_AUTH_PROVIDER_TOKEN",
           "UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET",
-          "UAIS_EXTERNAL_STORAGE_ACCESS_TOKEN",
-          "UAIS_COLLABORATION_INVITE_EMAIL_PROVIDER_TOKEN",
-          "UAIS_COLLABORATION_INVITE_EMAIL_CALLBACK_TOKEN",
-          "UAIS_STUDENT_ROSTER_SYNC_PROVIDER_TOKEN",
-          "UAIS_KNOWLEDGE_INDEX_SYNC_PROVIDER_TOKEN",
-          "UAIS_GRADEBOOK_RELEASE_PROVIDER_TOKEN",
-          "UAIS_COURSE_CONTENT_PUBLISH_PROVIDER_TOKEN",
-          "UAIS_COURSE_EXPORT_PROVIDER_TOKEN",
-          "UAIS_GRADING_FEEDBACK_PROVIDER_TOKEN",
         ],
       },
       externalStorage: {
@@ -6663,9 +6715,11 @@ describe("UAIS AI environment and provider smoke plan", () => {
           "vercel-env-apply-app-auth-provider-not-proven",
           "vercel-env-apply-app-auth-provider-env-missing",
           "vercel-env-apply-secret-strength-not-sufficient",
-          "vercel-env-apply-external-storage-not-remote-https",
-          "vercel-env-apply-external-storage-fingerprint-not-proven",
-          "vercel-env-apply-external-storage-database-adapter-proof-not-ready",
+          // This environment names no durable store at all - no backend
+          // selector, no database URL, no storage endpoint - which is one
+          // blocker, not three findings about an external service it never
+          // chose.
+          "vercel-env-apply-durable-storage-not-configured",
         ],
       }),
     );
@@ -7146,6 +7200,9 @@ describe("UAIS AI environment and provider smoke plan", () => {
         "UAIS_TEACHER_AUTH_PROVIDER=trusted-cookie-issuer",
         "UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET=0123456789abcdef0123456789abcdef",
         "UAIS_TEACHER_AUTH_ISSUER_SECRET=tiny-issuer-secret",
+        // The endpoint is what makes this an external-storage posture, and the
+        // access token is only graded once that backend has been selected.
+        "UAIS_EXTERNAL_STORAGE_BASE_URL=https://storage.example.test/uais",
         "UAIS_EXTERNAL_STORAGE_ACCESS_TOKEN=0123456789abcdef0123456789abcdef",
       ].join("\n"),
     );
@@ -7195,6 +7252,150 @@ describe("UAIS AI environment and provider smoke plan", () => {
     expect(output).not.toContain(tmpDir);
     expect(output).not.toContain("/Users/");
   });
+
+  // The September launch configuration: first-party accounts on the core
+  // database for learners, and a teacher session minted at login. Neither
+  // selector reads an external endpoint or a second secret, and the plan must
+  // not demand one - it used to require the trusted provider's URL and token,
+  // an external storage service and seven enterprise triplets from every
+  // deployment, so this configuration collected roughly thirty findings for
+  // services it does not run.
+  it("plans the database-backed launch configuration without an external account or storage service", () => {
+    const tmpDir = mkdtempSync(join(tmpdir(), "uais-vercel-env-sync-database-"));
+    const envFile = join(tmpDir, "vercel-env-sync-database.test.env");
+    writeFileSync(
+      envFile,
+      [
+        "UAIS_LIVE_AI_APPROVAL_TOKEN=secret-database-live-approval-token-strong",
+        "UAIS_AI_ACCESS_SIGNING_SECRET=secret-database-ai-access-signing-strong",
+        "UAIS_APP_SESSION_SIGNING_SECRET=secret-database-app-session-signing-str",
+        "UAIS_APP_AUTH_PROVIDER=database-accounts",
+        "UAIS_CORE_DATABASE_URL=postgres://uais:secret-database-dsn@db.example.test/uais",
+        "UAIS_TEACHER_AUTH_PROVIDER=database-account-cookie",
+        "UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET=secret-database-teacher-session-str",
+        "DEEPSEEK_API_KEY=secret-database-deepseek",
+        "DASHSCOPE_API_KEY=secret-database-dashscope",
+      ].join("\n"),
+    );
+
+    const output = execFileSync("node", [
+      "scripts/vercel-env-sync.mjs",
+      "--dry-run",
+      "--project",
+      "uais",
+      "--env-file",
+      envFile,
+    ], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    });
+    const body = JSON.parse(output);
+
+    expect(body.authProviderMode).toBe("database-account-cookie");
+    expect(body.appAuthProviderMode).toBe("database-accounts");
+    expect(body.storageBackendMode).toBe("core-database");
+    expect(body.status).toBe("ready");
+    expect(body.blockedReasons).toEqual([]);
+    // Exactly the four secrets a first-party deployment signs or verifies with.
+    expect(body.secretStrength.checks.map((check: { name: string }) => check.name)).toEqual([
+      "UAIS_LIVE_AI_APPROVAL_TOKEN",
+      "UAIS_AI_ACCESS_SIGNING_SECRET",
+      "UAIS_APP_SESSION_SIGNING_SECRET",
+      "UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET",
+    ]);
+    expect(output).not.toContain("secret-database-dsn");
+    expect(output).not.toContain("db.example.test");
+    expect(output).not.toContain(tmpDir);
+  });
+
+  it("refuses to grade a postgres selector with no core database as durable", () => {
+    // The selector alone is not a durable posture: the store it selects reads
+    // the core database url and answers 503 without one. Grading this
+    // "core-database" waved an apply through with no durable store at all -
+    // checkStorageBackend in chatroom-production-readiness.mjs, which this
+    // mirrors, has always blocked the same case.
+    const tmpDir = mkdtempSync(join(tmpdir(), "uais-vercel-env-sync-selector-"));
+    const envFile = join(tmpDir, "vercel-env-sync-selector.test.env");
+    writeFileSync(
+      envFile,
+      [
+        "UAIS_LIVE_AI_APPROVAL_TOKEN=secret-selector-live-approval-token-strong",
+        "UAIS_AI_ACCESS_SIGNING_SECRET=secret-selector-ai-access-signing-strong",
+        "UAIS_APP_SESSION_SIGNING_SECRET=secret-selector-app-session-signing-str",
+        "UAIS_APP_AUTH_PROVIDER=database-accounts",
+        "UAIS_TEACHER_AUTH_PROVIDER=database-account-cookie",
+        "UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET=secret-selector-teacher-session-st",
+        "UAIS_TEACHING_COURSE_MANAGEMENT_BACKEND=postgres",
+        "DEEPSEEK_API_KEY=secret-selector-deepseek",
+        "DASHSCOPE_API_KEY=secret-selector-dashscope",
+      ].join("\n"),
+    );
+
+    const output = execFileSync("node", [
+      "scripts/vercel-env-sync.mjs",
+      "--dry-run",
+      "--project",
+      "uais",
+      "--env-file",
+      envFile,
+    ], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    });
+    const body = JSON.parse(output);
+
+    expect(body.storageBackendMode).toBe("local-json");
+    expect(body.status).toBe("blocked");
+    expect(body.blockedReasons).toContain(
+      "vercel-env-apply-durable-storage-not-configured",
+    );
+    expect(output).not.toContain(tmpDir);
+  });
+
+  // The flag is set on production today, and nothing in the chain refused it.
+  it("refuses to plan an apply that carries the production demo-auth escape hatch", () => {
+    const tmpDir = mkdtempSync(join(tmpdir(), "uais-vercel-env-sync-demo-flag-"));
+    const envFile = join(tmpDir, "vercel-env-sync-demo-flag.test.env");
+    writeFileSync(
+      envFile,
+      [
+        "UAIS_LIVE_AI_APPROVAL_TOKEN=secret-demo-flag-live-approval-token-strong",
+        "UAIS_AI_ACCESS_SIGNING_SECRET=secret-demo-flag-ai-access-signing-strong",
+        "UAIS_APP_SESSION_SIGNING_SECRET=secret-demo-flag-app-session-signing-str",
+        "UAIS_APP_AUTH_PROVIDER=database-accounts",
+        "UAIS_CORE_DATABASE_URL=postgres://uais:secret-demo-flag-dsn@db.example.test/uais",
+        "UAIS_TEACHER_AUTH_PROVIDER=database-account-cookie",
+        "UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET=secret-demo-flag-teacher-session-s",
+        "UAIS_APP_ALLOW_PRODUCTION_DEMO_AUTH=1",
+        "DEEPSEEK_API_KEY=secret-demo-flag-deepseek",
+        "DASHSCOPE_API_KEY=secret-demo-flag-dashscope",
+      ].join("\n"),
+    );
+
+    const output = execFileSync("node", [
+      "scripts/vercel-env-sync.mjs",
+      "--dry-run",
+      "--project",
+      "uais",
+      "--env-file",
+      envFile,
+    ], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    });
+    const body = JSON.parse(output);
+
+    expect(body.status).toBe("blocked");
+    expect(body.blockedReasons).toContain(
+      "vercel-env-apply-production-demo-auth-flag-set",
+    );
+    expect(body.productionDemoAuthFlag).toEqual({
+      status: "set",
+      requiredForProduction: "unset",
+      valueRedacted: true,
+    });
+  });
+
 
   it("records the selected OIDC auth provider mode in Vercel env sync evidence without requiring the trusted issuer secret", () => {
     const tmpDir = mkdtempSync(join(tmpdir(), "uais-vercel-env-sync-oidc-"));

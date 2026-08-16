@@ -62,6 +62,10 @@ describe("chatroom production readiness preflight", () => {
     const { exitCode, report } = await runPreflight(envFile);
 
     expect(exitCode).toBe(1);
+    // Named like every other evidence file in the release chain, so the
+    // aggregate gate that now consumes this report can refuse a file that is
+    // not it rather than accepting any JSON carrying `status: "ready"`.
+    expect(report.target).toBe("chatroom-production-readiness");
     expect(report.status).toBe("blocked");
     // An unset backend selector means local JSON, which production refuses.
     expect(findCheck(report, "B2").blockedReasons).toContain(

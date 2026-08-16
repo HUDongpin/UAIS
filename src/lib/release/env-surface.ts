@@ -47,7 +47,8 @@ export const uaisEnvSurfaceCatalog = [
     valueKind: "secret",
     serverOnly: true,
     productionDefault: "required",
-    purpose: "Signs the core UAIS app session cookie.",
+    purpose:
+      "Signs the core UAIS app session cookie. At least 32 characters: a deployed runtime refuses a shorter value and mints no session, the same floor the teacher session secret enforces.",
   },
   {
     name: "UAIS_APP_AUTH_PROVIDER",
@@ -56,16 +57,23 @@ export const uaisEnvSurfaceCatalog = [
     valueKind: "auth-provider",
     serverOnly: true,
     productionDefault: "required",
-    purpose: "Selects the production app auth provider mode.",
+    purpose:
+      "Selects the production app auth provider mode. `database-accounts` is the launch selector: it authenticates against the uais_users rows on the core database and needs no second service. `trusted-account-provider` remains a supported future option, and `local-demo` - the value an unset variable falls back to - is refused in a production runtime.",
   },
+  // Conditional, not required, and cataloged the same way the external-storage
+  // endpoint pair below is: the launch selector does not read either of them.
+  // They were marked `required`, which made the production surface look like it
+  // needed an external account service that has never been deployed anywhere,
+  // while the selector that does work needs nothing but the database URL.
   {
     name: "UAIS_APP_AUTH_PROVIDER_URL",
     tier: "active-production",
     owner: "S19/S12",
     valueKind: "base-url",
     serverOnly: true,
-    productionDefault: "required",
-    purpose: "Points the core app auth provider integration at its server endpoint.",
+    productionDefault: "optional",
+    purpose:
+      "Points the core app auth provider integration at its server endpoint. Required ONLY when UAIS_APP_AUTH_PROVIDER is `trusted-account-provider`; the launch `database-accounts` selector reads neither this nor its token.",
   },
   {
     name: "UAIS_APP_AUTH_PROVIDER_TOKEN",
@@ -73,8 +81,55 @@ export const uaisEnvSurfaceCatalog = [
     owner: "S19/S12",
     valueKind: "secret",
     serverOnly: true,
+    productionDefault: "optional",
+    purpose:
+      "Authenticates server-side calls to the core app auth provider, at least 32 characters. Required ONLY when UAIS_APP_AUTH_PROVIDER is `trusted-account-provider`; the launch `database-accounts` selector reads neither this nor its endpoint.",
+  },
+  // Cataloged because it was not, and because it is the one name in this file
+  // that can put published credentials on the live site. `local-demo` is the
+  // fallback for an unset UAIS_APP_AUTH_PROVIDER, so a production runtime that
+  // never set the selector is one variable away from serving logins from the two
+  // demo accounts in src/lib/server/uais-app-auth-provider.ts. The provider
+  // contract blocks that by default; this flag is the only thing that unblocks
+  // it, and a deployment that reaches for it wants `database-accounts` instead.
+  {
+    name: "UAIS_APP_ALLOW_PRODUCTION_DEMO_AUTH",
+    tier: "active-production",
+    owner: "S19/S12",
+    valueKind: "mode",
+    serverOnly: true,
+    productionDefault: "blocked-until-approved",
+    purpose:
+      "Escape hatch that lets the `local-demo` provider mint sessions in a production runtime. It MUST be unset in production: setting it makes the repo's public demo accounts real logins on the deployed site. Read by resolveUaisAppAuthProviderContract in src/lib/server/uais-app-auth-provider.ts.",
+  },
+  // Promoted out of quarantine. Both names were carried in the legacy block as
+  // "not required for the core POC production surface", which was true only
+  // while every production-capable teacher provider needed an external service.
+  // `database-account-cookie` needs none, so the teacher surface is now
+  // launch-required rather than deferred: quarantined here meant a deployed
+  // teacher could read the course list and then 401 on every write, which is
+  // exactly what www.uais.top served. The remaining
+  // UAIS_TEACHER_AUTH_ISSUER_SECRET / _OIDC_* names stay quarantined - they
+  // belong to the two provider kinds that still need a service to exist.
+  {
+    name: "UAIS_TEACHER_AUTH_PROVIDER",
+    tier: "active-production",
+    owner: "S19/S12",
+    valueKind: "auth-provider",
+    serverOnly: true,
     productionDefault: "required",
-    purpose: "Authenticates server-side calls to the core app auth provider.",
+    purpose:
+      "Selects the teacher session provider. `database-account-cookie` is the launch selector: it mints a teacher cookie at login for an account the app auth provider already verified as role=teacher in uais_users, and needs no issuer URL and no second secret. `trusted-cookie-issuer` and `oidc-jwks` remain supported future options; `local-signed-cookie` is refused in production, and an unset value blocks the teacher surface outright.",
+  },
+  {
+    name: "UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET",
+    tier: "active-production",
+    owner: "S19/S12",
+    valueKind: "secret",
+    serverOnly: true,
+    productionDefault: "required",
+    purpose:
+      "Signs the teacher session cookie, at least 32 characters, with no development fallback because a committed constant would be a published forgery key for teacher writes. It is the ONLY secret the `database-account-cookie` selector needs; without it every teacher write - create course, invite codes, approvals, groups - answers 401 in production.",
   },
   {
     name: "UAIS_CORE_DATABASE_URL",
@@ -83,7 +138,8 @@ export const uaisEnvSurfaceCatalog = [
     valueKind: "secret",
     serverOnly: true,
     productionDefault: "required",
-    purpose: "Managed Postgres connection URL for the core UAIS database adapter.",
+    purpose:
+      "Managed Postgres connection URL for the core UAIS database adapter. Also required in the BUILD environment: `npm run vercel-build` applies migrations 0001-0007 from there, and a build without it ships an application whose database was never migrated.",
   },
   {
     name: "UAIS_LANGGRAPH_PERSISTENCE_BACKEND",
@@ -319,6 +375,45 @@ export const uaisEnvSurfaceCatalog = [
       "Per-actor learning chatroom history reads allowed per day; defaults to 2000.",
   },
   {
+    name: "UAIS_LEARNING_PPT_PLAYBACK_DATA_DIR",
+    tier: "optional-live-ai",
+    owner: "S19/S12",
+    valueKind: "storage-path",
+    serverOnly: true,
+    productionDefault: "optional",
+    purpose:
+      "Directory of published lesson deck manifests; defaults to the repo-tracked data/learning-ppt-playback.",
+  },
+  {
+    name: "UAIS_LEARNING_AI_GUIDE_RATE_LIMIT_MODE",
+    tier: "optional-live-ai",
+    owner: "S07/S19",
+    valueKind: "mode",
+    serverOnly: true,
+    productionDefault: "optional",
+    purpose:
+      "Switch for the learning ask-box spend guard; set to off to disable it, enforce by default.",
+  },
+  {
+    name: "UAIS_LEARNING_AI_GUIDE_RATE_LIMIT_PER_MINUTE",
+    tier: "optional-live-ai",
+    owner: "S07/S19",
+    valueKind: "limit",
+    serverOnly: true,
+    productionDefault: "optional",
+    purpose:
+      "Per-actor learning ask-box AI requests allowed per minute; defaults to 30.",
+  },
+  {
+    name: "UAIS_LEARNING_AI_GUIDE_RATE_LIMIT_PER_DAY",
+    tier: "optional-live-ai",
+    owner: "S07/S19",
+    valueKind: "limit",
+    serverOnly: true,
+    productionDefault: "optional",
+    purpose: "Per-actor learning ask-box AI requests allowed per day; defaults to 600.",
+  },
+  {
     name: "DEEPSEEK_API_KEY",
     tier: "optional-live-ai",
     owner: "S07/S19",
@@ -445,9 +540,23 @@ export const uaisEnvSurfaceCatalog = [
     purpose:
       "Bearer token for the external storage service, at least 32 characters. Required ONLY when the backend selector is `external`; it travels on every storage call, which is why that endpoint must be HTTPS.",
   },
+  // The sibling of the quarantined UAIS_TEACHING_OPERATIONS_BACKEND below, and
+  // a different variable despite the near-identical name. This one is read by
+  // live code - src/lib/server/teaching-operations-store.ts and
+  // teaching-operations-postgres-store.ts - and was missing from this catalog
+  // entirely, so the only teaching-operations name an operator could find here
+  // was the one that does NOT move the data.
+  {
+    name: "UAIS_TEACHING_OPERATIONS_SNAPSHOT_BACKEND",
+    tier: "active-production",
+    owner: "S19/S12",
+    valueKind: "storage-backend",
+    serverOnly: true,
+    productionDefault: "optional",
+    purpose:
+      "Phase 1 cutover switch for teaching-operations snapshots: `postgres` or `managed` routes operational reads/writes to the core database, and unset keeps the JSON file path byte-identical. Deliberately separate from the external-append UAIS_TEACHING_OPERATIONS_BACKEND, which the external storage contract rejects under `postgres`.",
+  },
   ...createQuarantinedLegacyEntries([
-    "UAIS_TEACHER_AUTH_PROVIDER",
-    "UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET",
     "UAIS_TEACHER_AUTH_ISSUER_SECRET",
     "UAIS_TEACHER_AUTH_OIDC_ISSUER",
     "UAIS_TEACHER_AUTH_OIDC_AUDIENCE",
@@ -456,6 +565,9 @@ export const uaisEnvSurfaceCatalog = [
     "UAIS_TEACHER_AI_OWNERSHIP_BACKEND",
     "UAIS_TEACHER_AI_OWNERSHIP_DIR",
     "UAIS_VOICE_LIFECYCLE_AUDIT_BACKEND",
+    // External-append selector only. The durable-storage switch for the same
+    // entity is the active-production UAIS_TEACHING_OPERATIONS_SNAPSHOT_BACKEND
+    // entry above.
     "UAIS_TEACHING_OPERATIONS_BACKEND",
     "UAIS_TEACHING_COURSE_ASSETS_BACKEND",
     "UAIS_EXTERNAL_STORAGE_SERVICE_MODE",

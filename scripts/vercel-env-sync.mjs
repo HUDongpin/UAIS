@@ -43,6 +43,17 @@ const deploymentEnvDefinitions = [
     roles: ["app-auth"],
     valueType: "secret",
   },
+  // Carries credentials, so it is classified as a secret rather than a base
+  // URL. It backs three things at once: the `database-accounts` login lookup,
+  // the `database-account-cookie` teacher role check, and the Postgres stores -
+  // and it is needed in the BUILD environment too, because vercel-build applies
+  // the migrations from there.
+  {
+    name: "UAIS_CORE_DATABASE_URL",
+    provider: "uais",
+    roles: ["app-auth", "core-database"],
+    valueType: "secret",
+  },
   {
     name: "UAIS_TEACHER_AUTH_PROVIDER",
     provider: "uais",
@@ -371,21 +382,61 @@ const localOnlyEnvDefinitions = [
 ];
 
 const minimumProductionSecretLength = 32;
-const commonProductionSecretStrengthNames = [
+const coreDatabaseUrlEnvNames = ["UAIS_CORE_DATABASE_URL", "DATABASE_URL", "POSTGRES_URL"];
+
+// Signed or verified on every request whichever selectors are chosen.
+const coreProductionSecretStrengthNames = [
   "UAIS_LIVE_AI_APPROVAL_TOKEN",
   "UAIS_AI_ACCESS_SIGNING_SECRET",
   "UAIS_APP_SESSION_SIGNING_SECRET",
-  "UAIS_APP_AUTH_PROVIDER_TOKEN",
   "UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET",
+];
+const appAuthProviderProductionSecretStrengthNames = {
+  "trusted-account-provider": ["UAIS_APP_AUTH_PROVIDER_TOKEN"],
+  // The database selector's credential IS the database URL, which is graded as
+  // a connection string rather than by length.
+  "database-accounts": [],
+};
+const externalStorageProductionSecretStrengthNames = [
   "UAIS_EXTERNAL_STORAGE_ACCESS_TOKEN",
-  "UAIS_COLLABORATION_INVITE_EMAIL_PROVIDER_TOKEN",
-  "UAIS_COLLABORATION_INVITE_EMAIL_CALLBACK_TOKEN",
-  "UAIS_STUDENT_ROSTER_SYNC_PROVIDER_TOKEN",
-  "UAIS_KNOWLEDGE_INDEX_SYNC_PROVIDER_TOKEN",
-  "UAIS_GRADEBOOK_RELEASE_PROVIDER_TOKEN",
-  "UAIS_COURSE_CONTENT_PUBLISH_PROVIDER_TOKEN",
-  "UAIS_COURSE_EXPORT_PROVIDER_TOKEN",
-  "UAIS_GRADING_FEEDBACK_PROVIDER_TOKEN",
+];
+
+// Each enterprise integration carries its own token, and a token is only worth
+// grading once its integration has been selected. Requiring all seven of a
+// deployment that runs none of them is how a correct plan collected thirty
+// failures for services it never calls.
+const enterpriseProviderSecretStrengthNames = [
+  {
+    selector: "UAIS_COLLABORATION_INVITE_EMAIL_PROVIDER",
+    names: [
+      "UAIS_COLLABORATION_INVITE_EMAIL_PROVIDER_TOKEN",
+      "UAIS_COLLABORATION_INVITE_EMAIL_CALLBACK_TOKEN",
+    ],
+  },
+  {
+    selector: "UAIS_STUDENT_ROSTER_SYNC_PROVIDER",
+    names: ["UAIS_STUDENT_ROSTER_SYNC_PROVIDER_TOKEN"],
+  },
+  {
+    selector: "UAIS_KNOWLEDGE_INDEX_SYNC_PROVIDER",
+    names: ["UAIS_KNOWLEDGE_INDEX_SYNC_PROVIDER_TOKEN"],
+  },
+  {
+    selector: "UAIS_GRADEBOOK_RELEASE_PROVIDER",
+    names: ["UAIS_GRADEBOOK_RELEASE_PROVIDER_TOKEN"],
+  },
+  {
+    selector: "UAIS_COURSE_CONTENT_PUBLISH_PROVIDER",
+    names: ["UAIS_COURSE_CONTENT_PUBLISH_PROVIDER_TOKEN"],
+  },
+  {
+    selector: "UAIS_COURSE_EXPORT_PROVIDER",
+    names: ["UAIS_COURSE_EXPORT_PROVIDER_TOKEN"],
+  },
+  {
+    selector: "UAIS_GRADING_FEEDBACK_PROVIDER",
+    names: ["UAIS_GRADING_FEEDBACK_PROVIDER_TOKEN"],
+  },
 ];
 const teacherAuthScopedProductionSecretStrengthNames = [
   "UAIS_LIVE_AI_APPROVAL_TOKEN",
@@ -399,7 +450,31 @@ const externalStorageScopedProductionSecretStrengthNames = [
 const authProviderProductionSecretStrengthNames = {
   "trusted-cookie-issuer": ["UAIS_TEACHER_AUTH_ISSUER_SECRET"],
   "oidc-jwks": [],
+  // The session signing secret is already in every scoped list above, and it is
+  // the only secret this selector reads.
+  "database-account-cookie": [],
 };
+
+// Mirrors the two provider contracts in src/lib/server/. Both selectors in each
+// map are production-capable; a plan must require the SELECTED one's variables
+// and not the other's.
+const acceptedTeacherAuthProviderModes = [
+  "trusted-cookie-issuer",
+  "oidc-jwks",
+  "database-account-cookie",
+];
+const acceptedAppAuthProviderModes = ["trusted-account-provider", "database-accounts"];
+const appAuthProviderRequiredEnvNames = {
+  "trusted-account-provider": [
+    "UAIS_APP_AUTH_PROVIDER_URL",
+    "UAIS_APP_AUTH_PROVIDER_TOKEN",
+  ],
+  "database-accounts": ["UAIS_CORE_DATABASE_URL"],
+};
+const commonRequiredAppAuthEnvNames = [
+  "UAIS_APP_SESSION_SIGNING_SECRET",
+  "UAIS_APP_AUTH_PROVIDER",
+];
 const defaultDeploymentScope = "full";
 
 try {
@@ -511,6 +586,10 @@ function buildVercelEnvSyncPlan({
     ...(releaseRunId ? { releaseRunId } : {}),
     authProviderMode,
     appAuthProviderMode,
+    storageBackendMode: readStorageBackendMode(env),
+    productionDemoAuthFlag: describeProductionDemoAuthFlag(
+      env.UAIS_APP_ALLOW_PRODUCTION_DEMO_AUTH,
+    ),
     ...(oidcEndpointSecurity ? { oidcEndpointSecurity } : {}),
     externalStorageEndpoint,
     externalStorageServiceFingerprint,
@@ -617,12 +696,17 @@ function summarizeLocalSource(plan) {
 }
 
 function describeProductionSecretStrength(env, authProviderMode, deploymentScope) {
-  const commonRequiredNames = readScopedProductionSecretStrengthNames(deploymentScope);
+  const commonRequiredNames = readScopedProductionSecretStrengthNames(
+    deploymentScope,
+    env,
+  );
   const requiredNames = [
-    ...commonRequiredNames,
-    ...(deploymentScope === "external-storage"
-      ? []
-      : (authProviderProductionSecretStrengthNames[authProviderMode] ?? [])),
+    ...new Set([
+      ...commonRequiredNames,
+      ...(deploymentScope === "external-storage"
+        ? []
+        : (authProviderProductionSecretStrengthNames[authProviderMode] ?? [])),
+    ]),
   ];
   return {
     minimumLength: minimumProductionSecretLength,
@@ -635,14 +719,61 @@ function describeProductionSecretStrength(env, authProviderMode, deploymentScope
   };
 }
 
-function readScopedProductionSecretStrengthNames(deploymentScope) {
+function readScopedProductionSecretStrengthNames(deploymentScope, env) {
   if (deploymentScope === "teacher-auth") {
     return teacherAuthScopedProductionSecretStrengthNames;
   }
   if (deploymentScope === "external-storage") {
     return externalStorageScopedProductionSecretStrengthNames;
   }
-  return commonProductionSecretStrengthNames;
+  return [
+    ...coreProductionSecretStrengthNames,
+    ...(appAuthProviderProductionSecretStrengthNames[
+      readAppAuthProviderMode(env.UAIS_APP_AUTH_PROVIDER)
+    ] ?? []),
+    ...(readStorageBackendMode(env) === "external"
+      ? externalStorageProductionSecretStrengthNames
+      : []),
+    ...enterpriseProviderSecretStrengthNames.flatMap((integration) =>
+      hasValue(env[integration.selector]) ? integration.names : [],
+    ),
+  ];
+}
+
+// Mirrors checkStorageBackend in scripts/chatroom-production-readiness.mjs and
+// the runtime default: a production deployment with a core database URL and no
+// explicit selector is already durable on Postgres, so external-storage
+// placement is a choice rather than the only durable option.
+function readStorageBackendMode(env) {
+  const selector = env.UAIS_TEACHING_COURSE_MANAGEMENT_BACKEND?.trim().toLowerCase() ?? "";
+  const coreDatabaseConfigured = coreDatabaseUrlEnvNames.some((name) =>
+    hasValue(env[name]),
+  );
+  if (selector === "external") {
+    return "external";
+  }
+  if (selector === "postgres" || selector === "managed") {
+    // The selector alone is not a durable posture. The store it selects reads
+    // the core database url and answers 503 without one, so grading this
+    // "core-database" waved an apply through with no durable store at all -
+    // checkStorageBackend in chatroom-production-readiness.mjs, which this
+    // mirrors, has always blocked that case on missing-UAIS_CORE_DATABASE_URL.
+    // Answer with what is actually configured, and let the durable-storage gate
+    // name it.
+    return coreDatabaseConfigured ? "core-database" : "local-json";
+  }
+  if (coreDatabaseConfigured) {
+    // Unset selector plus a database is the runtime's own default, and it wins
+    // over a placed external endpoint because that is what the app would do.
+    return "core-database";
+  }
+  if (hasValue(env.UAIS_EXTERNAL_STORAGE_BASE_URL)) {
+    // No selector and no database, but an endpoint was deliberately placed:
+    // the plan is an external-storage plan and has to prove that endpoint.
+    return "external";
+  }
+  // Neither a durable selector nor a database: production refuses local JSON.
+  return "local-json";
 }
 
 function selectDeploymentEnvDefinitions({ deploymentScope, authProviderMode }) {
@@ -698,19 +829,25 @@ function readTeacherAuthProviderMode(value) {
     return "missing";
   }
   const provider = value.trim();
-  if (provider === "trusted-cookie-issuer" || provider === "oidc-jwks") {
-    return provider;
-  }
-  return "unsupported";
+  return acceptedTeacherAuthProviderModes.includes(provider) ? provider : "unsupported";
 }
 
 function readAppAuthProviderMode(value) {
   if (!hasValue(value)) {
     return "missing";
   }
-  return value.trim() === "trusted-account-provider"
-    ? "trusted-account-provider"
-    : "unsupported";
+  const provider = value.trim();
+  return acceptedAppAuthProviderModes.includes(provider) ? provider : "unsupported";
+}
+
+// The one flag that can serve the repo's public demo credentials as real logins
+// on the deployed site. An apply targets production, so it must never carry it.
+function describeProductionDemoAuthFlag(value) {
+  return {
+    status: hasValue(value) ? "set" : "unset",
+    requiredForProduction: "unset",
+    valueRedacted: true,
+  };
 }
 
 function describeExternalStorageEndpoint(value) {
@@ -846,6 +983,9 @@ function isRequiredForSelectedAuthProvider(name, authProviderMode) {
 
 function readVercelEnvApplyPreflight(plan) {
   const blockedReasons = dedupeBlockedReasons([
+    // Applies to every scope: an apply writes to the production target, and no
+    // scope of it is allowed to carry the demo-auth escape hatch.
+    ...readApplyProductionDemoAuthBlockedReasons(plan),
     ...(plan.deploymentScope === "external-storage"
       ? []
       : readApplyAuthProviderBlockedReasons(plan.authProviderMode)),
@@ -884,9 +1024,15 @@ function readVercelEnvSyncBlockedReasons(plan) {
 }
 
 function readApplyAuthProviderBlockedReasons(authProviderMode) {
-  return authProviderMode === "trusted-cookie-issuer" || authProviderMode === "oidc-jwks"
+  return acceptedTeacherAuthProviderModes.includes(authProviderMode)
     ? []
     : ["vercel-env-apply-auth-provider-not-proven"];
+}
+
+function readApplyProductionDemoAuthBlockedReasons(plan) {
+  return plan.productionDemoAuthFlag?.status === "set"
+    ? ["vercel-env-apply-production-demo-auth-flag-set"]
+    : [];
 }
 
 function readApplyRequiredAuthEnvBlockedReasons(entries) {
@@ -898,11 +1044,12 @@ function readApplyRequiredAuthEnvBlockedReasons(entries) {
 }
 
 function readApplyAppAuthProviderBlockedReasons(plan) {
+  // Follows the SELECTED selector. Demanding the trusted provider's endpoint
+  // and token unconditionally is what made a correct `database-accounts` plan
+  // unappliable on two variables the login route never reads.
   const requiredNames = [
-    "UAIS_APP_SESSION_SIGNING_SECRET",
-    "UAIS_APP_AUTH_PROVIDER",
-    "UAIS_APP_AUTH_PROVIDER_URL",
-    "UAIS_APP_AUTH_PROVIDER_TOKEN",
+    ...commonRequiredAppAuthEnvNames,
+    ...(appAuthProviderRequiredEnvNames[plan.appAuthProviderMode] ?? []),
   ];
   const presentNames = new Set(
     plan.entries
@@ -910,7 +1057,7 @@ function readApplyAppAuthProviderBlockedReasons(plan) {
       .map((entry) => entry.name),
   );
   return [
-    ...(plan.appAuthProviderMode === "trusted-account-provider"
+    ...(acceptedAppAuthProviderModes.includes(plan.appAuthProviderMode)
       ? []
       : ["vercel-env-apply-app-auth-provider-not-proven"]),
     ...(requiredNames.every((name) => presentNames.has(name))
@@ -927,6 +1074,16 @@ function readApplySecretStrengthBlockedReasons(secretStrength) {
 
 function readApplyExternalStorageBlockedReasons(plan) {
   const blockedReasons = [];
+  // The external-storage service is one of two durable options, not a
+  // precondition of shipping. A plan that keeps its data on the core database
+  // has nothing here to prove; a plan with neither has no durable store at all,
+  // which is the failure worth naming.
+  if (plan.storageBackendMode === "core-database") {
+    return blockedReasons;
+  }
+  if (plan.storageBackendMode === "local-json") {
+    return ["vercel-env-apply-durable-storage-not-configured"];
+  }
   if (plan.externalStorageEndpoint.endpointClass !== "remote-https") {
     blockedReasons.push("vercel-env-apply-external-storage-not-remote-https");
   }

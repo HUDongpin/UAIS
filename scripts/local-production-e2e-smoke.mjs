@@ -26,17 +26,52 @@ const LOCAL_PRODUCTION_ROUTE_SMOKE_AUTH_CHAIN = [
   "teacher-ai-session",
   "teacher-ppt-workflow",
 ];
-const LOCAL_PRODUCTION_ROUTE_SMOKE_REQUIRED_ENV = [
+// Everything the protected route smoke needs whichever teacher auth provider
+// the fixture selects.
+const LOCAL_PRODUCTION_ROUTE_SMOKE_COMMON_REQUIRED_ENV = [
   "UAIS_AI_ACCESS_SIGNING_SECRET",
   "UAIS_TEACHER_AUTH_PROVIDER",
   "UAIS_TEACHER_AUTH_ROUTE_SMOKE_TEACHER_ID",
   "UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET",
-  "UAIS_TEACHER_AUTH_ISSUER_SECRET",
   "UAIS_TEACHER_AI_OWNERSHIP_BACKEND",
   "UAIS_VOICE_LIFECYCLE_AUDIT_BACKEND",
   "UAIS_EXTERNAL_STORAGE_BASE_URL",
   "UAIS_EXTERNAL_STORAGE_ACCESS_TOKEN",
 ];
+// Keyed on the selected provider, mirroring scripts/ai-route-smoke.mjs. The
+// issuer secret belongs to trusted-cookie-issuer alone; listing it flatly meant
+// a database-account-cookie posture was reported as needing a secret that
+// selector never reads.
+const LOCAL_PRODUCTION_ROUTE_SMOKE_PROVIDER_REQUIRED_ENV = {
+  "trusted-cookie-issuer": ["UAIS_TEACHER_AUTH_ISSUER_SECRET"],
+  "oidc-jwks": [
+    "UAIS_TEACHER_AUTH_OIDC_ISSUER",
+    "UAIS_TEACHER_AUTH_OIDC_AUDIENCE",
+    "UAIS_TEACHER_AUTH_OIDC_JWKS_URL",
+    "UAIS_TEACHER_AUTH_OIDC_TEACHER_ID_CLAIM",
+    "UAIS_TEACHER_AUTH_OIDC_SMOKE_BEARER_TOKEN",
+    "UAIS_TEACHER_AUTH_OIDC_SMOKE_TEACHER_ID",
+  ],
+  "database-account-cookie": ["UAIS_TEACHER_AUTH_ROUTE_SMOKE_SESSION_COOKIE"],
+};
+// The fixture harness selects this provider; it signs its own issuer proof
+// rather than standing up a database, so the local lane stays hermetic.
+const LOCAL_PRODUCTION_TEACHER_AUTH_PROVIDER = "trusted-cookie-issuer";
+
+// The plan is written before anything runs, so it can only speak for the
+// provider this lane pins. The EVIDENCE is written from a run that reported the
+// provider it actually used, and passes it: without that every entry in the map
+// but `trusted-cookie-issuer` was unreachable, so a lane pointed at a
+// database-account-cookie deployment still published "requires the issuer
+// secret" as its required-env evidence.
+function readLocalProductionRouteSmokeRequiredEnv(authProviderMode) {
+  const selector =
+    authProviderMode?.trim().toLowerCase() || LOCAL_PRODUCTION_TEACHER_AUTH_PROVIDER;
+  return [
+    ...LOCAL_PRODUCTION_ROUTE_SMOKE_COMMON_REQUIRED_ENV,
+    ...(LOCAL_PRODUCTION_ROUTE_SMOKE_PROVIDER_REQUIRED_ENV[selector] ?? []),
+  ];
+}
 const LOCAL_PRODUCTION_EXTERNAL_STORAGE_REQUIRED_ENV = [
   "UAIS_EXTERNAL_STORAGE_BASE_URL",
   "UAIS_EXTERNAL_STORAGE_ACCESS_TOKEN",
@@ -708,7 +743,7 @@ function buildPlan({ mode, port, skipBuild, skipBrowser }) {
         command:
           "node scripts/ai-route-smoke.mjs --live --approved --environment local-production --base-url <local-production-url> --env-file <ephemeral-env>",
         authChain: LOCAL_PRODUCTION_ROUTE_SMOKE_AUTH_CHAIN,
-        requiredFixtureEnv: LOCAL_PRODUCTION_ROUTE_SMOKE_REQUIRED_ENV,
+        requiredFixtureEnv: readLocalProductionRouteSmokeRequiredEnv(),
         storageBackends: LOCAL_PRODUCTION_EXTERNAL_STORAGE_BACKENDS,
         routeProofSummary: LOCAL_PRODUCTION_ROUTE_PROOF_SUMMARY,
       },
@@ -1218,7 +1253,9 @@ function createRouteSmokeCheck(result) {
     command:
       "node scripts/ai-route-smoke.mjs --live --approved --environment local-production --base-url <local-production-url> --env-file <ephemeral-env>",
     authChain: LOCAL_PRODUCTION_ROUTE_SMOKE_AUTH_CHAIN,
-    requiredFixtureEnv: LOCAL_PRODUCTION_ROUTE_SMOKE_REQUIRED_ENV,
+    requiredFixtureEnv: readLocalProductionRouteSmokeRequiredEnv(
+      result.body.authProviderMode,
+    ),
     storageBackends: LOCAL_PRODUCTION_EXTERNAL_STORAGE_BACKENDS,
     routeProofSummary: LOCAL_PRODUCTION_ROUTE_PROOF_SUMMARY,
     routeResults: Array.isArray(result.body.results)
@@ -1681,7 +1718,7 @@ async function createLocalProductionFixture(
     UAIS_DEPLOYMENT_ENV: "local-production",
     UAIS_LOCAL_PRODUCTION_E2E_ALLOW_INSECURE_TEACHING_PROVIDER_FIXTURE: "1",
     UAIS_AI_ACCESS_SIGNING_SECRET: "uais-local-production-ai-access-fixture",
-    UAIS_TEACHER_AUTH_PROVIDER: "trusted-cookie-issuer",
+    UAIS_TEACHER_AUTH_PROVIDER: LOCAL_PRODUCTION_TEACHER_AUTH_PROVIDER,
     UAIS_TEACHER_AUTH_ROUTE_SMOKE_TEACHER_ID: LOCAL_PRODUCTION_ROUTE_SMOKE_TEACHER_ID,
     UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET: teacherAuthSessionSecret,
     UAIS_TEACHER_AUTH_ISSUER_SECRET: "uais-local-production-teacher-auth-issuer-fixture",
