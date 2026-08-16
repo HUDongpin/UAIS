@@ -5,12 +5,14 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "vercel-build": "npm run db:migrate && next build",
+    "vercel-build": "npm run db:migrate:deploy && next build",
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
     "test:critical": "vitest run tests/critical-user-flows-backend.test.ts tests/critical-user-flow-matrix.test.ts tests/app-proxy-auth.test.ts tests/uais-app-session.test.ts tests/teaching-course-management-api.test.ts tests/learner-profile.test.ts",
+    "test:db": "vitest run --no-file-parallelism tests/teaching-course-management-postgres-integration.test.ts tests/learning-chatroom-postgres-integration.test.ts tests/uais-app-account-postgres-integration.test.ts tests/teaching-course-management-cutover-integration.test.ts tests/teaching-operations-cutover-integration.test.ts",
     "db:migrate": "node scripts/apply-core-migrations.mjs",
+    "db:migrate:deploy": "node scripts/apply-core-migrations.mjs --deploy",
     "release:dirty-map": "node scripts/release-dirty-map.mjs",
     "release:clean-check": "node scripts/release-clean-check.mjs",
     "release:chatroom-readiness": "node scripts/chatroom-production-readiness.mjs",
@@ -31,6 +33,7 @@
     "postgres": "^3.4.9",
     "react": "19.2.4",
     "react-dom": "19.2.4",
+    "uqr": "0.1.3",
     "ws": "^8.21.0"
   },
   "devDependencies": {
