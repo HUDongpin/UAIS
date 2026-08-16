@@ -14,7 +14,8 @@ export function getUaisHomeHrefForRole(role: UaisAppRole) {
   return role === "student" ? "/student-dashboard" : "/teaching";
 }
 
-export function isUaisRouteAllowedForRole(pathname: string, role: UaisAppRole) {
+export function isUaisRouteAllowedForRole(target: string, role: UaisAppRole) {
+  const pathname = readRoutePathname(target);
   if (pathname === "/") {
     return true;
   }
@@ -33,4 +34,12 @@ export function isUaisRouteAllowedForRole(pathname: string, role: UaisAppRole) {
   }
 
   return pathname === "/student-dashboard" || pathname.startsWith("/student-dashboard/");
+}
+
+// Callers pass either a bare pathname (the proxy) or a whole return path with its
+// query string (the post-login redirect target, e.g. `/courses?invite=CODE`).
+// Matching the query as part of the path would refuse exactly the links this gate
+// exists to let through, so the query and fragment are cut off first.
+function readRoutePathname(target: string) {
+  return target.split(/[?#]/, 1)[0];
 }

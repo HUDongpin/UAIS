@@ -5,6 +5,7 @@ import {
   UAIS_APP_SESSION_SIGNATURE_COOKIE,
 } from "@/lib/auth/uais-app-session";
 import {
+  classifyUaisAppSessionSigningSecret,
   createUaisAppSessionCookie,
   createUaisAppSessionSetCookieHeaders,
   getUaisAppSessionUserFromCookieString,
@@ -26,7 +27,7 @@ describe("UAIS enterprise app sessions", () => {
       env: {
         NODE_ENV: "development",
         UAIS_APP_AUTH_PROVIDER: "local-demo",
-        UAIS_APP_SESSION_SIGNING_SECRET: "test-app-session-signing-secret",
+        UAIS_APP_SESSION_SIGNING_SECRET: "test-app-session-signing-secret-32ch",
       },
       now: new Date("2099-01-01T00:00:00.000Z"),
       createSessionId: () => "app-session-student-test-id",
@@ -69,7 +70,7 @@ describe("UAIS enterprise app sessions", () => {
     const cookieHeader = createCookieHeaderFromSetCookies(setCookies);
     expect(
       getUaisAppSessionUserFromCookieString(cookieHeader, {
-        secret: "test-app-session-signing-secret",
+        secret: "test-app-session-signing-secret-32ch",
         now: new Date("2099-01-01T00:01:00.000Z"),
       }),
     ).toEqual(
@@ -85,7 +86,7 @@ describe("UAIS enterprise app sessions", () => {
       env: {
         NODE_ENV: "production",
         UAIS_APP_AUTH_PROVIDER: "local-demo",
-        UAIS_APP_SESSION_SIGNING_SECRET: "test-app-session-signing-secret",
+        UAIS_APP_SESSION_SIGNING_SECRET: "test-app-session-signing-secret-32ch",
       },
     });
 
@@ -110,7 +111,7 @@ describe("UAIS enterprise app sessions", () => {
       env: {
         NODE_ENV: "development",
         UAIS_APP_AUTH_PROVIDER: "local-demo",
-        UAIS_APP_SESSION_SIGNING_SECRET: "test-app-session-signing-secret",
+        UAIS_APP_SESSION_SIGNING_SECRET: "test-app-session-signing-secret-32ch",
       },
     });
 
@@ -162,16 +163,16 @@ describe("UAIS enterprise app sessions", () => {
     expect(
       resolveUaisAppSessionSigningSecret({
         VERCEL_ENV: "preview",
-        UAIS_APP_SESSION_SIGNING_SECRET: "test-app-session-signing-secret",
+        UAIS_APP_SESSION_SIGNING_SECRET: "test-app-session-signing-secret-32ch",
       }),
-    ).toBe("test-app-session-signing-secret");
+    ).toBe("test-app-session-signing-secret-32ch");
 
     const post = createUaisAppSessionPostHandler({
       env: {
         NODE_ENV: "development",
         UAIS_DEPLOYMENT_ENV: "production",
         UAIS_APP_AUTH_PROVIDER: "local-demo",
-        UAIS_APP_SESSION_SIGNING_SECRET: "test-app-session-signing-secret",
+        UAIS_APP_SESSION_SIGNING_SECRET: "test-app-session-signing-secret-32ch",
       },
     });
 
@@ -197,12 +198,71 @@ describe("UAIS enterprise app sessions", () => {
     expect(JSON.stringify(body)).not.toContain("12345");
   });
 
+  it("refuses a signing secret below the strength floor in a deployed runtime", async () => {
+    // The release chain has always GRADED a secret shorter than 32 characters as
+    // weak (scripts/app-auth-provider-readiness.mjs) while the runtime accepted
+    // any non-empty string, so a deployment that skipped the gate signed every
+    // session in the cohort with whatever was pasted into the Vercel field.
+    const weakSecret = { UAIS_APP_SESSION_SIGNING_SECRET: "uais-secret" };
+    for (const runtime of [
+      { UAIS_DEPLOYMENT_ENV: "production" },
+      { VERCEL_ENV: "preview" },
+      { UAIS_DEPLOYMENT_ENV: "staging" },
+    ]) {
+      expect(
+        resolveUaisAppSessionSigningSecret({ ...runtime, ...weakSecret }),
+        JSON.stringify(runtime),
+      ).toBeUndefined();
+      expect(classifyUaisAppSessionSigningSecret({ ...runtime, ...weakSecret })).toEqual({
+        status: "weak",
+        minimumLength: 32,
+        valueRedacted: true,
+      });
+    }
+
+    // A laptop keeps working. The floor protects a secret other people can
+    // reach; refusing a short one locally would break every `.env.local` in the
+    // project for no security gain.
+    expect(resolveUaisAppSessionSigningSecret(weakSecret)).toBe("uais-secret");
+    expect(classifyUaisAppSessionSigningSecret({})).toMatchObject({
+      status: "development-fallback",
+    });
+
+    const post = createUaisAppSessionPostHandler({
+      env: {
+        UAIS_DEPLOYMENT_ENV: "production",
+        UAIS_APP_AUTH_PROVIDER: "local-demo",
+        UAIS_APP_ALLOW_PRODUCTION_DEMO_AUTH: "true",
+        ...weakSecret,
+      },
+    });
+    const response = await post(
+      new Request("https://www.uais.top/api/auth/app-session", {
+        method: "POST",
+        body: JSON.stringify({ account: "Peter", password: "12345" }),
+      }),
+    );
+    const body = await response.json();
+
+    // 503 with no cookie, and a reason that names the ACTUAL fault: reporting a
+    // plainly-configured secret as "not configured" sends the owner looking in
+    // the wrong place.
+    expect(response.status).toBe(503);
+    expect(response.headers.getSetCookie()).toEqual([]);
+    expect(body.appSessionSigningSecret).toEqual({
+      status: "weak",
+      minimumLength: 32,
+      valueRedacted: true,
+    });
+    expect(JSON.stringify(body)).not.toContain("uais-secret");
+  });
+
   it("allows the owner-approved local demo account in production only behind an explicit demo-auth flag", async () => {
     const env = {
       NODE_ENV: "production",
       UAIS_APP_AUTH_PROVIDER: "local-demo",
       UAIS_APP_ALLOW_PRODUCTION_DEMO_AUTH: "true",
-      UAIS_APP_SESSION_SIGNING_SECRET: "test-app-session-signing-secret",
+      UAIS_APP_SESSION_SIGNING_SECRET: "test-app-session-signing-secret-32ch",
     };
     const post = createUaisAppSessionPostHandler({
       env,
@@ -257,7 +317,7 @@ describe("UAIS enterprise app sessions", () => {
       NODE_ENV: "development",
       UAIS_DEPLOYMENT_ENV: "production",
       UAIS_APP_AUTH_PROVIDER: "trusted-account-provider",
-      UAIS_APP_SESSION_SIGNING_SECRET: "test-app-session-signing-secret",
+      UAIS_APP_SESSION_SIGNING_SECRET: "test-app-session-signing-secret-32ch",
     };
     const post = createUaisAppSessionPostHandler({
       env,
@@ -327,7 +387,7 @@ describe("UAIS enterprise app sessions", () => {
         UAIS_APP_AUTH_PROVIDER: "trusted-account-provider",
         UAIS_APP_AUTH_PROVIDER_URL: "https://accounts.example.test/uais/authenticate",
         UAIS_APP_AUTH_PROVIDER_TOKEN: "test-app-auth-provider-token-with-32-chars",
-        UAIS_APP_SESSION_SIGNING_SECRET: "test-app-session-signing-secret",
+        UAIS_APP_SESSION_SIGNING_SECRET: "test-app-session-signing-secret-32ch",
       },
       now: new Date("2099-01-01T00:00:00.000Z"),
       createSessionId: () => "trusted-app-session-student-test-id",
@@ -388,7 +448,7 @@ describe("UAIS enterprise app sessions", () => {
     };
 
     const cookieHeader = createUaisAppSessionCookie(student, {
-      secret: "test-app-session-signing-secret",
+      secret: "test-app-session-signing-secret-32ch",
       now: new Date("2099-01-01T00:00:00.000Z"),
       sessionId: "app-session-cookie-test-id",
     });
@@ -398,7 +458,7 @@ describe("UAIS enterprise app sessions", () => {
     expect(cookieHeader).not.toContain("student:Peter");
     expect(
       getUaisAppSessionUserFromCookieString(`foo=bar; ${cookieHeader}`, {
-        secret: "test-app-session-signing-secret",
+        secret: "test-app-session-signing-secret-32ch",
         now: new Date("2099-01-01T00:01:00.000Z"),
       }),
     ).toEqual(
@@ -410,7 +470,7 @@ describe("UAIS enterprise app sessions", () => {
     expect(
       getUaisAppSessionUserFromCookieString(
         "uais_app_session=student:Peter; uais_app_session_signature=bad",
-        { secret: "test-app-session-signing-secret" },
+        { secret: "test-app-session-signing-secret-32ch" },
       ),
     ).toBeNull();
 
@@ -425,7 +485,7 @@ describe("UAIS enterprise app sessions", () => {
         sessionId: "app-session-cookie-test-id",
       },
       maxAgeSeconds: 3600,
-      secret: "test-app-session-signing-secret",
+      secret: "test-app-session-signing-secret-32ch",
       secure: true,
     });
     expect(setCookies.join("\n")).toContain("HttpOnly");
@@ -443,12 +503,27 @@ describe("UAIS enterprise app sessions", () => {
     expect(isUaisRouteAllowedForRole("/student-dashboard", "admin")).toBe(false);
   });
 
+  // Plan E9: the post-login redirect target carries the whole return path, so an
+  // invite link had its query matched as part of the pathname and was refused -
+  // sending a student who signed in to join a class to the plain plaza instead.
+  it("matches the pathname of a return path that carries a query or fragment", () => {
+    expect(isUaisRouteAllowedForRole("/courses?invite=66334455", "student")).toBe(true);
+    expect(isUaisRouteAllowedForRole("/courses?invite=66334455", "teacher")).toBe(true);
+    expect(isUaisRouteAllowedForRole("/learning?courseId=research#unit-3", "student")).toBe(
+      true,
+    );
+    expect(isUaisRouteAllowedForRole("/teaching?course=abc", "student")).toBe(false);
+    expect(isUaisRouteAllowedForRole("/student-dashboard?tab=groups", "admin")).toBe(false);
+    // The query cannot smuggle an allowed prefix into a refused pathname.
+    expect(isUaisRouteAllowedForRole("/teaching?next=/courses", "student")).toBe(false);
+  });
+
   it("accepts admin from the trusted account provider as a signed app role", async () => {
     const post = createUaisAppSessionPostHandler({
       env: {
         NODE_ENV: "production",
         UAIS_APP_AUTH_PROVIDER: "trusted-account-provider",
-        UAIS_APP_SESSION_SIGNING_SECRET: "test-app-session-signing-secret",
+        UAIS_APP_SESSION_SIGNING_SECRET: "test-app-session-signing-secret-32ch",
       },
       now: new Date("2099-01-01T00:00:00.000Z"),
       createSessionId: () => "app-session-admin-test-id",
@@ -480,7 +555,7 @@ describe("UAIS enterprise app sessions", () => {
     });
     expect(
       getUaisAppSessionUserFromCookieString(cookieHeader, {
-        secret: "test-app-session-signing-secret",
+        secret: "test-app-session-signing-secret-32ch",
         now: new Date("2099-01-01T00:01:00.000Z"),
       }),
     ).toEqual(
@@ -495,7 +570,7 @@ describe("UAIS enterprise app sessions", () => {
     const env = {
       NODE_ENV: "development",
       UAIS_APP_AUTH_PROVIDER: "local-demo",
-      UAIS_APP_SESSION_SIGNING_SECRET: "test-app-session-signing-secret",
+      UAIS_APP_SESSION_SIGNING_SECRET: "test-app-session-signing-secret-32ch",
       UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET:
         "test-teacher-auth-session-signing-secret-32",
     };
@@ -550,7 +625,7 @@ describe("UAIS enterprise app sessions", () => {
         ...runtime.markers,
         UAIS_APP_AUTH_PROVIDER: "local-demo",
         UAIS_APP_ALLOW_PRODUCTION_DEMO_AUTH: "true",
-        UAIS_APP_SESSION_SIGNING_SECRET: "test-app-session-signing-secret",
+        UAIS_APP_SESSION_SIGNING_SECRET: "test-app-session-signing-secret-32ch",
         UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET:
           "test-teacher-auth-session-signing-secret-32",
       };
@@ -591,7 +666,7 @@ describe("UAIS enterprise app sessions", () => {
       env: {
         NODE_ENV: "development",
         UAIS_APP_AUTH_PROVIDER: "local-demo",
-        UAIS_APP_SESSION_SIGNING_SECRET: "test-app-session-signing-secret",
+        UAIS_APP_SESSION_SIGNING_SECRET: "test-app-session-signing-secret-32ch",
       },
       account: "Phoebe",
     });
@@ -610,7 +685,7 @@ describe("UAIS enterprise app sessions", () => {
     const env = {
       NODE_ENV: "development",
       UAIS_APP_AUTH_PROVIDER: "local-demo",
-      UAIS_APP_SESSION_SIGNING_SECRET: "test-app-session-signing-secret",
+      UAIS_APP_SESSION_SIGNING_SECRET: "test-app-session-signing-secret-32ch",
       UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET:
         "test-teacher-auth-session-signing-secret-32",
     };

@@ -10,6 +10,28 @@ const developmentAppSessionSigningSecret =
   "uais-development-only-app-session-signing-secret";
 const defaultSessionTtlSeconds = 8 * 60 * 60;
 
+// The same floor `minimumTeacherAuthSecretLength` applies to the teacher session
+// secret, and the same one scripts/app-auth-provider-readiness.mjs has always
+// GRADED against - it reported `signingSecretStrength: "weak"` and blocked the
+// release for anything shorter, while the runtime accepted any non-empty string.
+// A release gate that refuses what the runtime accepts is not a gate: the
+// deployment that skips the gate is exactly the one that ends up signing every
+// session in the cohort with a guessable key.
+//
+// 32 characters is a floor on the ENCODED length, not on entropy, because that
+// is the only property this code can check. It is enough to make a hand-typed
+// value ("uais-secret") fail and a generated one pass.
+export const minimumUaisAppSessionSecretLength = 32;
+
+export type UaisAppSessionSigningSecretContract = {
+  // `development-fallback` is the committed constant a local runtime signs with.
+  // It is never reachable from a deployed runtime - see the deployed branch in
+  // readAppSessionSigningSecretState.
+  status: "configured" | "development-fallback" | "missing" | "weak";
+  minimumLength: typeof minimumUaisAppSessionSecretLength;
+  valueRedacted: true;
+};
+
 export function isUaisAppProductionRuntime(
   env: Record<string, string | undefined>,
 ) {
@@ -222,13 +244,53 @@ export function readUaisAppSessionClaimsFromCookieValues(input: {
 export function resolveUaisAppSessionSigningSecret(
   env: Record<string, string | undefined>,
 ) {
+  return readAppSessionSigningSecretState(env).secret;
+}
+
+/**
+ * The same decision, reported rather than resolved.
+ *
+ * Callers that have to EXPLAIN a refusal need to tell `missing` from `weak`:
+ * they are different operator actions (set the variable / replace the value with
+ * a longer one), and a deployment that answers "not configured" for a secret
+ * that is plainly configured sends the owner looking in the wrong place. Carries
+ * a status and a length floor, never the value.
+ */
+export function classifyUaisAppSessionSigningSecret(
+  env: Record<string, string | undefined>,
+): UaisAppSessionSigningSecretContract {
+  return {
+    status: readAppSessionSigningSecretState(env).status,
+    minimumLength: minimumUaisAppSessionSecretLength,
+    valueRedacted: true,
+  };
+}
+
+function readAppSessionSigningSecretState(env: Record<string, string | undefined>): {
+  status: UaisAppSessionSigningSecretContract["status"];
+  secret?: string;
+} {
   const configured = env.UAIS_APP_SESSION_SIGNING_SECRET?.trim();
-  if (configured) {
-    return configured;
+  const deployed = isUaisAppDeployedRuntime(env);
+
+  if (!configured) {
+    // A deployed runtime has no fallback: a committed constant would be a
+    // published forgery key for every session on the deployment.
+    return deployed
+      ? { status: "missing" }
+      : { status: "development-fallback", secret: developmentAppSessionSigningSecret };
   }
-  return isUaisAppDeployedRuntime(env)
-    ? undefined
-    : developmentAppSessionSigningSecret;
+
+  // The floor applies to DEPLOYED runtimes only. A short secret on a laptop
+  // signs cookies nobody else can reach, and refusing it would break every
+  // local `.env.local` and every suite fixture in the repository for no security
+  // gain - the same split `isUaisAppDeployedRuntime` already draws for the
+  // fallback above.
+  if (deployed && configured.length < minimumUaisAppSessionSecretLength) {
+    return { status: "weak" };
+  }
+
+  return { status: "configured", secret: configured };
 }
 
 function parseClaims(claimsValue: string): UaisAppSessionClaims | undefined {

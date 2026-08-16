@@ -117,7 +117,10 @@ describe("enterprise closed-loop regression guards", () => {
     const inviteAuditSection = sliceRequiredSection(
       page,
       "async function readInviteWorkspaceAuditEvidence",
-      "function resolveInviteWorkspaceTargetClassId",
+      // Plan E9 removed `resolveInviteWorkspaceTargetClassId` — the silent
+      // first-class fallback this section used to end at — so the slice now runs
+      // to the next declaration past the publication readback it must cover.
+      "async function copyInviteWorkspaceValue",
     );
 
     expect(page).toContain("INVITE_CLASS_INVITATION_READBACK_MISMATCH_MESSAGE");
@@ -134,13 +137,17 @@ describe("enterprise closed-loop regression guards", () => {
   });
 
   it("keeps teaching membership approval UI gated by persisted course-state readback", () => {
-    // Workspace handlers moved into the useTeachingWorkspace hook (Phase 3 decomposition).
-    const page = source("src/components/pages/use-teaching-workspace.tsx");
+    // Workspace handlers moved into the useTeachingWorkspace hook (Phase 3
+    // decomposition), and the membership lifecycle moved again in plan E9 to a
+    // sibling hook that holds approve-one beside approve-all/reject/remove.
+    const page = source(
+      "src/components/teaching/use-teaching-class-membership-lifecycle.tsx",
+    );
     const pageTest = source("tests/teaching-page.test.tsx");
     const approvalSection = sliceRequiredSection(
       page,
-      "async function approveClassMembership",
-      "const newClassCourse",
+      "const approveClassMembership = useCallback",
+      "const approveAllPendingMemberships",
     );
     const receiptCheckIndex = approvalSection.indexOf("isPersistedMembershipApprovalReceipt");
     const readbackIndex = approvalSection.indexOf(
@@ -600,7 +607,14 @@ describe("enterprise closed-loop regression guards", () => {
     expect(deployedRuntimeSection).toContain("env.VERCEL_ENV === \"preview\"");
     expect(deployedRuntimeSection).toContain("deploymentEnv === \"preview\"");
     expect(deployedRuntimeSection).toContain("deploymentEnv === \"staging\"");
-    expect(appSession).toContain("return isUaisAppDeployedRuntime(env)");
+    // The signing-secret decision is gated on the DEPLOYED check, not on the
+    // production one: a preview or a staging deployment is reachable by other
+    // people, so it gets neither the committed development fallback nor a secret
+    // below the strength floor.
+    expect(appSession).toContain("const deployed = isUaisAppDeployedRuntime(env)");
+    expect(appSession).toContain(
+      "if (deployed && configured.length < minimumUaisAppSessionSecretLength)",
+    );
     expect(appAuthProvider).toContain("isUaisAppProductionRuntime(input.env)");
     expect(appSessionRoute).toContain("const isProductionRuntime = isUaisAppProductionRuntime(env)");
     expect(appSessionRoute).toContain("secure: isProductionRuntime");

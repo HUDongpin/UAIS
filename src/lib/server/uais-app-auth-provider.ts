@@ -1,14 +1,29 @@
 import type { UaisAppRole, UaisAppSessionUser } from "@/lib/auth/uais-app-session";
+import { getUaisCoreDatabaseReadiness } from "@/lib/db/core-database";
 import { isUaisAppProductionRuntime } from "@/lib/server/uais-app-session";
 
 export type UaisAppAuthProviderContract = {
   selector: string;
-  providerKind: "local-demo" | "trusted-account-provider" | "unsupported";
+  providerKind:
+    | "local-demo"
+    | "database-accounts"
+    | "trusted-account-provider"
+    | "unsupported";
   productionStatus: "ready" | "blocked";
-  blockedReason?: "local-demo-not-production" | "trusted-provider-not-configured" | "unsupported-provider";
+  blockedReason?:
+    | "local-demo-not-production"
+    | "database-accounts-not-configured"
+    | "trusted-provider-not-configured"
+    | "unsupported-provider";
   providerBinding?: {
     endpoint: "configured" | "injected";
     credential: "configured" | "injected";
+    valueRedacted: true;
+  };
+  // Names and statuses only, never the DSN - same rule as `providerBinding`.
+  databaseAccountBinding?: {
+    source: "uais-core-database";
+    accountTable: "uais_users";
     valueRedacted: true;
   };
   demoProductionAccess?: {
@@ -57,6 +72,7 @@ const localDemoAccounts: UaisLocalDemoAccount[] = [
 export function resolveUaisAppAuthProviderContract(input: {
   env: Record<string, string | undefined>;
   hasTrustedAccountProvider?: boolean;
+  hasDatabaseAccountProvider?: boolean;
 }): UaisAppAuthProviderContract {
   const selector = normalizeProviderSelector(input.env.UAIS_APP_AUTH_PROVIDER);
 
@@ -99,6 +115,35 @@ export function resolveUaisAppAuthProviderContract(input: {
             providerBinding: {
               endpoint: providerConfig ? "configured" : "injected",
               credential: providerConfig ? "configured" : "injected",
+              valueRedacted: true,
+            } as const,
+          }
+        : {}),
+      responsibleSession: "S12/S19",
+      redaction: createRedaction(),
+    };
+  }
+
+  // First-party accounts on the managed Postgres the deployment already
+  // requires. This is the only selector that can carry a real cohort: local-demo
+  // is two public credentials, and trusted-account-provider needs an external
+  // service that does not exist. Readiness is purely "is the core database
+  // configured" - no second service, no extra secret - because the account rows
+  // and the login route live in the same deployment.
+  if (selector === "database-accounts") {
+    const ready =
+      Boolean(input.hasDatabaseAccountProvider) ||
+      getUaisCoreDatabaseReadiness(input.env).status === "ready";
+    return {
+      selector,
+      providerKind: "database-accounts",
+      productionStatus: ready ? "ready" : "blocked",
+      ...(ready ? {} : { blockedReason: "database-accounts-not-configured" as const }),
+      ...(ready
+        ? {
+            databaseAccountBinding: {
+              source: "uais-core-database",
+              accountTable: "uais_users",
               valueRedacted: true,
             } as const,
           }

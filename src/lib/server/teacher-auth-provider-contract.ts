@@ -39,6 +39,7 @@ export type UaisTeacherAuthProviderContract = {
   providerKind:
     | "missing"
     | "local-signed-cookie"
+    | "database-account-cookie"
     | "trusted-cookie-issuer"
     | "oidc-jwks"
     | "unsupported";
@@ -182,6 +183,52 @@ export function resolveUaisTeacherAuthProviderContract(input: {
       requiredEnv,
       secretStrength,
       endpointSecurity,
+      responsibleSession: "S12",
+      redaction: createRedaction(),
+    };
+  }
+
+  // Teacher sessions minted at login for accounts the first-party account
+  // provider has already verified as `role = 'teacher'` in `uais_users`.
+  //
+  // This is the selector that makes a production teacher able to write. The
+  // other two production-capable kinds each need something that does not exist:
+  // `trusted-cookie-issuer` needs a separate issuer service holding a second
+  // secret, and `oidc-jwks` needs a campus identity provider and a client that
+  // was never built. Meanwhile `local-signed-cookie` is - correctly - hard
+  // blocked in production, which left `www.uais.top` with a teacher who could
+  // list courses read-only and then 401 on create-course, invite codes,
+  // approvals and groups.
+  //
+  // It requires exactly one secret because the trust chain is shorter: there is
+  // no second party to authenticate. The account row is the authority, the
+  // login route is the only mint point, and the signing secret is what keeps a
+  // client from forging the cookie. The >= 32-character floor is the same one
+  // the other kinds enforce, and there is deliberately no development fallback
+  // - a committed constant would be a published forgery key for teacher writes.
+  if (selector === "database-account-cookie") {
+    const requiredEnv = buildRequiredEnvChecks(input.env, [
+      "UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET",
+    ]);
+    const secretStrength = buildSecretStrengthChecks(input.env, [
+      "UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET",
+    ]);
+    const present = requiredEnv.every((entry) => entry.status === "present");
+    const strong = secretStrength.checks.every((entry) => entry.status === "sufficient");
+    return {
+      selector,
+      providerKind: "database-account-cookie",
+      adapterStatus: "implemented",
+      productionStatus: present && strong ? "ready" : "blocked",
+      ...(present && strong
+        ? {}
+        : {
+            blockedReason: present
+              ? ("weak-UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET" as const)
+              : ("missing-UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET" as const),
+          }),
+      requiredEnv,
+      secretStrength,
       responsibleSession: "S12",
       redaction: createRedaction(),
     };
