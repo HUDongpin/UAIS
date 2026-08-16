@@ -9,6 +9,7 @@ import {
 import { isLearningChatroomGroupsEnabled } from "@/lib/server/learning-chatroom-groups-flag";
 import {
   createLearningChatroomShare,
+  learningChatroomShareMaxTtlMs,
   LearningChatroomShareStoreError,
   type LearningChatroomShareRepository,
 } from "@/lib/server/learning-chatroom-share-store";
@@ -86,7 +87,7 @@ export function createLearningChatroomShareMintPostHandler(
         );
       }
 
-      const body = parseShareMintRequest(await readJsonBody(request));
+      const body = parseShareMintRequest(await readJsonBody(request), now());
 
       // Throttled before the authorization store read, so a looping client costs
       // no snapshot round trip. Keyed on the actor alone for the same reason the
@@ -170,6 +171,7 @@ export function createLearningChatroomShareMintPostHandler(
         ...(access.group ? { groupId: access.group.groupId } : {}),
         createdBy: appSession.account,
         now: new Date(now()).toISOString(),
+        ...(body.expiresAt ? { expiresAt: body.expiresAt } : {}),
       });
 
       const sharePath = `/share/${record.shareId}`;
@@ -184,6 +186,9 @@ export function createLearningChatroomShareMintPostHandler(
             ...(record.classId ? { classId: record.classId } : {}),
             ...(record.groupId ? { groupId: record.groupId } : {}),
             createdAt: record.createdAt,
+            // Returned so the room can tell whoever copied the link when it
+            // stops working, instead of the link simply going dead one day.
+            expiresAt: record.expiresAt,
           },
           sharePath,
           shareUrl: `${readRequestOrigin(request)}${sharePath}`,
@@ -199,7 +204,7 @@ export function createLearningChatroomShareMintPostHandler(
   };
 }
 
-function parseShareMintRequest(value: unknown) {
+function parseShareMintRequest(value: unknown, nowMs: number) {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     throw new PublicLearningChatroomShareError("Request body must be an object.", 400);
   }
@@ -216,7 +221,33 @@ function parseShareMintRequest(value: unknown) {
     courseId,
     classId: readBoundedId(record.classId, "classId"),
     groupId: readBoundedId(record.groupId, "groupId"),
+    expiresAt: readShareExpiresAt(record.expiresAt, nowMs),
   };
+}
+
+// Optional: absent means the store's 14-day default. A named moment is refused
+// rather than clamped when it is unreadable, already past, or beyond the ceiling
+// - a minter who asked for a link lasting a year should be told the answer is
+// no, not handed a link that quietly lasts three months.
+function readShareExpiresAt(value: unknown, nowMs: number) {
+  const expiresAt = readString(value);
+  if (!expiresAt) {
+    return "";
+  }
+  const expiresAtMs = Date.parse(expiresAt);
+  if (!Number.isFinite(expiresAtMs) || expiresAtMs <= nowMs) {
+    throw new PublicLearningChatroomShareError(
+      "Learning chatroom share expiresAt must be a future ISO timestamp.",
+      400,
+    );
+  }
+  if (expiresAtMs > nowMs + learningChatroomShareMaxTtlMs) {
+    throw new PublicLearningChatroomShareError(
+      "Learning chatroom share expiresAt must be within 90 days.",
+      400,
+    );
+  }
+  return new Date(expiresAtMs).toISOString();
 }
 
 function readBoundedId(value: unknown, label: string) {

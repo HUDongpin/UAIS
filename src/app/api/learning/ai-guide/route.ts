@@ -8,6 +8,11 @@ import {
 } from "@/lib/ai/providers/qwen-client";
 import { getProviderForRole } from "@/lib/ai/providers/registry";
 import {
+  createAiRequestRateLimiter,
+  resolveAiRequestRateLimitCount,
+  resolveAiRequestRateLimitMode,
+} from "@/lib/server/ai-request-rate-limit";
+import {
   runLearningGuideMultiAgentGraph,
   type LearningGuideAgentCompletionInput,
   type LearningGuideAgentId,
@@ -68,6 +73,9 @@ type QwenMultimodalClient = {
 
 type LearningAiGuidePostHandlerDeps = {
   env?: Record<string, string | undefined>;
+  // Injected clock for the spend guard, so a suite can drive window rollover
+  // without sleeping. Same seam the chatroom route uses.
+  now?: () => number;
   createDeepSeekTextClient?: (options: {
     apiKey: string;
     baseUrl?: string;
@@ -126,14 +134,52 @@ const learningAiGuideAgents: Record<LearningAiGuideAgentId, LearningAiGuideAgent
 
 const learningGuideMultiAgentMaxTokens = 256;
 
+// This route was the last completely unthrottled provider spend path: every
+// accepted request buys at least one live completion, and the multi-agent mode
+// buys several. One stuck client loop - a retry in a `useEffect`, a student
+// leaning on the send key - was unbounded spend with nothing in the product
+// able to stop it. The chatroom's guard already existed; this is the same
+// limiter with its own env names so an operator can tune the ask box without
+// also widening the chatroom.
+//
+// Defaults are deliberately looser than the chatroom's per-message budget: the
+// ask box is a considered question, not a chat cadence, and 30/minute is far
+// above human use while still bounding a runaway loop.
+const learningAiGuideDefaultRateLimitPerMinute = 30;
+const learningAiGuideDefaultRateLimitPerDay = 600;
+
 export const POST = createLearningAiGuidePostHandler();
 
 export function createLearningAiGuidePostHandler(
   deps: LearningAiGuidePostHandlerDeps = {},
 ) {
   const env = deps.env ?? process.env;
+  const now = deps.now ?? (() => Date.now());
   const deepSeekFactory = deps.createDeepSeekTextClient ?? createDeepSeekTextClient;
   const qwenFactory = deps.createQwenMultimodalClient ?? createQwenMultimodalClient;
+  const rateLimiter = createAiRequestRateLimiter({
+    config: {
+      mode: resolveAiRequestRateLimitMode(env.UAIS_LEARNING_AI_GUIDE_RATE_LIMIT_MODE),
+      windows: [
+        {
+          id: "per-minute",
+          limit: resolveAiRequestRateLimitCount(
+            env.UAIS_LEARNING_AI_GUIDE_RATE_LIMIT_PER_MINUTE,
+            learningAiGuideDefaultRateLimitPerMinute,
+          ),
+          windowMs: 60000,
+        },
+        {
+          id: "per-day",
+          limit: resolveAiRequestRateLimitCount(
+            env.UAIS_LEARNING_AI_GUIDE_RATE_LIMIT_PER_DAY,
+            learningAiGuideDefaultRateLimitPerDay,
+          ),
+          windowMs: 86400000,
+        },
+      ],
+    },
+  });
 
   return async function POST(request: Request) {
     const traceId = readSafeLearningAiGuideTraceId(request);
@@ -146,6 +192,21 @@ export function createLearningAiGuidePostHandler(
         throw new PublicLearningAiGuideError(
           "UAIS app session is required for learning AI guide.",
           401,
+        );
+      }
+
+      // Throttled before the body is parsed and before course authorization,
+      // for the same reason the chatroom throttles early: a rejected actor must
+      // cost neither a provider completion nor a course-management store read.
+      // The key is the session account alone - a course-scoped key would hand
+      // any client a fresh budget for every courseId it cared to invent, and
+      // this check runs before membership has been verified.
+      const rateLimit = rateLimiter.check({ key: appSession.account, nowMs: now() });
+      if (!rateLimit.allowed) {
+        throw new PublicLearningAiGuideError(
+          "Learning AI guide request limit reached; retry shortly.",
+          429,
+          { retryAfterSeconds: rateLimit.retryAfterSeconds },
         );
       }
 
@@ -262,12 +323,25 @@ export function createLearningAiGuidePostHandler(
       const publicError = createPublicLearningAiGuideError(error);
       const status = publicError?.status ?? 400;
       const message = publicError?.message ?? "Learning AI guide request failed.";
+      // A 429 without Retry-After tells a client nothing, so it retries
+      // immediately into the same rejection. The limiter already computed a
+      // never-zero value; this is where it reaches the caller.
+      const retryAfterSeconds =
+        publicError instanceof PublicLearningAiGuideError
+          ? publicError.retryAfterSeconds
+          : undefined;
       return Response.json(
         {
           error: message,
+          ...(retryAfterSeconds !== undefined ? { retryAfterSeconds } : {}),
           redaction: createLearningAiGuideRedaction(),
         },
-        { status },
+        {
+          status,
+          ...(retryAfterSeconds !== undefined
+            ? { headers: { "retry-after": String(retryAfterSeconds) } }
+            : {}),
+        },
       );
     }
   };
@@ -615,10 +689,21 @@ function readString(value: unknown) {
 
 class PublicLearningAiGuideError extends Error {
   readonly status: number;
+  // Only ever set on a 429. Carried on the error rather than returned from the
+  // throttle site so the single catch block below stays the one place that
+  // shapes a response, exactly as it did before the limiter existed.
+  readonly retryAfterSeconds?: number;
 
-  constructor(message: string, status: number) {
+  constructor(
+    message: string,
+    status: number,
+    options: { retryAfterSeconds?: number } = {},
+  ) {
     super(message);
     this.name = "PublicLearningAiGuideError";
     this.status = status;
+    if (options.retryAfterSeconds !== undefined) {
+      this.retryAfterSeconds = options.retryAfterSeconds;
+    }
   }
 }

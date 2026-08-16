@@ -511,6 +511,12 @@ describe("learner chatroom live multi-agent endpoint", () => {
 
     await screen.findByText("智能服务暂时不可用，请稍后再试。");
     expectBubbleWithText("@研究助教 帮我梳理研究问题");
+    // An outage is the one refusal the student can do nothing about, so it has to
+    // name someone reachable. The sentence comes from the single `copy.ts` slot
+    // (`auth.supportChannel`) the owner will swap for the real channel.
+    expect(document.querySelector("[data-uais-support-channel]")?.textContent).toBe(
+      "如果问题持续出现，请联系任课教师获取帮助。",
+    );
   });
 
   it("shows the sign-in copy when the endpoint answers 401", async () => {

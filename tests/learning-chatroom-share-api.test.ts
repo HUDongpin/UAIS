@@ -1,5 +1,5 @@
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createElement } from "react";
@@ -33,7 +33,11 @@ import {
   resolveLearningChatroomShareViewerKey,
 } from "@/lib/server/learning-chatroom-share-rate-limit";
 import type { LearningChatroomShareRepository } from "@/lib/server/learning-chatroom-share-store";
-import { appendLearningChatroomTranscriptMessages } from "@/lib/server/learning-chatroom-transcript-store";
+import {
+  appendLearningChatroomTranscriptMessages,
+  learningChatroomGroupTranscriptMaxMessages,
+  setLearningChatroomTranscriptMessageModeration,
+} from "@/lib/server/learning-chatroom-transcript-store";
 import { normalizeTeachingCourseManagementDatabase } from "@/lib/server/teaching-course-management-store";
 import { createUaisAppSessionCookie } from "@/lib/server/uais-app-session";
 import type { UaisAppSessionUser } from "@/lib/auth/uais-app-session";
@@ -48,7 +52,7 @@ import type { TeachingCourseManagementRepository } from "@/lib/server/teaching-c
 // room to whoever holds it, so nothing on the API or the page may carry a
 // student account id - only display names.
 
-const appSessionSigningSecret = "test-app-session-signing-secret";
+const appSessionSigningSecret = "test-app-session-signing-secret-32ch";
 const stableFutureIssueTime = new Date("2099-01-01T00:00:00.000Z");
 
 // Accounts are safe ids; display names are the CJK strings a roster renders, so
@@ -71,11 +75,19 @@ const shareFixtureDirs: string[] = [];
 // way this file reaches the loader without naming one explicitly.
 let shareViewRateLimiter = createLearningChatroomShareReadRateLimiter();
 
+// The moment every clock-free assertion in this file is judged at: half an hour
+// after the fixture mints, and well inside the 14-day default life of a link.
+// Pinned rather than left to `Date.now()` because the loader now reads the same
+// clock twice - the throttle window AND whether the share has expired - so an
+// unpinned suite would start failing on a calendar date rather than on a change.
+const shareViewNowMs = Date.parse("2026-08-08T14:30:00.000Z");
+
 function loadShareDocument(
   input: Parameters<typeof loadLearningChatroomShareDocument>[0],
 ) {
   return loadLearningChatroomShareDocument({
     rateLimiter: shareViewRateLimiter,
+    nowMs: shareViewNowMs,
     ...input,
   });
 }
@@ -408,7 +420,7 @@ describe("UAIS learning chatroom share records", () => {
       shareId: record.shareId,
     });
     expect(stored).toEqual(record);
-    expect(isLearningChatroomShareActive(stored)).toBe(true);
+    expect(isLearningChatroomShareActive(stored, { nowMs: shareViewNowMs })).toBe(true);
 
     const database = await readLearningChatroomShareDatabase({ dataDir: fixture.dataDir });
     expect(database.schemaVersion).toBe(learningChatroomShareSchemaVersion);
@@ -426,7 +438,7 @@ describe("UAIS learning chatroom share records", () => {
       shareId: record.shareId,
     });
     expect(revoked?.revokedAt).toBe("2026-08-08T15:00:00.000Z");
-    expect(isLearningChatroomShareActive(revoked)).toBe(false);
+    expect(isLearningChatroomShareActive(revoked, { nowMs: shareViewNowMs })).toBe(false);
 
     // Revoking twice keeps the first revocation: the moment a link died is not
     // rewritten by a second attempt.
@@ -469,6 +481,11 @@ describe("UAIS learning chatroom share records", () => {
       courseId: "elementary-math-research",
       createdBy: "PeterChen",
       createdAt: "2026-08-08T14:00:00.000Z",
+      // The record carries no `expiresAt` - it predates share expiry - and is
+      // read as ending 14 days after it was minted. Normalizing on read rather
+      // than through a migration is what makes the rule reach a database this
+      // build has never written, including one an external backend still holds.
+      expiresAt: "2026-08-22T14:00:00.000Z",
       storagePolicy: "local-json-learning-chatroom-shares",
       storageWritePolicy: "atomic-json-file-replace",
       responsibleSession: "S12",
@@ -510,6 +527,9 @@ describe("POST /api/learning/chatroom/share", () => {
       classId: fixture.classId,
       groupId: fixture.groupId,
       createdAt: "2026-08-08T14:00:00.000Z",
+      // Every link ends. Returned so the room can tell whoever copied it when it
+      // stops working, instead of the link simply going dead one day.
+      expiresAt: "2026-08-22T14:00:00.000Z",
     });
     expect(body.sharePath).toBe("/share/share-minted00000000000000000001");
     expect(body.shareUrl).toBe(
@@ -547,6 +567,7 @@ describe("POST /api/learning/chatroom/share", () => {
       courseId: fixture.courseId,
       classId: fixture.classId,
       createdAt: "2026-08-08T14:00:00.000Z",
+      expiresAt: "2026-08-22T14:00:00.000Z",
     });
     expect(body.share.groupId).toBeUndefined();
     expectNoAccountIds(body);
@@ -788,7 +809,7 @@ describe("DELETE /api/learning/chatroom/share/[shareId]", () => {
       dataDir: fixture.dataDir,
       shareId,
     });
-    expect(isLearningChatroomShareActive(stored)).toBe(false);
+    expect(isLearningChatroomShareActive(stored, { nowMs: shareViewNowMs })).toBe(false);
   });
 
   it("refuses another group member, a foreign teacher, and an unknown id", async () => {
@@ -827,7 +848,7 @@ describe("DELETE /api/learning/chatroom/share/[shareId]", () => {
       dataDir: fixture.dataDir,
       shareId,
     });
-    expect(isLearningChatroomShareActive(stored)).toBe(true);
+    expect(isLearningChatroomShareActive(stored, { nowMs: shareViewNowMs })).toBe(true);
 
     const anonymous = await revokeShare(...toRevokeArgs(createRevokeRequest(shareId)));
     expect(anonymous.status).toBe(401);
@@ -1465,6 +1486,120 @@ describe("chatroom export print view", () => {
   });
 });
 
+// A chatroom room is a rolling window, not an archive: it keeps the newest 200
+// turns (500 for a group) and drops the rest on append. Nothing disclosed that
+// anywhere - not the room, not this document, not the PDF, not the public share
+// page - so an export could silently begin mid-discussion and a share link could
+// publish a conversation whose opening had already been dropped. Both surfaces
+// render the same line, from the same document field, for exactly that reason.
+describe("chatroom transcript rolling-window disclosure", () => {
+  const trimmedCopy =
+    "较早的消息已滚动归档，导出与分享同样不含";
+
+  it("discloses the window on both the print view and the share page", () => {
+    for (const tone of ["print", "screen"] as const) {
+      const markup = renderToStaticMarkup(
+        createElement(ChatroomTranscriptDocument, {
+          document: createTrimmedDocumentFixture({ windowAtCapacity: true }),
+          tone,
+          title: "聊天记录导出",
+        }),
+      );
+      expect(markup, tone).toContain(trimmedCopy);
+      expect(markup, tone).toContain('data-uais-chatroom-window-trimmed="true"');
+    }
+  });
+
+  it("says nothing when the room still has room", () => {
+    const markup = renderToStaticMarkup(
+      createElement(ChatroomTranscriptDocument, {
+        document: createTrimmedDocumentFixture({ windowAtCapacity: false }),
+        tone: "print" as const,
+        title: "聊天记录导出",
+      }),
+    );
+    expect(markup).not.toContain(trimmedCopy);
+  });
+
+  it("reports a room that is not at its cap as untrimmed, end to end", async () => {
+    const fixture = await createShareFixture({ groupsMode: "on" });
+    await seedGroupRoomTranscript(fixture);
+
+    const result = await loadLearningChatroomExportDocument({
+      env: fixture.env,
+      locale: "zh-CN",
+      appSession: { ...groupMemberOne, role: "student" },
+      courseId: fixture.courseId,
+      groupId: fixture.groupId,
+    });
+    expect(result.status).toBe("ready");
+    if (result.status !== "ready") {
+      return;
+    }
+    // Three stored turns against a 500-turn group window: the disclosure would
+    // be a lie here, and a document that always warned would teach every reader
+    // to ignore the one time it matters.
+    expect(result.document.windowAtCapacity).toBe(false);
+  });
+
+  it("reports a full window from the room's own stored count", async () => {
+    const fixture = await createShareFixture({ groupsMode: "on" });
+    await appendLearningChatroomTranscriptMessages({
+      dataDir: fixture.dataDir,
+      courseId: fixture.courseId,
+      classId: fixture.classId,
+      groupId: fixture.groupId,
+      studentId: groupMemberOne.account,
+      now: "2026-08-08T13:00:00.000Z",
+      messages: Array.from({ length: learningChatroomGroupTranscriptMaxMessages }, (_, index) => ({
+        messageId: `room-full-${index}`,
+        role: "student" as const,
+        content: `第 ${index + 1} 条。`,
+        authorId: groupMemberOne.account,
+        authorName: groupMemberOne.displayName,
+        createdAt: "2026-08-08T13:00:00.000Z",
+      })),
+    });
+
+    const result = await loadLearningChatroomExportDocument({
+      env: fixture.env,
+      locale: "zh-CN",
+      appSession: { ...groupMemberOne, role: "student" },
+      courseId: fixture.courseId,
+      groupId: fixture.groupId,
+    });
+    expect(result.status).toBe("ready");
+    if (result.status !== "ready") {
+      return;
+    }
+    // The window is full, so the next message the room takes evicts one - and
+    // this export already carries whatever the cap has cut.
+    expect(result.document.windowAtCapacity).toBe(true);
+  });
+});
+
+function createTrimmedDocumentFixture(overrides: { windowAtCapacity: boolean }) {
+  return {
+    locale: "zh-CN" as const,
+    courseName: "初等数学研究",
+    groupName: "第三小组",
+    memberNames: [groupMemberOne.displayName, groupMemberTwo.displayName],
+    messageCount: 1,
+    transcriptStatus: "loaded" as const,
+    messages: [
+      {
+        id: "room-1",
+        role: "student" as const,
+        content: "窗口已经满了。",
+        authorLabel: groupMemberOne.displayName,
+        createdAt: "2026-08-08T13:00:00.000Z",
+        timeLabel: "2026-08-08 13:00 UTC",
+      },
+    ],
+    ...overrides,
+  };
+}
+
 describe("chatroom share/export button wiring", () => {
   it("mints through the real route and returns the caller's own absolute link", async () => {
     const fixture = await createShareFixture({ groupsMode: "on" });
@@ -1495,6 +1630,10 @@ describe("chatroom share/export button wiring", () => {
       // The browser's origin wins over the server echo, so a preview deployment
       // or a custom domain copies its own host.
       url: "https://uais.top/share/share-wired000000000000000000001",
+      // Carried back so the room can tell whoever copies this link when it
+      // stops working. A link that simply goes dead one day is the thing this
+      // field exists to prevent.
+      expiresAt: "2026-08-22T14:00:00.000Z",
     });
   });
 
@@ -1546,3 +1685,211 @@ describe("chatroom share/export button wiring", () => {
 function toRevokeArgs(input: ReturnType<typeof createRevokeRequest>) {
   return [input.request, input.context] as const;
 }
+
+// Two ways a published room stops being published, and one way it stops being
+// complete.
+//
+// Expiry is the one that did not exist: a share record carried `createdAt` and
+// `revokedAt` and nothing else, so a link nobody remembered to revoke kept
+// serving a live classroom transcript to whoever still had the URL - for the
+// rest of the degree. Every link now ends on its own.
+describe("learning chatroom share expiry", () => {
+  const mintNowMs = Date.parse("2026-08-08T14:00:00.000Z");
+  const fourteenDaysMs = 14 * 24 * 60 * 60 * 1000;
+
+  it("defaults to 14 days, and an expired link is the same 404 as a revoked one", async () => {
+    const fixture = await createShareFixture({ groupsMode: "on" });
+    await seedGroupRoomTranscript(fixture);
+    const shareId = await mintGroupShare(fixture);
+
+    const stored = await readLearningChatroomShare({
+      dataDir: fixture.dataDir,
+      shareId,
+    });
+    expect(stored?.expiresAt).toBe("2026-08-22T14:00:00.000Z");
+
+    // One minute before the end: still a live room.
+    const alive = await loadShareDocument({
+      env: fixture.env,
+      locale: "zh-CN",
+      shareId,
+      nowMs: mintNowMs + fourteenDaysMs - 60_000,
+    });
+    expect(alive.status).toBe("ready");
+
+    // One minute after: indistinguishable from an id that never existed, which
+    // is the point - a viewer must not be able to tell a wrong link from a
+    // withdrawn one, nor either from one that simply ran out.
+    const expired = await loadShareDocument({
+      env: fixture.env,
+      locale: "zh-CN",
+      shareId,
+      nowMs: mintNowMs + fourteenDaysMs + 60_000,
+    });
+    expect(expired.status).toBe("not-found");
+  });
+
+  it("honours an explicit expiresAt and refuses one that is past or beyond the ceiling", async () => {
+    const fixture = await createShareFixture({ groupsMode: "on" });
+    const { mintShare } = createShareHandlers(fixture, {
+      shareIds: ["share-explicit0000000000000000001"],
+    });
+
+    const response = await mintShare(
+      createMintRequest(
+        {
+          courseId: fixture.courseId,
+          groupId: fixture.groupId,
+          expiresAt: "2026-08-11T14:00:00.000Z",
+        },
+        fixture.cookieFor(groupMemberOne),
+      ),
+    );
+    const body = await response.json();
+    expect(response.status, JSON.stringify(body)).toBe(201);
+    expect(body.share.expiresAt).toBe("2026-08-11T14:00:00.000Z");
+
+    // Refused rather than clamped: a minter who asked for a link lasting a year
+    // should be told no, not handed one that quietly lasts three months.
+    for (const expiresAt of [
+      "2026-08-08T13:00:00.000Z",
+      "2027-08-08T14:00:00.000Z",
+      "not-a-timestamp",
+    ]) {
+      const refused = await mintShare(
+        createMintRequest(
+          { courseId: fixture.courseId, groupId: fixture.groupId, expiresAt },
+          fixture.cookieFor(groupMemberOne),
+        ),
+      );
+      expect(refused.status, expiresAt).toBe(400);
+      expect((await refused.json()).error).toContain("expiresAt");
+    }
+  });
+
+  it("reads a legacy record with no expiresAt as ending 14 days after it was minted", async () => {
+    const fixture = await createShareFixture({ groupsMode: "on" });
+    await seedGroupRoomTranscript(fixture);
+
+    // A share database exactly as an earlier build wrote it: no expiry field at
+    // all. Written straight to disk rather than through the store, because the
+    // store can no longer produce one.
+    await writeFile(
+      join(fixture.dataDir, "learning-chatroom-shares.json"),
+      JSON.stringify({
+        schemaVersion: learningChatroomShareSchemaVersion,
+        updatedAt: "2026-08-08T14:00:00.000Z",
+        shares: [
+          {
+            shareId: "share-legacyttl000000000000000001",
+            courseId: fixture.courseId,
+            classId: fixture.classId,
+            groupId: fixture.groupId,
+            createdBy: groupMemberOne.account,
+            createdAt: "2026-08-08T14:00:00.000Z",
+            storagePolicy: "local-json-learning-chatroom-shares",
+            storageWritePolicy: "atomic-json-file-replace",
+            responsibleSession: "S12",
+            redaction: { secrets: "omitted", localFiles: "omitted", assets: "ids-only" },
+          },
+        ],
+      }),
+    );
+
+    const normalized = await readLearningChatroomShare({
+      dataDir: fixture.dataDir,
+      shareId: "share-legacyttl000000000000000001",
+    });
+    expect(normalized?.expiresAt).toBe("2026-08-22T14:00:00.000Z");
+
+    const expired = await loadShareDocument({
+      env: fixture.env,
+      locale: "zh-CN",
+      shareId: "share-legacyttl000000000000000001",
+      nowMs: mintNowMs + fourteenDaysMs + 60_000,
+    });
+    expect(expired.status).toBe("not-found");
+  });
+});
+
+describe("learning chatroom moderation on the published room", () => {
+  it("keeps a teacher-hidden message out of the share page and the export document", async () => {
+    const fixture = await createShareFixture({ groupsMode: "on" });
+    await seedGroupRoomTranscript(fixture);
+    const shareId = await mintGroupShare(fixture);
+
+    await setLearningChatroomTranscriptMessageModeration({
+      dataDir: fixture.dataDir,
+      courseId: fixture.courseId,
+      classId: fixture.classId,
+      groupId: fixture.groupId,
+      studentId: groupMemberOne.account,
+      messageId: "room-3",
+      status: "hidden",
+      actorId: owningTeacher.account,
+      now: "2026-08-08T13:30:00.000Z",
+    });
+
+    const shared = await loadShareDocument({
+      env: fixture.env,
+      locale: "zh-CN",
+      shareId,
+    });
+    expect(shared.status).toBe("ready");
+    if (shared.status !== "ready") {
+      return;
+    }
+    expect(shared.document.messageCount).toBe(2);
+    expect(shared.document.messages.map((message) => message.id)).toEqual([
+      "room-1",
+      "room-2",
+    ]);
+    expect(JSON.stringify(shared.document)).not.toContain("我来整理一下数据来源");
+
+    // The same loader feeds the print view and the server-rendered PDF, so one
+    // moderation decision reaches all three surfaces rather than three.
+    const exported = await loadLearningChatroomExportDocument({
+      env: fixture.env,
+      locale: "zh-CN",
+      appSession: { ...groupMemberTwo, role: "student" },
+      courseId: fixture.courseId,
+      groupId: fixture.groupId,
+    });
+    expect(exported.status).toBe("ready");
+    if (exported.status !== "ready") {
+      return;
+    }
+    expect(exported.document.messageCount).toBe(2);
+    expect(JSON.stringify(exported.document)).not.toContain("我来整理一下数据来源");
+  });
+});
+
+describe("public share page crawl policy", () => {
+  it("disallows /share/ in robots.txt", async () => {
+    // A share link is a capability handed to particular people. Indexed, it
+    // publishes a classroom conversation to anyone who searches a phrase from
+    // it - and revoking the link cannot take a search result back, so the
+    // exclusion has to exist before the first crawl.
+    const { default: robots } = await import("@/app/robots");
+    const rules = robots().rules;
+    expect(Array.isArray(rules)).toBe(false);
+    if (Array.isArray(rules)) {
+      return;
+    }
+    expect(rules.userAgent).toBe("*");
+    expect(rules.allow).toBe("/");
+    expect(rules.disallow).toEqual(expect.arrayContaining(["/share/"]));
+  });
+
+  it("marks the share page noindex in its own metadata", async () => {
+    // The half that reaches a crawler which ignores robots.txt but honours the
+    // meta tag, and the half that survives a crawler arriving by some other path.
+    const source = await readFile(
+      join(process.cwd(), "src", "app", "share", "[shareId]", "page.tsx"),
+      "utf8",
+    );
+    expect(source).toContain("index: false");
+    expect(source).toContain("follow: false");
+    expect(source).toContain("robots: shareRobotsMetadata");
+  });
+});

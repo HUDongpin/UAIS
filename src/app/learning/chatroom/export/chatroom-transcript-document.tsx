@@ -116,6 +116,20 @@ export function ChatroomTranscriptDocument({
           />
         </dl>
 
+        {/* The room this was taken from is a full rolling window, so the
+            transcript below starts where the window now starts. Printed in the
+            meta block rather than dropped in the thread: whoever reads the
+            paper or the link is exactly the reader who cannot check the live
+            room for what came before. */}
+        {document.windowAtCapacity ? (
+          <p
+            data-uais-chatroom-window-trimmed="true"
+            className={`mt-3 text-xs leading-5 ${style.muted}`}
+          >
+            {t.learning.chatroomWindowTrimmed}
+          </p>
+        ) : null}
+
         {notice ? <p className={`mt-3 text-xs leading-5 ${style.muted}`}>{notice}</p> : null}
       </header>
 

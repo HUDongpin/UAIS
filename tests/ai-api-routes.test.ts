@@ -84,7 +84,7 @@ import { join } from "node:path";
 
 const liveApprovalToken = "test-live-approval-token";
 const aiAccessSigningSecret = "test-ai-access-signing-secret";
-const appSessionSigningSecret = "test-app-session-signing-secret";
+const appSessionSigningSecret = "test-app-session-signing-secret-32ch";
 const teacherAuthSessionSigningSecret = "test-teacher-auth-session-signing-secret";
 const teacherAuthIssuerSecret = "test-teacher-auth-issuer-secret-strong";
 const stableFutureIssueTime = new Date("2099-01-01T00:00:00.000Z");

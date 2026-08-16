@@ -37,6 +37,14 @@ vi.mock("next/link", () => ({
 }));
 
 import { LearningChatroomPage } from "@/components/pages/learning-page-chatroom";
+import {
+  isThreadNearBottom,
+  resolveThreadAutoScroll,
+} from "@/components/pages/learning-chatroom-thread-scroll";
+import {
+  chatroomPollIntervalMs,
+  formatShareExpiry,
+} from "@/components/pages/use-learning-chatroom";
 import { SessionUserProvider } from "@/components/providers/session-user";
 import { resetReportedLearningEventsForTesting } from "@/lib/learning-records/client-event-reporter";
 import type { UaisAppSessionUser } from "@/lib/auth/uais-app-session";
@@ -68,14 +76,25 @@ type FetchCall = {
 };
 
 type StubOptions = {
-  chatroom?: () => Promise<Response> | Response;
+  // The call index lets a test answer the same round differently on a retry,
+  // which is how the delivery-receipt cases below are written.
+  chatroom?: (callIndex: number) => Promise<Response> | Response;
   chatroomHistory?: (url: string, callIndex: number) => Promise<Response> | Response;
   teachingCourses?: () => Promise<Response> | Response;
+  // Teacher moderation and share minting. Both live under
+  // `/api/learning/chatroom/...`, so the router below matches them BEFORE the
+  // room's own endpoint or every moderation call would be answered as a round.
+  moderation?: (callIndex: number) => Promise<Response> | Response;
+  share?: () => Promise<Response> | Response;
+  // DELETE /api/learning/chatroom/share/[shareId].
+  shareRevoke?: () => Promise<Response> | Response;
 };
 
 function stubFetch(options: StubOptions = {}) {
   const calls: FetchCall[] = [];
   let historyCallIndex = 0;
+  let roundCallIndex = 0;
+  let moderationCallIndex = 0;
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     const method = (init?.method ?? "GET").toUpperCase();
@@ -94,6 +113,25 @@ function stubFetch(options: StubOptions = {}) {
         ? options.teachingCourses()
         : Response.json({ courses: [], classes: [], memberships: [], learningGroups: [] });
     }
+    if (url.includes("/api/learning/chatroom/moderation")) {
+      const index = moderationCallIndex;
+      moderationCallIndex += 1;
+      return options.moderation
+        ? options.moderation(index)
+        : Response.json({ action: "hide-message", receipt: { status: "applied" } });
+    }
+    if (url.includes("/api/learning/chatroom/share")) {
+      // Mint and revoke share one path prefix and are told apart by the verb,
+      // exactly as the routes are.
+      if (method === "DELETE") {
+        return options.shareRevoke
+          ? options.shareRevoke()
+          : Response.json({ receipt: { status: "revoked" } });
+      }
+      return options.share
+        ? options.share()
+        : Response.json({ share: { shareId: "share-1" } }, { status: 201 });
+    }
     if (url.includes("/api/learning/chatroom")) {
       if (method === "GET") {
         const index = historyCallIndex;
@@ -105,8 +143,10 @@ function stubFetch(options: StubOptions = {}) {
               transcript: { status: "loaded", messageCount: 0 },
             });
       }
+      const roundIndex = roundCallIndex;
+      roundCallIndex += 1;
       return options.chatroom
-        ? options.chatroom()
+        ? options.chatroom(roundIndex)
         : Response.json({ status: "end", turns: [], progress: [], orchestration: {} });
     }
     return Response.json({});
@@ -123,7 +163,14 @@ function historyCalls(calls: FetchCall[]) {
 
 function roundCalls(calls: FetchCall[]) {
   return calls.filter(
-    (call) => call.url.includes("/api/learning/chatroom") && call.method === "POST",
+    (call) =>
+      call.url.endsWith("/api/learning/chatroom") && call.method === "POST",
+  );
+}
+
+function moderationCalls(calls: FetchCall[]) {
+  return calls.filter((call) =>
+    call.url.includes("/api/learning/chatroom/moderation"),
   );
 }
 
@@ -244,6 +291,10 @@ type GroupTranscriptMessage = {
 function groupTranscriptResponse(
   messages: GroupTranscriptMessage[],
   overrides: Partial<StudentVisibleGroup> = {},
+  // The two room facts E10 added to the GET: whether the teacher has frozen the
+  // room, and whether its rolling window is full. Both default to the quiet
+  // case, so every existing case below keeps the shape it was written against.
+  roomState: { frozen?: boolean; windowAtCapacity?: boolean } = {},
 ) {
   const group = { ...groupThree, ...overrides };
   return Response.json({
@@ -257,7 +308,15 @@ function groupTranscriptResponse(
       isSelf: false,
       ...message,
     })),
-    transcript: { status: "loaded", messageCount: messages.length },
+    transcript: {
+      status: "loaded",
+      messageCount: messages.length,
+      window: {
+        maxMessages: 500,
+        atCapacity: roomState.windowAtCapacity === true,
+      },
+    },
+    moderation: { status: roomState.frozen ? "frozen" : "open" },
     redaction: { secrets: "omitted", localFiles: "omitted", assets: "ids-only" },
   });
 }
@@ -292,10 +351,14 @@ async function settle() {
   });
 }
 
+// Advances exactly one poll interval, read from the hook rather than hardcoded.
+// These assertions count history reads, so a literal here silently doubles
+// every count the moment the interval changes - which is what happened when it
+// moved from 5s to 2.5s.
 async function advancePoll(times = 1) {
   for (let index = 0; index < times; index += 1) {
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(5000);
+      await vi.advanceTimersByTimeAsync(chatroomPollIntervalMs);
     });
   }
 }
@@ -328,17 +391,21 @@ function setDocumentHidden(hidden: boolean) {
   document.dispatchEvent(new Event("visibilitychange"));
 }
 
+// Shared by both describes below so a second suite in this file cannot drift
+// from the first one's teardown.
+function resetChatroomHarness() {
+  mockPreferences.locale = "zh-CN";
+  resetReportedLearningEventsForTesting();
+  setDocumentHidden(false);
+  window.localStorage.clear();
+  window.history.replaceState({}, "", "/");
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+}
+
 describe("learner chatroom group room UI", () => {
-  afterEach(() => {
-    mockPreferences.locale = "zh-CN";
-    resetReportedLearningEventsForTesting();
-    setDocumentHidden(false);
-    window.localStorage.clear();
-    window.history.replaceState({}, "", "/");
-    vi.useRealTimers();
-    vi.unstubAllGlobals();
-    vi.restoreAllMocks();
-  });
+  afterEach(resetChatroomHarness);
 
   it("auto-enters the only assigned group and reads that group's room", async () => {
     // Fake timers so the armed 5s poll interval cannot fire a second GET before
@@ -1018,5 +1085,1479 @@ describe("learner chatroom group room UI", () => {
     // Let the round finish so it does not dangle past the test.
     resolveTurn?.(Response.json({ status: "end", turns: [], progress: [], orchestration: {} }));
     await settle();
+  });
+});
+
+// Delivery receipts (S04 + S12 contract).
+//
+// Persistence is best-effort by design: the route answers 200 for a round it
+// could not store, reporting `transcript.status: "unavailable"` in the body. The
+// client used to read only `response.ok`, so a message that reached no store —
+// and that no classmate's poll would ever deliver — rendered exactly like one
+// the room had kept. These cases pin the four places that now depend on the
+// receipt instead of on the status code.
+
+const undeliveredCopy = "未送达，点按重试";
+const historyUnavailableCopy = "历史记录暂不可用，当前仅显示本次会话的消息。";
+
+function undeliveredControl() {
+  return document.querySelector<HTMLButtonElement>(
+    '[data-uais-chatroom-undelivered="true"]',
+  );
+}
+
+function historyNotice() {
+  return document.querySelector<HTMLElement>(
+    '[data-uais-chatroom-history-notice="true"]',
+  );
+}
+
+function composerOf(container: HTMLElement) {
+  return container.querySelector<HTMLInputElement>("#group-message") as HTMLInputElement;
+}
+
+async function sendMessage(container: HTMLElement, text: string) {
+  const input = composerOf(container);
+  fireEvent.change(input, { target: { value: text } });
+  fireEvent.submit(input.closest("form") as HTMLFormElement);
+  await settle();
+  await settle();
+}
+
+// Ids of the student rows a POST carried, in order. The last one is the message
+// that round was sending, which is what a retry has to re-post unchanged.
+function postedMessageIds(call: FetchCall) {
+  const messages = (call.body?.messages ?? []) as Array<{ id: string }>;
+  return messages.map((message) => message.id);
+}
+
+// collaboration.contributed writes, which the harness answers 202 for.
+function contributionCalls(calls: FetchCall[]) {
+  return calls.filter(
+    (call) =>
+      call.url.includes("/api/learning-records/events") &&
+      (call.body?.event as { type?: string } | undefined)?.type ===
+        "collaboration.contributed",
+  );
+}
+
+describe("learner chatroom delivery receipts", () => {
+  afterEach(resetChatroomHarness);
+
+  it("marks a message the room never stored as undelivered instead of delivered", async () => {
+    vi.useFakeTimers();
+    stubFetch({
+      teachingCourses: () => studentCoursesResponse([courseA], [groupThree]),
+      chatroomHistory: () => groupTranscriptResponse([]),
+      // A plain message: no agent is addressed, so the route takes its fast
+      // path and the only thing the round had to do was persist — which is
+      // exactly what the receipt says did not happen.
+      chatroom: () =>
+        Response.json({
+          status: "cue-user",
+          turns: [],
+          transcript: { status: "unavailable" },
+          progress: [],
+          orchestration: {},
+        }),
+    });
+
+    const { container } = renderChatroom();
+    await settle();
+    await settle();
+    await sendMessage(container, "三点图书馆见。");
+
+    // The bubble stays: the learner did write it, and hiding it would be its
+    // own kind of lie. It is ringed and carries the retry control instead.
+    const bubble = bubbleWith("三点图书馆见。") as HTMLElement;
+    expect(bubble).toBeTruthy();
+    expect(bubble.className).toContain("ring-[var(--danger)]");
+    const retry = undeliveredControl();
+    expect(retry).toBeTruthy();
+    expect(retry?.textContent).toContain(undeliveredCopy);
+    expect(bubble.contains(retry as Node)).toBe(true);
+  });
+
+  it("leaves a stored message unmarked when the receipt confirms the append", async () => {
+    vi.useFakeTimers();
+    stubFetch({
+      teachingCourses: () => studentCoursesResponse([courseA], [groupThree]),
+      chatroomHistory: () => groupTranscriptResponse([]),
+      chatroom: () =>
+        Response.json({
+          status: "cue-user",
+          turns: [],
+          transcript: { status: "persisted", appendedMessageCount: 1, messageCount: 1 },
+          progress: [],
+          orchestration: {},
+        }),
+    });
+
+    const { container } = renderChatroom();
+    await settle();
+    await settle();
+    await sendMessage(container, "我把访谈提纲发群里了。");
+
+    expect(bubbleWith("我把访谈提纲发群里了。")).toBeTruthy();
+    expect(undeliveredControl()).toBeNull();
+  });
+
+  // E16/PKG-10: the contribution record was emitted on `response.ok`, one await
+  // BEFORE the receipt was read, so a round the route answered 200 for and could
+  // not store still credited participation - the learner's record claimed a
+  // message no classmate would ever receive.
+  it("records the contribution when the receipt confirms the message", async () => {
+    vi.useFakeTimers();
+    const { calls } = stubFetch({
+      teachingCourses: () => studentCoursesResponse([courseA], [groupThree]),
+      chatroomHistory: () => groupTranscriptResponse([]),
+      chatroom: () =>
+        Response.json({
+          status: "cue-user",
+          turns: [],
+          transcript: { status: "persisted", appendedMessageCount: 1, messageCount: 1 },
+          progress: [],
+          orchestration: {},
+        }),
+    });
+
+    const { container } = renderChatroom();
+    await settle();
+    await settle();
+    await sendMessage(container, "我把访谈提纲发群里了。");
+
+    const contributions = contributionCalls(calls);
+    expect(contributions).toHaveLength(1);
+    expect(contributions[0].body).toMatchObject({
+      actorId: studentUser.account,
+      event: { context: { courseId: "course-a", cohortId: "group-three" } },
+    });
+  });
+
+  it("withholds the contribution while the room has not confirmed the message", async () => {
+    vi.useFakeTimers();
+    const { calls } = stubFetch({
+      teachingCourses: () => studentCoursesResponse([courseA], [groupThree]),
+      chatroomHistory: () => groupTranscriptResponse([]),
+      chatroom: () =>
+        Response.json({
+          status: "cue-user",
+          turns: [],
+          transcript: { status: "unavailable" },
+          progress: [],
+          orchestration: {},
+        }),
+    });
+
+    const { container } = renderChatroom();
+    await settle();
+    await settle();
+    await sendMessage(container, "这条没进聊天室。");
+
+    // The round happened and the bubble is on screen, marked undelivered - and
+    // the learning record says nothing at all.
+    expect(undeliveredControl()).toBeTruthy();
+    expect(contributionCalls(calls)).toHaveLength(0);
+  });
+
+  it("records the withheld contribution once a later read replays the message", async () => {
+    vi.useFakeTimers();
+    const sentId: { current: string | undefined } = { current: undefined };
+    const { calls } = stubFetch({
+      teachingCourses: () => studentCoursesResponse([courseA], [groupThree]),
+      chatroomHistory: () =>
+        sentId.current
+          ? groupTranscriptResponse([
+              {
+                id: sentId.current,
+                role: "student",
+                content: "这条其实写进去了。",
+                authorName: "陈可",
+                isSelf: true,
+              },
+            ])
+          : groupTranscriptResponse([]),
+      chatroom: () =>
+        Response.json({
+          status: "cue-user",
+          turns: [],
+          transcript: { status: "unavailable" },
+          progress: [],
+          orchestration: {},
+        }),
+    });
+
+    const { container } = renderChatroom();
+    await settle();
+    await settle();
+    await sendMessage(container, "这条其实写进去了。");
+    expect(contributionCalls(calls)).toHaveLength(0);
+
+    // The append the route abandoned did land, and the replay is what proves it:
+    // the participation the send held back is honest to credit now.
+    sentId.current = postedMessageIds(roundCalls(calls)[0]).slice(-1)[0];
+    await advancePoll();
+    expect(contributionCalls(calls)).toHaveLength(1);
+
+    // And exactly once: a further replay of the same row credits nothing more.
+    await advancePoll();
+    expect(contributionCalls(calls)).toHaveLength(1);
+  });
+
+  it("credits one message once when a poll release and a tap-to-retry both confirm it", async () => {
+    // The park/release map was idempotent per PARKED ENTRY, not per message id.
+    // A poll replay released the record and emptied the map; a retry already in
+    // flight then resolved with a confirmed receipt, found the map empty, parked
+    // the same message again and emitted it again - two
+    // `collaboration.contributed` rows, each with its own unique idempotency key
+    // so the server could not collapse them either. One sentence, two credits in
+    // the learner's record.
+    vi.useFakeTimers();
+    const sentId: { current: string | undefined } = { current: undefined };
+    let resolveRetry: (response: Response) => void = () => {};
+    const { calls } = stubFetch({
+      teachingCourses: () => studentCoursesResponse([courseA], [groupThree]),
+      chatroomHistory: () =>
+        sentId.current
+          ? groupTranscriptResponse([
+              {
+                id: sentId.current,
+                role: "student",
+                content: "编码表我来整理。",
+                authorName: "陈可",
+                isSelf: true,
+              },
+            ])
+          : groupTranscriptResponse([]),
+      chatroom: (index) =>
+        index === 0
+          ? Response.json({
+              status: "cue-user",
+              turns: [],
+              transcript: { status: "unavailable" },
+              progress: [],
+              orchestration: {},
+            })
+          : // Held open so the poll below can land FIRST, which is the ordering
+            // that produced the double credit.
+            new Promise<Response>((resolve) => {
+              resolveRetry = resolve;
+            }),
+    });
+
+    const { container } = renderChatroom();
+    await settle();
+    await settle();
+    await sendMessage(container, "编码表我来整理。");
+    expect(contributionCalls(calls)).toHaveLength(0);
+
+    sentId.current = postedMessageIds(roundCalls(calls)[0]).slice(-1)[0];
+    fireEvent.click(undeliveredControl() as HTMLButtonElement);
+    await settle();
+
+    // The append the route abandoned did land, and the replay proves it: the
+    // parked record is released here.
+    await advancePoll();
+    expect(contributionCalls(calls)).toHaveLength(1);
+
+    // Now the retry resolves, confirmed. It is a delivery receipt for a message
+    // that has already been credited, so it must credit nothing.
+    resolveRetry(
+      Response.json({
+        status: "cue-user",
+        turns: [],
+        transcript: { status: "persisted", appendedMessageCount: 1, messageCount: 1 },
+        progress: [],
+        orchestration: {},
+      }),
+    );
+    await settle();
+    await settle();
+
+    expect(contributionCalls(calls)).toHaveLength(1);
+    expect(undeliveredControl()).toBeNull();
+  });
+
+  it("re-posts the same message id on tap-to-retry and clears the mark when it lands", async () => {
+    vi.useFakeTimers();
+    const { calls } = stubFetch({
+      teachingCourses: () => studentCoursesResponse([courseA], [groupThree]),
+      chatroomHistory: () => groupTranscriptResponse([]),
+      chatroom: (index) =>
+        Response.json({
+          status: "cue-user",
+          turns: [],
+          transcript:
+            index === 0
+              ? { status: "unavailable" }
+              : { status: "persisted", appendedMessageCount: 1, messageCount: 1 },
+          progress: [],
+          orchestration: {},
+        }),
+    });
+
+    const { container } = renderChatroom();
+    await settle();
+    await settle();
+    await sendMessage(container, "我负责整理编码表。");
+
+    const retry = undeliveredControl();
+    expect(retry).toBeTruthy();
+    expect(retry?.disabled).toBe(false);
+
+    fireEvent.click(retry as HTMLButtonElement);
+    await settle();
+    await settle();
+
+    const posts = roundCalls(calls);
+    expect(posts).toHaveLength(2);
+    // The whole point of retrying under the original id: the server append is
+    // idempotent per message id, so a first write that landed late cannot be
+    // doubled by the retry.
+    const first = postedMessageIds(posts[0]);
+    const second = postedMessageIds(posts[1]);
+    expect(second[second.length - 1]).toBe(first[first.length - 1]);
+    expect(second).toHaveLength(1);
+
+    // The confirmed receipt is the only thing that clears the mark.
+    expect(undeliveredControl()).toBeNull();
+    expect(bubbleWith("我负责整理编码表。")).toBeTruthy();
+  });
+
+  it("keeps the message marked when the retry fails to persist as well", async () => {
+    vi.useFakeTimers();
+    stubFetch({
+      teachingCourses: () => studentCoursesResponse([courseA], [groupThree]),
+      chatroomHistory: () => groupTranscriptResponse([]),
+      chatroom: () =>
+        Response.json({
+          status: "cue-user",
+          turns: [],
+          transcript: { status: "unavailable" },
+          progress: [],
+          orchestration: {},
+        }),
+    });
+
+    const { container } = renderChatroom();
+    await settle();
+    await settle();
+    await sendMessage(container, "存储还是没恢复。");
+
+    fireEvent.click(undeliveredControl() as HTMLButtonElement);
+    await settle();
+    await settle();
+
+    // Nothing is cleared optimistically: only a confirmed receipt, or a read
+    // that replays the row, may say a message is in the room.
+    expect(undeliveredControl()).toBeTruthy();
+  });
+
+  it("clears the mark when a later read replays the message the room did keep", async () => {
+    vi.useFakeTimers();
+    const sentId: { current: string | undefined } = { current: undefined };
+    const { calls } = stubFetch({
+      teachingCourses: () => studentCoursesResponse([courseA], [groupThree]),
+      chatroomHistory: () =>
+        sentId.current
+          ? groupTranscriptResponse([
+              {
+                id: sentId.current,
+                role: "student",
+                content: "预算超时那条其实写进去了。",
+                authorName: "陈可",
+                isSelf: true,
+              },
+            ])
+          : groupTranscriptResponse([]),
+      chatroom: () =>
+        Response.json({
+          status: "cue-user",
+          turns: [],
+          transcript: { status: "unavailable" },
+          progress: [],
+          orchestration: {},
+        }),
+    });
+
+    const { container } = renderChatroom();
+    await settle();
+    await settle();
+    await sendMessage(container, "预算超时那条其实写进去了。");
+    expect(undeliveredControl()).toBeTruthy();
+
+    // "unavailable" means "not confirmed inside the budget", not "not written":
+    // the append the route abandoned keeps running and may still land, and the
+    // next read is what proves it.
+    sentId.current = postedMessageIds(roundCalls(calls)[0]).slice(-1)[0];
+    expect(sentId.current).toBeTruthy();
+    await advancePoll();
+
+    expect(undeliveredControl()).toBeNull();
+    expect(bubbleWith("预算超时那条其实写进去了。")).toBeTruthy();
+  });
+
+  it("puts the typed text back in the composer when the send is throttled", async () => {
+    vi.useFakeTimers();
+    stubFetch({
+      teachingCourses: () => studentCoursesResponse([courseA], [groupThree]),
+      chatroomHistory: () => groupTranscriptResponse([]),
+      chatroom: () =>
+        Response.json(
+          { error: "rate limited" },
+          { status: 429, headers: { "retry-after": "30" } },
+        ),
+    });
+
+    const { container } = renderChatroom();
+    await settle();
+    await settle();
+    await sendMessage(container, "@方法顾问 变量怎么定？");
+
+    // A throttled message reached no store at all, so its bubble is pulled out
+    // of the thread — and the text goes back where it was typed rather than
+    // being discarded, which used to force the learner to retype it.
+    expect(bubbleWith("@方法顾问 变量怎么定？")).toBeUndefined();
+    expect(composerOf(container).value).toBe("@方法顾问 变量怎么定？");
+    expect(screen.getByText("发送过于频繁，请在 30 秒后重试。")).toBeTruthy();
+    expect(undeliveredControl()).toBeNull();
+  });
+
+  it("keeps a draft the learner started while the throttled round was in flight", async () => {
+    vi.useFakeTimers();
+    let releaseRound: ((response: Response) => void) | undefined;
+    const deferred = new Promise<Response>((resolve) => {
+      releaseRound = resolve;
+    });
+    stubFetch({
+      teachingCourses: () => studentCoursesResponse([courseA], [groupThree]),
+      chatroomHistory: () => groupTranscriptResponse([]),
+      chatroom: () => deferred,
+    });
+
+    const { container } = renderChatroom();
+    await settle();
+    await settle();
+
+    const input = composerOf(container);
+    fireEvent.change(input, { target: { value: "第一条" } });
+    fireEvent.submit(input.closest("form") as HTMLFormElement);
+    await settle();
+    fireEvent.change(composerOf(container), { target: { value: "改主意了" } });
+
+    releaseRound?.(
+      Response.json({ error: "rate limited" }, { status: 429, headers: { "retry-after": "5" } }),
+    );
+    await settle();
+    await settle();
+
+    // The newer text wins: restoring over it would delete what the learner is
+    // in the middle of writing.
+    expect(composerOf(container).value).toBe("改主意了");
+  });
+
+  it("says the history is unavailable without blanking the thread, and takes it back", async () => {
+    vi.useFakeTimers();
+    const stored = [
+      {
+        id: "stored-1",
+        role: "student" as const,
+        content: "存储出问题之前的消息。",
+        authorName: "林若晨",
+        isSelf: false,
+      },
+    ];
+    stubFetch({
+      teachingCourses: () => studentCoursesResponse([courseA], [groupThree]),
+      chatroomHistory: (_url, index) =>
+        index === 1
+          ? // The store could not be read, so the route answers 200 with an
+            // empty transcript. Without the receipt this is indistinguishable
+            // from a healthy, quiet room.
+            Response.json({
+              courseId: courseA.courseId,
+              classId: courseA.classId,
+              groupId: groupThree.groupId,
+              groupName: groupThree.groupName,
+              members: groupThree.members,
+              messages: [],
+              transcript: { status: "unavailable", messageCount: 0 },
+            })
+          : groupTranscriptResponse(stored),
+    });
+
+    renderChatroom();
+    await settle();
+    await settle();
+    expect(screen.getByText("存储出问题之前的消息。")).toBeTruthy();
+    expect(historyNotice()).toBeNull();
+
+    await advancePoll();
+
+    expect(historyNotice()?.textContent).toBe(historyUnavailableCopy);
+    // The thread is never blanked for a read that failed: the learner keeps
+    // every message the room already showed them.
+    expect(screen.getByText("存储出问题之前的消息。")).toBeTruthy();
+    expect(screen.queryByText(emptyChatCopy)).toBeNull();
+
+    await advancePoll();
+
+    // A read that reaches the store again withdraws the notice.
+    expect(historyNotice()).toBeNull();
+    expect(screen.getByText("存储出问题之前的消息。")).toBeTruthy();
+  });
+
+  it("announces an unavailable history in English too", async () => {
+    mockPreferences.locale = "en-US";
+    vi.useFakeTimers();
+    stubFetch({
+      teachingCourses: () => studentCoursesResponse([courseA], [groupThree]),
+      chatroomHistory: () =>
+        Response.json({
+          courseId: courseA.courseId,
+          groupId: groupThree.groupId,
+          groupName: groupThree.groupName,
+          members: groupThree.members,
+          messages: [],
+          transcript: { status: "unavailable", messageCount: 0 },
+        }),
+    });
+
+    renderChatroom();
+    await settle();
+    await settle();
+
+    expect(historyNotice()?.textContent).toBe(
+      "History temporarily unavailable — only this session's messages are shown.",
+    );
+  });
+
+  it("treats a response with no receipt as delivered", async () => {
+    vi.useFakeTimers();
+    stubFetch({
+      teachingCourses: () => studentCoursesResponse([courseA], [groupThree]),
+      chatroomHistory: () => groupTranscriptResponse([]),
+      // A deployment that predates the receipt must not paint every message it
+      // successfully stored as failed.
+      chatroom: () =>
+        Response.json({ status: "cue-user", turns: [], progress: [], orchestration: {} }),
+    });
+
+    const { container } = renderChatroom();
+    await settle();
+    await settle();
+    await sendMessage(container, "旧部署也应该正常。");
+
+    expect(bubbleWith("旧部署也应该正常。")).toBeTruthy();
+    expect(undeliveredControl()).toBeNull();
+    expect(historyNotice()).toBeNull();
+  });
+});
+
+// E11 (PKG-6 client): the four things the room was doing dishonestly, and the
+// two capabilities it did not have at all.
+//
+// - "Agents are thinking…" appeared for EVERY in-flight send, including the
+//   plain messages the route now persists and answers without touching a
+//   provider. The indicator was claiming work nobody had asked for.
+// - Tap-to-retry re-posted as an ordinary send, so the mention gate read the
+//   same last student message and ran the round again: a learner who asked once
+//   was answered - and billed - twice.
+// - The rolling window (solo 200 / group 500) was disclosed nowhere: not the
+//   room, not the export, not the share page.
+// - A share link expired and nothing said when.
+// - There was no teacher moderation surface at all.
+
+const thinkingCopy = "智能体思考中…";
+const windowTrimmedCopy = "较早的消息已滚动归档，导出与分享同样不含";
+const frozenNoticeCopy = "本聊天室已被授课教师暂时冻结，暂时无法发送新消息。";
+const hideCopy = "隐藏";
+const hiddenReceiptCopy = "已隐藏，刷新后成员不再看到这条消息。";
+const freezeCopy = "冻结聊天室";
+const unfreezeCopy = "解除冻结";
+const frozenStateCopy = "当前状态：已冻结";
+
+function windowNotice() {
+  return document.querySelector<HTMLElement>(
+    '[data-uais-chatroom-window-notice="true"]',
+  );
+}
+
+function frozenNotice() {
+  return document.querySelector<HTMLElement>(
+    '[data-uais-chatroom-frozen-notice="true"]',
+  );
+}
+
+function hideControlFor(messageId: string) {
+  return document.querySelector<HTMLButtonElement>(
+    `[data-uais-chatroom-hide-message="${messageId}"]`,
+  );
+}
+
+function freezeToggle() {
+  return document.querySelector<HTMLButtonElement>(
+    "[data-uais-chatroom-freeze-toggle]",
+  );
+}
+
+function moderationReceipt() {
+  return document.querySelector<HTMLElement>(
+    '[data-uais-chatroom-moderation-receipt="true"]',
+  );
+}
+
+function shareExpiry() {
+  return document.querySelector<HTMLElement>(
+    '[data-uais-chatroom-share-expiry="true"]',
+  );
+}
+
+// Holds a round open so the in-flight state can be asserted, then releases it.
+function deferredRound() {
+  let release: ((response: Response) => void) | undefined;
+  const promise = new Promise<Response>((resolve) => {
+    release = resolve;
+  });
+  return {
+    promise,
+    finish: () =>
+      release?.(
+        Response.json({ status: "cue-user", turns: [], progress: [], orchestration: {} }),
+      ),
+  };
+}
+
+function typeAndSubmit(container: HTMLElement, text: string) {
+  const input = composerOf(container);
+  fireEvent.change(input, { target: { value: text } });
+  fireEvent.submit(input.closest("form") as HTMLFormElement);
+}
+
+describe("learner chatroom honest round state", () => {
+  afterEach(resetChatroomHarness);
+
+  it("does not claim agents are thinking for a message that addresses none", async () => {
+    vi.useFakeTimers();
+    const round = deferredRound();
+    stubFetch({
+      teachingCourses: () => studentCoursesResponse([courseA], [groupThree]),
+      chatroomHistory: () => groupTranscriptResponse([]),
+      chatroom: () => round.promise,
+    });
+
+    const { container } = renderChatroom();
+    await settle();
+    await settle();
+
+    typeAndSubmit(container, "三点图书馆见。");
+    await settle();
+
+    // The round is genuinely in flight - the POST has not resolved - and the
+    // room says nothing about agents, because none was addressed and none will
+    // run. The composer stays open too: a plain message waits on a store write,
+    // not on a ten-to-fifty-second provider round.
+    expect(screen.queryByText(thinkingCopy)).toBeNull();
+    const sendButton = screen.getByRole("button", { name: /发送/ }) as HTMLButtonElement;
+    expect(sendButton.disabled).toBe(false);
+
+    round.finish();
+    await settle();
+    expect(screen.queryByText(thinkingCopy)).toBeNull();
+  });
+
+  it("shows the thinking indicator only while a mentioned agent is answering", async () => {
+    vi.useFakeTimers();
+    const round = deferredRound();
+    stubFetch({
+      teachingCourses: () => studentCoursesResponse([courseA], [groupThree]),
+      chatroomHistory: () => groupTranscriptResponse([]),
+      chatroom: () => round.promise,
+    });
+
+    const { container } = renderChatroom();
+    await settle();
+    await settle();
+
+    typeAndSubmit(container, "@方法顾问 变量怎么定？");
+    await settle();
+
+    expect(screen.getByText(thinkingCopy)).toBeTruthy();
+    const sendButton = screen.getByRole("button", { name: /发送/ }) as HTMLButtonElement;
+    expect(sendButton.disabled).toBe(true);
+
+    round.finish();
+    await settle();
+    expect(screen.queryByText(thinkingCopy)).toBeNull();
+  });
+
+  it("uses the server's own mention rule, so a pasted address summons nobody", async () => {
+    vi.useFakeTimers();
+    const round = deferredRound();
+    stubFetch({
+      teachingCourses: () => studentCoursesResponse([courseA], [groupThree]),
+      chatroomHistory: () => groupTranscriptResponse([]),
+      chatroom: () => round.promise,
+    });
+
+    const { container } = renderChatroom();
+    await settle();
+    await settle();
+
+    // An email-like string carrying a handle. The route's gate refuses to start
+    // a round for it, so a client that showed "thinking" here would be
+    // promising a reply that is never coming.
+    typeAndSubmit(container, "写信给 peter@MathTA.example 就行。");
+    await settle();
+
+    expect(screen.queryByText(thinkingCopy)).toBeNull();
+
+    round.finish();
+    await settle();
+  });
+});
+
+describe("learner chatroom rolling-window disclosure", () => {
+  afterEach(resetChatroomHarness);
+
+  it("says older messages have rolled out once the room is at its window cap", async () => {
+    vi.useFakeTimers();
+    stubFetch({
+      teachingCourses: () => studentCoursesResponse([courseA], [groupThree]),
+      chatroomHistory: () =>
+        groupTranscriptResponse(
+          [{ id: "stored-1", role: "student", content: "窗口已经满了。" }],
+          {},
+          { windowAtCapacity: true },
+        ),
+    });
+
+    renderChatroom();
+    await settle();
+    await settle();
+
+    const notice = windowNotice();
+    expect(notice).toBeTruthy();
+    // The wording names the export and the share link too, because those carry
+    // the same cut and nothing else in either surface says so.
+    expect(notice?.textContent).toBe(windowTrimmedCopy);
+  });
+
+  it("stays quiet while the room still has room", async () => {
+    vi.useFakeTimers();
+    stubFetch({
+      teachingCourses: () => studentCoursesResponse([courseA], [groupThree]),
+      chatroomHistory: () =>
+        groupTranscriptResponse([
+          { id: "stored-1", role: "student", content: "刚开始聊。" },
+        ]),
+    });
+
+    renderChatroom();
+    await settle();
+    await settle();
+
+    expect(windowNotice()).toBeNull();
+  });
+});
+
+describe("learner chatroom frozen room", () => {
+  afterEach(resetChatroomHarness);
+
+  it("tells a member the room is frozen and closes the composer", async () => {
+    vi.useFakeTimers();
+    stubFetch({
+      teachingCourses: () => studentCoursesResponse([courseA], [groupThree]),
+      chatroomHistory: () =>
+        groupTranscriptResponse(
+          [{ id: "stored-1", role: "student", content: "老师说先停一下。" }],
+          {},
+          { frozen: true },
+        ),
+    });
+
+    const { container } = renderChatroom();
+    await settle();
+    await settle();
+
+    // Read from the room's own state, so the member is told BEFORE they type.
+    expect(frozenNotice()?.textContent).toContain(frozenNoticeCopy);
+    expect(composerOf(container).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: /发送/ }) as HTMLButtonElement).disabled).toBe(
+      true,
+    );
+  });
+
+  it("closes the composer on a refused send and keeps the text out of the room", async () => {
+    vi.useFakeTimers();
+    const { calls } = stubFetch({
+      teachingCourses: () => studentCoursesResponse([courseA], [groupThree]),
+      // The room read as open, so the freeze landed between the poll and the
+      // send: the refusal is the only signal this client gets.
+      chatroomHistory: () => groupTranscriptResponse([]),
+      chatroom: () =>
+        Response.json(
+          {
+            error: "UAIS learning chatroom room is frozen by the course teacher.",
+            reasonCode: "chatroom-room-frozen",
+          },
+          { status: 423 },
+        ),
+    });
+
+    const { container } = renderChatroom();
+    await settle();
+    await settle();
+    await sendMessage(container, "还能发吗？");
+
+    // The route refuses a frozen room BEFORE it has a room to persist into, so
+    // this message reached no store. Leaving its bubble on screen would tell
+    // the sender it was delivered; the text goes back to the composer instead.
+    expect(bubbleWith("还能发吗？")).toBeUndefined();
+    expect(composerOf(container).value).toBe("还能发吗？");
+    expect(frozenNotice()?.textContent).toContain(frozenNoticeCopy);
+    expect(composerOf(container).disabled).toBe(true);
+    expect(roundCalls(calls)).toHaveLength(1);
+  });
+
+  it("keeps the teacher's composer open in a frozen room", async () => {
+    vi.useFakeTimers();
+    window.history.replaceState({}, "", "/learning/chatroom?groupId=group-three");
+    stubFetch({
+      teachingCourses: () => teacherCoursesResponse([courseA]),
+      chatroomHistory: () =>
+        groupTranscriptResponse([], {}, { frozen: true }),
+    });
+
+    const { container } = renderChatroom(teacherUser);
+    await settle();
+    await settle();
+
+    // A frozen room is quieted, not closed: the teacher who froze it still has
+    // to be able to say why.
+    expect(composerOf(container).disabled).toBe(false);
+    expect(frozenNotice()).toBeNull();
+    expect(freezeToggle()?.textContent).toContain(unfreezeCopy);
+    expect(screen.getByText(frozenStateCopy)).toBeTruthy();
+  });
+});
+
+describe("teacher chatroom moderation controls", () => {
+  afterEach(resetChatroomHarness);
+
+  it("renders no moderation controls for a member", async () => {
+    vi.useFakeTimers();
+    stubFetch({
+      teachingCourses: () => studentCoursesResponse([courseA], [groupThree]),
+      chatroomHistory: () =>
+        groupTranscriptResponse([
+          { id: "stored-1", role: "student", content: "这条谁都能看。" },
+        ]),
+    });
+
+    renderChatroom();
+    await settle();
+    await settle();
+
+    expect(hideControlFor("stored-1")).toBeNull();
+    expect(freezeToggle()).toBeNull();
+  });
+
+  it("hides one message through the moderation route and reports it", async () => {
+    vi.useFakeTimers();
+    window.history.replaceState({}, "", "/learning/chatroom?groupId=group-three");
+    const { calls } = stubFetch({
+      teachingCourses: () => teacherCoursesResponse([courseA]),
+      chatroomHistory: () =>
+        groupTranscriptResponse([
+          {
+            id: "stored-bad",
+            role: "student",
+            content: "这条不该留在群里。",
+            authorName: "林若晨",
+            isSelf: false,
+          },
+        ]),
+    });
+
+    renderChatroom(teacherUser);
+    await settle();
+    await settle();
+    expect(screen.getByText("这条不该留在群里。")).toBeTruthy();
+
+    const hide = hideControlFor("stored-bad");
+    expect(hide).toBeTruthy();
+    expect(hide?.textContent).toContain(hideCopy);
+
+    fireEvent.click(hide as HTMLButtonElement);
+    await settle();
+    await settle();
+
+    const moderations = moderationCalls(calls);
+    expect(moderations).toHaveLength(1);
+    expect(moderations[0].method).toBe("POST");
+    expect(moderations[0].body).toEqual({
+      action: "hide-message",
+      courseId: "course-a",
+      classId: "class-a",
+      groupId: "group-three",
+      messageId: "stored-bad",
+    });
+
+    // The receipt is written only after the route accepts: moderation is the one
+    // chatroom write that is not best-effort, so "hidden" must never be shown
+    // for a message the class can still read.
+    expect(moderationReceipt()?.textContent).toContain(hiddenReceiptCopy);
+    expect(screen.queryByText("这条不该留在群里。")).toBeNull();
+  });
+
+  it("reports a refused hide instead of pretending it landed", async () => {
+    vi.useFakeTimers();
+    window.history.replaceState({}, "", "/learning/chatroom?groupId=group-three");
+    stubFetch({
+      teachingCourses: () => teacherCoursesResponse([courseA]),
+      chatroomHistory: () =>
+        groupTranscriptResponse([
+          { id: "stored-bad", role: "student", content: "存储挂了。", isSelf: false },
+        ]),
+      moderation: () =>
+        Response.json(
+          { error: "storage unavailable", reasonCode: "moderation-storage-unavailable" },
+          { status: 503 },
+        ),
+    });
+
+    renderChatroom(teacherUser);
+    await settle();
+    await settle();
+
+    fireEvent.click(hideControlFor("stored-bad") as HTMLButtonElement);
+    await settle();
+    await settle();
+
+    expect(moderationReceipt()?.textContent).toContain("操作未生效，请稍后重试。");
+    expect(screen.getByText("存储挂了。")).toBeTruthy();
+  });
+
+  it("freezes and unfreezes the room with a state label the teacher can read", async () => {
+    vi.useFakeTimers();
+    window.history.replaceState({}, "", "/learning/chatroom?groupId=group-three");
+    const { calls } = stubFetch({
+      teachingCourses: () => teacherCoursesResponse([courseA]),
+      chatroomHistory: () => groupTranscriptResponse([]),
+    });
+
+    renderChatroom(teacherUser);
+    await settle();
+    await settle();
+
+    const toggle = freezeToggle() as HTMLButtonElement;
+    expect(toggle.textContent).toContain(freezeCopy);
+    expect(toggle.dataset.uaisChatroomFreezeToggle).toBe("open");
+
+    fireEvent.click(toggle);
+    await settle();
+    await settle();
+
+    const moderations = moderationCalls(calls);
+    expect(moderations).toHaveLength(1);
+    expect(moderations[0].body).toEqual({
+      action: "freeze-room",
+      courseId: "course-a",
+      classId: "class-a",
+      groupId: "group-three",
+    });
+    // The button names the ACTION and the line under it names the STATE, so the
+    // control cannot be read as saying the opposite of what it does.
+    expect((freezeToggle() as HTMLButtonElement).textContent).toContain(unfreezeCopy);
+    expect(screen.getByText(frozenStateCopy)).toBeTruthy();
+
+    fireEvent.click(freezeToggle() as HTMLButtonElement);
+    await settle();
+    await settle();
+    expect(moderationCalls(calls)[1].body).toEqual(
+      expect.objectContaining({ action: "unfreeze-room" }),
+    );
+  });
+
+  it("drops a row the room has stopped replaying, for every member", async () => {
+    vi.useFakeTimers();
+    stubFetch({
+      teachingCourses: () => studentCoursesResponse([courseA], [groupThree]),
+      chatroomHistory: (_url, index) =>
+        index === 0
+          ? groupTranscriptResponse([
+              { id: "stored-1", role: "student", content: "第一条。", isSelf: false },
+              { id: "stored-2", role: "student", content: "第二条要被隐藏。", isSelf: false },
+            ])
+          : groupTranscriptResponse([
+              { id: "stored-1", role: "student", content: "第一条。", isSelf: false },
+            ]),
+    });
+
+    renderChatroom();
+    await settle();
+    await settle();
+    expect(screen.getByText("第二条要被隐藏。")).toBeTruthy();
+
+    await advancePoll();
+    await settle();
+
+    // The hidden row was this member's NEWEST message, which the merge used to
+    // preserve as an unsent tail - so a teacher's moderation reached the store,
+    // the export and the share page, and not the screen it was made for.
+    expect(screen.queryByText("第二条要被隐藏。")).toBeNull();
+    expect(screen.getByText("第一条。")).toBeTruthy();
+  });
+});
+
+describe("learner chatroom resend intent", () => {
+  afterEach(resetChatroomHarness);
+
+  it("retries delivery without buying a second agent round", async () => {
+    vi.useFakeTimers();
+    const { calls } = stubFetch({
+      teachingCourses: () => studentCoursesResponse([courseA], [groupThree]),
+      chatroomHistory: () => groupTranscriptResponse([]),
+      chatroom: (index) =>
+        index === 0
+          ? Response.json({
+              status: "cue-user",
+              turns: [
+                {
+                  messageId: "agent-live-1",
+                  agentId: "methods-consultant",
+                  content: "先把变量定义写清楚。",
+                },
+              ],
+              transcript: { status: "unavailable" },
+              progress: [],
+              orchestration: {},
+            })
+          : Response.json({
+              status: "cue-user",
+              turns: [],
+              transcript: { status: "persisted", appendedMessageCount: 1, messageCount: 1 },
+              agentRound: { status: "skipped", reason: "resend-intent" },
+              progress: [],
+              orchestration: {},
+            }),
+    });
+
+    const { container } = renderChatroom();
+    await settle();
+    await settle();
+    await sendMessage(container, "@方法顾问 变量怎么定？");
+
+    const retry = undeliveredControl();
+    expect(retry).toBeTruthy();
+
+    fireEvent.click(retry as HTMLButtonElement);
+    await settle();
+    await settle();
+
+    const posts = roundCalls(calls);
+    expect(posts).toHaveLength(2);
+    // The first send is an ordinary round; the retry is not. Without the marker
+    // the route's gate would read the same "@方法顾问 …" last student message
+    // and run - and bill - the round a second time for a question asked once.
+    expect(posts[0].body?.intent).toBeUndefined();
+    expect(posts[1].body?.intent).toBe("resend");
+    const sentId = postedMessageIds(posts[0]).at(-1);
+    expect(posts[1].body?.messageId).toBe(sentId);
+    // The resent id is one of the student rows the request carries, which is
+    // what the route requires of the marker.
+    expect(postedMessageIds(posts[1])).toContain(sentId);
+
+    // A delivery retry waits on no agent, so the room never claims one is
+    // thinking - and the confirmed receipt clears the mark.
+    expect(screen.queryByText(thinkingCopy)).toBeNull();
+    expect(undeliveredControl()).toBeNull();
+  });
+});
+
+describe("learner chatroom share expiry", () => {
+  afterEach(resetChatroomHarness);
+
+  it("shows when the minted link stops working", async () => {
+    vi.useFakeTimers();
+    stubFetch({
+      teachingCourses: () => studentCoursesResponse([courseA], [groupThree]),
+      chatroomHistory: () => groupTranscriptResponse([]),
+      share: () =>
+        Response.json(
+          {
+            share: {
+              shareId: "share-expiry0000000000000000001",
+              courseId: "course-a",
+              groupId: "group-three",
+              createdAt: "2026-08-08T14:00:00.000Z",
+              expiresAt: "2026-08-22T14:00:00.000Z",
+            },
+            sharePath: "/share/share-expiry0000000000000000001",
+            shareUrl: "https://uais.top/share/share-expiry0000000000000000001",
+          },
+          { status: 201 },
+        ),
+    });
+
+    renderChatroom();
+    await settle();
+    await settle();
+
+    fireEvent.click(screen.getByRole("button", { name: /生成分享链接|分享链接/ }));
+    await settle();
+    await settle();
+
+    const expiry = shareExpiry();
+    expect(expiry).toBeTruthy();
+    // Absolute and in the reading locale: "expires in 14 days" is exactly the
+    // phrasing that leaves the person who pasted the link guessing which day.
+    expect(expiry?.textContent).toContain("链接有效期至");
+    expect(expiry?.textContent).toContain(
+      formatShareExpiry("2026-08-22T14:00:00.000Z", "zh-CN") as string,
+    );
+  });
+
+  it("shows no expiry line before a link is minted", async () => {
+    vi.useFakeTimers();
+    stubFetch({
+      teachingCourses: () => studentCoursesResponse([courseA], [groupThree]),
+      chatroomHistory: () => groupTranscriptResponse([]),
+    });
+
+    renderChatroom();
+    await settle();
+    await settle();
+
+    expect(shareExpiry()).toBeNull();
+  });
+});
+
+// E16/PKG-10: DELETE /api/learning/chatroom/share/[shareId] existed and was
+// tested from the day it was written, and nothing in the product ever called it
+// - a link, once copied, could only be waited out. These pin the control that
+// now does.
+describe("learner chatroom share revoke", () => {
+  afterEach(resetChatroomHarness);
+
+  const mintedShareId = "share-revoke000000000000000000001";
+
+  function mintResponse() {
+    return Response.json(
+      {
+        share: {
+          shareId: mintedShareId,
+          courseId: "course-a",
+          groupId: "group-three",
+          createdAt: "2026-08-08T14:00:00.000Z",
+          expiresAt: "2026-08-22T14:00:00.000Z",
+        },
+        sharePath: `/share/${mintedShareId}`,
+        shareUrl: `https://uais.top/share/${mintedShareId}`,
+      },
+      { status: 201 },
+    );
+  }
+
+  function revokeControl() {
+    return document.querySelector<HTMLButtonElement>(
+      '[data-uais-chatroom-share-revoke="idle"]',
+    );
+  }
+
+  function revokeConfirm() {
+    return document.querySelector<HTMLButtonElement>(
+      "[data-uais-chatroom-share-revoke-confirm]",
+    );
+  }
+
+  function revokeCancel() {
+    return document.querySelector<HTMLButtonElement>(
+      "[data-uais-chatroom-share-revoke-cancel]",
+    );
+  }
+
+  function revokeCalls(calls: FetchCall[]) {
+    return calls.filter(
+      (call) =>
+        call.url.includes("/api/learning/chatroom/share/") && call.method === "DELETE",
+    );
+  }
+
+  async function mintLink(options: StubOptions = {}) {
+    const stub = stubFetch({
+      teachingCourses: () => studentCoursesResponse([courseA], [groupThree]),
+      chatroomHistory: () => groupTranscriptResponse([]),
+      share: mintResponse,
+      ...options,
+    });
+    renderChatroom();
+    await settle();
+    await settle();
+    fireEvent.click(screen.getByRole("button", { name: /生成分享链接|分享链接/ }));
+    await settle();
+    await settle();
+    return stub;
+  }
+
+  it("revokes the minted link through DELETE and reports it", async () => {
+    vi.useFakeTimers();
+    const { calls } = await mintLink();
+
+    expect(shareExpiry()).toBeTruthy();
+    // Armed first: revoking cannot be undone and the people holding the link
+    // are not here to be asked.
+    expect(revokeConfirm()).toBeNull();
+    fireEvent.click(revokeControl() as HTMLButtonElement);
+    expect(screen.getByText("撤销后，已复制这条链接的人将无法再打开。")).toBeTruthy();
+    expect(revokeCalls(calls)).toHaveLength(0);
+
+    fireEvent.click(revokeConfirm() as HTMLButtonElement);
+    await settle();
+
+    expect(revokeCalls(calls)).toHaveLength(1);
+    expect(revokeCalls(calls)[0].url).toContain(
+      `/api/learning/chatroom/share/${mintedShareId}`,
+    );
+    expect(screen.getByText("链接已撤销，之前复制的链接不再可用。")).toBeTruthy();
+    // The withdrawn link stops being shown as a live one.
+    expect(shareExpiry()).toBeNull();
+    expect(revokeControl()).toBeNull();
+  });
+
+  it("keeps the link when the confirm is cancelled", async () => {
+    vi.useFakeTimers();
+    const { calls } = await mintLink();
+
+    fireEvent.click(revokeControl() as HTMLButtonElement);
+    fireEvent.click(revokeCancel() as HTMLButtonElement);
+    await settle();
+
+    expect(revokeCalls(calls)).toHaveLength(0);
+    expect(shareExpiry()).toBeTruthy();
+    expect(revokeControl()).toBeTruthy();
+  });
+
+  it("keeps showing a link the revoke could not withdraw", async () => {
+    vi.useFakeTimers();
+    const { calls } = await mintLink({
+      shareRevoke: () => Response.json({ error: "store unavailable" }, { status: 503 }),
+    });
+
+    fireEvent.click(revokeControl() as HTMLButtonElement);
+    fireEvent.click(revokeConfirm() as HTMLButtonElement);
+    await settle();
+
+    expect(revokeCalls(calls)).toHaveLength(1);
+    expect(screen.getByText("撤销失败，请稍后再试。")).toBeTruthy();
+    // The link is still live, so it is still shown as live: clearing it would
+    // present a withdrawn link that still works.
+    expect(shareExpiry()).toBeTruthy();
+  });
+
+  // The route answers 404 for an unknown id AND for a link already revoked or
+  // expired, deliberately, so nobody can probe which links exist. In every one
+  // of those the link is dead, which is what the caller asked for.
+  it("treats a 404 as revoked rather than as a failure", async () => {
+    vi.useFakeTimers();
+    await mintLink({
+      shareRevoke: () => Response.json({ error: "share not found" }, { status: 404 }),
+    });
+
+    fireEvent.click(revokeControl() as HTMLButtonElement);
+    fireEvent.click(revokeConfirm() as HTMLButtonElement);
+    await settle();
+
+    expect(screen.getByText("链接已撤销，之前复制的链接不再可用。")).toBeTruthy();
+    expect(shareExpiry()).toBeNull();
+  });
+
+  it("offers no revoke control before a link is minted", async () => {
+    vi.useFakeTimers();
+    stubFetch({
+      teachingCourses: () => studentCoursesResponse([courseA], [groupThree]),
+      chatroomHistory: () => groupTranscriptResponse([]),
+    });
+
+    renderChatroom();
+    await settle();
+    await settle();
+
+    expect(revokeControl()).toBeNull();
+  });
+});
+
+// E12/PKG-7: the room on a 375px screen, and the auto-scroll guard behind its
+// "jump to latest" affordance.
+describe("learner chatroom narrow-viewport layout", () => {
+  afterEach(resetChatroomHarness);
+
+  it("puts the thread and its composer ahead of the roster below xl", async () => {
+    vi.useFakeTimers();
+    stubFetch({
+      teachingCourses: () => studentCoursesResponse([courseA], [groupThree]),
+      chatroomHistory: () => groupTranscriptResponse([]),
+    });
+
+    renderChatroom();
+    await settle();
+    await settle();
+
+    const zones = Array.from(
+      document.querySelectorAll<HTMLElement>("[data-uais-chatroom-zone]"),
+    ).map((zone) => zone.dataset.uaisChatroomZone);
+    // DOM order is what a 375px single column renders top to bottom; the desktop
+    // columns are restored with `xl:order-*`, which is why the roster may sit
+    // last here and still be the left column at `xl`.
+    expect(zones).toEqual(["room-header", "thread", "agent-dock", "roster"]);
+
+    const thread = document.querySelector<HTMLElement>(
+      '[data-uais-chatroom-zone="thread"]',
+    );
+    expect(thread?.className).toContain("order-1");
+    expect(thread?.className).toContain("xl:order-2");
+    expect(rosterPanel()?.className).toContain("order-3");
+    expect(rosterPanel()?.className).toContain("xl:order-1");
+    // The composer is inside the thread zone, so "thread first" carries it.
+    expect(thread?.querySelector("form")).toBeTruthy();
+  });
+
+  it("collapses the roster into an expandable section below xl", async () => {
+    vi.useFakeTimers();
+    stubFetch({
+      teachingCourses: () => studentCoursesResponse([courseA], [groupThree]),
+      chatroomHistory: () => groupTranscriptResponse([]),
+    });
+
+    renderChatroom();
+    await settle();
+    await settle();
+
+    const toggle = screen.getByRole("button", { name: "展开成员与智能体" });
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    expect(toggle.className).toContain("xl:hidden");
+
+    const rosterBody = rosterPanel()?.querySelector<HTMLElement>("ul")?.parentElement;
+    expect(rosterBody?.className).toContain("hidden");
+    expect(rosterBody?.className).toContain("xl:block");
+
+    fireEvent.click(toggle);
+
+    expect(
+      screen.getByRole("button", { name: "收起成员与智能体" }).getAttribute("aria-expanded"),
+    ).toBe("true");
+    expect(
+      rosterPanel()?.querySelector<HTMLElement>("ul")?.parentElement?.className,
+    ).not.toContain("hidden");
+  });
+});
+
+// The guard itself is pure on purpose: jsdom reports every scroll metric as 0,
+// so the decision cannot be observed through a rendered thread.
+describe("chatroom thread auto-scroll guard", () => {
+  it("treats only the end of the thread as near the bottom", () => {
+    expect(
+      isThreadNearBottom({ scrollHeight: 2000, scrollTop: 1900, clientHeight: 100 }),
+    ).toBe(true);
+    expect(
+      isThreadNearBottom({ scrollHeight: 2000, scrollTop: 1830, clientHeight: 100 }),
+    ).toBe(true);
+    expect(
+      isThreadNearBottom({ scrollHeight: 2000, scrollTop: 400, clientHeight: 100 }),
+    ).toBe(false);
+  });
+
+  it("keeps pinning the newest turn for a reader who is already at the bottom", () => {
+    expect(
+      resolveThreadAutoScroll({
+        nearBottom: true,
+        latestMessageIsSelf: false,
+        hasNewMessages: true,
+      }),
+    ).toEqual({ scrollToBottom: true, revealJumpToLatest: false });
+  });
+
+  it("leaves a scrolled-up reader in place and offers the jump instead", () => {
+    expect(
+      resolveThreadAutoScroll({
+        nearBottom: false,
+        latestMessageIsSelf: false,
+        hasNewMessages: true,
+      }),
+    ).toEqual({ scrollToBottom: false, revealJumpToLatest: true });
+  });
+
+  it("does not offer the jump when nothing new arrived", () => {
+    // A poll that delivers no message, or an agents-pending flip, must not put a
+    // "jump to latest" chip on screen.
+    expect(
+      resolveThreadAutoScroll({
+        nearBottom: false,
+        latestMessageIsSelf: false,
+        hasNewMessages: false,
+      }),
+    ).toEqual({ scrollToBottom: false, revealJumpToLatest: false });
+  });
+
+  it("always follows the reader's own message", () => {
+    expect(
+      resolveThreadAutoScroll({
+        nearBottom: false,
+        latestMessageIsSelf: true,
+        hasNewMessages: true,
+      }),
+    ).toEqual({ scrollToBottom: true, revealJumpToLatest: false });
+  });
+});
+
+describe("learner chatroom auth dead-ends", () => {
+  afterEach(resetChatroomHarness);
+
+  it("offers a /login handoff beside the composer's sign-in notice", async () => {
+    vi.useFakeTimers();
+    stubFetch({
+      teachingCourses: () => studentCoursesResponse([courseA], [groupThree]),
+      chatroomHistory: () => groupTranscriptResponse([]),
+      // The session this client still believes in has expired server-side.
+      chatroom: () => Response.json({ error: "sign in" }, { status: 401 }),
+    });
+
+    const { container } = renderChatroom();
+    await settle();
+    await settle();
+    await sendMessage(container, "@方法顾问 在吗？");
+
+    expect(screen.getByText(/请先登录，再与智能体对话。/)).toBeTruthy();
+    const signInLink = document.querySelector<HTMLAnchorElement>(
+      '[data-uais-chatroom-sign-in-link="true"]',
+    );
+    expect(signInLink?.getAttribute("href")).toBe("/login?from=%2Flearning%2Fchatroom");
+  });
+
+  it("offers the same handoff beside the export sign-in notice", async () => {
+    vi.useFakeTimers();
+    stubFetch({
+      teachingCourses: () => studentCoursesResponse([courseA], [groupThree]),
+      chatroomHistory: () => groupTranscriptResponse([]),
+    });
+
+    // No session at all: export refuses before it opens the print view.
+    render(
+      <SessionUserProvider initialSessionUser={null}>
+        <LearningChatroomPage />
+      </SessionUserProvider>,
+    );
+    await settle();
+    await settle();
+
+    fireEvent.click(screen.getByRole("button", { name: /导出文档/ }));
+
+    expect(screen.getByText(/请先登录，再导出聊天记录。/)).toBeTruthy();
+    expect(
+      document
+        .querySelector('[data-uais-chatroom-sign-in-link="true"]')
+        ?.getAttribute("href"),
+    ).toBe("/login?from=%2Flearning%2Fchatroom");
   });
 });

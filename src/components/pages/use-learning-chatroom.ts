@@ -4,10 +4,11 @@
 //
 // Everything that is not JSX lives here: room resolution (course -> group),
 // prior-transcript restore, visibility-aware polling with 429 back-off,
-// room-switch tokens, the agent round, mention/handle maps, the message
-// tokenizer the bubbles render as chips, and the collaboration.contributed
-// learning-record emission. `learning-page-chatroom.tsx` consumes this hook and
-// owns presentation only.
+// room-switch tokens, the agent round, delivery receipts, mention/handle maps,
+// the message tokenizer the bubbles render as chips, and the
+// collaboration.contributed learning-record emission.
+// `learning-page-chatroom.tsx` consumes this hook and owns presentation only;
+// `use-learning-chatroom-transport.ts` owns the request/response shapes.
 //
 // Backend contract this builds on (Phase 2, do not change):
 // - GET /api/learning/chatroom?courseId=&classId=&groupId= replays one room. For
@@ -17,6 +18,9 @@
 //   such a room belongs to the caller.
 // - GET is rate limited (30/min per actor). A 429 must never blank the thread.
 // - POST accepts an optional `groupId`; its response shape is unchanged.
+// - Both verbs report a `transcript` receipt. Persistence is best-effort by
+//   design, so `unavailable` arrives inside a 200 and delivery must be read from
+//   the receipt rather than from the status code.
 // - Group discovery rides GET /api/teaching/courses (`learningGroups`).
 
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
@@ -25,16 +29,49 @@ import { useSessionUser } from "@/components/providers/session-user";
 import { localizedText } from "@/components/ui/localized-text";
 import { aiAgents, chatMessages, type ChatMessage } from "@/data/uais";
 import { copy, type Locale } from "@/i18n/copy";
+import { findMentionedAgentIds } from "@/lib/ai/orchestration/director";
 import {
   createLearningChatroomExportUrl,
   requestLearningChatroomShareLink,
+  revokeLearningChatroomShareLink,
 } from "@/lib/chat-actions";
+import type { UaisAgentConfig } from "@/lib/ai/orchestration/types";
 import {
   createUniqueLearningEventKey,
   reportLearningEvent,
+  type ReportLearningEventInput,
 } from "@/lib/learning-records/client-event-reporter";
 import type { UaisAppSessionUser } from "@/lib/auth/uais-app-session";
-import { publishedLearningPptCourseId } from "./learning-page-content";
+import {
+  useLearningChatroomModeration,
+  type LearningChatroomModerationController,
+} from "./use-learning-chatroom-moderation";
+import {
+  createLocalChatMessageId,
+  demoFallbackCourse,
+  fetchChatroomHistory,
+  fetchUsableChatroomCourses,
+  isFrozenChatroomRefusal,
+  isUnconfirmedTranscriptReceipt,
+  readRetryAfterSeconds,
+  resolveAgentErrorCopy,
+  resolveChatroomCourse,
+  toAgentChatMessage,
+  type ActiveChatroomCourse,
+  type ChatroomApiResponse,
+  type ChatroomCourseOption,
+  type ChatroomCourseResolution,
+  type ChatroomGroupOption,
+  type ChatroomRoomMember,
+} from "./use-learning-chatroom-transport";
+
+export type {
+  ActiveChatroomCourse,
+  ChatroomCourseOption,
+  ChatroomCourseResolution,
+  ChatroomGroupOption,
+  ChatroomRoomMember,
+} from "./use-learning-chatroom-transport";
 
 // Legacy cohort id, still the last-resort learning-record cohort for a room with
 // neither a group nor a class. Phase 5 removed its other use: export and share
@@ -45,64 +82,35 @@ const chatroomGroupId = "research-method-group";
 // would be rejected by POST /api/learning/chatroom with 400.
 export const chatroomMessageMaxLength = 4000;
 
-// D6: 5s while the room is visible. The tab-hidden pause and the 429 back-off
-// below are what keep a group of members inside the 30/min GET budget.
-export const chatroomPollIntervalMs = 5000;
+// How quickly a classmate's message appears. 5s was chosen when every message
+// waited out a 10-50s agent round anyway, so the poll was never the bottleneck;
+// with ordinary messages now persisted immediately, it is. 2.5s is what the GET
+// budget affords: 24 reads a minute against a 30/min ceiling, leaving room for
+// a manual refresh without tripping the limiter. Below that the back-off would
+// become the normal case rather than the exception.
+//
+// The tab-hidden pause and the 429 back-off remain what keep a room of members
+// inside that budget.
+export const chatroomPollIntervalMs = 2500;
 
 // The static demo transcript from src/data/uais.ts, keyed by its actual ids.
 // Seeds are demo-only display fixtures: they render in demo-course context but
 // are never part of the live POST /api/learning/chatroom history.
 const seedMessageIds = new Set(chatMessages.map((message) => message.id));
 
-export type ChatroomRoomMember = {
-  displayName: string;
-  isSelf: boolean;
-};
-
-// One usable chatroom course, joined from the student membership/course/class
-// projections or taken from a teacher-owned course record.
-export type ChatroomCourseOption = {
-  courseId: string;
-  classId?: string;
-  courseName: string;
-  className?: string;
-  semester?: string;
-};
-
-// One assigned group the caller may enter, normalized from the student
-// (`{displayName,isSelf}`) or teacher (`{studentId,studentDisplayName}`)
-// projection of GET /api/teaching/courses.
-export type ChatroomGroupOption = {
-  groupId: string;
-  courseId: string;
-  classId?: string;
-  groupName: string;
-  members: ChatroomRoomMember[];
-};
-
-export type ActiveChatroomCourse = {
-  courseId: string;
-  classId?: string;
-  courseName?: string;
-  className?: string;
-  semester?: string;
-  isDemo: boolean;
-  // Why the demo course is standing in for a real one: "no-courses" when the
-  // signed-in fetch returned nothing usable, "load-failed" when the fetch
-  // itself failed. Absent for a genuine demo context (signed out, demo hint).
-  fallbackReason?: "no-courses" | "load-failed";
-};
-
-export type ChatroomCourseResolution =
-  | { status: "pending" }
-  | { status: "select"; options: ChatroomCourseOption[] }
-  | { status: "ready"; course: ActiveChatroomCourse };
-
 export type ChatroomAgentStatus = "idle" | "thinking" | "replied";
 
-const demoFallbackCourse: ActiveChatroomCourse = {
-  courseId: publishedLearningPptCourseId,
-  isDemo: true,
+// What the room shows next to the share button once a link exists: the copied
+// URL and the moment it stops working. `expiresLabel` is formatted once here, in
+// the reading locale and as an absolute date, because "in 14 days" is exactly
+// the phrasing that leaves someone guessing which day that was.
+export type LearningChatroomShareLinkState = {
+  // The record the room may withdraw. Held so the revoke control addresses the
+  // link this session actually minted, rather than needing a list of every share
+  // the room has ever had.
+  shareId: string;
+  url: string;
+  expiresLabel: string | null;
 };
 
 export type LearningChatroomController = {
@@ -140,8 +148,36 @@ export type LearningChatroomController = {
   error: string;
   roomAccessNotice: string | null;
   fallbackNotice: string | null;
+  /** The room's stored transcript could not be read on the last poll. */
+  historyNotice: string | null;
+  /** The room is holding a full rolling window, so older turns are leaving it. */
+  windowNotice: string | null;
+  /** The course teacher has frozen the room; shown to everyone who cannot post. */
+  frozenNotice: string | null;
+  /**
+   * At least one agent was actually addressed by the message in flight, so the
+   * room really is waiting on a provider round. A plain message waits on
+   * nothing: the route persists it and answers, which is why this is no longer
+   * simply "a request is open".
+   */
   agentsPending: boolean;
   composerDisabled: boolean;
+  /** Teacher-only hide/freeze controls for the open room. */
+  moderation: LearningChatroomModerationController;
+  /** The last minted share link, so the room can show its expiry beside it. */
+  shareLink: LearningChatroomShareLinkState | null;
+  /** The revoke control is armed and waiting for its confirm. */
+  shareRevokeConfirming: boolean;
+  /** A revoke request is in flight; the confirm stays disabled until it lands. */
+  shareRevokePending: boolean;
+  armShareRevoke: () => void;
+  cancelShareRevoke: () => void;
+  confirmShareRevoke: () => Promise<void>;
+
+  /** Ids of messages whose append the room never confirmed. */
+  undeliveredMessageIds: string[];
+  /** Re-posts an undelivered message under the id it was minted with. */
+  retryMessage: (messageId: string) => void;
 
   mentionAgent: (handle: string) => void;
   handleSend: (event: FormEvent<HTMLFormElement>) => void;
@@ -191,10 +227,96 @@ export function useLearningChatroom(): LearningChatroomController {
     { groupId: string; groupName?: string; members: ChatroomRoomMember[] } | null
   >(null);
   const [roomAccessNotice, setRoomAccessNotice] = useState<string | null>(null);
+  // Message ids the room's store never confirmed. The bubble stays on screen -
+  // the round it belonged to really did happen - but it is marked undelivered
+  // and offers a retry instead of looking exactly like a stored message. Before
+  // this the receipt was ignored entirely, so a lost append rendered as
+  // delivered and the sender learned about it from a classmate.
+  const [undeliveredMessageIds, setUndeliveredMessageIds] = useState<string[]>([]);
+  // The last read reached the endpoint but not the store, so the thread the
+  // learner is looking at may be missing rows nobody can see yet.
+  const [historyUnavailable, setHistoryUnavailable] = useState(false);
+  // The room's stored transcript is at its rolling-window cap, so its oldest
+  // turns are being dropped on every further message - and the export and share
+  // link inherit the same cut. Nothing used to say so anywhere.
+  const [windowAtCapacity, setWindowAtCapacity] = useState(false);
+  // The course teacher has frozen the room. Set from the room state on every
+  // read and from a refused send, so a member is told before they type as well
+  // as after.
+  const [roomFrozen, setRoomFrozen] = useState(false);
+  const [shareLink, setShareLink] = useState<LearningChatroomShareLinkState | null>(
+    null,
+  );
+  // Revoking is the one chatroom action that cannot be undone from the UI, so it
+  // is armed first and confirmed second - the same two-step the teacher's group
+  // delete uses, rather than a browser dialog the room has nowhere else.
+  const [shareRevokeConfirming, setShareRevokeConfirming] = useState(false);
+  const [shareRevokePending, setShareRevokePending] = useState(false);
+  // The ids the previous server replay carried. A row that the room used to
+  // replay and now does not has been moderated away (or evicted), so it must
+  // leave this thread too - see `mergeRoomTranscript`, whose tail would
+  // otherwise preserve a hidden message on the screen of every member who
+  // happened to have it as their newest row.
+  const previousServerMessageIdsRef = useRef<Set<string>>(new Set());
+  // Contribution records held back because the room never confirmed the message
+  // they belong to, keyed by that message id. Participation is credited for a
+  // message the room HOLDS, not for one the endpoint merely accepted, so an
+  // `unavailable` receipt parks the record here instead of emitting it; the poll
+  // below releases it if the room later replays the row.
+  const pendingContributionEventsRef = useRef<Map<string, ReportLearningEventInput>>(
+    new Map(),
+  );
+  // Message ids whose contribution record has already been emitted. Deleting the
+  // parked entry was not enough on its own: a record released by a poll replay
+  // left an empty map, and a tap-to-retry on the same bubble then re-parked and
+  // re-emitted it - two `collaboration.contributed` rows, each with its own
+  // unique idempotency key, for one message. The learner's record counted a
+  // single sentence twice. Release is now idempotent per message id, so the
+  // parked entry is at most one emission whichever path confirms it first.
+  const releasedContributionMessageIdsRef = useRef<Set<string>>(new Set());
   // Room key whose polling loop is stopped because the server denied the read;
   // re-polling a denial would only burn the shared GET budget.
   const [haltedRoomKey, setHaltedRoomKey] = useState<string | null>(null);
   const [documentVisible, setDocumentVisible] = useState(true);
+
+  // A message is undelivered only while the room cannot show it. It clears on a
+  // confirmed receipt, on a GET that replays it (an append the route abandoned
+  // as "not confirmed within budget" may still have landed), and on a 429, which
+  // takes the bubble out of the thread altogether.
+  const markMessageDelivery = useCallback(
+    (messageId: string, undelivered: boolean) => {
+      setUndeliveredMessageIds((current) => {
+        if (current.includes(messageId) === undelivered) {
+          return current;
+        }
+        return undelivered
+          ? [...current, messageId]
+          : current.filter((id) => id !== messageId);
+      });
+    },
+    [],
+  );
+
+  // Releases the contribution record parked for a message the room has now
+  // confirmed. Idempotent per MESSAGE ID, not merely per parked entry: emptying
+  // the map stopped a second release of the same entry, but nothing stopped the
+  // same message being parked a second time by a later confirmed round (a
+  // tap-to-retry resend on a bubble the poll had already released), which then
+  // emitted a second record for one sentence. The released-id set is consulted
+  // here and again before parking, so a message is credited exactly once for as
+  // long as the room stays mounted.
+  const emitConfirmedContribution = useCallback((messageId: string) => {
+    const contribution = pendingContributionEventsRef.current.get(messageId);
+    if (!contribution) {
+      return;
+    }
+    pendingContributionEventsRef.current.delete(messageId);
+    if (releasedContributionMessageIdsRef.current.has(messageId)) {
+      return;
+    }
+    releasedContributionMessageIdsRef.current.add(messageId);
+    void reportLearningEvent(contribution);
+  }, []);
 
   // A signed-out chatroom stays fully offline (sends fail fast below), so the
   // course fetch is skipped and resolution settles on the demo course.
@@ -330,11 +452,17 @@ export function useLearningChatroom(): LearningChatroomController {
   // halted and `roomAccessNotice` is on screen, so gate the composer on it too
   // rather than let an optimistic message pile up in a room that only answers
   // 403. It clears on the next successful read or a room change.
+  // A frozen room refuses student writes and keeps taking the teacher's, so the
+  // composer closes for exactly the accounts the route would refuse - the same
+  // rule, spelled the same way, rather than a client guess about who is allowed
+  // to speak into a quieted room.
+  const frozenForViewer = roomFrozen && sessionUser?.role !== "teacher";
   const composerDisabled =
     resolution.status !== "ready" ||
     demoPreviewOnly ||
     needsGroupChoice ||
-    roomAccessNotice !== null;
+    roomAccessNotice !== null ||
+    frozenForViewer;
   const fallbackNotice =
     fallbackReason === "load-failed"
       ? t.learning.chatroomCourseLoadFailed
@@ -389,6 +517,17 @@ export function useLearningChatroom(): LearningChatroomController {
     setServerRoom(null);
     setRoomAccessNotice(null);
     setHaltedRoomKey(null);
+    // Both delivery signals belong to the room that produced them: the messages
+    // they describe are gone from the thread, so carrying them across would mark
+    // another room's transcript.
+    setUndeliveredMessageIds([]);
+    setHistoryUnavailable(false);
+    // Every one of these describes the room that produced it, not the room the
+    // learner just walked into.
+    setWindowAtCapacity(false);
+    setRoomFrozen(false);
+    setShareLink(null);
+    previousServerMessageIdsRef.current = new Set();
   }, [roomKey]);
 
   // Polling is paused whenever the tab is hidden and resumes with an immediate
@@ -473,6 +612,17 @@ export function useLearningChatroom(): LearningChatroomController {
       }
 
       setRoomAccessNotice(null);
+      // An unreadable store answers 200 with an empty `messages` array, which is
+      // indistinguishable from a genuinely empty room. Without this the learner
+      // sees a healthy, quiet classroom instead of a transcript that is simply
+      // not being read; `mergeRoomTranscript` keeps whatever is already on
+      // screen, so saying so costs the thread nothing.
+      setHistoryUnavailable(result.transcriptUnavailable);
+      // Both are room facts rather than request outcomes, so they follow the
+      // room on every read: a teacher who thaws the room, or a window that
+      // fills while the tab is open, reaches the member without a reload.
+      setRoomFrozen(result.roomFrozen);
+      setWindowAtCapacity(result.transcriptWindowAtCapacity);
       if (result.groupId) {
         setServerRoom({
           groupId: result.groupId,
@@ -480,7 +630,35 @@ export function useLearningChatroom(): LearningChatroomController {
           members: result.members ?? [],
         });
       }
-      setMessages((current) => mergeRoomTranscript(current, result.messages));
+      const previousServerMessageIds = previousServerMessageIdsRef.current;
+      previousServerMessageIdsRef.current = new Set(
+        result.messages.map((message) => message.id),
+      );
+      setMessages((current) =>
+        mergeRoomTranscript(current, result.messages, previousServerMessageIds),
+      );
+      // A message the room can now replay is delivered, whatever its POST
+      // receipt said: `unavailable` means "not confirmed inside the budget", and
+      // the append the route abandoned may still have landed.
+      if (result.messages.length > 0) {
+        const storedIds = new Set(result.messages.map((message) => message.id));
+        // Same reasoning for the learning record the send parked: a row the room
+        // can replay really is stored, so the contribution is honest to credit
+        // now. Walked from the pending side because that map is empty in the
+        // ordinary case, while the replay carries the whole window.
+        for (const messageId of [...pendingContributionEventsRef.current.keys()]) {
+          if (storedIds.has(messageId)) {
+            emitConfirmedContribution(messageId);
+          }
+        }
+        setUndeliveredMessageIds((current) => {
+          if (current.length === 0) {
+            return current;
+          }
+          const next = current.filter((id) => !storedIds.has(id));
+          return next.length === current.length ? current : next;
+        });
+      }
     };
 
     void readRoom();
@@ -504,6 +682,7 @@ export function useLearningChatroom(): LearningChatroomController {
     haltedRoomKey,
     locale,
     currentRoomToken,
+    emitConfirmedContribution,
     t.learning.groupMemberUnknown,
     t.learning.groupNoGroup,
     t.learning.agentAccessDenied,
@@ -603,6 +782,14 @@ export function useLearningChatroom(): LearningChatroomController {
     course: ActiveChatroomCourse,
     groupId: string | undefined,
     history: ChatMessage[],
+    // The learner's own message this round is carrying. Its id is what the
+    // delivery receipt is applied to and what a retry re-posts; its text is what
+    // goes back into the composer if the send is throttled away.
+    sent: { messageId: string; text: string },
+    // A resend is a DELIVERY retry, not a conversation: the route persists the
+    // named row and skips the round entirely, so no agent answers twice and no
+    // second completion is billed for a message that was already asked once.
+    options: { resend?: boolean } = {},
   ) {
     // A round belongs to the room it was started in. The learner stays free to
     // leave a slow room (the chip/picker are never disabled while pending), so
@@ -612,7 +799,20 @@ export function useLearningChatroom(): LearningChatroomController {
     const roundRoomToken = currentRoomToken();
     const isCurrentRound = () => currentRoomToken() === roundRoomToken;
 
-    setAgentsPending(true);
+    // Does this send actually wait on an agent?
+    //
+    // It used to be assumed to, so "agents are thinking…" appeared for every
+    // message - including "好的，3点图书馆见", which the route now persists and
+    // answers immediately without touching a provider. The indicator was
+    // therefore claiming work nobody had asked for and nobody was doing. It is
+    // decided from the director's matcher on the same roster the route gates on,
+    // so the room and the server cannot disagree about who was addressed.
+    const mentionedAgentIds = options.resend ? [] : readMentionedAgentIds(sent.text);
+    const agentRoundExpected = mentionedAgentIds.length > 0;
+    setPendingAgentIds(mentionedAgentIds);
+    if (agentRoundExpected) {
+      setAgentsPending(true);
+    }
 
     try {
       const response = await fetch("/api/learning/chatroom", {
@@ -629,6 +829,15 @@ export function useLearningChatroom(): LearningChatroomController {
           // Present only for a group room; the server derives the effective
           // classId from the group record either way.
           ...(groupId ? { groupId } : {}),
+          // The persist-only marker. Without it a retry is an ordinary send:
+          // the same history is posted, the route's mention gate reads the same
+          // last student message, and a message that had addressed an agent
+          // buys a second round - the learner asked once and is answered (and
+          // billed) twice. The marker names the row being resent, which the
+          // route requires to be one of the student rows this request carries.
+          ...(options.resend
+            ? { intent: "resend" as const, messageId: sent.messageId }
+            : {}),
           // Seed fixtures are display-only and stay out of the live history in
           // every course context (the state never holds them; this is a guard).
           messages: history
@@ -642,19 +851,74 @@ export function useLearningChatroom(): LearningChatroomController {
       }
 
       if (!response.ok) {
-        setError(resolveAgentErrorCopy(response.status, t));
+        setError(
+          resolveAgentErrorCopy(response.status, t, readRetryAfterSeconds(response).retryAfterSeconds),
+        );
+        // A frozen room refuses the write BEFORE the route has a room to
+        // persist into, so - exactly like a throttle - the message reached no
+        // store. It also tells the composer to close: this is the one refusal a
+        // retry cannot get past, and it lasts as long as the teacher intends.
+        const frozenRefusal = await isFrozenChatroomRefusal(response);
+        // Reading the reason code is another await, so the room is re-checked:
+        // a refusal belongs to the room that produced it, and freezing the room
+        // the learner has since walked into would close a composer nobody
+        // refused.
+        if (!isCurrentRound()) {
+          return;
+        }
+        if (frozenRefusal) {
+          setRoomFrozen(true);
+        }
+        // A throttled message was never stored, so leaving its optimistic bubble
+        // on screen tells the sender it was delivered when their classmates
+        // will never see it. Every other failure leaves the bubble alone: the
+        // route persists the learner's own row best-effort before answering
+        // 4xx/5xx, so it really is in the room.
+        if (response.status === 429 || frozenRefusal) {
+          setMessages((current) =>
+            current.filter((message) => message.id !== sent.messageId),
+          );
+          markMessageDelivery(sent.messageId, false);
+          // The text goes back where it was typed. Dropping the bubble without
+          // it left the message existing nowhere at all - not in the room, not
+          // in the composer - so the learner had to retype what the room had
+          // just shown them. A draft started while the round was in flight is
+          // the newer text and wins.
+          setDraft((current) => (current.trim() ? current : sent.text));
+        }
         return;
       }
 
-      // The server accepted the post: record the contribution now, once, keyed
-      // by a unique suffix so every accepted send is its own record. Emitting
-      // here (not optimistically in `handleSend`) means a refused send — 401,
-      // 403, 400, or a network failure — records nothing the server rejected.
-      if (learnerAccount) {
+      const body = (await response.json()) as ChatroomApiResponse;
+      if (!isCurrentRound()) {
+        return;
+      }
+
+      // Persistence is best-effort by contract, so the route answers 200 for a
+      // round it could not store: delivery is read from the receipt, never from
+      // the status code. An `unavailable` receipt means this message is not in
+      // the room and no classmate's poll will ever bring it back.
+      const transcriptUnconfirmed = isUnconfirmedTranscriptReceipt(body.transcript);
+      markMessageDelivery(sent.messageId, transcriptUnconfirmed);
+
+      // The contribution is recorded for a message the ROOM HOLDS. It used to be
+      // emitted on `response.ok` alone, one await earlier than the receipt is
+      // read - so a round the route answered 200 for and could not store still
+      // credited participation, and the learner's record claimed a message no
+      // classmate would ever see. Emitting here (rather than optimistically in
+      // `handleSend`) still keeps a refused send - 401, 403, 400, a network
+      // failure - out of the record entirely.
+      if (learnerAccount && !releasedContributionMessageIdsRef.current.has(sent.messageId)) {
         // The group is the collaboration cohort when there is one; a legacy room
         // falls back to the class, then to the historic chatroom cohort id.
         const cohortId = groupId ?? course.classId ?? chatroomGroupId;
-        void reportLearningEvent({
+        // Keyed by a unique suffix so every confirmed send is its own record.
+        // Re-parking is skipped entirely once this message has been credited:
+        // overwriting the map entry was enough for a resend that arrived while
+        // the record was still parked, but not for one that arrived after a
+        // poll replay had already released it, which used to buy a second
+        // record for the same sentence.
+        pendingContributionEventsRef.current.set(sent.messageId, {
           actorId: learnerAccount,
           event: {
             type: "collaboration.contributed",
@@ -669,7 +933,6 @@ export function useLearningChatroom(): LearningChatroomController {
               locale,
             },
           },
-          // One learning record per accepted message, so the key must be unique.
           idempotencyKey: createUniqueLearningEventKey(
             learnerAccount,
             "collaboration.contributed",
@@ -677,11 +940,12 @@ export function useLearningChatroom(): LearningChatroomController {
             cohortId,
           ),
         });
-      }
-
-      const body = (await response.json()) as ChatroomApiResponse;
-      if (!isCurrentRound()) {
-        return;
+        if (!transcriptUnconfirmed) {
+          emitConfirmedContribution(sent.messageId);
+        }
+        // Otherwise it waits: `unavailable` means "not confirmed inside the
+        // budget", and the append may still have landed - the poll releases the
+        // record if the room replays the row.
       }
 
       const turns = Array.isArray(body.turns) ? body.turns : [];
@@ -712,7 +976,10 @@ export function useLearningChatroom(): LearningChatroomController {
       }
       setError(t.learning.agentUnavailable);
     } finally {
-      if (isCurrentRound()) {
+      // Cleared only by the send that raised it: a plain message never set it,
+      // and clearing a flag this call does not own would take the indicator away
+      // from a round that is still running.
+      if (agentRoundExpected && isCurrentRound()) {
         setAgentsPending(false);
       }
     }
@@ -747,10 +1014,13 @@ export function useLearningChatroom(): LearningChatroomController {
     // Built eagerly (not inside the functional updater) so the live request can
     // send exactly the history the UI just rendered instead of stale state.
     const selfName = sessionUser?.displayName;
+    // Minted here rather than read back off the tail of `nextMessages`, because
+    // the receipt handler and tap-to-retry both address this exact row.
+    const sentMessageId = createLocalChatMessageId();
     const nextMessages: ChatMessage[] = [
       ...messages,
       {
-        id: createLocalChatMessageId(),
+        id: sentMessageId,
         kind: "student",
         author:
           activeGroup && selfName
@@ -773,12 +1043,11 @@ export function useLearningChatroom(): LearningChatroomController {
     setDraft("");
     setError("");
     setNotice("");
-    setPendingAgentIds(readMentionedAgentIds(trimmedDraft));
 
     // The collaboration.contributed learning record is emitted from
-    // `requestAgentTurns` only after the server accepts the post, so a send the
-    // route refuses (401/403/400) never records a contribution the server did
-    // not store.
+    // `requestAgentTurns` only once the room's store CONFIRMS the message, so a
+    // send the route refuses (401/403/400) and a round the route could not
+    // persist both stay out of the learner's record.
 
     if (!sessionUser) {
       // The route would answer 401 anyway, so fail fast and keep the UX crisp.
@@ -787,7 +1056,46 @@ export function useLearningChatroom(): LearningChatroomController {
       return;
     }
 
-    void requestAgentTurns(activeCourse, activeGroup?.groupId, nextMessages);
+    void requestAgentTurns(activeCourse, activeGroup?.groupId, nextMessages, {
+      messageId: sentMessageId,
+      text: trimmedDraft,
+    });
+  }
+
+  // Tap-to-retry on an undelivered bubble. The message keeps the id it was
+  // minted with, so the append the store may or may not have taken is idempotent
+  // per message id and a retry cannot double-post it.
+  //
+  // It is sent as a RESEND, not as an ordinary send. A retry used to re-post the
+  // whole visible transcript with no marker, so the route's mention gate read
+  // the same last student message and ran the round again: a learner tapping
+  // "not delivered" on a message that had addressed an agent bought a second
+  // live completion and got a second answer to a question they asked once. The
+  // resend intent asks for delivery only - the route persists the named row and
+  // skips the round.
+  //
+  // The undelivered mark is NOT cleared optimistically: only a confirmed receipt
+  // (or a GET that replays the row) may say a message is in the room, so a retry
+  // that fails again leaves the bubble exactly as honest as it was.
+  function retryMessage(messageId: string) {
+    if (agentsPending || !activeCourse || composerDisabled) {
+      return;
+    }
+    const message = messages.find((candidate) => candidate.id === messageId);
+    if (!message) {
+      return;
+    }
+
+    const text = localizedText(message.text, locale);
+    setError("");
+    setNotice("");
+    void requestAgentTurns(
+      activeCourse,
+      activeGroup?.groupId,
+      messages,
+      { messageId, text },
+      { resend: true },
+    );
   }
 
   // Export opens the real print view for THIS room (Phase 5). It is a route, not
@@ -846,9 +1154,24 @@ export function useLearningChatroom(): LearningChatroomController {
       { origin: window.location.origin },
     );
     if (result.status === "failed") {
+      setShareLink(null);
       setNotice(t.learning.shareFailed);
       return;
     }
+
+    // Every link ends on its own, so the room says when. Kept beside the copied
+    // URL rather than folded into the one-line notice: the notice is transient
+    // and the expiry is the thing whoever pastes this link needs to remember.
+    setShareLink({
+      shareId: result.shareId,
+      url: result.url,
+      expiresLabel: result.expiresAt
+        ? formatShareExpiry(result.expiresAt, locale)
+        : null,
+    });
+    // A fresh mint replaces whatever the previous link's revoke prompt was
+    // asking about.
+    setShareRevokeConfirming(false);
 
     // An insecure context (or a browser without the Clipboard API) exposes no
     // `navigator.clipboard`: nothing is copied, so report the fallback and let
@@ -868,6 +1191,74 @@ export function useLearningChatroom(): LearningChatroomController {
     }
     setError("");
   }
+
+  function armShareRevoke() {
+    setShareRevokeConfirming(true);
+    setNotice("");
+  }
+
+  function cancelShareRevoke() {
+    setShareRevokeConfirming(false);
+  }
+
+  // Withdraws the link this room is currently showing.
+  //
+  // Scope, on purpose: this is the share THIS session minted and has on screen,
+  // not a management surface for every link the room has ever published. A
+  // cross-session list needs an "index shares by room" read the share store does
+  // not expose, plus its own access rules for a teacher revoking a student's
+  // link - both are separate work, and neither is a reason to leave the one link
+  // the learner is looking at un-revocable.
+  async function confirmShareRevoke() {
+    if (!shareLink || shareRevokePending) {
+      return;
+    }
+
+    setShareRevokePending(true);
+    const result = await revokeLearningChatroomShareLink(shareLink.shareId);
+    setShareRevokePending(false);
+    if (result.status === "failed") {
+      // The link is still live, so the URL and its expiry stay exactly where
+      // they were: clearing them would show a withdrawn link that still works.
+      setNotice(t.learning.shareRevokeFailed);
+      return;
+    }
+
+    setShareRevokeConfirming(false);
+    setShareLink(null);
+    setNotice(t.learning.shareRevoked);
+    setError("");
+  }
+
+  // A hidden row stops being part of the room, so it leaves this thread too.
+  // Every other member loses it on their next read - the store filters hidden
+  // rows out of every replay path - and this is the moderator's own copy.
+  const dropHiddenMessage = useCallback((messageId: string) => {
+    setMessages((current) => current.filter((message) => message.id !== messageId));
+  }, []);
+
+  const moderationRoom = useMemo(
+    () =>
+      activeCourse
+        ? {
+            courseId: activeCourse.courseId,
+            ...(activeCourse.classId ? { classId: activeCourse.classId } : {}),
+            ...(activeGroup ? { groupId: activeGroup.groupId } : {}),
+          }
+        : null,
+    [activeCourse, activeGroup],
+  );
+  const moderation = useLearningChatroomModeration({
+    locale,
+    // The controls appear for a teacher in a real group room and nowhere else:
+    // the moderation route keys a per-student room by the learner's account id,
+    // which this client is deliberately never given.
+    canModerate: isInstructor && !demoPreviewOnly,
+    room: moderationRoom,
+    frozen: roomFrozen,
+    onRoomFrozenChange: setRoomFrozen,
+    onMessageHidden: dropHiddenMessage,
+  });
 
   return {
     locale,
@@ -896,8 +1287,22 @@ export function useLearningChatroom(): LearningChatroomController {
     error,
     roomAccessNotice,
     fallbackNotice,
+    historyNotice: historyUnavailable ? t.learning.chatHistoryUnavailable : null,
+    windowNotice: windowAtCapacity ? t.learning.chatroomWindowTrimmed : null,
+    // The teacher already sees the room's state in the moderation panel, so
+    // this line is for the members it actually stops.
+    frozenNotice: frozenForViewer ? t.learning.chatroomFrozenNotice : null,
     agentsPending,
     composerDisabled,
+    moderation,
+    shareLink,
+    shareRevokeConfirming,
+    shareRevokePending,
+    armShareRevoke,
+    cancelShareRevoke,
+    confirmShareRevoke,
+    undeliveredMessageIds,
+    retryMessage,
     mentionAgent,
     handleSend,
     handleExport,
@@ -917,9 +1322,19 @@ function createCourseKey(course: {
 // message, a turn from a round that has not been persisted yet) is kept at the
 // end. Rows older than that are replaced wholesale, so an eviction from the
 // rolling window cannot resurrect as a trailing message.
+//
+// `previouslyReplayedIds` is what keeps that tail from preserving a message the
+// room has since REMOVED. A teacher-hidden row stops appearing in every replay
+// path, but if it happened to be a member's newest row it sat in the tail and
+// stayed on their screen indefinitely - the moderation decision reached the
+// store, the export and the share page, and not the one place it was made for.
+// A row the previous read carried and this one does not is gone on purpose, so
+// it goes here too; a row the server has never replayed is still in flight and
+// is kept exactly as before.
 export function mergeRoomTranscript(
   current: ChatMessage[],
   incoming: ChatMessage[],
+  previouslyReplayedIds: ReadonlySet<string> = new Set(),
 ): ChatMessage[] {
   if (incoming.length === 0) {
     return current;
@@ -936,7 +1351,10 @@ export function mergeRoomTranscript(
 
   const tail = current
     .slice(lastKnownIndex + 1)
-    .filter((message) => !incomingIds.has(message.id));
+    .filter(
+      (message) =>
+        !incomingIds.has(message.id) && !previouslyReplayedIds.has(message.id),
+    );
   const merged = tail.length > 0 ? [...incoming, ...tail] : incoming;
   // Identity is preserved when nothing moved, so a poll that returns the same
   // room does not re-render the thread every five seconds.
@@ -1038,38 +1456,54 @@ export function tokenizeMentionText(
   return tokens;
 }
 
+// The roster the SERVER gates on, rebuilt from this client's own agent data:
+// the same ids, the same `@handle` plus its English alias. Only the mention
+// fields carry meaning here - the rest satisfy the shared config type - because
+// this roster exists for exactly one question.
+const mentionRoster: UaisAgentConfig[] = aiAgents.map((agent) => ({
+  id: agent.id,
+  handle: agent.handle,
+  aliases: englishAgentHandlesById[agent.id]
+    ? [englishAgentHandlesById[agent.id]]
+    : [],
+  name: agent.id,
+  role: "assistant" as const,
+  providerRole: "text-reasoning" as const,
+  priority: 0,
+  allowedActions: ["respond"],
+}));
+
+/**
+ * Which agents this message actually addresses.
+ *
+ * The director's own matcher, not a second one. The room used to answer this
+ * with a bare handle regex, which is looser than the gate the route applies: it
+ * counted a pasted transcript line and an address like `peter@MathTA.example`
+ * as summons. With the round now gated on the mention, a looser client answer is
+ * not a cosmetic difference - it is the room promising a reply that will never
+ * come, and marking agents "thinking" for a round the server declined to run.
+ */
 function readMentionedAgentIds(text: string): string[] {
-  const ids = new Set<string>();
-  mentionHandlePattern.lastIndex = 0;
-  let match = mentionHandlePattern.exec(text);
-  while (match) {
-    const agentId = agentIdByHandle[match[0]];
-    if (agentId) {
-      ids.add(agentId);
-    }
-    match = mentionHandlePattern.exec(text);
-  }
-  return [...ids];
+  return findMentionedAgentIds(mentionRoster, text);
 }
 
-// POST /api/learning/chatroom response contract.
-type ChatroomTurn = {
-  // The id the room stored this turn under. Reused as the rendered message id so
-  // the next round re-posts it and the server append stays idempotent.
-  messageId?: string;
-  agentId?: string;
-  content?: string;
-};
+// Absolute, in the reading locale, and formatted once. "Expires in 14 days" is
+// the phrasing that leaves whoever pasted the link guessing which day that was.
+export function formatShareExpiry(expiresAt: string, locale: Locale): string | null {
+  const expiresAtMs = Date.parse(expiresAt);
+  if (!Number.isFinite(expiresAtMs)) {
+    return null;
+  }
+  return new Date(expiresAtMs).toLocaleDateString(locale, {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+}
 
-type ChatroomApiResponse = {
-  status?: "cue-user" | "end" | "max-turns";
-  turns?: ChatroomTurn[];
-  // Per-agent mid-round failures; the matching fallback turns already carry
-  // server-localized copy, so the UI renders nothing extra for these.
-  turnErrors?: Array<{ agentId?: string; kind?: "timeout" | "provider" }>;
-  error?: string;
-};
-
+// The one request shape the controller still builds itself: mapping a rendered
+// bubble back to a POST row needs the handle map above, which the transport
+// module deliberately does not import.
 type ChatroomRequestMessage = {
   id: string;
   role: "student" | "agent";
@@ -1096,472 +1530,5 @@ function toChatroomRequestMessage(
     content,
     // Omitted rather than guessed when the handle is off the roster.
     ...(agentId ? { agentId } : {}),
-  };
-}
-
-function toAgentChatMessage(
-  turn: ChatroomTurn,
-  index: number,
-  stamp: number,
-  locale: Locale,
-): ChatMessage {
-  const agent = aiAgents.find((candidate) => candidate.id === turn.agentId);
-  const content = typeof turn.content === "string" ? turn.content : "";
-
-  return {
-    id: turn.messageId ?? `agent-${stamp}-${index}`,
-    kind: "agent",
-    // Off-roster agent ids still render, under a generic AI label.
-    author: agent?.name ?? {
-      "zh-CN": "智能体",
-      "en-US": "AI Agent",
-    },
-    agentHandle: agent?.handle,
-    text: {
-      "zh-CN": content,
-      "en-US": content,
-    },
-    time: locale === "zh-CN" ? "刚刚" : "Now",
-  };
-}
-
-// Ids have to stay unique across sessions, because the server keys transcript
-// appends by message id: a counter that restarted at 1 after a reload would make
-// a fresh message look like one the room had already stored, and it would be
-// silently dropped.
-let localChatMessageSequence = 0;
-
-function createLocalChatMessageId() {
-  localChatMessageSequence += 1;
-  const unique =
-    globalThis.crypto?.randomUUID?.() ??
-    `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-  return `local-${unique}-${localChatMessageSequence}`;
-}
-
-// GET /api/learning/chatroom response contract: the room's stored transcript,
-// plus the group roster for a group room.
-type ChatroomHistoryMessage = {
-  id?: unknown;
-  role?: unknown;
-  content?: unknown;
-  agentId?: unknown;
-  authorName?: unknown;
-  authorRole?: unknown;
-  isSelf?: unknown;
-  createdAt?: unknown;
-};
-
-type ChatroomHistoryResponse = {
-  groupId?: unknown;
-  groupName?: unknown;
-  members?: unknown;
-  messages?: unknown;
-};
-
-type ChatroomHistoryResult =
-  | {
-      status: "loaded";
-      messages: ChatMessage[];
-      groupId?: string;
-      groupName?: string;
-      members?: ChatroomRoomMember[];
-    }
-  // 403 `feature-not-enabled`: this deployment has not turned group rooms on, so
-  // the client drops the group and keeps the legacy per-student room silently.
-  | { status: "groups-disabled" }
-  | { status: "denied"; reasonCode?: string }
-  | { status: "throttled"; retryAfterSeconds?: number }
-  | { status: "failed" };
-
-// Never throws and never reports "no history" for a transport problem: the
-// caller keeps whatever the room already shows, which is what makes a 429 or a
-// blip harmless while polling.
-async function fetchChatroomHistory(input: {
-  courseId: string;
-  classId?: string;
-  groupId?: string;
-  locale: Locale;
-  otherMemberFallbackName: string;
-}): Promise<ChatroomHistoryResult> {
-  const query = new URLSearchParams({ courseId: input.courseId });
-  if (input.classId) {
-    query.set("classId", input.classId);
-  }
-  if (input.groupId) {
-    query.set("groupId", input.groupId);
-  }
-
-  try {
-    const response = await fetch(`/api/learning/chatroom?${query.toString()}`, {
-      headers: { accept: "application/json" },
-    });
-    if (response.status === 429) {
-      return {
-        status: "throttled",
-        ...readRetryAfterSeconds(response),
-      };
-    }
-    if (response.status === 403) {
-      const reasonCode = await readAccessReasonCode(response);
-      if (reasonCode === "feature-not-enabled") {
-        return { status: "groups-disabled" };
-      }
-      return { status: "denied", ...(reasonCode ? { reasonCode } : {}) };
-    }
-    if (!response.ok) {
-      return { status: "failed" };
-    }
-
-    const body = (await response.json()) as ChatroomHistoryResponse;
-    if (!Array.isArray(body?.messages)) {
-      return { status: "failed" };
-    }
-
-    const groupId = readString(body.groupId);
-    const isGroupRoom = Boolean(groupId);
-    return {
-      status: "loaded",
-      messages: body.messages.flatMap((message) => {
-        const restored = toStoredChatMessage(
-          message as ChatroomHistoryMessage,
-          input.locale,
-          { isGroupRoom, otherMemberFallbackName: input.otherMemberFallbackName },
-        );
-        return restored ? [restored] : [];
-      }),
-      ...(groupId ? { groupId } : {}),
-      ...(readString(body.groupName) ? { groupName: readString(body.groupName) } : {}),
-      ...(Array.isArray(body.members)
-        ? { members: readRoomMembers(body.members) }
-        : {}),
-    };
-  } catch {
-    return { status: "failed" };
-  }
-}
-
-function readRetryAfterSeconds(response: Response) {
-  const header = Number.parseInt(response.headers.get("retry-after") ?? "", 10);
-  return Number.isFinite(header) && header > 0 ? { retryAfterSeconds: header } : {};
-}
-
-async function readAccessReasonCode(response: Response): Promise<string | undefined> {
-  try {
-    const body = (await response.json()) as { access?: { reasonCode?: unknown } };
-    return readString(body?.access?.reasonCode);
-  } catch {
-    return undefined;
-  }
-}
-
-function readRoomMembers(value: unknown[]): ChatroomRoomMember[] {
-  return value.flatMap((entry) => {
-    if (typeof entry !== "object" || entry === null) {
-      return [];
-    }
-    const record = entry as Record<string, unknown>;
-    const displayName = readString(record.displayName);
-    if (!displayName) {
-      return [];
-    }
-    return [{ displayName, isSelf: record.isSelf === true }];
-  });
-}
-
-function toStoredChatMessage(
-  message: ChatroomHistoryMessage,
-  locale: Locale,
-  room: { isGroupRoom: boolean; otherMemberFallbackName: string },
-): ChatMessage | undefined {
-  const id = readString(message.id);
-  const content = readString(message.content);
-  if (!id || !content || (message.role !== "student" && message.role !== "agent")) {
-    return undefined;
-  }
-
-  const time = formatStoredChatMessageTime(message.createdAt, locale);
-  if (message.role === "student") {
-    // Group rooms have several writers, so "is this mine?" is decided by the
-    // server-computed `isSelf` and never by the row simply being a student row.
-    // A legacy room is scoped to one account, so every stored student message
-    // there is the current viewer's own.
-    if (!room.isGroupRoom) {
-      return {
-        id,
-        kind: "student",
-        author: { "zh-CN": "我", "en-US": "Me" },
-        text: { "zh-CN": content, "en-US": content },
-        time,
-        self: true,
-      };
-    }
-
-    const isSelf = message.isSelf === true;
-    // Absent on pre-v2 rows, so an older group transcript still renders with a
-    // neutral label instead of being attributed to whoever is reading.
-    const authorName = readString(message.authorName);
-    return {
-      id,
-      kind: "student",
-      author: isSelf
-        ? { "zh-CN": "我", "en-US": "Me" }
-        : {
-            "zh-CN": authorName ?? room.otherMemberFallbackName,
-            "en-US": authorName ?? room.otherMemberFallbackName,
-          },
-      text: { "zh-CN": content, "en-US": content },
-      time,
-      self: isSelf,
-      // Only the server marks a turn as the teacher's; the client never infers
-      // it from the reader's own role.
-      ...(message.authorRole === "teacher" ? { instructor: true } : {}),
-    };
-  }
-
-  const agent = aiAgents.find((candidate) => candidate.id === message.agentId);
-  return {
-    id,
-    kind: "agent",
-    // Off-roster agent ids still render, under a generic AI label.
-    author: agent?.name ?? { "zh-CN": "智能体", "en-US": "AI Agent" },
-    agentHandle: agent?.handle,
-    text: { "zh-CN": content, "en-US": content },
-    time,
-  };
-}
-
-function formatStoredChatMessageTime(createdAt: unknown, locale: Locale) {
-  const storedAt = typeof createdAt === "string" ? Date.parse(createdAt) : Number.NaN;
-  if (Number.isNaN(storedAt)) {
-    return locale === "zh-CN" ? "早前" : "Earlier";
-  }
-  return new Date(storedAt).toLocaleTimeString(locale, {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  });
-}
-
-function resolveAgentErrorCopy(status: number, t: (typeof copy)[Locale]): string {
-  if (status === 400) {
-    return t.learning.agentRequestInvalid;
-  }
-  if (status === 401) {
-    return t.learning.agentSignInRequired;
-  }
-  if (status === 403) {
-    return t.learning.agentAccessDenied;
-  }
-  return t.learning.agentUnavailable;
-}
-
-// GET /api/teaching/courses is parsed tolerantly: unknown fields are ignored.
-// A non-OK/malformed/network answer is reported as a failure rather than as an
-// empty roster, so the UI never claims the learner has no courses.
-type TeachingCoursesResponseBody = {
-  courses?: unknown;
-  classes?: unknown;
-  memberships?: unknown;
-  learningGroups?: unknown;
-};
-
-type ChatroomCourseFetchResult =
-  | { ok: true; options: ChatroomCourseOption[]; groups: ChatroomGroupOption[] }
-  | { ok: false };
-
-async function fetchUsableChatroomCourses(
-  role: string,
-): Promise<ChatroomCourseFetchResult> {
-  try {
-    const response = await fetch("/api/teaching/courses", {
-      headers: { accept: "application/json" },
-    });
-    if (!response.ok) {
-      return { ok: false };
-    }
-    const body = (await response.json()) as TeachingCoursesResponseBody;
-    // A 200 whose body parses but carries the wrong shape is a failed load, not
-    // an empty roster: reporting it as "no courses" would tell an enrolled
-    // learner to go join a course. A well-formed empty array stays genuine.
-    if (role === "student") {
-      if (!Array.isArray(body?.memberships)) {
-        return { ok: false };
-      }
-      return {
-        ok: true,
-        options: readStudentCourseOptions(body),
-        groups: readChatroomGroups(body.learningGroups),
-      };
-    }
-    if (!Array.isArray(body?.courses)) {
-      return { ok: false };
-    }
-    return {
-      ok: true,
-      options: readTeacherCourseOptions(body),
-      groups: readChatroomGroups(body.learningGroups),
-    };
-  } catch {
-    return { ok: false };
-  }
-}
-
-function asRecordArray(value: unknown): Record<string, unknown>[] {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-  return value.filter(
-    (entry): entry is Record<string, unknown> =>
-      typeof entry === "object" && entry !== null,
-  );
-}
-
-function readString(value: unknown): string | undefined {
-  return typeof value === "string" && value ? value : undefined;
-}
-
-// Students receive `{displayName,isSelf}` co-member rows for their own groups;
-// teachers receive the full records (`{studentId,studentDisplayName}`) for the
-// courses they own. Both normalize to the same roster shape, and neither is ever
-// asked for an account id.
-function readChatroomGroups(value: unknown): ChatroomGroupOption[] {
-  return asRecordArray(value).flatMap((group) => {
-    const groupId = readString(group.groupId);
-    const courseId = readString(group.courseId);
-    const groupName = readString(group.groupName);
-    if (!groupId || !courseId || !groupName) {
-      return [];
-    }
-    const members = asRecordArray(group.members).flatMap((member) => {
-      const displayName =
-        readString(member.displayName) ?? readString(member.studentDisplayName);
-      if (!displayName) {
-        return [];
-      }
-      return [{ displayName, isSelf: member.isSelf === true }];
-    });
-    const classId = readString(group.classId);
-    return [
-      {
-        groupId,
-        courseId,
-        ...(classId ? { classId } : {}),
-        groupName,
-        members,
-      },
-    ];
-  });
-}
-
-// Student view: usable courses are approved memberships joined to the
-// student-visible course/class projections for display names.
-function readStudentCourseOptions(
-  body: TeachingCoursesResponseBody,
-): ChatroomCourseOption[] {
-  const courses = asRecordArray(body.courses);
-  const classes = asRecordArray(body.classes);
-  const options: ChatroomCourseOption[] = [];
-  for (const membership of asRecordArray(body.memberships)) {
-    if (membership.membershipStatus !== "approved") {
-      continue;
-    }
-    const courseId = readString(membership.courseId);
-    if (!courseId) {
-      continue;
-    }
-    const classId = readString(membership.classId);
-    const course = courses.find((entry) => entry.courseId === courseId);
-    const classItem = classes.find(
-      (entry) => entry.classId === classId && entry.courseId === courseId,
-    );
-    options.push({
-      courseId,
-      classId,
-      courseName: readString(course?.courseName) ?? courseId,
-      className: readString(classItem?.className),
-      semester: readString(classItem?.semester) ?? readString(course?.semester),
-    });
-  }
-  return dedupeCourseOptions(options);
-}
-
-// Teacher view: usable courses are all owned course records.
-function readTeacherCourseOptions(
-  body: TeachingCoursesResponseBody,
-): ChatroomCourseOption[] {
-  const options = asRecordArray(body.courses).flatMap((course) => {
-    const courseId = readString(course.courseId);
-    const courseName = readString(course.courseName);
-    if (!courseId || !courseName) {
-      return [];
-    }
-    return [{ courseId, courseName, semester: readString(course.semester) }];
-  });
-  return dedupeCourseOptions(options);
-}
-
-function dedupeCourseOptions(
-  options: ChatroomCourseOption[],
-): ChatroomCourseOption[] {
-  const seen = new Set<string>();
-  return options.filter((option) => {
-    const key = `${option.courseId}::${option.classId ?? ""}`;
-    if (seen.has(key)) {
-      return false;
-    }
-    seen.add(key);
-    return true;
-  });
-}
-
-// Resolution priority: URL hint → single usable course → picker for multiple →
-// demo fallback (announced with the reason it stood in). A `?groupId=` deep link
-// is resolved before this runs, because the group record already names its own
-// course.
-function resolveChatroomCourse(
-  result: ChatroomCourseFetchResult,
-  hints: {
-    urlCourseId: string | null;
-    urlClassId: string | null;
-  },
-): ChatroomCourseResolution {
-  if (!result.ok) {
-    return {
-      status: "ready",
-      course: { ...demoFallbackCourse, fallbackReason: "load-failed" },
-    };
-  }
-
-  const options = result.options;
-  const matchHint = (courseId: string | null, classId: string | null) => {
-    if (!courseId) {
-      return undefined;
-    }
-    const sameCourse = options.filter((option) => option.courseId === courseId);
-    if (!classId) {
-      return sameCourse[0];
-    }
-    return (
-      sameCourse.find((option) => option.classId === classId) ??
-      // Teacher options carry no classId, so a class-scoped deep link must
-      // still resolve to the course instead of being discarded.
-      sameCourse.find((option) => !option.classId)
-    );
-  };
-
-  const hinted = matchHint(hints.urlCourseId, hints.urlClassId);
-  if (hinted) {
-    return { status: "ready", course: { ...hinted, isDemo: false } };
-  }
-  if (options.length === 1) {
-    return { status: "ready", course: { ...options[0], isDemo: false } };
-  }
-  if (options.length > 1) {
-    return { status: "select", options };
-  }
-  return {
-    status: "ready",
-    course: { ...demoFallbackCourse, fallbackReason: "no-courses" },
   };
 }

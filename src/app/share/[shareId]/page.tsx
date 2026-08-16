@@ -21,14 +21,30 @@ import { getLocalizedRouteMetadata } from "@/lib/server/localized-route-metadata
 //
 // A revoked or unknown share id is a single, indistinguishable 404.
 
+// A share link is a capability handed to particular people, so the page it opens
+// must never become a search result: an indexed transcript would publish a
+// classroom conversation to anyone who searched a phrase from it, and no
+// revocation can undo a crawl. `robots.ts` disallows `/share/` for well-behaved
+// crawlers; this per-page directive is the half that also reaches the ones that
+// ignore the file but honour the meta tag, and it survives a crawler that
+// reached the URL some other way.
+const shareRobotsMetadata = {
+  index: false,
+  follow: false,
+  nocache: true,
+  googleBot: { index: false, follow: false },
+} satisfies Metadata["robots"];
+
 const metadataByLocale = {
   "zh-CN": {
     title: "小组协作记录 | 优爱思",
     description: "只读分享的人机协作聊天室记录，仅显示成员昵称。",
+    robots: shareRobotsMetadata,
   },
   "en-US": {
     title: "Group Collaboration Record | UAIS",
     description: "A read-only shared human-AI chatroom transcript, display names only.",
+    robots: shareRobotsMetadata,
   },
 } satisfies Record<Locale, Metadata>;
 

@@ -131,9 +131,14 @@ export async function authorizeLearningAiGuideCourseAccess(input: {
     assertTeachingCourseManagementLocalJsonRuntimeAllowed(input.env);
   }
 
+  // Scoped to the requested course. This runs on every 2.5s chatroom poll, and
+  // it used to pull the whole deployment's course management - every course,
+  // class, membership, group and audit event - to answer a question about one
+  // course. Since the per-course re-key it reads one row.
   const { database } = await readTeachingCourseManagementSnapshot({
     dataDir: resolveTeachingCourseManagementDataDir(input.env.UAIS_TEACHING_COURSES_DATA_DIR),
     repository,
+    courseId: input.courseId,
   });
 
   // The group record is looked up once, off the snapshot the course gate already

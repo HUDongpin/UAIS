@@ -67,6 +67,12 @@ export type ChatroomTranscriptDocument = {
   messageCount: number;
   dateRange?: { startLabel: string; endLabel: string };
   transcriptStatus: "loaded" | "unavailable";
+  // The room this document was taken from is holding a full rolling window, so
+  // turns older than the ones below have already left it - and this document
+  // inherits the cut. Both surfaces say so: an export or a share link that
+  // quietly starts mid-conversation is worse than one that admits where it
+  // begins.
+  windowAtCapacity: boolean;
 };
 
 export type LearningChatroomShareViewResult =
@@ -107,7 +113,9 @@ export async function loadLearningChatroomShareDocument(
     // unknown-viewer bucket, which throttles rather than bypasses.
     clientKey?: string;
     // Injected in tests for isolated counts and a fixed clock; production uses
-    // the module singleton and the wall clock.
+    // the module singleton and the wall clock. The same clock decides the
+    // throttle window and whether the link has expired, so a suite that pins one
+    // cannot be surprised by the other.
     rateLimiter?: AiRequestRateLimiter;
     nowMs?: number;
   },
@@ -154,9 +162,10 @@ export async function loadLearningChatroomShareDocument(
     return { status: "unavailable" };
   }
 
-  // Unknown and revoked are deliberately the same answer: whoever holds a link
-  // must not be able to tell a wrong id from a withdrawn one.
-  if (!isLearningChatroomShareActive(share)) {
+  // Unknown, revoked and expired are deliberately the same answer: whoever holds
+  // a link must not be able to tell a wrong id from a withdrawn one, nor a
+  // withdrawn one from a link that simply reached the end of its 14 days.
+  if (!isLearningChatroomShareActive(share, { nowMs: input.nowMs ?? Date.now() })) {
     return { status: "not-found" };
   }
 
@@ -169,7 +178,10 @@ export async function loadLearningChatroomShareDocument(
     return { status: "not-found" };
   }
 
-  const snapshot = await readChatroomCourseDatabase(input);
+  const snapshot = await readChatroomCourseDatabase({
+    ...input,
+    courseId: share.courseId,
+  });
   if (snapshot.status === "unavailable") {
     return { status: "unavailable" };
   }
@@ -218,6 +230,7 @@ export async function loadLearningChatroomShareDocument(
       fallbackStudentName: group ? undefined : creatorDisplayName,
       messages: history.messages,
       transcriptStatus: history.status,
+      windowAtCapacity: history.window.atCapacity,
     }),
   };
 }
@@ -300,7 +313,10 @@ export async function loadLearningChatroomExportDocument(
     studentId: input.appSession.account,
   });
 
-  const snapshot = await readChatroomCourseDatabase(input);
+  const snapshot = await readChatroomCourseDatabase({
+    ...input,
+    courseId: input.courseId,
+  });
 
   return {
     status: "ready",
@@ -314,6 +330,7 @@ export async function loadLearningChatroomExportDocument(
       fallbackStudentName: group ? undefined : input.appSession.displayName,
       messages: history.messages,
       transcriptStatus: history.status,
+      windowAtCapacity: history.window.atCapacity,
     }),
   };
 }
@@ -326,6 +343,7 @@ function createChatroomTranscriptDocument(input: {
   fallbackStudentName?: string;
   messages: LearningChatroomTranscriptMessage[];
   transcriptStatus: "loaded" | "unavailable";
+  windowAtCapacity: boolean;
 }): ChatroomTranscriptDocument {
   const t = copy[input.locale];
   const messages = input.messages.map((message) => ({
@@ -357,11 +375,12 @@ function createChatroomTranscriptDocument(input: {
         }
       : {}),
     transcriptStatus: input.transcriptStatus,
+    windowAtCapacity: input.windowAtCapacity,
   };
 }
 
 async function readChatroomCourseDatabase(
-  input: ChatroomTranscriptViewDeps,
+  input: ChatroomTranscriptViewDeps & { courseId: string },
 ): Promise<
   { status: "loaded"; database: TeachingCourseManagementDatabase } | { status: "unavailable"; database?: undefined }
 > {
@@ -375,11 +394,14 @@ async function readChatroomCourseDatabase(
     if (!repository) {
       assertTeachingCourseManagementLocalJsonRuntimeAllowed(input.env);
     }
+    // A share view is about one room, so it reads one course's row rather than
+    // the whole deployment - see the per-course re-key in the Postgres store.
     const { database } = await readTeachingCourseManagementSnapshot({
       dataDir: resolveTeachingCourseManagementDataDir(
         input.env.UAIS_TEACHING_COURSES_DATA_DIR,
       ),
       ...(repository ? { repository } : {}),
+      courseId: input.courseId,
     });
     return { status: "loaded", database };
   } catch {

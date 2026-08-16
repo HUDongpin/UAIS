@@ -126,7 +126,11 @@ export function createLearningChatroomShareRevokeDeleteHandler(
         ...(shareBackend.repository ? { repository: shareBackend.repository } : {}),
         shareId,
       });
-      if (!isLearningChatroomShareActive(record)) {
+      // Expiry is judged on the handler's own clock, the same one the revocation
+      // below is stamped with: an already-expired link is a 404 here exactly as
+      // it is on the public page, so revoking it reports the same "not found" a
+      // second revoker gets.
+      if (!isLearningChatroomShareActive(record, { nowMs: now() })) {
         return createShareNotFoundResponse(traceId);
       }
 
@@ -183,6 +187,7 @@ export function createLearningChatroomShareRevokeDeleteHandler(
             ...(revocation.record.classId ? { classId: revocation.record.classId } : {}),
             ...(revocation.record.groupId ? { groupId: revocation.record.groupId } : {}),
             createdAt: revocation.record.createdAt,
+            expiresAt: revocation.record.expiresAt,
             revokedAt: revocation.record.revokedAt,
           },
           receipt: revocation.receipt,

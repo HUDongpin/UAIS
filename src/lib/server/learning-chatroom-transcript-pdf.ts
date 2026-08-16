@@ -75,6 +75,10 @@ export type ChatroomTranscriptPdfLabels = {
   messageCountLabel: string;
   agentTag: string;
   unavailableNotice: string;
+  // Printed under the meta lines when the room was already holding a full
+  // rolling window: a saved PDF outlives the room it came from, so it is the
+  // last place that can still say the conversation started earlier than page 1.
+  windowTrimmedNotice: string;
 };
 
 type RenderState = {
@@ -131,13 +135,19 @@ export async function renderChatroomTranscriptPdf(input: {
   return doc.save();
 }
 
-function drawHeader(
-  state: RenderState,
+/**
+ * The header's meta block, as text.
+ *
+ * Split out and exported because a PDF's drawn text is unreadable from the
+ * saved bytes - the CJK glyphs travel as an embedded subset inside a compressed
+ * content stream - so this is the only way a suite can assert that a line the
+ * document is REQUIRED to carry is actually on the page. Exactly the reason
+ * `wrapText` is exported.
+ */
+export function createChatroomTranscriptPdfMetaLines(
   document: ChatroomTranscriptDocument,
   labels: ChatroomTranscriptPdfLabels,
-) {
-  drawParagraph(state, labels.title, { size: titleSize, color: ink, gapAfter: 10 });
-
+): string[] {
   const metaLines: string[] = [];
   if (document.courseName) {
     metaLines.push(`${labels.courseLabel}: ${document.courseName}`);
@@ -154,8 +164,22 @@ function drawHeader(
     );
   }
   metaLines.push(`${labels.messageCountLabel}: ${document.messageCount}`);
+  // The saved file outlives the room, so this is the last surface that can
+  // still say the conversation started before page 1 does.
+  if (document.windowAtCapacity) {
+    metaLines.push(labels.windowTrimmedNotice);
+  }
+  return metaLines;
+}
 
-  for (const line of metaLines) {
+function drawHeader(
+  state: RenderState,
+  document: ChatroomTranscriptDocument,
+  labels: ChatroomTranscriptPdfLabels,
+) {
+  drawParagraph(state, labels.title, { size: titleSize, color: ink, gapAfter: 10 });
+
+  for (const line of createChatroomTranscriptPdfMetaLines(document, labels)) {
     drawParagraph(state, line, { size: metaSize, color: muted, lineHeight: 13 });
   }
 

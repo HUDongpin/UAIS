@@ -1461,6 +1461,54 @@ describe("UAIS learning chatroom group room windows and contention", () => {
     expect(unbounded.writes()).toBe(4);
   });
 
+  it("answers an exhausted append ladder with the shared contention reason code", async () => {
+    // The ladder that runs out of BUDGET inside its own wait - rather than out
+    // of attempts - is the one that answers with the store's own exhaustion
+    // error instead of re-throwing the backend's. That answer used to be a bare
+    // 409 whose only classification was English prose, while every other
+    // optimistic-snapshot surface in the tree already carried a stable code.
+    const store = createConflictingTranscriptRepository(9);
+    const slowRepository: LearningChatroomTranscriptRepository = {
+      ...store.repository,
+      write: async (input) => {
+        // Spends most of the budget inside the attempt, so the wait that follows
+        // is clamped to what is left and the loop breaks on the far side of it.
+        await new Promise((resolve) => {
+          setTimeout(resolve, 10);
+        });
+        await store.repository.write(input);
+      },
+    };
+
+    const error = await appendLearningChatroomTranscriptMessages({
+      repository: slowRepository,
+      courseId: "elementary-math-research",
+      classId: "elementary-math-research-class-1",
+      groupId: "group-three",
+      studentId: groupMemberOne.account,
+      messages: [
+        {
+          messageId: "local-a-1",
+          role: "student" as const,
+          content: "并发提问",
+          authorId: groupMemberOne.account,
+          authorName: groupMemberOne.displayName,
+        },
+      ],
+      now: "2026-08-08T12:00:00.000Z",
+      retryBudgetMs: 30,
+    }).catch((thrown: unknown) => thrown);
+
+    expect(error).toBeInstanceOf(LearningChatroomTranscriptStoreError);
+    const contention = error as LearningChatroomTranscriptStoreError;
+    expect(contention.status).toBe(409);
+    // The prose is unchanged; the code is the half a client can branch on.
+    expect(contention.message).toContain(
+      "Learning chatroom transcript snapshot changed",
+    );
+    expect(contention.reasonCode).toBe("snapshot-contention");
+  });
+
   it("does not re-attribute a message the room has already stored", async () => {
     const fixture = await createChatroomGroupFixture({ groupsMode: "on" });
     const { postChatroom, getHistory } = createGroupChatroom(fixture);

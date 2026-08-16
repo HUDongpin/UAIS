@@ -1,5 +1,6 @@
 import * as Sentry from "@sentry/nextjs";
 import { runAgentLoop } from "@/lib/ai/orchestration/agent-loop";
+import { hasMentionedAgent } from "@/lib/ai/orchestration/director";
 import { assertResponsibleProgressIsDisplaySafe } from "@/lib/ai/progress/responsible-progress";
 import { deepSeekTimeoutErrorMessage } from "@/lib/ai/providers/deepseek-client";
 import {
@@ -22,12 +23,18 @@ import {
 } from "@/lib/server/learning-ai-guide-access";
 import { isLearningChatroomGroupsEnabled } from "@/lib/server/learning-chatroom-groups-flag";
 import {
+  createLearningChatroomAgentSystemPrompt,
+  wrapLearningChatroomUntrustedContent,
+} from "@/lib/server/learning-chatroom-prompt-safety";
+import {
   appendLearningChatroomHistory,
   createLearningChatroomAgentMessageId,
   readLearningChatroomHistory,
+  type LearningChatroomHistoryResult,
   type LearningChatroomTranscriptRoomKey,
   type LearningChatroomTranscriptWriteResult,
 } from "@/lib/server/learning-chatroom-transcript-runtime";
+import { resolveLearningChatroomTranscriptMaxMessages } from "@/lib/server/learning-chatroom-transcript-store";
 import { TeachingCourseManagementStoreError } from "@/lib/server/teaching-course-management-store";
 import { getUaisAppSessionUserFromCookieString } from "@/lib/server/uais-app-session";
 import type { Locale } from "@/i18n/copy";
@@ -90,6 +97,14 @@ type LearningChatroomRequestBody = {
   // round, the budgets and the mention routing are identical - only the room key
   // and who may open it differ.
   groupId?: string;
+  // Persist-only resend. A learner tapping an undelivered bubble is asking for
+  // their line to reach the room, not for the agents to answer it a second time:
+  // without this marker the retry re-posts the same history, the mention gate
+  // reads the same last student message, and the round runs (and bills) again.
+  // The marker names the row being resent so a client cannot use it to persist a
+  // message it never showed anyone.
+  intent?: "resend";
+  messageId?: string;
   messages: LearningChatroomMessage[];
 };
 
@@ -168,6 +183,13 @@ const learningChatroomRequestBudgetMs = 50000;
 const learningChatroomRoundBudgetMs = 45000;
 const learningChatroomRoundBudgetReserveMs = 2000;
 const learningChatroomPersistBudgetMs = 3000;
+// The pre-round room read - the one that carries the freeze state and the
+// server-vouched history - is metered too, and for the same reason the append
+// is: it happens on the critical path of a request that has a hard wall, and the
+// store's own bounds (a 10s abort per external call) can outlast what is left of
+// it. An unconfirmed read degrades rather than fails - see the call site - so a
+// short budget costs the round its prior context, never the round itself.
+const learningChatroomRoomReadBudgetMs = 5000;
 const learningChatroomMinProviderTimeoutMs = 3000;
 const learningChatroomMaxProviderTimeoutMs = 15000;
 const learningChatroomEmptyContentMessage =
@@ -181,6 +203,17 @@ const learningChatroomDefaultRateLimitPerMinute = 6;
 const learningChatroomDefaultRateLimitPerDay = 120;
 const learningChatroomRateLimitMessage =
   "Learning chatroom rate limit exceeded. Please wait before sending another message.";
+// The storage guard for messages that spend nothing. Once agent rounds became
+// mention-gated, ordinary conversation stopped being measured against a budget
+// sized for provider calls - so it needs its own, far looser ceiling that still
+// bounds a client stuck in a send loop. Deliberately fixed constants and not env
+// names: this is not a spend knob, and it must not be the thing an operator
+// widens while chasing a spend problem. 60/minute is roughly one message per
+// second sustained, which no human types and every runaway loop exceeds.
+const learningChatroomPostDefaultRateLimitPerMinute = 60;
+const learningChatroomPostDefaultRateLimitPerDay = 2000;
+const learningChatroomPostRateLimitMessage =
+  "Learning chatroom message rate limit exceeded. Please wait before sending another message.";
 // A history read spends no provider money, so its budget is not about cost: it
 // is the endpoint a room polls on a timer, and every call still costs a course
 // authorization read plus a transcript read. The defaults are deliberately
@@ -393,8 +426,15 @@ export function createLearningChatroomHistoryGetHandler(
           transcript: {
             status: history.status,
             messageCount: history.messages.length,
+            // The room is a rolling window, and until now nothing said so
+            // anywhere: not the room, not the export, not the share page. A
+            // client that knows the window is full can tell its members that
+            // older turns are leaving - and that the export and share links
+            // they hand out are missing them too.
+            window: history.window,
             ...(history.storagePolicy ? { storagePolicy: history.storagePolicy } : {}),
           },
+          moderation: createLearningChatroomModerationProjection(history),
           redaction: createLearningChatroomRedaction(),
         },
         traceId,
@@ -416,6 +456,23 @@ export function createLearningChatroomPostHandler(
   // production instance, and each test handler gets its own isolated counts.
   const rateLimiter = createAiRequestRateLimiter({
     config: readLearningChatroomRateLimitConfig(env),
+  });
+  const postRateLimiter = createAiRequestRateLimiter({
+    config: {
+      mode: "enforce",
+      windows: [
+        {
+          id: "per-minute",
+          limit: learningChatroomPostDefaultRateLimitPerMinute,
+          windowMs: 60000,
+        },
+        {
+          id: "per-day",
+          limit: learningChatroomPostDefaultRateLimitPerDay,
+          windowMs: 86400000,
+        },
+      ],
+    },
   });
 
   return async function POST(request: Request) {
@@ -450,27 +507,85 @@ export function createLearningChatroomPostHandler(
         return createLearningAiGuideAccessDeniedResponse({ access, traceId });
       }
 
-      // Throttle before the course-authorization store read, so a throttled
-      // actor costs neither a provider completion nor a persistence round trip.
-      // The key is the actor alone, deliberately not the actor plus courseId:
-      // this check runs before membership is verified, so a course-scoped key
-      // would hand any client a fresh budget for every courseId it invents.
-      // `courseId` still rides along on the throttle event for diagnosis.
+      // Does this message actually address an agent?
+      //
+      // This is the difference between a chatroom and an AI demo. Before, every
+      // line a student typed dispatched the highest-priority agent - so "好的,
+      // 3点图书馆见" bought a live completion, and the sender waited out the
+      // whole round before their classmates could see it. Forty group rooms
+      // experienced that as a broken chat, at real provider cost, for messages
+      // nobody addressed to an agent.
+      //
+      // Decided from the same matcher the director uses, on the same roster the
+      // round would use, so the gate and the round can never disagree about who
+      // was addressed.
+      const roster = createLearningChatroomRoster(body.locale);
+      const lastStudentMessage = [...body.messages]
+        .reverse()
+        .find((message) => message.role === "student");
+      // A resend is persist-only by construction: the round is skipped before
+      // the mention gate is even consulted, so a retry of a message that DID
+      // address an agent still costs nothing and produces no second answer.
+      const agentRoundRequested =
+        body.intent !== "resend" &&
+        (lastStudentMessage
+          ? hasMentionedAgent(roster, lastStudentMessage.content)
+          : false);
+
+      // Two budgets, because the two costs are different by orders of
+      // magnitude.
+      //
+      // The agent limiter is the spend guard: one allowed round is up to
+      // `learningChatroomMaxAgentTurns` live completions, so it stays at the
+      // operator-tunable 6/minute it always had - and now applies ONLY to the
+      // messages that actually spend. Ordinary conversation is no longer
+      // measured against a budget sized for provider calls, which is what made
+      // the old limit break normal chat cadence.
+      //
+      // The post limiter still bounds a message that spends nothing but does
+      // cost a store write, so removing the agent throttle from plain chat does
+      // not leave the transcript writable without limit. Fixed constants rather
+      // than env names: this is a storage guard, not a spend knob, and it must
+      // never be the thing an operator widens while chasing a spend problem.
+      //
+      // Both run before the authorization store read, so a throttled actor
+      // costs neither a completion nor a round trip. The key is the actor alone,
+      // deliberately not the actor plus courseId: this runs before membership is
+      // verified, so a course-scoped key would hand any client a fresh budget
+      // for every courseId it invents.
       const actor = createLearningChatroomGraphActor(appSession);
-      const rateLimit = rateLimiter.check({ key: actor.actorId, nowMs: now() });
-      if (!rateLimit.allowed) {
+      const postRateLimit = postRateLimiter.check({ key: actor.actorId, nowMs: now() });
+      if (!postRateLimit.allowed) {
         logLearningChatroomThrottle({
           traceId,
           courseId: body.courseId,
           actorId: actor.actorId,
-          windowId: rateLimit.windowId,
-          limit: rateLimit.limit,
-          retryAfterSeconds: rateLimit.retryAfterSeconds,
-          message: learningChatroomRateLimitMessage,
+          windowId: postRateLimit.windowId,
+          limit: postRateLimit.limit,
+          retryAfterSeconds: postRateLimit.retryAfterSeconds,
+          message: learningChatroomPostRateLimitMessage,
         });
-        throw new PublicLearningChatroomError(learningChatroomRateLimitMessage, 429, {
-          retryAfterSeconds: rateLimit.retryAfterSeconds,
+        throw new PublicLearningChatroomError(learningChatroomPostRateLimitMessage, 429, {
+          retryAfterSeconds: postRateLimit.retryAfterSeconds,
         });
+      }
+
+      if (agentRoundRequested) {
+        const rateLimit = rateLimiter.check({ key: actor.actorId, nowMs: now() });
+        if (!rateLimit.allowed) {
+          logLearningChatroomThrottle({
+            traceId,
+            courseId: body.courseId,
+            actorId: actor.actorId,
+            windowId: rateLimit.windowId,
+            limit: rateLimit.limit,
+            retryAfterSeconds: rateLimit.retryAfterSeconds,
+            message: learningChatroomRateLimitMessage,
+          });
+          throw new PublicLearningChatroomError(learningChatroomRateLimitMessage, 429, {
+            retryAfterSeconds: rateLimit.retryAfterSeconds,
+          });
+        }
       }
 
       if (body.groupId && !isLearningChatroomGroupsEnabled(env)) {
@@ -502,6 +617,55 @@ export function createLearningChatroomPostHandler(
         group,
         studentId: appSession.account,
       });
+      const logTranscriptError = createLearningChatroomTranscriptErrorLogger(
+        traceId,
+        body.courseId,
+      );
+      // One read, two jobs. It carries the room's moderation state, which the
+      // freeze gate below needs on EVERY post; and it is the only history the
+      // provider round is allowed to see, because it is the only history this
+      // server wrote (see `createLearningChatroomProviderHistory`).
+      //
+      // Metered against the wall like the append is. A read that cannot confirm
+      // in time degrades to "no stored history": the freeze gate then fails open
+      // and the round runs on the client's own unstored student rows, which is a
+      // round with less context - never a round that leaked forged agent turns,
+      // because the fallback carries no agent rows at all.
+      const roomHistory = await raceLearningChatroomBudget({
+        budgetMs: Math.min(
+          learningChatroomRoomReadBudgetMs,
+          requestDeadlineMs - now(),
+        ),
+        timedOut: createUnavailableLearningChatroomHistory(room.groupId),
+        run: () =>
+          readLearningChatroomHistory({
+            env,
+            fetch: deps.fetch,
+            repository: deps.transcriptRepository,
+            ...room,
+            onError: logTranscriptError,
+          }),
+      });
+
+      // A frozen room refuses student writes and keeps taking the teacher's, so
+      // an instructor can quiet a room and still speak into it. The check sits
+      // before `transcriptRoom` is set, so the error path below cannot persist
+      // the refused message as a consolation.
+      //
+      // Deliberately fail-open when the transcript could not be read at all: a
+      // storage outage must not silently mute a whole class, and a message that
+      // gets through will report its own `unavailable` receipt anyway.
+      if (
+        roomHistory.moderation?.status === "frozen" &&
+        appSession.role !== "teacher"
+      ) {
+        throw new PublicLearningChatroomError(
+          "UAIS learning chatroom room is frozen by the course teacher.",
+          423,
+          { reasonCode: "chatroom-room-frozen" },
+        );
+      }
+
       transcriptRoom = room;
       // Student rows are attributed to the sender at append time. Only rows the
       // room has never stored are actually written, and another member's message
@@ -521,10 +685,56 @@ export function createLearningChatroomPostHandler(
       transcriptRequestMessages = body.messages
         .filter((message) => message.role === "student")
         .map((message) => createLearningChatroomTranscriptMessage(message, author));
-      const logTranscriptError = createLearningChatroomTranscriptErrorLogger(
-        traceId,
-        body.courseId,
-      );
+
+      // FAST PATH: nobody addressed an agent, so there is no round to wait for.
+      //
+      // The message is persisted here and the response returns immediately -
+      // the difference between a classmate seeing "好的，3点图书馆见" in about a
+      // second and seeing it after the ten-to-fifty seconds a provider round
+      // takes. It also spends nothing: no completer pool is built, so a
+      // deployment with no provider key configured can still carry a
+      // human-to-human conversation instead of 503-ing on every line.
+      //
+      // The response keeps the same shape as a round that produced no turns,
+      // which the client already handles as a cue-user round: `turns: []`
+      // renders nothing and clears the thinking indicator.
+      if (!agentRoundRequested) {
+        const transcript = await persistLearningChatroomHistoryWithinBudget({
+          budgetMs: requestDeadlineMs + learningChatroomPersistBudgetMs - now(),
+          append: (retryBudgetMs) =>
+            appendLearningChatroomHistory({
+              env,
+              fetch: deps.fetch,
+              repository: deps.transcriptRepository,
+              ...room,
+              messages: transcriptRequestMessages,
+              now: new Date(now()).toISOString(),
+              retryBudgetMs,
+              onError: logTranscriptError,
+            }),
+        });
+        transcriptWritten = true;
+
+        return learningChatroomJsonResponse(
+          200,
+          {
+            status: "cue-user",
+            turns: [],
+            transcript: createLearningChatroomTranscriptReceipt(transcript),
+            // Named so a reader of the response - or of a support ticket - can
+            // tell "no agent answered because none was addressed" apart from
+            // "no agent answered because the round failed", and both apart from
+            // a resend, which is a delivery retry rather than a conversation.
+            agentRound: {
+              status: "skipped",
+              reason:
+                body.intent === "resend" ? "resend-intent" : "no-agent-mentioned",
+            },
+            redaction: createLearningChatroomRedaction(),
+          },
+          traceId,
+        );
+      }
 
       // One completer per configured provider role. A round needs at least one;
       // it does NOT need a particular one, which is what stops a single provider
@@ -546,9 +756,17 @@ export function createLearningChatroomPostHandler(
           503,
         );
       }
-      const roster = createLearningChatroomRoster(body.locale);
+      // Persona plus the injection preamble. Assembled here, once per round,
+      // rather than baked into the roster above so the personas stay readable as
+      // teaching instructions and the safety rules stay in one auditable place.
       const promptsByAgentId = new Map(
-        learningChatroomAgents.map((agent) => [agent.id as string, agent.systemPrompt[body.locale]]),
+        learningChatroomAgents.map((agent) => [
+          agent.id as string,
+          createLearningChatroomAgentSystemPrompt({
+            personaPrompt: agent.systemPrompt[body.locale],
+            locale: body.locale,
+          }),
+        ]),
       );
       const providerRolesByAgentId = new Map<string, ChatroomAgentProviderRole>(
         learningChatroomAgents.map((agent) => [agent.id as string, agent.providerRole]),
@@ -559,7 +777,11 @@ export function createLearningChatroomPostHandler(
       const modelsByAgentId = new Map<string, string>();
       const providersByAgentId = new Map<string, "deepseek" | "qwen">();
       const rolesByAgentId = new Map<string, ChatroomAgentProviderRole>();
-      const history = body.messages.map(createDeepSeekHistoryMessage);
+      const history = createLearningChatroomProviderHistory({
+        storedMessages: roomHistory.messages,
+        hiddenMessageIds: roomHistory.hiddenMessageIds,
+        requestMessages: body.messages,
+      });
       const turnErrors: LearningChatroomTurnError[] = [];
       const turnFailureMessages: string[] = [];
       // The round budget is whichever ends first: the round's own 45s window, or
@@ -822,31 +1044,65 @@ async function persistLearningChatroomHistoryWithinBudget(input: {
   budgetMs: number;
   append: (retryBudgetMs: number) => Promise<LearningChatroomTranscriptWriteResult>;
 }): Promise<LearningChatroomTranscriptWriteResult> {
+  return raceLearningChatroomBudget({
+    budgetMs: input.budgetMs,
+    timedOut: { status: "unavailable" },
+    run: input.append,
+  });
+}
+
+// The cutoff itself, shared by the append above and the pre-round room read.
+// Both are store calls on a request with a hard wall, both degrade to a reported
+// status rather than an error, and both must abandon rather than outlast the
+// budget - so there is exactly one implementation of "wait this long, then take
+// the fallback".
+async function raceLearningChatroomBudget<T>(input: {
+  budgetMs: number;
+  timedOut: T;
+  run: (budgetMs: number) => Promise<T>;
+}): Promise<T> {
   if (input.budgetMs <= 0) {
-    // No wall left at all, so the store is not even read: starting work that
+    // No wall left at all, so the store is not even called: starting work that
     // cannot finish only spends someone else's budget.
-    return { status: "unavailable" };
+    return input.timedOut;
   }
 
-  let persistTimer: ReturnType<typeof setTimeout> | undefined;
+  let cutoffTimer: ReturnType<typeof setTimeout> | undefined;
   try {
     return await Promise.race([
-      input.append(input.budgetMs),
-      new Promise<LearningChatroomTranscriptWriteResult>((resolveLate) => {
-        persistTimer = setTimeout(
-          () => resolveLate({ status: "unavailable" }),
-          input.budgetMs,
-        );
+      input.run(input.budgetMs),
+      new Promise<T>((resolveLate) => {
+        cutoffTimer = setTimeout(() => resolveLate(input.timedOut), input.budgetMs);
         // Node keeps the process alive for a pending timer; jsdom has no
         // `unref` at all, hence the optional call.
-        (persistTimer as unknown as { unref?: () => void }).unref?.();
+        (cutoffTimer as unknown as { unref?: () => void }).unref?.();
       }),
     ]);
   } finally {
-    // Not hygiene: without this a fast append leaves the cutoff timer pending
-    // for the whole budget, which under jsdom (no `unref`) holds the test run.
-    clearTimeout(persistTimer);
+    // Not hygiene: without this a fast call leaves the cutoff timer pending for
+    // the whole budget, which under jsdom (no `unref`) holds the test run.
+    clearTimeout(cutoffTimer);
   }
+}
+
+function createUnavailableLearningChatroomHistory(
+  groupId: string | undefined,
+): LearningChatroomHistoryResult {
+  return {
+    status: "unavailable",
+    messages: [],
+    hiddenMessageCount: 0,
+    // A read that timed out knows of no moderation decision, so it claims none.
+    // The round it degrades into carries the client's own unstored student rows,
+    // which is a round with less context - never one that smuggles agent turns.
+    hiddenMessageIds: [],
+    // A read that never confirmed knows nothing about the window either, so it
+    // reports the cap it would have been trimmed to and claims no eviction.
+    window: {
+      maxMessages: resolveLearningChatroomTranscriptMaxMessages(groupId),
+      atCapacity: false,
+    },
+  };
 }
 
 // Shared by both handlers: a public error keeps its status and message, anything
@@ -872,6 +1128,7 @@ function createLearningChatroomErrorResponse(input: {
     status,
     {
       error: message,
+      ...(publicError?.reasonCode ? { reasonCode: publicError.reasonCode } : {}),
       traceId: input.traceId,
       redaction: createLearningChatroomRedaction(),
     },
@@ -1085,10 +1342,78 @@ function createOrchestrationMessage(message: LearningChatroomMessage): UaisChatM
   };
 }
 
-function createDeepSeekHistoryMessage(message: LearningChatroomMessage) {
+/**
+ * The provider's view of the conversation, rebuilt from what the SERVER stored.
+ *
+ * The round used to be assembled straight from the request body, which meant a
+ * client could post `{ role: "agent", agentId, content }` rows and have them
+ * mapped into `assistant` turns. Those rows were already refused persistence -
+ * a forged agent reply must never reach a transcript that replays to every
+ * member and to the signed-out `/share` page - but they still reached the
+ * prompt, so a learner could seed "the AI TA already said X" into a round they
+ * were about to be billed for, and every agent in that round would answer as if
+ * it had.
+ *
+ * So agent turns come only from the stored transcript, which contains exactly
+ * the turns this server minted. The one thing the store cannot supply is the
+ * message being sent right now - it is not persisted until after the round - so
+ * unstored STUDENT rows from the request are appended, and unstored agent rows
+ * are dropped on the floor.
+ *
+ * Hidden rows never appear. The store filters them out of `storedMessages`
+ * before this sees them - but that alone was not enough, and was the hole this
+ * paragraph used to paper over. A row the teacher hides is absent from the
+ * stored list, which is indistinguishable from "never stored", so a client still
+ * holding the hidden bubble (its author's own tab, or any member whose poll had
+ * not landed yet) re-posted it and it was appended as an unstored PENDING
+ * student row. The transcript refused it - the append is idempotent by message
+ * id and the hidden row is still there - so the room stayed clean while the
+ * moderated text went into every subsequent billed prompt, which is precisely
+ * the injection attempt a teacher hides a message to stop. So the hidden ids
+ * travel with the read and are subtracted from the pending rows here.
+ *
+ * The combined history is capped at the same `learningChatroomMaxMessages` the
+ * request was capped at. Without that cap a group room - which keeps a 500-turn
+ * window - would suddenly send ten times the tokens the per-request slice was
+ * sized for.
+ */
+function createLearningChatroomProviderHistory(input: {
+  storedMessages: LearningChatroomTranscriptMessage[];
+  hiddenMessageIds: string[];
+  requestMessages: LearningChatroomMessage[];
+}) {
+  // Both halves of what the room has ALREADY taken a decision about: the rows it
+  // replays, and the rows a teacher removed from that replay. A request row
+  // matching either is not a new message and must not be appended as one.
+  const settledIds = new Set([
+    ...input.storedMessages.map((message) => message.messageId),
+    ...input.hiddenMessageIds,
+  ]);
+  const pendingStudentMessages = input.requestMessages.filter(
+    (message) => message.role === "student" && !settledIds.has(message.id),
+  );
+
+  return [
+    ...input.storedMessages.map((message) =>
+      createDeepSeekHistoryMessage(message.role, message.content),
+    ),
+    ...pendingStudentMessages.map((message) =>
+      createDeepSeekHistoryMessage("student", message.content),
+    ),
+  ].slice(-learningChatroomMaxMessages);
+}
+
+// Student text is untrusted input, so it travels inside the delimiters the
+// system prompt tells the model to treat as data. Agent turns are this server's
+// own minted output and stay unwrapped - wrapping them would blur exactly the
+// line the delimiters exist to draw.
+function createDeepSeekHistoryMessage(role: "student" | "agent", content: string) {
+  if (role === "agent") {
+    return { role: "assistant" as const, content };
+  }
   return {
-    role: message.role === "student" ? ("user" as const) : ("assistant" as const),
-    content: message.content,
+    role: "user" as const,
+    content: wrapLearningChatroomUntrustedContent(content),
   };
 }
 
@@ -1301,6 +1626,20 @@ function createLearningChatroomHistoryMessage(
   };
 }
 
+// The room's moderation state, narrowed to the one thing a client may act on.
+// `actorId` and `actedAt` stay server-side: which teacher acted, and when, is
+// staff audit data, and a room that named its moderator to every member would
+// turn a moderation action into a public accusation.
+//
+// Always a definite status, never an absent field: "never moderated" and
+// "explicitly thawed" are the same thing to a composer, and a client should not
+// have to infer `open` from a missing key.
+function createLearningChatroomModerationProjection(
+  history: LearningChatroomHistoryResult,
+) {
+  return { status: history.moderation?.status ?? "open" };
+}
+
 function createLearningChatroomTranscriptReceipt(
   result: LearningChatroomTranscriptWriteResult,
 ) {
@@ -1374,14 +1713,54 @@ function parseLearningChatroomRequest(value: unknown): LearningChatroomRequestBo
 
   const classId = readLearningChatroomClassId(value.classId);
   const groupId = readLearningChatroomGroupId(value.groupId);
+  const resend = readLearningChatroomResendIntent(value, messages);
 
   return {
     locale: value.locale,
     courseId,
     ...(classId ? { classId } : {}),
     ...(groupId ? { groupId } : {}),
+    ...resend,
     messages,
   };
+}
+
+// `intent` is optional and the only value it may take is `"resend"`, so a body
+// without it keeps the historic behaviour exactly. The named `messageId` must be
+// one of the STUDENT rows this very request carries: a resend is a second
+// attempt at a message the client already showed its sender, and requiring the
+// row to be present here keeps the marker from becoming a way to persist
+// something the room never rendered - or to silence an agent round by naming
+// somebody else's id.
+function readLearningChatroomResendIntent(
+  value: Record<string, unknown>,
+  messages: LearningChatroomMessage[],
+) {
+  if (value.intent === undefined || value.intent === null) {
+    return {};
+  }
+  if (value.intent !== "resend") {
+    throw new PublicLearningChatroomError(
+      "Learning chatroom intent must be resend when present.",
+      400,
+    );
+  }
+
+  const messageId = readString(value.messageId);
+  if (
+    !messageId ||
+    messageId.length > 200 ||
+    !messages.some(
+      (message) => message.id === messageId && message.role === "student",
+    )
+  ) {
+    throw new PublicLearningChatroomError(
+      "Learning chatroom resend requires the messageId of a student message in this request.",
+      400,
+    );
+  }
+
+  return { intent: "resend" as const, messageId };
 }
 
 function parseLearningChatroomMessage(
@@ -1489,11 +1868,20 @@ class PublicLearningChatroomError extends Error {
   readonly status: number;
   // Only set for 429s, where the response must tell the client how long to wait.
   readonly retryAfterSeconds?: number;
+  // Stable classification beside the prose, for the refusals a client has to act
+  // on differently rather than merely display - today the frozen room, which the
+  // composer must disable rather than offer a retry for.
+  readonly reasonCode?: string;
 
-  constructor(message: string, status: number, options?: { retryAfterSeconds?: number }) {
+  constructor(
+    message: string,
+    status: number,
+    options?: { retryAfterSeconds?: number; reasonCode?: string },
+  ) {
     super(message);
     this.name = "PublicLearningChatroomError";
     this.status = status;
     this.retryAfterSeconds = options?.retryAfterSeconds;
+    this.reasonCode = options?.reasonCode;
   }
 }

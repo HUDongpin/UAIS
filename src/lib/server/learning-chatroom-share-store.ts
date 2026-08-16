@@ -61,6 +61,13 @@ export type LearningChatroomShareRecord = {
   // key (revocation, legacy room derivation) and never leaves the server.
   createdBy: string;
   createdAt: string;
+  // Every link dies on its own (owner decision: 14 days by default, minting may
+  // name its own moment). Revocation stays the immediate stop; expiry is what
+  // stops a link nobody remembers from outliving the term it was minted in.
+  // Required after normalization: a legacy record stored before this field
+  // existed is read as expiring 14 days after it was minted, so there is no such
+  // thing as a share without an end.
+  expiresAt: string;
   revokedAt?: string;
   storagePolicy: LearningChatroomShareStoragePolicy;
   storageWritePolicy: LearningChatroomShareStorageWritePolicy;
@@ -102,9 +109,17 @@ export const learningChatroomShareSchemaVersion = "uais-learning-chatroom-shares
 
 const learningChatroomShareMaxIdLength = 200;
 // A dead link is a 404 whether the record still exists or not, so a share that
-// has been revoked for a month is pruned on the next write instead of growing
-// the database forever.
+// has been revoked - or has been expired - for a month is pruned on the next
+// write instead of growing the database forever.
 const learningChatroomShareRevokedRetentionMs = 30 * 24 * 60 * 60 * 1000;
+// The default life of a link, and the life a legacy record is read as having.
+// Two weeks covers the assignment a group actually shares a room for, and it
+// means an unrevoked link left in a chat thread stops publishing the room by
+// itself rather than staying live for the rest of the degree.
+export const learningChatroomShareDefaultTtlMs = 14 * 24 * 60 * 60 * 1000;
+// The longest life minting may ask for. A ceiling exists so "optional expiresAt"
+// cannot be used to opt out of expiry altogether by naming the year 3000.
+export const learningChatroomShareMaxTtlMs = 90 * 24 * 60 * 60 * 1000;
 // Bounded like every other UAIS database. Reaching this means something is
 // minting links in a loop, which is a refusal rather than an eviction: evicting
 // a live share would break a link somebody is holding.
@@ -191,6 +206,10 @@ export async function createLearningChatroomShare(input: {
   groupId?: string;
   createdBy: string;
   now?: string;
+  // Absent means the 14-day default. A caller that names its own moment is
+  // bounded by `learningChatroomShareMaxTtlMs`; the route validates and reports
+  // the refusal, this store is the second, non-bypassable check.
+  expiresAt?: string;
 }): Promise<{ record: LearningChatroomShareRecord; receipt: LearningChatroomShareReceipt }> {
   // Local-JSON share writes are refused in production exactly like transcripts:
   // the serverless filesystem is ephemeral, so a link written there would be
@@ -213,6 +232,10 @@ export async function createLearningChatroomShare(input: {
     ...(input.groupId ? { groupId: input.groupId } : {}),
     createdBy: input.createdBy,
     createdAt: now,
+    expiresAt: resolveLearningChatroomShareExpiry({
+      createdAt: now,
+      expiresAt: input.expiresAt,
+    }),
     storagePolicy: storage.shareStoragePolicy,
     storageWritePolicy: storage.storageWritePolicy,
     responsibleSession: "S12",
@@ -325,13 +348,57 @@ export async function revokeLearningChatroomShare(input: {
   };
 }
 
-// A share is usable only while it exists and has not been revoked. Callers must
-// funnel every lookup through this so "revoked" and "unknown" stay a single,
-// indistinguishable outcome for whoever holds the link.
+// A share is usable only while it exists, has not been revoked, and has not
+// expired. Callers must funnel every lookup through this so "revoked",
+// "expired" and "unknown" stay a single, indistinguishable outcome for whoever
+// holds the link - a viewer who could tell them apart would learn that a live
+// room exists behind the id they guessed.
+//
+// `nowMs` is injectable because expiry is the first thing about a share that
+// depends on the clock, and a route or a suite that already pins its own clock
+// must not have a second, unpinned one decide whether the link still works.
 export function isLearningChatroomShareActive(
   record: LearningChatroomShareRecord | undefined,
+  options: { nowMs?: number } = {},
 ): record is LearningChatroomShareRecord {
-  return Boolean(record && !record.revokedAt);
+  if (!record || record.revokedAt) {
+    return false;
+  }
+  const expiresAtMs = Date.parse(record.expiresAt);
+  if (!Number.isFinite(expiresAtMs)) {
+    // A record whose expiry cannot be read is treated as ended rather than as
+    // eternal: failing closed on a public, sessionless page is the only safe
+    // direction.
+    return false;
+  }
+  return (options.nowMs ?? Date.now()) < expiresAtMs;
+}
+
+// Mint-time expiry, and the same arithmetic a legacy record is normalized with.
+// An unparseable or out-of-range request falls back to the default rather than
+// being honoured: the store is the last line before persistence, and a link that
+// never ends is exactly what this field exists to prevent.
+function resolveLearningChatroomShareExpiry(input: {
+  createdAt: string;
+  expiresAt?: string;
+}) {
+  const createdAtMs = Date.parse(input.createdAt);
+  const defaultExpiresAt = new Date(
+    (Number.isFinite(createdAtMs) ? createdAtMs : Date.now()) +
+      learningChatroomShareDefaultTtlMs,
+  ).toISOString();
+  if (!input.expiresAt) {
+    return defaultExpiresAt;
+  }
+
+  const requestedMs = Date.parse(input.expiresAt);
+  if (!Number.isFinite(requestedMs) || !Number.isFinite(createdAtMs)) {
+    return defaultExpiresAt;
+  }
+  if (requestedMs <= createdAtMs || requestedMs > createdAtMs + learningChatroomShareMaxTtlMs) {
+    return defaultExpiresAt;
+  }
+  return new Date(requestedMs).toISOString();
 }
 
 export async function readLearningChatroomShareSnapshot(input: {
@@ -444,6 +511,14 @@ function normalizeLearningChatroomShare(value: unknown): LearningChatroomShareRe
       learningChatroomShareMaxIdLength,
     ),
     createdAt: requireIsoDate(record.createdAt, "createdAt"),
+    // Legacy records - every share minted before links had an end - are read as
+    // expiring 14 days after they were minted. Normalizing on READ rather than
+    // through a migration means the rule applies to a database this build has
+    // never written, including one an external backend still holds.
+    expiresAt: resolveLearningChatroomShareExpiry({
+      createdAt: requireIsoDate(record.createdAt, "createdAt"),
+      ...(typeof record.expiresAt === "string" ? { expiresAt: record.expiresAt } : {}),
+    }),
     ...(record.revokedAt ? { revokedAt: requireIsoDate(record.revokedAt, "revokedAt") } : {}),
     storagePolicy: normalizeShareStoragePolicy(record.storagePolicy),
     storageWritePolicy: normalizeShareStorageWritePolicy(record.storageWritePolicy),
@@ -534,21 +609,30 @@ async function writeLearningChatroomShareSnapshot(input: {
   });
 }
 
+// Both ways a link dies age out of the database on the same retention: a record
+// that has been unusable for a month answers 404 whether it is still stored or
+// not, so keeping it only grows the snapshot every mint has to rewrite.
 function pruneExpiredRevokedShares(shares: LearningChatroomShareRecord[], now: string) {
   const nowMs = Date.parse(now);
   if (!Number.isFinite(nowMs)) {
     return shares;
   }
   return shares.filter((share) => {
-    if (!share.revokedAt) {
+    const endedAtMs = readLearningChatroomShareEndedAtMs(share);
+    if (endedAtMs === undefined) {
       return true;
     }
-    const revokedAtMs = Date.parse(share.revokedAt);
-    if (!Number.isFinite(revokedAtMs)) {
-      return true;
-    }
-    return nowMs - revokedAtMs < learningChatroomShareRevokedRetentionMs;
+    return nowMs - endedAtMs < learningChatroomShareRevokedRetentionMs;
   });
+}
+
+function readLearningChatroomShareEndedAtMs(share: LearningChatroomShareRecord) {
+  const revokedAtMs = share.revokedAt ? Date.parse(share.revokedAt) : undefined;
+  if (revokedAtMs !== undefined && Number.isFinite(revokedAtMs)) {
+    return revokedAtMs;
+  }
+  const expiresAtMs = Date.parse(share.expiresAt);
+  return Number.isFinite(expiresAtMs) ? expiresAtMs : undefined;
 }
 
 function normalizeShareStoragePolicy(value: unknown): LearningChatroomShareStoragePolicy {
