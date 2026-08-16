@@ -10,16 +10,19 @@ import {
   type TeachingOperationAuditRequestSource,
   type TeachingOperationExternalAppendAdapter,
   type TeachingOperationExternalRollbackAdapter,
+  type TeachingOperationInviteCodeAllocator,
 } from "@/lib/server/teaching-operations-store";
 import { createUaisTeachingCourseManagementRepository } from "@/lib/server/teaching-course-management-external-store";
 import {
-  assertTeachingClassInviteCodePublishTarget,
+  allocateTeachingClassInviteCode,
   assertTeachingCourseManagementLocalJsonRuntimeAllowed,
   publishTeachingClassInviteCode,
+  readTeachingClassInviteCodePublishTarget,
   resolveTeachingCourseManagementDataDir,
   TeachingCourseManagementStoreError,
   type TeachingCourseManagementReceipt,
 } from "@/lib/server/teaching-course-management-store";
+import { createUaisTeachingOperationRepository } from "@/lib/server/teaching-operations-postgres-store";
 import {
   isExternalStorageBackendReadyContract,
   resolveUaisStorageBackendContract,
@@ -232,10 +235,20 @@ export function createTeachingOperationActionPostHandler(
           env,
           fetch: deps.fetch,
         });
-      if (isTeachingOperationProductionRuntime(env) && !appendExternalTeachingOperation) {
+      // The same gate the store applies, kept here so a production request that
+      // has nowhere durable to land is refused before any provider side effect
+      // runs. A resolved managed snapshot repository counts: it is the launch
+      // posture production actually runs, and the store's non-external path
+      // reads and writes it under a revision guard. Only a production write
+      // that would land on the local JSON file is still refused.
+      if (
+        isTeachingOperationProductionRuntime(env) &&
+        !appendExternalTeachingOperation &&
+        !createUaisTeachingOperationRepository({ env })
+      ) {
         throw new TeachingOperationStoreError(
           503,
-          "Production teaching operation persistence requires external storage.",
+          "Production teaching operation persistence requires a durable backend, not local JSON storage.",
         );
       }
 
@@ -257,7 +270,9 @@ export function createTeachingOperationActionPostHandler(
         operationId,
         actionSlot,
       });
-      await preflightClassInvitePublishTarget({
+      // One read answers both halves of a publish preflight: that the named
+      // class is this teacher's, and which code that class already owns.
+      const classInvitePublishTarget = await preflightClassInvitePublishTarget({
         env,
         fetch: deps.fetch,
         body,
@@ -266,6 +281,7 @@ export function createTeachingOperationActionPostHandler(
         authenticatedTeacher,
         courseId,
       });
+      const targetClassId = readTargetClassId(body);
 
       const receipt = await executeTeachingOperationAction({
         dataDir: resolveTeachingOperationDataDir(env.UAIS_TEACHING_OPERATIONS_DATA_DIR),
@@ -274,6 +290,14 @@ export function createTeachingOperationActionPostHandler(
         actionSlot,
         actorId: authenticatedTeacher.actorId,
         courseId,
+        ...(targetClassId ? { targetClassId } : {}),
+        allocateInviteCode: createTeachingOperationInviteCodeAllocator({
+          env,
+          fetch: deps.fetch,
+          ...(classInvitePublishTarget
+            ? { publishInvitationCode: classInvitePublishTarget.invitationCode }
+            : {}),
+        }),
         sourceAction: typeof body.sourceAction === "string" ? body.sourceAction : undefined,
         idempotencyKey: readIdempotencyKey({ request, body }),
         ...(isRecord(body.courseSettingsPatch)
@@ -419,7 +443,6 @@ export function createTeachingOperationActionPostHandler(
           gradingFeedbackDraftReceipt,
         });
       }
-      const targetClassId = readTargetClassId(body);
       let classInvitePublicationReceipt:
         | Awaited<ReturnType<typeof maybePublishClassInviteCode>>
         | undefined;
@@ -1063,12 +1086,12 @@ async function preflightClassInvitePublishTarget(input: {
   courseId?: string;
 }) {
   if (input.operationId !== "invite-code" || input.actionSlot !== "secondary" || !input.courseId) {
-    return;
+    return undefined;
   }
 
   const targetClassId = readTargetClassId(input.body);
   if (!targetClassId) {
-    return;
+    return undefined;
   }
 
   const courseManagementRepository = createUaisTeachingCourseManagementRepository({
@@ -1079,13 +1102,49 @@ async function preflightClassInvitePublishTarget(input: {
     assertTeachingCourseManagementLocalJsonRuntimeAllowed(input.env);
   }
 
-  await assertTeachingClassInviteCodePublishTarget({
+  return readTeachingClassInviteCodePublishTarget({
     dataDir: resolveTeachingCourseManagementDataDir(input.env.UAIS_TEACHING_COURSES_DATA_DIR),
     repository: courseManagementRepository,
     actorId: input.authenticatedTeacher.actorId,
     courseId: input.courseId,
     classId: targetClassId,
   });
+}
+
+// The invite-code arbiter the operations store is handed.
+//
+// Codes belong to the course-management corpus, not to the operations log: a
+// student joins with the bare code, so uniqueness has to be deployment-wide,
+// and the class row is what a published code is written onto. A generate draws
+// against that whole corpus; a publish names the code the preflight already
+// found on this request's own class or draft. The store used to answer both
+// from its own snapshot - a sequential walk from a constant for generate, and
+// "the last code generated for any course" for publish - which under external
+// persistence, where that snapshot is empty per request, meant one constant
+// code for the entire deployment.
+function createTeachingOperationInviteCodeAllocator(input: {
+  env: Record<string, string | undefined>;
+  fetch?: typeof fetch;
+  publishInvitationCode?: string;
+}): TeachingOperationInviteCodeAllocator {
+  return async ({ intent }) => {
+    if (intent === "publish") {
+      return input.publishInvitationCode;
+    }
+
+    const courseManagementRepository = createUaisTeachingCourseManagementRepository({
+      env: input.env,
+      fetch: input.fetch,
+    });
+    if (!courseManagementRepository) {
+      assertTeachingCourseManagementLocalJsonRuntimeAllowed(input.env);
+    }
+
+    return allocateTeachingClassInviteCode({
+      dataDir: resolveTeachingCourseManagementDataDir(input.env.UAIS_TEACHING_COURSES_DATA_DIR),
+      repository: courseManagementRepository,
+    });
+  };
 }
 
 async function maybePublishClassInviteCode(input: {

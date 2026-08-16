@@ -29,6 +29,8 @@ import type {
   TeachingOperationGradeReleaseRollbackNotificationProjection,
   TeachingOperationGradebookUpdateProjection,
   TeachingOperationIdempotencyStatus,
+  TeachingOperationInviteCodeAllocator,
+  TeachingOperationInviteCodeIntent,
   TeachingOperationInviteCodeRecord,
   TeachingOperationOutboxRecord,
   TeachingOperationPersistedAuditEvent,
@@ -44,6 +46,7 @@ import type {
 // imports this store's normalizer/error at runtime; this store reaches the
 // postgres store through a dynamic import) and no module cycle is created.
 import type { TeachingOperationRepository } from "./teaching-operations-postgres-store";
+import { drawUnusedInviteCode } from "./invite-code-allocator";
 import { resolveTeachingOperationDataDir } from "./teaching-operation-data-dir";
 import { actionDefinitions } from "./teaching-operations-action-catalog";
 import {
@@ -135,7 +138,6 @@ export {
   rollbackExternalTeachingGradebookRelease,
 } from "./teaching-operations-gradebook-external-handlers";
 
-const firstInviteCode = "55395057";
 const localTeachingOperationWriteQueues = new Map<string, Promise<void>>();
 
 export async function executeTeachingOperationAction(
@@ -150,14 +152,26 @@ export async function executeTeachingOperationAction(
 
   const operationId = input.operationId;
   const dataDir = resolveTeachingOperationDataDir(input.dataDir);
+  const env = input.env ?? process.env;
   const usingExternalPersistence = Boolean(input.appendExternalTeachingOperation);
+  // A resolved managed snapshot repository IS production-grade persistence: the
+  // non-external path below reads it with its revision and writes back under
+  // that revision through the guarded retry ladders. This gate used to demand
+  // the external-append adapter and nothing else, so every authenticated
+  // teacher on the database-backed launch posture - the one production runs -
+  // got a 503 before any of that ran. What is still refused is the only case
+  // the 503 was ever about: a production write that would land on the local
+  // JSON file.
+  const usingManagedSnapshotPersistence =
+    Boolean(input.repository) || usesPostgresOperationSnapshot(env);
   if (
-    isTeachingOperationProductionRuntime(input.env ?? process.env) &&
-    !usingExternalPersistence
+    isTeachingOperationProductionRuntime(env) &&
+    !usingExternalPersistence &&
+    !usingManagedSnapshotPersistence
   ) {
     throw new TeachingOperationStoreError(
       503,
-      "Production teaching operation persistence requires external storage.",
+      "Production teaching operation persistence requires a durable backend, not local JSON storage.",
     );
   }
   const validatedInput: ValidatedExecuteTeachingOperationActionInput = {
@@ -188,7 +202,15 @@ async function executeValidatedTeachingOperationAction(input: {
   usingExternalPersistence: boolean;
 }): Promise<TeachingOperationReceipt> {
   const { dataDir, usingExternalPersistence } = input;
-  const access = createTeachingOperationSnapshotAccess(dataDir, input.input.repository);
+  // The env travels with the access, so the backend the gate above accepted is
+  // the backend this read/write actually uses. Without it the resolution below
+  // silently fell back to `process.env`, and a caller naming a managed backend
+  // could clear the gate and still write the local file.
+  const access = createTeachingOperationSnapshotAccess(
+    dataDir,
+    input.input.repository,
+    input.input.env,
+  );
   // The revision-carrying read, so the write below can be guarded. External
   // persistence appends to someone else's log and never replaces this snapshot,
   // so it keeps starting from an empty in-memory database with no revision.
@@ -276,6 +298,12 @@ async function executeValidatedTeachingOperationAction(input: {
     actionId: definition.actionId,
     actorId,
     courseId,
+    ...(input.input.targetClassId
+      ? { classId: requireSafeId(input.input.targetClassId, "target class id") }
+      : {}),
+    ...(input.input.allocateInviteCode
+      ? { allocateInviteCode: input.input.allocateInviteCode }
+      : {}),
     recordId,
     table: definition.table,
     now,
@@ -520,10 +548,12 @@ export type TeachingOperationSnapshotAccessInput = {
 function createTeachingOperationSnapshotAccess(
   dataDir: string,
   repository: TeachingOperationRepository | undefined,
+  env?: Record<string, string | undefined>,
 ): TeachingOperationSnapshotAccessInput {
   return {
     dataDir,
     ...(repository ? { repository } : {}),
+    ...(env ? { env } : {}),
   };
 }
 
@@ -1152,6 +1182,8 @@ async function createArtifacts(input: {
   actionId: TeachingOperationActionId;
   actorId: string;
   courseId?: string;
+  classId?: string;
+  allocateInviteCode?: TeachingOperationInviteCodeAllocator;
   recordId: string;
   table: string;
   now: Date;
@@ -1282,7 +1314,13 @@ async function createArtifacts(input: {
   }
 
   if (input.actionId === "generate-invite-code") {
-    const code = createNextInviteCode(input.database);
+    const code = await resolveTeachingOperationInviteCode({ ...input, intent: "generate" });
+    if (!code) {
+      throw new TeachingOperationStoreError(
+        409,
+        "Teaching operation invite code capacity is exhausted.",
+      );
+    }
     const inviteRecord: TeachingOperationInviteCodeRecord = {
       inviteId: `invite-${code}-${formatTimestampId(input.now)}`,
       operationId: "invite-code",
@@ -1305,16 +1343,19 @@ async function createArtifacts(input: {
   }
 
   if (input.actionId === "publish-invite-code") {
-    const latestInvite = input.database.inviteCodes.at(-1);
-    const code = latestInvite?.code ?? firstInviteCode;
+    const code = await resolveTeachingOperationInviteCode({ ...input, intent: "publish" });
+    if (!code) {
+      // Neither the request nor this course has a code to publish. A receipt
+      // that names none is the honest one; the fallback this replaced stamped a
+      // constant onto whichever class the request happened to point at.
+      return [databaseRecord];
+    }
     const inviteRecord: TeachingOperationInviteCodeRecord = {
       inviteId: `invite-published-${code}-${formatTimestampId(input.now)}`,
       operationId: "invite-code",
       code,
       status: "published",
-      ...(input.courseId ?? latestInvite?.courseId
-        ? { courseId: input.courseId ?? latestInvite?.courseId }
-        : {}),
+      ...(input.courseId ? { courseId: input.courseId } : {}),
       actorId: input.actorId,
       createdAt: input.createdAt,
     };
@@ -1544,9 +1585,66 @@ function normalizeDatabase(value: unknown): TeachingOperationDatabase {
   };
 }
 
-function createNextInviteCode(database: TeachingOperationDatabase) {
-  const previous = database.inviteCodes.at(-1)?.code ?? firstInviteCode;
-  return String(Number(previous) + 1).padStart(8, "0");
+// Where an invite-code action's code comes from.
+//
+// The allocator the caller passes is the arbiter: for the route it draws
+// against the course-management corpus (the store that owns deployment-wide
+// code uniqueness) and, for a publish, names the code the request's own class
+// or draft already holds. Only a caller that named no allocator - a direct
+// store call - falls back to this snapshot, and even then a generate draws at
+// random and a publish stays inside the request's own course.
+//
+// What is gone is the pair this replaced: a sequential walk from a constant,
+// which made every code in the deployment guessable from any one of them, and a
+// publish that stamped `inviteCodes.at(-1)` - the last code generated for ANY
+// course - onto whichever class the request pointed at.
+async function resolveTeachingOperationInviteCode(input: {
+  database: TeachingOperationDatabase;
+  allocateInviteCode?: TeachingOperationInviteCodeAllocator;
+  intent: TeachingOperationInviteCodeIntent;
+  actorId: string;
+  courseId?: string;
+  classId?: string;
+}) {
+  const allocated = await input.allocateInviteCode?.({
+    intent: input.intent,
+    actorId: input.actorId,
+    ...(input.courseId ? { courseId: input.courseId } : {}),
+    ...(input.classId ? { classId: input.classId } : {}),
+  });
+  if (allocated) {
+    return requireInviteCode(allocated);
+  }
+  if (input.intent === "publish") {
+    return findCourseScopedInviteCode(input.database, input.courseId);
+  }
+
+  return drawUnusedInviteCode(
+    new Set(input.database.inviteCodes.map((inviteCode) => inviteCode.code)),
+  );
+}
+
+// The newest code this course generated, and only this course. A publish that
+// reached past its own course is how one class's code landed on another's.
+function findCourseScopedInviteCode(
+  database: TeachingOperationDatabase,
+  courseId: string | undefined,
+) {
+  for (let index = database.inviteCodes.length - 1; index >= 0; index -= 1) {
+    const inviteCode = database.inviteCodes[index];
+    if ((inviteCode.courseId ?? "") === (courseId ?? "")) {
+      return inviteCode.code;
+    }
+  }
+
+  return undefined;
+}
+
+function requireInviteCode(value: string) {
+  if (!/^\d{8}$/.test(value)) {
+    throw new TeachingOperationStoreError(400, "Teaching operation invite code is invalid.");
+  }
+  return value;
 }
 
 function ensureWithinBase(baseDir: string, targetPath: string) {

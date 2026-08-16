@@ -822,6 +822,19 @@ const requiredTeachingOperationsRouteSmokeEnvNames = [
   "UAIS_TEACHING_OPERATIONS_SMOKE_CLASS_ID",
 ];
 
+// What replaces UAIS_TEACHING_OPERATIONS_BACKEND once the smoke ran against the
+// database-backed posture. The operations snapshot then lives in the core
+// database, so the durable-storage proof is the snapshot selector plus the DSN
+// that selector needs - the external-append selector moves no data at all.
+const postgresSnapshotTeachingOperationsRouteSmokeEnvNames = [
+  "UAIS_TEACHING_OPERATIONS_SNAPSHOT_BACKEND",
+  "UAIS_CORE_DATABASE_URL",
+];
+
+const postgresSnapshotModeTeachingOperationsRouteSmokeEnvValues = new Map([
+  ["UAIS_TEACHING_OPERATIONS_SNAPSHOT_BACKEND", "postgres"],
+]);
+
 const externalModeTeachingOperationsRouteSmokeEnvNames = new Set([
   "UAIS_TEACHING_OPERATIONS_BACKEND",
   "UAIS_TEACHING_COURSE_MANAGEMENT_BACKEND",
@@ -837,6 +850,8 @@ const externalModeTeachingOperationsRouteSmokeEnvNames = new Set([
 const redactedTeachingOperationsRouteSmokeEnvNames = new Set([
   "UAIS_EXTERNAL_STORAGE_BASE_URL",
   "UAIS_EXTERNAL_STORAGE_ACCESS_TOKEN",
+  // A DSN carries the database password, so it is proved by placement only.
+  "UAIS_CORE_DATABASE_URL",
   "UAIS_COLLABORATION_INVITE_EMAIL_PROVIDER_URL",
   "UAIS_COLLABORATION_INVITE_EMAIL_PROVIDER_TOKEN",
   "UAIS_COLLABORATION_INVITE_EMAIL_CALLBACK_TOKEN",
@@ -10093,6 +10108,35 @@ function readTeachingOperationsRouteSmokeRouteStatus(evidence) {
   };
 }
 
+// Which teaching-operations storage posture this smoke ran against. Follows the
+// evidence's own declaration when it makes one, and otherwise infers it from
+// the placement the evidence already reports - the same rule
+// readVercelEnvStorageBackendMode uses - so evidence written before this field
+// existed keeps its meaning. The external-append selector is the RETIRED
+// posture; the snapshot selector is the database-backed launch posture, and
+// demanding the retired one from every deployment is what made this
+// prerequisite unsatisfiable for the configuration production actually runs.
+function readTeachingOperationsRouteSmokeStorageBackendMode(evidence, entriesByName) {
+  const declared = isRecord(evidence) ? evidence.storageBackendMode : undefined;
+  if (declared === "external" || declared === "core-database") {
+    return declared;
+  }
+  return entriesByName.has("UAIS_TEACHING_OPERATIONS_SNAPSHOT_BACKEND")
+    ? "core-database"
+    : "external";
+}
+
+function readTeachingOperationsRouteSmokeEnvNamesForMode(storageBackendMode) {
+  if (storageBackendMode !== "core-database") {
+    return requiredTeachingOperationsRouteSmokeEnvNames;
+  }
+  return requiredTeachingOperationsRouteSmokeEnvNames.flatMap((name) =>
+    name === "UAIS_TEACHING_OPERATIONS_BACKEND"
+      ? postgresSnapshotTeachingOperationsRouteSmokeEnvNames
+      : [name],
+  );
+}
+
 function readTeachingOperationsRouteSmokeRequiredEnv(evidence) {
   const entries = Array.isArray(evidence.requiredEnv)
     ? evidence.requiredEnv.filter((entry) => isRecord(entry))
@@ -10102,9 +10146,13 @@ function readTeachingOperationsRouteSmokeRequiredEnv(evidence) {
       .filter((entry) => typeof entry.name === "string")
       .map((entry) => [entry.name, entry]),
   );
+  const storageBackendMode = readTeachingOperationsRouteSmokeStorageBackendMode(
+    evidence,
+    entriesByName,
+  );
 
   return Object.fromEntries(
-    requiredTeachingOperationsRouteSmokeEnvNames.map((name) => {
+    readTeachingOperationsRouteSmokeEnvNamesForMode(storageBackendMode).map((name) => {
       const entry = entriesByName.get(name);
       if (!entry) {
         return [name, "missing"];
@@ -10117,7 +10165,12 @@ function readTeachingOperationsRouteSmokeRequiredEnv(evidence) {
             : "missing",
         ];
       }
+      const requiredValue = postgresSnapshotModeTeachingOperationsRouteSmokeEnvValues.get(name);
+      if (requiredValue && entry.requiredValue !== requiredValue) {
+        return [name, "required-value-missing"];
+      }
       if (
+        !requiredValue &&
         externalModeTeachingOperationsRouteSmokeEnvNames.has(name) &&
         entry.requiredValue !== "external"
       ) {

@@ -107,10 +107,11 @@ export type {
   TeachingLearningGroupValidationReasonCode,
 } from "./teaching-course-management-group-handlers";
 export {
+  allocateTeachingClassInviteCode,
   approveTeachingClassMembership,
-  assertTeachingClassInviteCodePublishTarget,
   joinTeachingClassByInviteCode,
   publishTeachingClassInviteCode,
+  readTeachingClassInviteCodePublishTarget,
   rollbackTeachingCourseCreation,
   saveTeachingClassInviteCodeDraftRecord,
 } from "./teaching-course-management-class-handlers";

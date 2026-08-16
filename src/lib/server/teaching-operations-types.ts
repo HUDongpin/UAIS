@@ -937,6 +937,10 @@ export type ExecuteTeachingOperationActionInput = {
   actionSlot: TeachingOperationActionSlot;
   actorId?: string;
   courseId?: string;
+  // The class an invite-code action names. Carried so the invite allocator can
+  // bind a code to THIS request's class rather than to whatever the snapshot
+  // happened to hold last.
+  targetClassId?: string;
   sourceAction?: string;
   idempotencyKey?: string;
   courseSettingsPatch?: unknown;
@@ -948,8 +952,24 @@ export type ExecuteTeachingOperationActionInput = {
     requestSource: TeachingOperationAuditRequestSource;
   };
   appendExternalTeachingOperation?: TeachingOperationExternalAppendAdapter;
+  allocateInviteCode?: TeachingOperationInviteCodeAllocator;
   now?: Date;
 };
+
+export type TeachingOperationInviteCodeIntent = "generate" | "publish";
+
+// Where an invite code actually comes from. The operations snapshot is not the
+// arbiter of codes - the course-management corpus is, because a student joins
+// with the bare code and the uniqueness that matters is deployment-wide - so
+// the route hands the store an allocator bound to the request's course/class
+// instead of letting the store invent one from its own log. `undefined` means
+// "this request names no code", which for a publish is "nothing to publish".
+export type TeachingOperationInviteCodeAllocator = (input: {
+  intent: TeachingOperationInviteCodeIntent;
+  actorId: string;
+  courseId?: string;
+  classId?: string;
+}) => Promise<string | undefined>;
 
 export type ValidatedExecuteTeachingOperationActionInput = Omit<
   ExecuteTeachingOperationActionInput,

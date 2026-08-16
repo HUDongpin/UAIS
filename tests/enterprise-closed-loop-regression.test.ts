@@ -178,13 +178,22 @@ describe("enterprise closed-loop regression guards", () => {
     expect(route).toContain("authenticatedTeacher.role !== \"teacher\"");
     expect(route).toContain("authorizeTeachingOperationCourseAccess");
     expect(route).toContain("assertProductionTeachingOperationCourseOwnershipAccessConfigured");
-    expect(route).toContain("Production teaching operation persistence requires external storage.");
+    // Fail-closed still, but on the honest condition: production may persist
+    // through the external append adapter OR the managed snapshot repository -
+    // the database-backed posture production runs - and never onto local JSON.
+    expect(route).toContain(
+      "Production teaching operation persistence requires a durable backend, not local JSON storage.",
+    );
+    expect(route).toContain("!createUaisTeachingOperationRepository({ env })");
     expect(route).toContain("env,");
     expect(route).toContain("actorId: authenticatedTeacher.actorId");
     expect(store).toContain("env?: Record<string, string | undefined>;");
-    expect(store).toContain("isTeachingOperationProductionRuntime(input.env ?? process.env)");
+    expect(store).toContain("isTeachingOperationProductionRuntime(env)");
     expect(store).toContain("!usingExternalPersistence");
-    expect(store).toContain("Production teaching operation persistence requires external storage.");
+    expect(store).toContain("!usingManagedSnapshotPersistence");
+    expect(store).toContain(
+      "Production teaching operation persistence requires a durable backend, not local JSON storage.",
+    );
 
     expect(route.indexOf("const authenticatedTeacher = readAuthenticatedTeacherSession")).toBeLessThan(
       route.indexOf("const body = await readJsonBody(request)"),

@@ -572,8 +572,12 @@ describe("teaching-operations snapshot concurrency", () => {
       const inviteArtifact = receipt.artifacts.find(
         (artifact) => artifact.kind === "invite-code",
       );
-      // Allocated once, from the snapshot this request actually read.
-      expect(inviteArtifact).toMatchObject({ kind: "invite-code", code: "55395058" });
+      // Allocated once, from the snapshot this request actually read. The code
+      // itself is a random draw, so what is pinned is that the receipt names
+      // one code and the merge carries that same one through.
+      const allocatedCode =
+        inviteArtifact?.kind === "invite-code" ? inviteArtifact.code : "";
+      expect(allocatedCode).toEqual(expect.stringMatching(/^\d{8}$/));
       expect(repository.writes).toBe(2);
 
       const stored = repository.stored();
@@ -581,7 +585,7 @@ describe("teaching-operations snapshot concurrency", () => {
       // unguarded write used to erase - and exactly one code was allocated here.
       expect(stored.inviteCodes.map((item) => item.code)).toEqual([
         "60000000",
-        "55395058",
+        allocatedCode,
       ]);
       expect(stored.records.map((item) => item.recordId)).toContain(receipt.receiptId);
       expect(

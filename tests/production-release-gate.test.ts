@@ -13364,6 +13364,115 @@ describe("UAIS production E2E release gate", () => {
     expect(output).not.toContain("/Users/");
   });
 
+  it("accepts the postgres snapshot posture in place of the external-append operations backend", () => {
+    const tmpDir = mkdtempSync(join(tmpdir(), "uais-release-gate-teaching-ops-postgres-"));
+    const evidence = writeAcceptedProductionReleaseGateEvidence(tmpDir);
+    const teachingOperationsRouteSmoke = evidence.teachingOperationsRouteSmoke;
+    const smokeEvidence = JSON.parse(readFileSync(teachingOperationsRouteSmoke, "utf8")) as {
+      storageBackendMode?: string;
+      requiredEnv?: Array<Record<string, unknown>>;
+    };
+    // The database-backed launch posture: the operations snapshot lives in the
+    // core database, so the durable-storage proof is the snapshot selector plus
+    // the DSN it needs. The external-append selector moves no data and is not
+    // placed at all.
+    smokeEvidence.storageBackendMode = "core-database";
+    smokeEvidence.requiredEnv = (smokeEvidence.requiredEnv ?? []).flatMap((entry) =>
+      entry.name === "UAIS_TEACHING_OPERATIONS_BACKEND"
+        ? [
+            {
+              name: "UAIS_TEACHING_OPERATIONS_SNAPSHOT_BACKEND",
+              status: "present",
+              requiredValue: "postgres",
+            },
+            { name: "UAIS_CORE_DATABASE_URL", status: "present", valueRedacted: true },
+          ]
+        : [entry],
+    );
+    writeFileSync(teachingOperationsRouteSmoke, `${JSON.stringify(smokeEvidence, null, 2)}\n`);
+
+    const output = execFileSync("node", [
+      "scripts/production-e2e-release-gate.mjs",
+      "--teaching-operations-route-smoke",
+      teachingOperationsRouteSmoke,
+    ], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    });
+    const body = JSON.parse(output);
+    const requirement = (body.requirements as Array<Record<string, unknown>>).find(
+      (entry) => entry.id === "teaching-operations-route-smoke",
+    );
+
+    expect(body.blockedReasons).not.toContain(
+      "teaching-operations-route-smoke-required-env-not-proven",
+    );
+    expect(requirement?.requiredEnv).toEqual(
+      expect.objectContaining({
+        UAIS_TEACHING_OPERATIONS_SNAPSHOT_BACKEND: "present",
+        UAIS_CORE_DATABASE_URL: "present",
+      }),
+    );
+    // The retired selector is not demanded from a deployment that never placed it.
+    expect(
+      Object.keys(requirement?.requiredEnv as Record<string, unknown>),
+    ).not.toContain("UAIS_TEACHING_OPERATIONS_BACKEND");
+    expect(output).not.toContain(tmpDir);
+    expect(output).not.toContain("/Users/");
+  });
+
+  it("blocks release when the postgres snapshot posture does not select postgres", () => {
+    const tmpDir = mkdtempSync(join(tmpdir(), "uais-release-gate-teaching-ops-snapshot-value-"));
+    const evidence = writeAcceptedProductionReleaseGateEvidence(tmpDir);
+    const teachingOperationsRouteSmoke = evidence.teachingOperationsRouteSmoke;
+    const smokeEvidence = JSON.parse(readFileSync(teachingOperationsRouteSmoke, "utf8")) as {
+      storageBackendMode?: string;
+      requiredEnv?: Array<Record<string, unknown>>;
+    };
+    smokeEvidence.storageBackendMode = "core-database";
+    smokeEvidence.requiredEnv = (smokeEvidence.requiredEnv ?? []).flatMap((entry) =>
+      entry.name === "UAIS_TEACHING_OPERATIONS_BACKEND"
+        ? [
+            {
+              name: "UAIS_TEACHING_OPERATIONS_SNAPSHOT_BACKEND",
+              status: "present",
+              requiredValue: "external",
+            },
+            { name: "UAIS_CORE_DATABASE_URL", status: "present", valueRedacted: true },
+          ]
+        : [entry],
+    );
+    writeFileSync(teachingOperationsRouteSmoke, `${JSON.stringify(smokeEvidence, null, 2)}\n`);
+
+    const output = execFileSync("node", [
+      "scripts/production-e2e-release-gate.mjs",
+      "--teaching-operations-route-smoke",
+      teachingOperationsRouteSmoke,
+    ], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    });
+    const body = JSON.parse(output);
+
+    expect(body.blockedReasons).toContain(
+      "teaching-operations-route-smoke-required-env-not-proven",
+    );
+    expect(body.requirements).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "teaching-operations-route-smoke",
+          status: "blocked",
+          blockedReason: "teaching-operations-route-smoke-required-env-not-proven",
+          requiredEnv: expect.objectContaining({
+            UAIS_TEACHING_OPERATIONS_SNAPSHOT_BACKEND: "required-value-missing",
+          }),
+        }),
+      ]),
+    );
+    expect(output).not.toContain(tmpDir);
+    expect(output).not.toContain("/Users/");
+  });
+
   it("blocks release when teaching operations route smoke omits course content provider publish proof", () => {
     const tmpDir = mkdtempSync(join(tmpdir(), "uais-release-gate-course-content-provider-"));
     const legacyResults = { ...acceptedTeachingOperationsRouteSmokeResults };

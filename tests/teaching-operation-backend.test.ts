@@ -33,7 +33,9 @@ import {
 import { createUaisAppSessionCookie } from "@/lib/server/uais-app-session";
 import {
   executeTeachingOperationAction,
+  normalizeTeachingOperationDatabase,
   readTeachingOperationDatabase,
+  type TeachingOperationDatabase,
 } from "@/lib/server/teaching-operations-store";
 import { createUaisTeachingCourseManagementRepository } from "@/lib/server/teaching-course-management-external-store";
 import {
@@ -65,6 +67,50 @@ function productionTeacherAuthProviderEnv(sessionSigningSecret: string) {
     UAIS_TEACHER_AUTH_PROVIDER: "trusted-cookie-issuer",
     UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET: sessionSigningSecret,
     UAIS_TEACHER_AUTH_ISSUER_SECRET: productionTeacherAuthIssuerSecret,
+  };
+}
+
+// A managed snapshot repository that stores the database in memory. It is the
+// same seam the durable-backend tests use: a resolved repository, whatever
+// backs it, is revision-guarded durable persistence as far as the store is
+// concerned.
+function createManagedTeachingOperationRepository() {
+  let stored: TeachingOperationDatabase | undefined;
+  let revision = 0;
+
+  return {
+    read: async () => ({
+      database: normalizeTeachingOperationDatabase(
+        stored ?? {
+          schemaVersion: "uais-teaching-operations-v1",
+          updatedAt: "1970-01-01T00:00:00.000Z",
+          records: [],
+          auditEvents: [],
+          domainProjections: [],
+          inviteCodes: [],
+          outbox: [],
+          exportManifests: [],
+        },
+      ),
+      ...(stored ? { revision: `rev-${revision}` } : {}),
+    }),
+    write: async ({ database }: { database: TeachingOperationDatabase }) => {
+      stored = normalizeTeachingOperationDatabase(database);
+      revision += 1;
+    },
+    stored: () =>
+      normalizeTeachingOperationDatabase(
+        stored ?? {
+          schemaVersion: "uais-teaching-operations-v1",
+          updatedAt: "1970-01-01T00:00:00.000Z",
+          records: [],
+          auditEvents: [],
+          domainProjections: [],
+          inviteCodes: [],
+          outbox: [],
+          exportManifests: [],
+        },
+      ),
   };
 }
 
@@ -120,10 +166,17 @@ describe("teaching operation backend persistence", () => {
           `${operationId}:secondary`,
         ]),
       );
+      // Codes are drawn, not counted: the published code is the one this
+      // course generated a moment earlier, not a constant every deployment
+      // shares.
+      const generatedCode = database.inviteCodes.find(
+        (item) => item.status === "generated",
+      )?.code;
+      expect(generatedCode).toEqual(expect.stringMatching(/^\d{8}$/));
       expect(database.inviteCodes.at(-1)).toEqual(
         expect.objectContaining({
           operationId: "invite-code",
-          code: "55395058",
+          code: generatedCode,
           status: "published",
         }),
       );
@@ -152,7 +205,8 @@ describe("teaching operation backend persistence", () => {
         }),
       ).rejects.toMatchObject({
         status: 503,
-        message: "Production teaching operation persistence requires external storage.",
+        message:
+          "Production teaching operation persistence requires a durable backend, not local JSON storage.",
       });
 
       const database = await readTeachingOperationDatabase({ dataDir });
@@ -183,13 +237,90 @@ describe("teaching operation backend persistence", () => {
         }),
       ).rejects.toMatchObject({
         status: 503,
-        message: "Production teaching operation persistence requires external storage.",
+        message:
+          "Production teaching operation persistence requires a durable backend, not local JSON storage.",
       });
 
       const database = await readTeachingOperationDatabase({ dataDir });
       expect(database.records).toHaveLength(0);
       expect(database.auditEvents).toHaveLength(0);
       expect(database.domainProjections).toHaveLength(0);
+    } finally {
+      await rm(dataDir, { recursive: true, force: true });
+    }
+  });
+
+  it("accepts a resolved managed snapshot repository as production teaching operation persistence", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "uais-teaching-store-production-managed-"));
+    const repository = createManagedTeachingOperationRepository();
+
+    try {
+      // No external append adapter anywhere: this is the database-backed launch
+      // posture production runs, and it used to 503 for every authenticated
+      // teacher before a single durable write was attempted.
+      const receipt = await executeTeachingOperationAction({
+        dataDir,
+        repository,
+        env: {
+          NODE_ENV: "production",
+          VERCEL_ENV: "production",
+        },
+        operationId: "course-settings",
+        actionSlot: "primary",
+        courseId: "teacher-research-methods",
+        sourceAction: "manage",
+        actorId: "teacher-kang",
+        now: new Date("2026-06-22T08:00:00.000Z"),
+      });
+
+      expect(receipt).toEqual(
+        expect.objectContaining({
+          operationId: "course-settings",
+          actionSlot: "primary",
+          actorId: "teacher-kang",
+          status: "persisted",
+        }),
+      );
+      // The record landed in the managed snapshot, not in the local JSON file.
+      expect(repository.stored().records.map((record) => record.recordId)).toEqual([
+        receipt.receiptId,
+      ]);
+      const localDatabase = await readTeachingOperationDatabase({ dataDir });
+      expect(localDatabase.records).toHaveLength(0);
+      expectNoLocalOrSecretValues(receipt, dataDir);
+    } finally {
+      await rm(dataDir, { recursive: true, force: true });
+    }
+  });
+
+  it("routes production teaching operations to the postgres snapshot selector instead of refusing them", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "uais-teaching-store-production-selector-"));
+
+    try {
+      // The selector is set but its DSN is not, so the durable resolver answers.
+      // That it answers at all is the point: the external-storage refusal no
+      // longer fires ahead of the backend this deployment actually selected.
+      await expect(
+        executeTeachingOperationAction({
+          dataDir,
+          env: {
+            NODE_ENV: "production",
+            UAIS_TEACHING_OPERATIONS_SNAPSHOT_BACKEND: "postgres",
+          },
+          operationId: "course-settings",
+          actionSlot: "primary",
+          courseId: "teacher-research-methods",
+          sourceAction: "manage",
+          actorId: "teacher-kang",
+          now: new Date("2026-06-22T08:00:00.000Z"),
+        }),
+      ).rejects.toMatchObject({
+        status: 503,
+        message: "Postgres teaching operation storage requires UAIS_CORE_DATABASE_URL.",
+      });
+
+      const database = await readTeachingOperationDatabase({ dataDir });
+      expect(database.records).toHaveLength(0);
     } finally {
       await rm(dataDir, { recursive: true, force: true });
     }
@@ -4598,20 +4729,28 @@ describe("teaching operation backend persistence", () => {
         }
       ).domainProjections;
 
+      // The code is drawn at random, so the projection is checked against the
+      // code the receipt actually carries rather than a fixed next number.
+      const generatedCode = receipt.artifacts.find(
+        (artifact) => artifact.kind === "invite-code",
+      );
+      const inviteCode =
+        generatedCode?.kind === "invite-code" ? generatedCode.code : "";
+      expect(inviteCode).toEqual(expect.stringMatching(/^\d{8}$/));
       expect(receipt.artifacts).toContainEqual(
         expect.objectContaining({
           kind: "domain-object",
           objectType: "invite-code-draft",
-          objectId: "invite-code-draft-teacher-research-methods-55395058",
+          objectId: `invite-code-draft-teacher-research-methods-${inviteCode}`,
         }),
       );
       expect(domainProjections).toEqual([
         expect.objectContaining({
-          objectId: "invite-code-draft-teacher-research-methods-55395058",
+          objectId: `invite-code-draft-teacher-research-methods-${inviteCode}`,
           objectType: "invite-code-draft",
           courseId: "teacher-research-methods",
-          inviteCode: "55395058",
-          joinUrl: "/courses?invite=55395058",
+          inviteCode,
+          joinUrl: `/courses?invite=${inviteCode}`,
           generatedBy: "teacher-kang",
           draftStatus: "generated",
           operationRecordId: receipt.receiptId,
@@ -4631,7 +4770,7 @@ describe("teaching operation backend persistence", () => {
     const dataDir = await mkdtemp(join(tmpdir(), "uais-teaching-domain-invite-"));
 
     try {
-      await executeTeachingOperationAction({
+      const generateReceipt = await executeTeachingOperationAction({
         dataDir,
         operationId: "invite-code",
         actionSlot: "primary",
@@ -4656,20 +4795,35 @@ describe("teaching operation backend persistence", () => {
         }
       ).domainProjections;
 
+      // Publishing carries THIS course's generated code forward; it does not
+      // mint a constant of its own.
+      const generatedArtifact = generateReceipt.artifacts.find(
+        (artifact) => artifact.kind === "invite-code",
+      );
+      const inviteCode =
+        generatedArtifact?.kind === "invite-code" ? generatedArtifact.code : "";
+      expect(inviteCode).toEqual(expect.stringMatching(/^\d{8}$/));
+      expect(receipt.artifacts).toContainEqual(
+        expect.objectContaining({
+          kind: "invite-code",
+          code: inviteCode,
+          status: "published",
+        }),
+      );
       expect(receipt.artifacts).toContainEqual(
         expect.objectContaining({
           kind: "domain-object",
           objectType: "enrollment-access",
-          objectId: "enrollment-access-teacher-research-methods-55395058",
+          objectId: `enrollment-access-teacher-research-methods-${inviteCode}`,
         }),
       );
       expect(domainProjections).toContainEqual(
         expect.objectContaining({
-          objectId: "enrollment-access-teacher-research-methods-55395058",
+          objectId: `enrollment-access-teacher-research-methods-${inviteCode}`,
           objectType: "enrollment-access",
           courseId: "teacher-research-methods",
-          inviteCode: "55395058",
-          joinUrl: "/courses?invite=55395058",
+          inviteCode,
+          joinUrl: `/courses?invite=${inviteCode}`,
           publishedBy: "teacher-kang",
           publicationStatus: "published",
           operationRecordId: receipt.receiptId,
@@ -10607,6 +10761,288 @@ describe("teaching operation backend persistence", () => {
       expectNoLocalOrSecretValues(courseDatabase, dataDir);
       expectNoLocalOrSecretValues(firstBody, dataDir);
       expectNoLocalOrSecretValues(secondBody, dataDir);
+    } finally {
+      await rm(dataDir, { recursive: true, force: true });
+    }
+  });
+
+  it("mints generated invite codes against the course-management corpus, not a sequence", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "uais-teaching-route-invite-allocation-"));
+    const operationsDataDir = join(dataDir, "operations");
+    const coursesDataDir = join(dataDir, "courses");
+    const ownershipDir = join(dataDir, "teacher-ai-ownership");
+    const teacherAuthSecret = "test-teacher-auth-session-signing-secret";
+    const teacherCookie = createUaisTeacherAuthSessionCookieHeader({
+      secret: teacherAuthSecret,
+      claims: {
+        sessionId: "teacher-invite-allocation-session",
+        actorId: "teacher-kang",
+        role: "teacher",
+        authenticatedAt: "2026-06-22T11:15:00.000Z",
+        expiresAt: "2026-06-22T12:15:00.000Z",
+      },
+    });
+    const env = {
+      UAIS_TEACHING_OPERATIONS_DATA_DIR: operationsDataDir,
+      UAIS_TEACHING_COURSES_DATA_DIR: coursesDataDir,
+      UAIS_TEACHER_AI_OWNERSHIP_DIR: ownershipDir,
+      UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET: teacherAuthSecret,
+    };
+
+    try {
+      const { course } = await createTeachingCourseRecord({
+        dataDir: coursesDataDir,
+        actorId: "teacher-kang",
+        draft: {
+          name: "Invite Allocation Course",
+          instructor: "Kang Xia",
+          unit: "Guangzhou University 404",
+          department: "Experimental Teaching Center",
+          semester: "2026 Spring",
+        },
+        traceId: "trace-create-invite-allocation-course",
+        now: new Date("2026-06-22T11:18:00.000Z"),
+      });
+      const { classItem: firstClass } = await createTeachingClassRecord({
+        dataDir: coursesDataDir,
+        actorId: "teacher-kang",
+        courseId: course.courseId,
+        draft: { className: "Invite Allocation Class 1", semester: "2026 Spring" },
+        traceId: "trace-create-invite-allocation-class-1",
+        now: new Date("2026-06-22T11:19:00.000Z"),
+      });
+      const { classItem: secondClass } = await createTeachingClassRecord({
+        dataDir: coursesDataDir,
+        actorId: "teacher-kang",
+        courseId: course.courseId,
+        draft: { className: "Invite Allocation Class 2", semester: "2026 Spring" },
+        traceId: "trace-create-invite-allocation-class-2",
+        now: new Date("2026-06-22T11:20:00.000Z"),
+      });
+      await storeUaisTeacherAiOwnershipRecord({
+        baseDir: ownershipDir,
+        ownership: { teacherId: "teacher-kang", courseIds: [course.courseId] },
+        updatedAt: "2026-06-22T11:21:00.000Z",
+      });
+
+      const generatedCodes: string[] = [];
+      for (const [index, targetClassId] of [
+        firstClass.classId,
+        secondClass.classId,
+      ].entries()) {
+        const response = await createTeachingOperationActionPostHandler({
+          env,
+          now: new Date(`2026-06-22T11:3${index}:00.000Z`),
+        })(
+          new Request("https://www.uais.top/api/teaching/operations", {
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+              cookie: teacherCookie,
+              "x-uais-trace-id": `trace-invite-allocation-generate-${index}`,
+            },
+            body: JSON.stringify({
+              operationId: "invite-code",
+              actionSlot: "primary",
+              courseId: course.courseId,
+              targetClassId,
+              sourceAction: "inline-teaching-workspace",
+              idempotencyKey: `invite-allocation-generate-${index}`,
+            }),
+          }),
+        );
+        const body = await response.json();
+        const generated = body.receipt?.artifacts?.find(
+          (artifact: { kind?: string; status?: string }) =>
+            artifact.kind === "invite-code" && artifact.status === "generated",
+        );
+        expect(response.status, JSON.stringify(body)).toBe(200);
+        generatedCodes.push(String(generated?.code ?? ""));
+      }
+
+      const courseDatabase = await readTeachingCourseManagementDatabase({
+        dataDir: coursesDataDir,
+      });
+      const creationCodes = [firstClass.invitationCode, secondClass.invitationCode];
+
+      for (const code of generatedCodes) {
+        expect(code).toEqual(expect.stringMatching(/^\d{8}$/));
+        // Nothing in the corpus already holds it, and it is not the neighbour of
+        // anything that does: the old allocator walked upward from 55395057, so
+        // one code a student had seen enumerated the whole deployment.
+        expect(creationCodes).not.toContain(code);
+        for (const existing of [...creationCodes, ...generatedCodes.filter((item) => item !== code)]) {
+          expect(Number(code)).not.toBe(Number(existing) + 1);
+        }
+        expect(code).not.toBe("55395057");
+        expect(code).not.toBe("55395058");
+      }
+      expect(new Set(generatedCodes).size).toBe(2);
+      // Each draw is bound to the class the request named.
+      expect(
+        (courseDatabase.inviteCodeDrafts ?? []).map((draft) => ({
+          classId: draft.classId,
+          inviteCode: draft.inviteCode,
+        })),
+      ).toEqual([
+        { classId: firstClass.classId, inviteCode: generatedCodes[0] },
+        { classId: secondClass.classId, inviteCode: generatedCodes[1] },
+      ]);
+      expectNoLocalOrSecretValues(courseDatabase, dataDir);
+    } finally {
+      await rm(dataDir, { recursive: true, force: true });
+    }
+  });
+
+  it("publishes each class its own invite code instead of the last code generated anywhere", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "uais-teaching-route-invite-publish-scope-"));
+    const operationsDataDir = join(dataDir, "operations");
+    const coursesDataDir = join(dataDir, "courses");
+    const ownershipDir = join(dataDir, "teacher-ai-ownership");
+    const teacherAuthSecret = "test-teacher-auth-session-signing-secret";
+    const teacherCookie = createUaisTeacherAuthSessionCookieHeader({
+      secret: teacherAuthSecret,
+      claims: {
+        sessionId: "teacher-invite-publish-scope-session",
+        actorId: "teacher-kang",
+        role: "teacher",
+        authenticatedAt: "2026-06-22T11:15:00.000Z",
+        expiresAt: "2026-06-22T12:15:00.000Z",
+      },
+    });
+    const env = {
+      UAIS_TEACHING_OPERATIONS_DATA_DIR: operationsDataDir,
+      UAIS_TEACHING_COURSES_DATA_DIR: coursesDataDir,
+      UAIS_TEACHER_AI_OWNERSHIP_DIR: ownershipDir,
+      UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET: teacherAuthSecret,
+    };
+    const postOperation = (body: Record<string, unknown>, now: string, traceId: string) =>
+      createTeachingOperationActionPostHandler({ env, now: new Date(now) })(
+        new Request("https://www.uais.top/api/teaching/operations", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            cookie: teacherCookie,
+            "x-uais-trace-id": traceId,
+          },
+          body: JSON.stringify(body),
+        }),
+      );
+    const readPublishedCode = (body: {
+      receipt?: { artifacts?: Array<{ kind?: string; status?: string; code?: string }> };
+    }) =>
+      body.receipt?.artifacts?.find(
+        (artifact) => artifact.kind === "invite-code" && artifact.status === "published",
+      )?.code;
+
+    try {
+      const { course } = await createTeachingCourseRecord({
+        dataDir: coursesDataDir,
+        actorId: "teacher-kang",
+        draft: {
+          name: "Invite Publish Scope Course",
+          instructor: "Kang Xia",
+          unit: "Guangzhou University 404",
+          department: "Experimental Teaching Center",
+          semester: "2026 Spring",
+        },
+        traceId: "trace-create-invite-publish-scope-course",
+        now: new Date("2026-06-22T11:18:00.000Z"),
+      });
+      const { classItem: firstClass } = await createTeachingClassRecord({
+        dataDir: coursesDataDir,
+        actorId: "teacher-kang",
+        courseId: course.courseId,
+        draft: { className: "Invite Publish Scope Class 1", semester: "2026 Spring" },
+        traceId: "trace-create-invite-publish-scope-class-1",
+        now: new Date("2026-06-22T11:19:00.000Z"),
+      });
+      const { classItem: secondClass } = await createTeachingClassRecord({
+        dataDir: coursesDataDir,
+        actorId: "teacher-kang",
+        courseId: course.courseId,
+        draft: { className: "Invite Publish Scope Class 2", semester: "2026 Spring" },
+        traceId: "trace-create-invite-publish-scope-class-2",
+        now: new Date("2026-06-22T11:20:00.000Z"),
+      });
+      await storeUaisTeacherAiOwnershipRecord({
+        baseDir: ownershipDir,
+        ownership: { teacherId: "teacher-kang", courseIds: [course.courseId] },
+        updatedAt: "2026-06-22T11:21:00.000Z",
+      });
+
+      // Class 1 drafts a fresh code; class 2 never does.
+      const generateBody = await (
+        await postOperation(
+          {
+            operationId: "invite-code",
+            actionSlot: "primary",
+            courseId: course.courseId,
+            targetClassId: firstClass.classId,
+            sourceAction: "inline-teaching-workspace",
+            idempotencyKey: "invite-publish-scope-generate",
+          },
+          "2026-06-22T11:30:00.000Z",
+          "trace-invite-publish-scope-generate",
+        )
+      ).json();
+      const draftedCode = generateBody.receipt?.artifacts?.find(
+        (artifact: { kind?: string; status?: string }) =>
+          artifact.kind === "invite-code" && artifact.status === "generated",
+      )?.code;
+
+      const firstPublishBody = await (
+        await postOperation(
+          {
+            operationId: "invite-code",
+            actionSlot: "secondary",
+            courseId: course.courseId,
+            targetClassId: firstClass.classId,
+            sourceAction: "inline-teaching-workspace",
+            idempotencyKey: "invite-publish-scope-first",
+          },
+          "2026-06-22T11:35:00.000Z",
+          "trace-invite-publish-scope-first",
+        )
+      ).json();
+      const secondPublishBody = await (
+        await postOperation(
+          {
+            operationId: "invite-code",
+            actionSlot: "secondary",
+            courseId: course.courseId,
+            targetClassId: secondClass.classId,
+            sourceAction: "inline-teaching-workspace",
+            idempotencyKey: "invite-publish-scope-second",
+          },
+          "2026-06-22T11:40:00.000Z",
+          "trace-invite-publish-scope-second",
+        )
+      ).json();
+
+      // The draft class publishes the code it drafted; the class that drafted
+      // nothing keeps the random code it was created with. Publishing used to
+      // hand both of them "the last code generated anywhere", which overwrote
+      // the second class and 409'd it deployment-wide.
+      expect(readPublishedCode(firstPublishBody)).toBe(draftedCode);
+      expect(readPublishedCode(secondPublishBody)).toBe(secondClass.invitationCode);
+      expect(readPublishedCode(firstPublishBody)).not.toBe(
+        readPublishedCode(secondPublishBody),
+      );
+
+      const courseDatabase = await readTeachingCourseManagementDatabase({
+        dataDir: coursesDataDir,
+      });
+      expect(
+        courseDatabase.classes.map((item) => ({
+          classId: item.classId,
+          invitationCode: item.invitationCode,
+        })),
+      ).toEqual([
+        { classId: firstClass.classId, invitationCode: draftedCode },
+        { classId: secondClass.classId, invitationCode: secondClass.invitationCode },
+      ]);
+      expectNoLocalOrSecretValues(courseDatabase, dataDir);
     } finally {
       await rm(dataDir, { recursive: true, force: true });
     }
@@ -21122,9 +21558,13 @@ describe("teaching operation backend persistence", () => {
       );
 
       expect(response.status, JSON.stringify(body)).toBe(200);
+      // The class's own code, not a code invented by the operations log. Under
+      // external persistence that log is empty on every request, which is how
+      // publishing used to stamp one constant onto whichever class was named
+      // and 409 deployment-wide on the second class.
       expect(publishedInvite).toEqual(
         expect.objectContaining({
-          code: "55395057",
+          code: "55395056",
           status: "published",
         }),
       );
@@ -21164,8 +21604,8 @@ describe("teaching operation backend persistence", () => {
             classes: expect.arrayContaining([
               expect.objectContaining({
                 classId,
-                invitationCode: "55395057",
-                joinUrl: "/courses?invite=55395057",
+                invitationCode: "55395056",
+                joinUrl: "/courses?invite=55395056",
               }),
               expect.objectContaining({
                 classId: concurrentClassId,
@@ -22025,7 +22465,7 @@ describe("teaching operation backend persistence", () => {
 
       expect(response.status).toBe(503);
       expect(body.error).toBe(
-        "Production teaching operation persistence requires external storage.",
+        "Production teaching operation persistence requires a durable backend, not local JSON storage.",
       );
       expect(database.records).toHaveLength(0);
       expect(database.auditEvents).toHaveLength(0);
@@ -22084,7 +22524,7 @@ describe("teaching operation backend persistence", () => {
 
       expect(response.status).toBe(503);
       expect(body.error).toBe(
-        "Production teaching operation persistence requires external storage.",
+        "Production teaching operation persistence requires a durable backend, not local JSON storage.",
       );
       expect(body.traceId).toBe("trace-deployment-env-production-local-storage-denied");
       expect(database.records).toHaveLength(0);

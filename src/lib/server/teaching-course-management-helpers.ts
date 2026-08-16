@@ -1,4 +1,5 @@
-import { randomInt, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
+import { drawUnusedInviteCode } from "./invite-code-allocator";
 import { TeachingCourseManagementStoreError } from "./teaching-course-management-error";
 import {
   createRedaction,
@@ -214,25 +215,20 @@ export function createAuditEvent(input: {
   };
 }
 
-// How many random codes to draw before giving up. The namespace is 90 million
-// wide, so a deployment would need tens of millions of live classes before a
-// single draw were likely to collide; 32 draws is a bound on the loop, not a
-// number the allocator is expected to approach.
-const inviteCodeAllocationAttempts = 32;
-
-// Codes are drawn at random, not counted upwards from a fixed seed.
+// The corpus a class-invite draw is arbitrated against.
 //
 // The old allocator walked 55395057, 55395058, ... which made every code in the
 // deployment guessable from any single code a student had ever seen: the next
 // class to be created got the next number. A code is the only credential the
 // join route asks for, so that is an enumeration of every class in the
-// deployment. `randomInt` is uniform over the range (it rejection-samples
-// internally), and the draw is rejection-sampled again here against the codes
-// this snapshot already knows - classes, unpublished drafts, and the copy a
-// membership keeps of the code it joined with. The Postgres claims table closes
-// the remaining cross-course window inside the write's transaction; a loser
-// there retries and draws again.
-export function createClassInvitationCode(database: TeachingCourseManagementDatabase) {
+// deployment. The draw now lives in `drawUnusedInviteCode`, and is
+// rejection-sampled against the codes this snapshot already knows - classes,
+// unpublished drafts, and the copy a membership keeps of the code it joined
+// with. The Postgres claims table closes the remaining cross-course window
+// inside the write's transaction; a loser there retries and draws again.
+export function readUsedTeachingClassInviteCodes(
+  database: TeachingCourseManagementDatabase,
+) {
   const usedInviteCodes = new Set<string>();
   for (const classItem of database.classes) {
     usedInviteCodes.add(classItem.invitationCode);
@@ -244,13 +240,13 @@ export function createClassInvitationCode(database: TeachingCourseManagementData
     usedInviteCodes.add(membership.invitationCode);
   }
 
-  for (let attempt = 0; attempt < inviteCodeAllocationAttempts; attempt += 1) {
-    // 10000000..99999999: always eight digits, never a leading zero that a form
-    // or a spreadsheet could silently eat.
-    const invitationCode = String(randomInt(10_000_000, 100_000_000));
-    if (!usedInviteCodes.has(invitationCode)) {
-      return invitationCode;
-    }
+  return usedInviteCodes;
+}
+
+export function createClassInvitationCode(database: TeachingCourseManagementDatabase) {
+  const invitationCode = drawUnusedInviteCode(readUsedTeachingClassInviteCodes(database));
+  if (invitationCode) {
+    return invitationCode;
   }
 
   throw new TeachingCourseManagementStoreError(

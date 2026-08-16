@@ -10,6 +10,7 @@ import {
   countApprovedStudentsForCourse,
   countInviteCodeJoins,
   createAuditEvent,
+  createClassInvitationCode,
   createReceipt,
 } from "./teaching-course-management-helpers";
 import {
@@ -623,13 +624,25 @@ export async function publishTeachingClassInviteCode(input: {
   throw createTeachingCourseManagementContentionError();
 }
 
-export async function assertTeachingClassInviteCodePublishTarget(input: {
+// The publish target, and the code that target already owns, from ONE read.
+//
+// This replaces the assert-only preflight it grew out of: the route needed the
+// answer to "which code does this class publish?" at the same moment it asked
+// "is this class this teacher's?", and asking twice cost a second round trip to
+// the storage backend for no new information.
+//
+// Which code a publish carries is a course-management question - the drafts and
+// the class row live here - and it is answered per class: the newest generated
+// draft for this class, or, when the teacher never drafted one, the random code
+// the class was created with. Nothing here reaches past the named class, which
+// is what a publish that took "the last code generated anywhere" used to do.
+export async function readTeachingClassInviteCodePublishTarget(input: {
   dataDir?: string;
   repository?: TeachingCourseManagementRepository;
   actorId: string;
   courseId: string;
   classId: string;
-}) {
+}): Promise<{ classItem: TeachingClassRecord; invitationCode: string }> {
   const dataDir = resolveTeachingCourseManagementDataDir(input.dataDir);
   const actorId = requireSafeId(input.actorId, "actor id");
   const courseId = requireSafeId(input.courseId, "course id");
@@ -648,6 +661,31 @@ export async function assertTeachingClassInviteCodePublishTarget(input: {
   if (classItem.ownerTeacherId !== actorId) {
     throw new TeachingCourseManagementStoreError(403, "Teaching class ownership is required.");
   }
+
+  const inviteCodeDraft = [...(database.inviteCodeDrafts ?? [])]
+    .reverse()
+    .find((item) => item.courseId === courseId && item.classId === classId);
+
+  return {
+    classItem,
+    invitationCode: inviteCodeDraft?.inviteCode ?? classItem.invitationCode,
+  };
+}
+
+// A code drawn against every code in the deployment, not one course's
+// partition: a student joins with the bare code and no course context, so
+// uniqueness that stops at a course boundary is not uniqueness at all. This is
+// the same allocator the class-creation path uses.
+export async function allocateTeachingClassInviteCode(input: {
+  dataDir?: string;
+  repository?: TeachingCourseManagementRepository;
+}) {
+  const dataDir = resolveTeachingCourseManagementDataDir(input.dataDir);
+  const { database } = await readTeachingCourseManagementSnapshot({
+    dataDir,
+    ...(input.repository ? { repository: input.repository } : {}),
+  });
+  return createClassInvitationCode(database);
 }
 
 export async function joinTeachingClassByInviteCode(input: {
