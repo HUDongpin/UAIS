@@ -47,6 +47,8 @@ Every session must:
 - Dirty-root rescue work must begin with `npm run release:dirty-map -- --reason "<short reason>"`, then use explicit pathspec staging only. Do not use `git add .` for UAIS rescue, release, or owner-slice commits.
 - Before starting root-checkout work, run `npm run release:clean-check`. If it fails, only S25/S10/S22 rescue, release-intake, or owner-approved cleanup work may continue in the root until clean-status evidence is published.
 - Generated evidence refreshes must overwrite the canonical report names or go under ignored `.scratch/` folders. Archive superseded generated reports and dirty-map probes before handoff instead of accumulating new timestamped piles in the root.
+- As of 2026-08-18 the Vercel project `uais` is connected to `HUDongpin/UAIS`, so **pushing `main` deploys production at `uais.top` automatically**. A production build runs `npm run vercel-build`, which applies migrations to the live database before `next build`. Treat a push to `main` as a release action, not a save: it needs the same care as `vercel --prod`.
+- Pushing any other branch to `origin` creates a Vercel preview deployment. Preview shares the project's `DATABASE_URL`/`POSTGRES_URL`, which currently point at the **production** database, so preview runtime code reads and writes live data. Migrations are safe (the runner skips when `VERCEL_ENV` is not `production`), but application writes are not. Do not push a branch carrying destructive or seed-data behavior until preview is pointed at its own database.
 
 ## High-Intensity Release Coordination Protocol
 
