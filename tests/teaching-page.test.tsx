@@ -10137,6 +10137,29 @@ describe("TeachingPage", () => {
 
   it("loads signed server workflow state and existing PPT narration downloads", async () => {
     window.history.replaceState(null, "", "/teaching");
+    let objectUrlSequence = 0;
+    const createObjectUrlSpy = vi
+      .spyOn(URL, "createObjectURL")
+      .mockImplementation(() => `blob:uais-narration-download-${(objectUrlSequence += 1)}`);
+    const revokeObjectUrlSpy = vi
+      .spyOn(URL, "revokeObjectURL")
+      .mockImplementation(() => undefined);
+    const clickedDownloads: Array<{
+      connectedAtClick: boolean;
+      element: HTMLAnchorElement;
+      fileName: string;
+      href: string;
+    }> = [];
+    const anchorClickSpy = vi
+      .spyOn(HTMLAnchorElement.prototype, "click")
+      .mockImplementation(function (this: HTMLAnchorElement) {
+        clickedDownloads.push({
+          connectedAtClick: this.isConnected,
+          element: this,
+          fileName: this.download,
+          href: this.href,
+        });
+      });
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       if (url === "/api/teaching/courses" && (!init?.method || init.method === "GET")) {
@@ -10194,6 +10217,25 @@ describe("TeachingPage", () => {
           },
         });
       }
+      if (
+        url === "/api/ai/ppt-narration/export/audio-manifest-kang-xia-ppt-19" &&
+        init?.method === "GET"
+      ) {
+        return new Response(
+          new TextEncoder().encode("zip-download-bytes"),
+          { status: 200, headers: { "content-type": "application/zip" } },
+        );
+      }
+      if (
+        url ===
+          "/api/ai/ppt-narration/audio/audio-manifest-kang-xia-ppt-19/audio-slide-01" &&
+        init?.method === "GET"
+      ) {
+        return new Response(new TextEncoder().encode("wav-download-bytes"), {
+          status: 200,
+          headers: { "content-type": "audio/wav" },
+        });
+      }
       return Response.json({ error: "unexpected" }, { status: 500 });
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -10211,21 +10253,16 @@ describe("TeachingPage", () => {
       expect(screen.getByText("下一步：复核并下载课件配音")).toBeTruthy();
       expect(screen.getByText("声音样本就绪")).toBeTruthy();
       expect(screen.getByText("课件配音就绪")).toBeTruthy();
-      expect(screen.getByRole("link", { name: "下载完整课件配音包" })).toHaveProperty(
-        "href",
-        expect.stringContaining(
-          "/api/ai/ppt-narration/export/audio-manifest-kang-xia-ppt-19",
-        ),
-      );
-      expect(screen.getAllByRole("link", { name: /下载服务器第 \d+ 页音频/ })).toHaveLength(
-        19,
-      );
-      expect(screen.getByRole("link", { name: "下载服务器第 1 页音频" })).toHaveProperty(
-        "href",
-        expect.stringContaining(
-          "/api/ai/ppt-narration/audio/audio-manifest-kang-xia-ppt-19/audio-slide-01",
-        ),
-      );
+      // Buttons, not links. These download routes require the signed
+      // AI-access headers, which a browser cannot attach to an anchor
+      // navigation, so every one of these anchors answered 403 and downloaded
+      // nothing. Asserting the href only ever proved the url was spelled
+      // correctly — the download itself is covered by the click test below.
+      expect(screen.getByRole("button", { name: "下载完整课件配音包" })).toBeTruthy();
+      expect(
+        screen.getAllByRole("button", { name: /下载服务器第 \d+ 页音频/ }),
+      ).toHaveLength(19);
+      expect(screen.getByRole("button", { name: "下载服务器第 1 页音频" })).toBeTruthy();
     });
     expect(fetchMock.mock.calls).toHaveLength(3);
     const workflowCall = fetchMock.mock.calls.find(
@@ -10238,6 +10275,117 @@ describe("TeachingPage", () => {
       }),
     );
     expect(JSON.stringify(fetchMock.mock.calls)).not.toContain("API_KEY");
+
+    // The download regression: these controls used to be anchors, so clicking
+    // one navigated to a route that only accepts the signed access headers and
+    // came back 403 having downloaded nothing. Exercise the complete replacement
+    // path: mint a resource-scoped session, fetch a successful Blob without
+    // following redirects, click a temporary download anchor, then revoke it.
+    fireEvent.click(screen.getByRole("button", { name: "下载完整课件配音包" }));
+    await waitFor(() => {
+      expect(anchorClickSpy).toHaveBeenCalledTimes(1);
+      expect(revokeObjectUrlSpy).toHaveBeenCalledTimes(1);
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "下载服务器第 1 页音频" }));
+    await waitFor(() => {
+      expect(anchorClickSpy).toHaveBeenCalledTimes(2);
+      expect(revokeObjectUrlSpy).toHaveBeenCalledTimes(2);
+    });
+
+    const exportCall = fetchMock.mock.calls.find(
+      ([url]) =>
+        String(url) ===
+        "/api/ai/ppt-narration/export/audio-manifest-kang-xia-ppt-19",
+    );
+    const audioCall = fetchMock.mock.calls.find(
+      ([url]) =>
+        String(url) ===
+        "/api/ai/ppt-narration/audio/audio-manifest-kang-xia-ppt-19/audio-slide-01",
+    );
+    expect(exportCall?.[1]).toEqual(
+      expect.objectContaining({
+        method: "GET",
+        credentials: "same-origin",
+        redirect: "error",
+        headers: expect.objectContaining({
+          "x-uais-access-claims": "redacted-claims-ppt-narration-export-download",
+          "x-uais-access-signature":
+            "redacted-signature-ppt-narration-export-download",
+        }),
+      }),
+    );
+    expect(audioCall?.[1]).toEqual(
+      expect.objectContaining({
+        method: "GET",
+        credentials: "same-origin",
+        redirect: "error",
+        headers: expect.objectContaining({
+          "x-uais-access-claims": "redacted-claims-ppt-narration-audio-download",
+          "x-uais-access-signature": "redacted-signature-ppt-narration-audio-download",
+        }),
+      }),
+    );
+
+    const sessionBodies = fetchMock.mock.calls
+      .filter(([url]) => String(url) === "/api/ai/session")
+      .map(([, init]) => JSON.parse(String(init?.body)) as {
+        action: string;
+        resource: Record<string, string>;
+        ttlSeconds: number;
+      });
+    expect(
+      sessionBodies.find(({ action }) => action === "ppt-narration-export-download"),
+    ).toEqual({
+      action: "ppt-narration-export-download",
+      ttlSeconds: 300,
+      resource: {
+        teacherId: "teacher-kang",
+        courseId: "research-methods",
+        audioManifestId: "audio-manifest-kang-xia-ppt-19",
+      },
+    });
+    expect(
+      sessionBodies.find(({ action }) => action === "ppt-narration-audio-download"),
+    ).toEqual({
+      action: "ppt-narration-audio-download",
+      ttlSeconds: 300,
+      resource: {
+        teacherId: "teacher-kang",
+        courseId: "research-methods",
+        audioManifestId: "audio-manifest-kang-xia-ppt-19",
+        audioId: "audio-slide-01",
+      },
+    });
+
+    expect(createObjectUrlSpy).toHaveBeenCalledTimes(2);
+    const exportBlob = createObjectUrlSpy.mock.calls[0]?.[0] as Blob;
+    const audioBlob = createObjectUrlSpy.mock.calls[1]?.[0] as Blob;
+    expect(exportBlob).toBeInstanceOf(Blob);
+    expect(exportBlob.type).toBe("application/zip");
+    expect(await exportBlob.text()).toBe("zip-download-bytes");
+    expect(audioBlob).toBeInstanceOf(Blob);
+    expect(audioBlob.type).toBe("audio/wav");
+    expect(await audioBlob.text()).toBe("wav-download-bytes");
+    expect(clickedDownloads).toMatchObject([
+      {
+        connectedAtClick: true,
+        fileName: "ppt-narration-export.zip",
+        href: "blob:uais-narration-download-1",
+      },
+      {
+        connectedAtClick: true,
+        fileName: "audio-slide-01.wav",
+        href: "blob:uais-narration-download-2",
+      },
+    ]);
+    expect(clickedDownloads.every(({ element }) => !element.isConnected)).toBe(true);
+    expect(revokeObjectUrlSpy.mock.calls).toEqual([
+      ["blob:uais-narration-download-1"],
+      ["blob:uais-narration-download-2"],
+    ]);
+    expect(screen.queryByText(/\u4e0b\u8f7d\u5931\u8d25/)).toBeNull();
+
     if (process.env.UAIS_TEACHER_WORKFLOW_FEATURE_EVIDENCE === "1") {
       process.stdout.write(
         `UAIS_TEACHER_WORKFLOW_FEATURES ${JSON.stringify({
@@ -10246,6 +10394,82 @@ describe("TeachingPage", () => {
       );
     }
   });
+
+  it.each([
+    [
+      "an absolute external URL",
+      "https://attacker.example/api/ai/ppt-narration/export/audio-manifest-kang-xia-ppt-19",
+    ],
+    [
+      "a protocol-relative external URL",
+      "//attacker.example/api/ai/ppt-narration/export/audio-manifest-kang-xia-ppt-19",
+    ],
+    [
+      "malformed percent encoding",
+      "/api/ai/ppt-narration/export/audio-manifest-%E0%A4%A",
+    ],
+  ])(
+    "rejects %s before minting a download session or making a download request",
+    async (_caseName, unsafeExportDownloadUrl) => {
+      window.history.replaceState(null, "", "/teaching");
+      const createObjectUrlSpy = vi.spyOn(URL, "createObjectURL");
+      const anchorClickSpy = vi.spyOn(HTMLAnchorElement.prototype, "click");
+      const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url === "/api/teaching/courses" && (!init?.method || init.method === "GET")) {
+          return createSignedTeachingCourseListReadback();
+        }
+        if (url === "/api/ai/session" && init?.method === "POST") {
+          return createRedactedTeacherAiSessionResponse(init);
+        }
+        if (
+          url === "/api/ai/teacher-ppt-workflow" &&
+          (!init?.method || init.method === "GET")
+        ) {
+          return Response.json({
+            workflow: {
+              teacherId: "teacher-kang",
+              courseId: "research-methods",
+              pptAssetId: "kang-xia-ppt-19",
+              status: "ready-for-downloads",
+              nextAction: "review-and-download-ppt-narration",
+              downloads: {
+                audioManifestId: "audio-manifest-kang-xia-ppt-19",
+                exportDownloadUrl: unsafeExportDownloadUrl,
+                audioDownloadPattern:
+                  "/api/ai/ppt-narration/audio/audio-manifest-kang-xia-ppt-19/{audioId}",
+              },
+            },
+          });
+        }
+        return Response.json({ error: "unexpected download request" }, { status: 500 });
+      });
+      vi.stubGlobal("fetch", fetchMock);
+
+      render(<TeachingPage />);
+      openAgentWorkspace();
+      await waitForSignedTeachingCourseListReadback(fetchMock);
+      fireEvent.click(screen.getByRole("button", { name: "刷新服务端工作流" }));
+      await screen.findByRole("button", { name: "下载完整课件配音包" });
+
+      const callCountBeforeRejectedClick = fetchMock.mock.calls.length;
+      fireEvent.click(screen.getByRole("button", { name: "下载完整课件配音包" }));
+
+      await waitFor(() => {
+        expect(screen.getByText("无法识别的下载地址。")).toBeTruthy();
+      });
+      expect(fetchMock.mock.calls).toHaveLength(callCountBeforeRejectedClick);
+      expect(fetchMock.mock.calls.some(([url]) => String(url) === unsafeExportDownloadUrl)).toBe(
+        false,
+      );
+      const issuedActions = fetchMock.mock.calls
+        .filter(([url]) => String(url) === "/api/ai/session")
+        .map(([, init]) => (JSON.parse(String(init?.body)) as { action: string }).action);
+      expect(issuedActions).toEqual(["teacher-ppt-workflow-read"]);
+      expect(createObjectUrlSpy).not.toHaveBeenCalled();
+      expect(anchorClickSpy).not.toHaveBeenCalled();
+    },
+  );
 
   it("keeps partial server workflow status usable before steps and downloads are ready", async () => {
     window.history.replaceState(null, "", "/teaching");
@@ -10299,7 +10523,7 @@ describe("TeachingPage", () => {
       expect(screen.getByText("服务端步骤尚未返回。")).toBeTruthy();
       expect(screen.getByText("服务端下载入口尚未生成。")).toBeTruthy();
     });
-    expect(screen.queryByRole("link", { name: "下载完整课件配音包" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "下载完整课件配音包" })).toBeNull();
     expect(fetchMock.mock.calls).toHaveLength(3);
     const workflowCall = fetchMock.mock.calls.find(
       ([url]) => String(url) === "/api/ai/teacher-ppt-workflow",
@@ -10426,35 +10650,18 @@ describe("TeachingPage", () => {
     expect(JSON.stringify(fetchMock.mock.calls)).not.toContain("DASHSCOPE");
   });
 
-  it("lets teachers run redacted AI readiness, smoke, chat, and PPT contract checks", async () => {
+  // Readiness and smoke-plan were dropped from this test with the two buttons that
+  // drove them. They were never teacher-runnable: `/api/ai/readiness` and
+  // `/api/ai/smoke-plan` assert `assertUaisAiAdminAccess`, no admin session is
+  // minted anywhere in the running system, and the production release gate asserts
+  // both routes DENY. This test passed only because the mock answered 200 where the
+  // real routes answer 403 — it proved the button was wired, not that it worked.
+  it("lets teachers run redacted AI chat and PPT contract checks", async () => {
     window.history.replaceState(null, "", "/teaching");
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       if (url === "/api/teaching/courses" && (!init?.method || init.method === "GET")) {
         return createSignedTeachingCourseListReadback();
-      }
-      if (url === "/api/ai/readiness") {
-        return Response.json({
-          readiness: [
-            { provider: "deepseek", requiredEnv: "DEEPSEEK_API_KEY", status: "present" },
-            { provider: "qwen", requiredEnv: "DASHSCOPE_API_KEY", status: "missing" },
-          ],
-        });
-      }
-      if (url === "/api/ai/smoke-plan") {
-        return Response.json({
-          mode: "dry-run",
-          network: "disabled",
-          checks: [
-            {
-              provider: "deepseek",
-              requiredEnv: "DEEPSEEK_API_KEY",
-              status: "present",
-              roles: ["text-reasoning"],
-              action: "verify-text-reasoning-contract",
-            },
-          ],
-        });
       }
       if (url === "/api/ai/session" && init?.method === "POST") {
         const body = JSON.parse(String(init.body)) as { action: string };
@@ -10528,8 +10735,9 @@ describe("TeachingPage", () => {
     openAgentWorkspace();
     await waitForSignedTeachingCourseListReadback(fetchMock);
 
-    fireEvent.click(screen.getByRole("button", { name: "刷新配置检查" }));
-    fireEvent.click(screen.getByRole("button", { name: "运行试测" }));
+    expect(screen.queryByRole("button", { name: "刷新配置检查" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "运行试测" })).toBeNull();
+
     fireEvent.click(screen.getByRole("button", { name: "试跑智能体合同" }));
     fireEvent.click(screen.getByRole("button", { name: "登记声音样本合同" }));
     fireEvent.click(screen.getByRole("button", { name: "声音克隆实时预检" }));
@@ -10537,9 +10745,6 @@ describe("TeachingPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "生成课件配音合同" }));
 
     await waitFor(() => {
-      expect(screen.getByText("深度求索：已配置")).toBeTruthy();
-      expect(screen.getByText("阿里千问：缺失")).toBeTruthy();
-      expect(screen.getByText("试运行：试运行 / 网络关闭")).toBeTruthy();
       expect(screen.getByText("方法顾问已通过多智能体合同响应。")).toBeTruthy();
       expect(screen.getByText("声音样本合同可用于复刻：10 秒")).toBeTruthy();
       expect(
@@ -10549,6 +10754,12 @@ describe("TeachingPage", () => {
       expect(screen.getByText("课件配音合同已排队：19 页")).toBeTruthy();
     });
     expect(JSON.stringify(fetchMock.mock.calls)).not.toContain("API_KEY");
+    expect(fetchMock.mock.calls.some(([url]) => String(url) === "/api/ai/readiness")).toBe(
+      false,
+    );
+    expect(fetchMock.mock.calls.some(([url]) => String(url) === "/api/ai/smoke-plan")).toBe(
+      false,
+    );
   });
 
   it("uses the signed teacher actor for uploaded voice sample ids instead of the default teacher", async () => {
@@ -10823,19 +11034,11 @@ describe("TeachingPage", () => {
 
     await waitFor(() => {
       expect(screen.getByText("课件配音已排队：19 页音频")).toBeTruthy();
-      expect(screen.getAllByRole("link", { name: /下载第 \d+ 页音频/ })).toHaveLength(19);
-      expect(screen.getByRole("link", { name: "下载第 1 页音频" })).toHaveProperty(
-        "href",
-        expect.stringContaining(
-          "/api/ai/ppt-narration/audio/audio-manifest-kang-xia-ppt-19/audio-slide-01",
-        ),
-      );
-      expect(screen.getByRole("link", { name: "下载第 19 页音频" })).toHaveProperty(
-        "href",
-        expect.stringContaining(
-          "/api/ai/ppt-narration/audio/audio-manifest-kang-xia-ppt-19/audio-slide-19",
-        ),
-      );
+      // Buttons rather than anchors, for the same reason as the server set: the
+      // audio route requires signed access headers an anchor cannot carry.
+      expect(screen.getAllByRole("button", { name: /下载第 \d+ 页音频/ })).toHaveLength(19);
+      expect(screen.getByRole("button", { name: "下载第 1 页音频" })).toBeTruthy();
+      expect(screen.getByRole("button", { name: "下载第 19 页音频" })).toBeTruthy();
     });
 
     const pptNarrationCall = fetchMock.mock.calls.find(

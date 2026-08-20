@@ -2,7 +2,14 @@
 
 // OpenMAIC operation preview panels for the teacher operation page (Phase 3
 // decomposition): the OperationSpecificPreview switch plus the data-export, agent,
-// and content preview panels, the small invite QR, and their scene/label helpers.
+// and content preview panels, the invite QR, and their scene/label helpers.
+//
+// The invite panel renders the shared `InvitationQrCode`. It used to draw its own
+// 15x15 grid seeded from the invite code's char codes — a picture of a QR code
+// that encoded nothing, published to assistive technology as "QR code for invite
+// code X". The scannable component replaced that pattern in the invitation dialog
+// and the inline workspace; this copy was missed, so the standalone
+// /teaching/invite-code page kept shipping the unscannable one.
 // Presentational — driven by props and the extracted catalog data.
 
 
@@ -19,6 +26,8 @@ import { QrCode } from "@phosphor-icons/react/dist/ssr/QrCode";
 import { Robot } from "@phosphor-icons/react/dist/ssr/Robot";
 import { ShieldCheck } from "@phosphor-icons/react/dist/ssr/ShieldCheck";
 import { SquaresFour } from "@phosphor-icons/react/dist/ssr/SquaresFour";
+import { createInviteJoinUrl } from "@/components/pages/teaching-page-helpers";
+import { InvitationQrCode } from "@/components/teaching/invitation-qr-code";
 import { localizedText } from "@/components/ui/localized-text";
 import type { Locale } from "@/i18n/copy";
 import {
@@ -67,7 +76,12 @@ export function OperationSpecificPreview({
     return (
       <div className="mt-5 grid gap-4 md:grid-cols-[220px_1fr]">
         <div className="rounded-2xl border border-[var(--border)] bg-white p-4">
-          <SmallQrPattern inviteCode={inviteCode} />
+          <InvitationQrCode
+            invitationCode={inviteCode}
+            joinUrl={createInviteJoinUrl(inviteCode)}
+            locale={locale}
+            variant="inline"
+          />
         </div>
         <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-elevated)] p-4">
           <div className="flex items-center gap-3">
@@ -485,45 +499,6 @@ function OpenMaicContentPreview({ locale }: { locale: Locale }) {
   );
 }
 
-function SmallQrPattern({ inviteCode }: { inviteCode: string }) {
-  const cells = createSmallQrCells(inviteCode);
-
-  return (
-    <div
-      aria-label={`QR code for invite code ${inviteCode}`}
-      className="grid aspect-square w-full grid-cols-[repeat(15,minmax(0,1fr))] bg-white"
-    >
-      {cells.map((active, index) => (
-        <span key={`${inviteCode}-${index}`} className={active ? "bg-black" : "bg-white"} />
-      ))}
-    </div>
-  );
-}
-
-function createSmallQrCells(seed: string) {
-  const size = 15;
-  const cells = Array.from({ length: size * size }, (_, index) => {
-    const charCode = seed.charCodeAt(index % seed.length);
-    return (charCode + index * 7) % 5 === 0;
-  });
-
-  function finder(x: number, y: number) {
-    for (let row = 0; row < 5; row += 1) {
-      for (let col = 0; col < 5; col += 1) {
-        const border = row === 0 || row === 4 || col === 0 || col === 4;
-        const center = row >= 2 && row <= 2 && col >= 2 && col <= 2;
-        cells[(y + row) * size + x + col] = border || center;
-      }
-    }
-  }
-
-  finder(0, 0);
-  finder(10, 0);
-  finder(0, 10);
-
-  return cells;
-}
-
 export function formatCourseAction(action: string, locale: Locale) {
   if (action === "manage") {
     return locale === "zh-CN" ? "管理课程" : "Manage course";
@@ -531,6 +506,17 @@ export function formatCourseAction(action: string, locale: Locale) {
 
   if (action === "continue") {
     return locale === "zh-CN" ? "继续编辑" : "Continue editing";
+  }
+
+  // The two class actions `createTeachingClassActionHref` emits. Without these
+  // the fallback returned the raw slug, so a zh-CN page headed 课程操作 displayed
+  // the literal English `enter-class` / `activity-list`.
+  if (action === "enter-class") {
+    return locale === "zh-CN" ? "进入班级" : "Enter class";
+  }
+
+  if (action === "activity-list") {
+    return locale === "zh-CN" ? "活动列表" : "Activity list";
   }
 
   return action;

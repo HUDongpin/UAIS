@@ -12,6 +12,10 @@ type TeachingOperationRouteProps = {
   searchParams: Promise<{
     action?: string | string[];
     course?: string | string[];
+    // `createTeachingClassActionHref` has always emitted `class`, but this type
+    // declared only `action` and `course`, so the class a teacher clicked through
+    // from was silently dropped and the page opened course-scoped instead.
+    class?: string | string[];
   }>;
 };
 
@@ -32,6 +36,7 @@ export default async function Page({ params, searchParams }: TeachingOperationRo
     <TeachingOperationPage
       action={firstQueryValue(query.action)}
       operationId={operation}
+      selectedClassId={firstQueryValue(query.class)}
       selectedCourseId={firstQueryValue(query.course)}
     />
   );

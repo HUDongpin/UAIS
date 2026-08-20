@@ -32,6 +32,7 @@ import {
 type TeachingOperationPageProps = {
   operationId: string;
   selectedCourseId?: string;
+  selectedClassId?: string;
   action?: string;
 };
 
@@ -270,6 +271,7 @@ const TEACHING_OPERATION_COURSE_CONTEXT_MISSING_MESSAGE: LocalizedText = {
 export function TeachingOperationPage({
   operationId,
   selectedCourseId,
+  selectedClassId,
   action,
 }: TeachingOperationPageProps) {
   const { locale } = useAppPreferences();
@@ -1065,6 +1067,18 @@ export function TeachingOperationPage({
                     ? "未选择课程：教学操作需要课程上下文。"
                     : "No course selected: teaching operations need course context."}
               </p>
+              {/* Shown for the same reason the course id is: the class arrives in
+                  the url and a teacher should be able to see that the click they
+                  made carried it. Rendered as the id because the static catalog
+                  has no class titles to resolve against. */}
+              {selectedClassId ? (
+                <p
+                  data-uais-operation-selected-class={selectedClassId}
+                  className="mt-2 text-sm font-medium text-[var(--foreground)]"
+                >
+                  {`${locale === "zh-CN" ? "已选择班级" : "Selected class"}：${selectedClassId}`}
+                </p>
+              ) : undefined}
               <p className="mt-2 text-sm leading-6 text-[var(--muted)]">
                 {action
                   ? `${locale === "zh-CN" ? "来源动作" : "Source action"}：${formatCourseAction(

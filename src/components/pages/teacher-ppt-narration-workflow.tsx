@@ -36,7 +36,6 @@ import {
   formatServerWorkflowProgressText,
   formatServerWorkflowStatusLine,
   formatServerWorkflowStep,
-  formatSmokeMode,
   formatTeacherVoiceRefDisplay,
   formatTeacherWorkflowNarration,
   formatTeacherWorkflowSample,
@@ -47,7 +46,6 @@ import {
   headersToRecord,
   localizeAgentContractResult,
   pickSignedAiAccessHeaders,
-  providerLabel,
   readTeacherWorkflowActorId,
   requireTeacherWorkflowActorId,
   resolveSelectedTeacherVoiceSampleAssetId,
@@ -112,6 +110,31 @@ export function TeacherPptNarrationWorkflow({
       }
     };
   }, [selectedVoiceAudioUrl]);
+
+  async function downloadNarrationAsset(input: { downloadUrl: string; fileName: string }) {
+    setWorkflowError(undefined);
+    try {
+      const actorId = requireTeacherWorkflowActorId({
+        locale,
+        teacherActorId,
+        serverWorkflowTeacherId: serverWorkflow?.teacherId,
+      });
+      await downloadProtectedTeacherWorkflowAsset({
+        downloadUrl: input.downloadUrl,
+        fileName: input.fileName,
+        locale,
+        teacherId: actorId,
+      });
+    } catch (error) {
+      setWorkflowError(
+        error instanceof Error
+          ? error.message
+          : locale === "zh-CN"
+            ? "下载失败。"
+            : "Download failed.",
+      );
+    }
+  }
 
   async function refreshServerWorkflow() {
     setWorkflowError(undefined);
@@ -603,31 +626,44 @@ export function TeacherPptNarrationWorkflow({
             )}
             {serverWorkflow.downloads ? (
               <div className="space-y-2">
-                <a
-                  href={serverWorkflow.downloads.exportDownloadUrl}
+                <button
+                  type="button"
+                  data-uais-ppt-narration-export-download
                   className="inline-flex min-h-9 items-center gap-2 rounded-full border border-[var(--accent-border)] bg-[var(--accent-soft)] px-3 text-xs font-semibold text-[var(--accent)]"
+                  onClick={() =>
+                    void downloadNarrationAsset({
+                      downloadUrl: serverWorkflow.downloads?.exportDownloadUrl ?? "",
+                      fileName: "ppt-narration-export.zip",
+                    })
+                  }
                 >
                   <ExportIcon size={14} weight="bold" />
                   {locale === "zh-CN"
                     ? "下载完整课件配音包"
                     : "Download full PPT narration package"}
-                </a>
+                </button>
                 <div className="flex flex-wrap gap-2">
                   {createServerWorkflowDownloadAssets({
                     locale,
                     audioDownloadPattern: serverWorkflow.downloads.audioDownloadPattern,
                   }).map((asset) => (
-                    <a
+                    <button
                       key={asset.audioId}
-                      href={asset.downloadUrl}
-                      download={`${asset.audioId}.wav`}
+                      type="button"
+                      data-uais-ppt-narration-audio-download={asset.audioId}
                       className="inline-flex min-h-9 items-center gap-2 rounded-full border border-[var(--accent-border)] bg-[var(--accent-soft)] px-3 text-xs font-semibold text-[var(--accent)]"
+                      onClick={() =>
+                        void downloadNarrationAsset({
+                          downloadUrl: asset.downloadUrl,
+                          fileName: `${asset.audioId}.wav`,
+                        })
+                      }
                     >
                       <ExportIcon size={14} weight="bold" />
                       {locale === "zh-CN"
                         ? formatPptAudioDownloadLabel(asset, locale, "server")
                         : `Download server ${asset.slideId} WAV`}
-                    </a>
+                    </button>
                   ))}
                 </div>
               </div>
@@ -857,17 +893,23 @@ export function TeacherPptNarrationWorkflow({
               </p>
               <div className="flex flex-wrap gap-2">
                 {narration.assets.map((asset) => (
-                  <a
+                  <button
                     key={asset.audioId}
-                    href={asset.downloadUrl}
-                    download={`${asset.audioId}.wav`}
+                    type="button"
+                    data-uais-ppt-narration-audio-download={asset.audioId}
                     className="inline-flex min-h-9 items-center gap-2 rounded-full border border-[var(--accent-border)] bg-[var(--accent-soft)] px-3 text-xs font-semibold text-[var(--accent)]"
+                    onClick={() =>
+                      void downloadNarrationAsset({
+                        downloadUrl: asset.downloadUrl,
+                        fileName: `${asset.audioId}.wav`,
+                      })
+                    }
                   >
                     <ExportIcon size={14} weight="bold" />
                     {locale === "zh-CN"
                       ? formatPptAudioDownloadLabel(asset, locale, "local")
                       : `Download ${asset.slideId} WAV`}
-                  </a>
+                  </button>
                 ))}
               </div>
             </div>
@@ -905,28 +947,6 @@ export function AiOpsWorkbench({
   teacherActorId?: string;
 }) {
   const [results, setResults] = useState<string[]>([]);
-
-  async function runReadiness() {
-    const body = await readJson<{ readiness: Array<{ provider: string; status: string }> }>(
-      "/api/ai/readiness",
-    );
-    setResults(
-      body.readiness.map((item) =>
-        locale === "zh-CN"
-          ? `${providerLabel(item.provider, locale)}：${formatWorkflowStatus(item.status, locale)}`
-          : `${providerLabel(item.provider, locale)}: ${item.status}`,
-      ),
-    );
-  }
-
-  async function runSmokePlan() {
-    const body = await readJson<{ mode: string; network: string }>("/api/ai/smoke-plan");
-    appendResult(
-      locale === "zh-CN"
-        ? `试运行：${formatSmokeMode(body.mode, locale)} / 网络${formatWorkflowStatus(body.network, locale)}`
-        : `Smoke: ${body.mode} / network ${body.network}`,
-    );
-  }
 
   async function runAgentContract() {
     const actorId = requireTeacherWorkflowActorId({ locale, teacherActorId });
@@ -1156,18 +1176,20 @@ export function AiOpsWorkbench({
   return (
     <div className="mt-4 rounded-2xl border border-[var(--border)] bg-[var(--surface-elevated)] p-4">
       <div className="flex flex-wrap gap-2">
-        <AiOpsButton
-          icon={<ChartBar size={16} weight="bold" />}
-          onClick={() => void runAiOpsAction(runReadiness)}
-        >
-          {locale === "zh-CN" ? "刷新配置检查" : "Refresh readiness"}
-        </AiOpsButton>
-        <AiOpsButton
-          icon={<ChartBar size={16} weight="bold" />}
-          onClick={() => void runAiOpsAction(runSmokePlan)}
-        >
-          {locale === "zh-CN" ? "运行试测" : "Run dry-run smoke"}
-        </AiOpsButton>
+        {/* 刷新配置检查 / Refresh readiness and 运行试测 / Run dry-run smoke used to
+            sit here. Both called admin-only routes (`/api/ai/readiness`,
+            `/api/ai/smoke-plan`) that assert `assertUaisAiAdminAccess` with a
+            signed session, and no admin AI-access session is minted anywhere in
+            the running system — the sole issuance path hardcodes role "teacher"
+            (src/lib/server/ai-session-issuer.ts:43-46). So both buttons answered
+            403 every time they were ever clicked.
+            They are not restored by lowering that gate: the production release
+            gate lists both routes in `requiredTeacherAiAdminRouteDirectCallProbes`
+            and asserts they DENY unsigned callers
+            (scripts/production-e2e-release-gate.mjs:530-547, :8812-8815). They are
+            operator diagnostics — which providers are reachable, what a dry-run
+            would do — and a teacher cannot act on either. Removed rather than
+            re-pointed. See coordination/reports/2026-08-19-teaching-backend-gated-defects-proposal.md */}
         <AiOpsButton
           icon={<Robot size={16} weight="bold" />}
           onClick={() => void runAiOpsAction(runAgentContract)}
@@ -1263,6 +1285,167 @@ async function readJson<T>(url: string, init?: RequestInit): Promise<T> {
   return (await response.json()) as T;
 }
 
+// The narration downloads used to be plain `<a href>` anchors. Their routes
+// require a signed AI-access session delivered *only* through the
+// `x-uais-access-claims` / `x-uais-access-signature` request headers, and a
+// browser cannot attach custom headers to a top-level navigation — so every one
+// of them answered 403 `signed-session-required` and no file ever arrived.
+//
+// Every other control in this component already goes through
+// `readProtectedTeacherWorkflowJson`, which mints those headers via
+// `POST /api/ai/session`. These helpers put the downloads on the same footing:
+// fetch with the minted headers, then hand the bytes to the browser as a blob.
+// Both actions are already in the session route's allowlist, so no server change
+// is needed.
+type PptNarrationDownloadTarget =
+  | {
+      action: "ppt-narration-export-download";
+      audioManifestId: string;
+      downloadPath: string;
+    }
+  | {
+      action: "ppt-narration-audio-download";
+      audioManifestId: string;
+      audioId: string;
+      downloadPath: string;
+    };
+
+const NARRATION_DOWNLOAD_PARSE_ORIGIN = "https://uais.invalid";
+const NARRATION_DOWNLOAD_SAFE_ID_PATTERN = /^[A-Za-z0-9_-]+$/;
+
+export function parsePptNarrationDownloadTarget(
+  downloadUrl: string,
+): PptNarrationDownloadTarget | undefined {
+  // The workflow emits root-relative URLs. Reject every form that can carry an
+  // authority (including protocol-relative and backslash-normalized URLs) before
+  // parsing, then require URL parsing to preserve the exact path. This keeps dot
+  // segments, queries, fragments, and other normalization tricks outside the
+  // signed-header download boundary.
+  if (
+    !downloadUrl.startsWith("/") ||
+    downloadUrl.startsWith("//") ||
+    downloadUrl.includes("\\")
+  ) {
+    return undefined;
+  }
+
+  try {
+    const parsed = new URL(downloadUrl, NARRATION_DOWNLOAD_PARSE_ORIGIN);
+    if (
+      parsed.origin !== NARRATION_DOWNLOAD_PARSE_ORIGIN ||
+      parsed.search ||
+      parsed.hash ||
+      parsed.pathname !== downloadUrl
+    ) {
+      return undefined;
+    }
+
+    const exportMatch = parsed.pathname.match(/^\/api\/ai\/ppt-narration\/export\/([^/]+)$/);
+    if (exportMatch) {
+      const audioManifestId = decodeURIComponent(exportMatch[1]);
+      if (!NARRATION_DOWNLOAD_SAFE_ID_PATTERN.test(audioManifestId)) {
+        return undefined;
+      }
+      return {
+        action: "ppt-narration-export-download",
+        audioManifestId,
+        downloadPath: `/api/ai/ppt-narration/export/${encodeURIComponent(audioManifestId)}`,
+      };
+    }
+
+    const audioMatch = parsed.pathname.match(
+      /^\/api\/ai\/ppt-narration\/audio\/([^/]+)\/([^/]+)$/,
+    );
+    if (audioMatch) {
+      const audioManifestId = decodeURIComponent(audioMatch[1]);
+      const audioId = decodeURIComponent(audioMatch[2]);
+      if (
+        !NARRATION_DOWNLOAD_SAFE_ID_PATTERN.test(audioManifestId) ||
+        !NARRATION_DOWNLOAD_SAFE_ID_PATTERN.test(audioId)
+      ) {
+        return undefined;
+      }
+      return {
+        action: "ppt-narration-audio-download",
+        audioManifestId,
+        audioId,
+        downloadPath: `/api/ai/ppt-narration/audio/${encodeURIComponent(
+          audioManifestId,
+        )}/${encodeURIComponent(audioId)}`,
+      };
+    }
+  } catch {
+    // `URL` accepts malformed percent escapes, but `decodeURIComponent` does not.
+    // Treat every parsing/decoding failure as an untrusted download target.
+    return undefined;
+  }
+
+  return undefined;
+}
+
+async function downloadProtectedTeacherWorkflowAsset(input: {
+  downloadUrl: string;
+  fileName: string;
+  locale: Locale;
+  teacherId: string;
+}) {
+  const target = parsePptNarrationDownloadTarget(input.downloadUrl);
+  if (!target) {
+    throw new Error(
+      input.locale === "zh-CN"
+        ? "无法识别的下载地址。"
+        : "Unrecognized narration download url.",
+    );
+  }
+
+  const accessHeaders = await requestTeacherAiSessionHeaders({
+    action: target.action,
+    resource: {
+      teacherId: input.teacherId,
+      courseId: DEFAULT_COURSE_ID,
+      audioManifestId: target.audioManifestId,
+      ...(target.action === "ppt-narration-audio-download"
+        ? { audioId: target.audioId }
+        : {}),
+    },
+    locale: input.locale,
+  });
+
+  const response = await fetch(target.downloadPath, {
+    method: "GET",
+    credentials: "same-origin",
+    headers: accessHeaders,
+    redirect: "error",
+  });
+  if (!response.ok) {
+    throw new Error(
+      input.locale === "zh-CN"
+        ? `下载失败（${response.status}）。`
+        : `Download failed (${response.status}).`,
+    );
+  }
+
+  saveBlobAsFile(await response.blob(), input.fileName);
+}
+
+function saveBlobAsFile(blob: Blob, fileName: string) {
+  if (typeof URL.createObjectURL !== "function") {
+    throw new Error("Blob downloads are unavailable in this browser.");
+  }
+  const objectUrl = URL.createObjectURL(blob);
+  try {
+    const link = document.createElement("a");
+    link.href = objectUrl;
+    link.download = fileName;
+    link.rel = "noopener";
+    document.body.append(link);
+    link.click();
+    link.remove();
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
 async function readProtectedTeacherWorkflowJson<T>(input: {
   url: string;
   locale: Locale;
@@ -1313,4 +1496,3 @@ async function requestTeacherAiSessionHeaders(input: {
     throw new Error(createTeacherWorkflowAuthErrorMessage(input.locale));
   }
 }
-

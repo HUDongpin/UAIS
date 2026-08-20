@@ -53,6 +53,8 @@ import {
   verifyCourseCoverAssetPersistence,
 } from "./teaching-page-helpers";
 import {
+  INVITE_CODE_COPIED_MESSAGE,
+  INVITE_COPY_FAILED_MESSAGE,
   TEACHING_COURSE_COVER_TEACHER_READBACK_REQUIRED_MESSAGE,
   TEACHING_OPERATION_SAVE_FAILED_MESSAGE,
 } from "./teaching-page-messages";
@@ -363,6 +365,23 @@ export function ClassInvitationDialog({
   // The class record's own join path when it has one (a published code carries
   // it), otherwise the same path the store would have written.
   const joinUrl = classItem.joinUrl?.trim() || createInviteJoinUrl(classItem.invitationCode);
+  // The clipboard glyph beside the code used to be bare decoration: the universal
+  // "copy this" affordance, with nothing behind it, next to a code a teacher is
+  // expected to hand out. The invite-code workspace already had working copy
+  // buttons, which made this one read as broken rather than absent.
+  const [copyStatus, setCopyStatus] = useState<"idle" | "copied" | "failed">("idle");
+
+  async function copyInvitationCode() {
+    try {
+      if (!navigator.clipboard?.writeText) {
+        throw new Error("Clipboard API unavailable.");
+      }
+      await navigator.clipboard.writeText(classItem.invitationCode);
+      setCopyStatus("copied");
+    } catch {
+      setCopyStatus("failed");
+    }
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/35 px-4 py-8 backdrop-blur-sm">
@@ -391,8 +410,34 @@ export function ClassInvitationDialog({
           <p className="text-6xl font-semibold leading-none text-[#6375ff]">
             {classItem.invitationCode}
           </p>
-          <ClipboardText size={28} weight="duotone" className="mb-3 text-[#9ab4d6]" />
+          <button
+            type="button"
+            data-uais-class-invitation-copy={classItem.invitationCode}
+            aria-label={
+              locale === "zh-CN"
+                ? `复制邀请码 ${classItem.invitationCode}`
+                : `Copy invite code ${classItem.invitationCode}`
+            }
+            className="mb-3 inline-flex size-11 items-center justify-center rounded-full text-[#9ab4d6] outline-none transition hover:bg-[#f4f7fb] hover:text-[#6375ff] focus-visible:ring-2 focus-visible:ring-[#2f7cff]"
+            onClick={() => void copyInvitationCode()}
+          >
+            <ClipboardText size={28} weight="duotone" />
+          </button>
         </div>
+        {copyStatus === "idle" ? undefined : (
+          <p
+            role="status"
+            data-uais-class-invitation-copy-status={copyStatus}
+            className={`mt-3 text-base font-medium ${
+              copyStatus === "copied" ? "text-[#3f9b6d]" : "text-[#c2544d]"
+            }`}
+          >
+            {localizedText(
+              copyStatus === "copied" ? INVITE_CODE_COPIED_MESSAGE : INVITE_COPY_FAILED_MESSAGE,
+              locale,
+            )}
+          </p>
+        )}
         {/* The three real ways in, in the order a student meets them. The line
             this replaced pointed at a code box on the homepage that does not
             exist; the box now does exist, on the course plaza page. */}

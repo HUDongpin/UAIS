@@ -102,13 +102,18 @@ export type SelectedVoiceSampleDurationStatus =
       status: "unchecked";
     };
 
+// The two download actions are last because they arrived last: the download
+// controls were anchors that never minted a session, so the client never named
+// these actions even though `/api/ai/session` has always allowed them.
 export type TeacherWorkflowSessionAction =
   | "live-chat"
   | "teacher-ppt-workflow-read"
   | "voice-sample-submit"
   | "voice-clone-preflight"
   | "voice-clone-status"
-  | "ppt-narration-submit";
+  | "ppt-narration-submit"
+  | "ppt-narration-audio-download"
+  | "ppt-narration-export-download";
 
 export type TeacherWorkflowSessionReadiness = {
   status: "checking" | "ready" | "blocked";
@@ -122,6 +127,10 @@ export type TeacherWorkflowSessionResource = {
   pptAssetId?: string;
   voiceRefId?: string;
   providerTaskId?: string;
+  // Scope for the two narration download actions. `/api/ai/session` already
+  // parses both fields; only this client type was missing them.
+  audioManifestId?: string;
+  audioId?: string;
 };
 
 export const DEFAULT_SAMPLE_ASSET_ID = "teacher-kang-10s-sample";
@@ -300,18 +309,6 @@ export function formatWorkflowStatus(status: string | undefined, locale: Locale)
   return statusLabels[value] ?? "待处理";
 }
 
-export function formatSmokeMode(mode: string, locale: Locale) {
-  if (locale !== "zh-CN") {
-    return mode;
-  }
-
-  if (mode === "dry-run") {
-    return "试运行";
-  }
-
-  return "检查";
-}
-
 export function formatWorkflowAction(action: string | undefined, locale: Locale) {
   const value = action ?? "pending";
   if (locale !== "zh-CN") {
@@ -442,18 +439,6 @@ export function headersToRecord(headers: HeadersInit | undefined): Record<string
     return Object.fromEntries(headers);
   }
   return headers;
-}
-
-export function providerLabel(provider: string, locale: Locale) {
-  if (provider === "deepseek") {
-    return locale === "zh-CN" ? "深度求索" : "DeepSeek";
-  }
-
-  if (provider === "qwen") {
-    return locale === "zh-CN" ? "阿里千问" : "Qwen";
-  }
-
-  return locale === "zh-CN" ? "服务商" : provider;
 }
 
 export function summarizePreflightChecks(
