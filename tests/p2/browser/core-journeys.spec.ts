@@ -104,17 +104,27 @@ test.describe("@e2e P2 core browser journeys", () => {
   ) => {
     const locale = localeForProject(testInfo);
     let playbackRequestCount = 0;
+    let playbackManifestUnavailable = true;
     await page.route("**/api/learning/ppt-playback/**", async (route) => {
-      if (route.request().method() === "GET" && playbackRequestCount === 0) {
+      const request = route.request();
+      const requestUrl = new URL(request.url());
+      const isPlaybackManifest =
+        request.method() === "GET" &&
+        requestUrl.pathname ===
+          "/api/learning/ppt-playback/elementary-math-research";
+      if (isPlaybackManifest) {
         playbackRequestCount += 1;
-        await route.fulfill({
-          status: 503,
-          contentType: "application/json",
-          body: JSON.stringify({ reasonCode: "playback-temporarily-unavailable" }),
-        });
+        if (playbackManifestUnavailable) {
+          await route.fulfill({
+            status: 503,
+            contentType: "application/json",
+            body: JSON.stringify({ reasonCode: "playback-temporarily-unavailable" }),
+          });
+        } else {
+          await route.continue();
+        }
         return;
       }
-      playbackRequestCount += 1;
       await route.continue();
     });
 
@@ -128,6 +138,7 @@ test.describe("@e2e P2 core browser journeys", () => {
       name: locale === "zh-CN" ? "重新加载课件" : "Retry loading slides",
     });
     await expect(retry).toBeVisible();
+    playbackManifestUnavailable = false;
     await retry.click();
 
     await expect(page).toHaveURL(/\/learning\?courseId=elementary-math-research/);
