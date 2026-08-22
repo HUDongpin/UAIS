@@ -17,7 +17,7 @@ import { UsersThree } from "@phosphor-icons/react/dist/ssr/UsersThree";
 import { useAppPreferences } from "@/components/providers/app-preferences";
 import { useSessionUser } from "@/components/providers/session-user";
 import { localizedText } from "@/components/ui/localized-text";
-import { aiAgents, chatMessages, learningCourses, plazaCourses } from "@/data/uais";
+import { aiAgents } from "@/data/uais";
 import { copy } from "@/i18n/copy";
 import type { Locale } from "@/i18n/copy";
 import { createLoginHandoffHref } from "@/lib/auth/login-return-path";
@@ -135,6 +135,50 @@ type StudentLearningGroupItem = {
 // student's own courses.
 type StudentDashboardSessionState = "ok" | "signed-out" | "unreachable";
 
+type LearningLoopDashboardState = "loading" | "ok" | "unreachable";
+
+type StudentLearningLoopDashboard = {
+  courses: Array<{
+    courseId: string;
+    courseTitle: string;
+    classId: string;
+    units: Array<{
+      lessonKey: string;
+      position: number;
+      activityId: string;
+      formative: { attempted: boolean };
+      submission: {
+        state:
+          | "not-started"
+          | "draft"
+          | "submitted"
+          | "revision_requested"
+          | "resubmitted"
+          | "accepted";
+      };
+      feedback: { status: "none" | "awaiting-teacher" | "revision-required" | "accepted" };
+      completion: { completed: boolean; basis: "teacher-accepted-current-version" };
+      dueAt?: string;
+    }>;
+    counts: {
+      notStarted: number;
+      draft: number;
+      submitted: number;
+      revisionRequested: number;
+      resubmitted: number;
+      accepted: number;
+      completedUnits: number;
+      overdue: number;
+    };
+    nextAction: { type: string; lessonKey?: string; reasonCode: string };
+    playbackProgress: { status: "not-authoritative"; percent: null };
+    projectionVersion: number;
+    dataFreshAt: string;
+  }>;
+  nextAction: { type: string; lessonKey?: string; reasonCode: string };
+  dataFreshAt: string;
+};
+
 const studentDashboardLoginHref = createLoginHandoffHref("/student-dashboard");
 
 export function StudentDashboardPage() {
@@ -149,11 +193,10 @@ export function StudentDashboardPage() {
   const [classMemberships, setClassMemberships] = useState<StudentClassMembershipItem[]>([]);
   const [learningGroups, setLearningGroups] = useState<StudentLearningGroupItem[]>([]);
   const [sessionState, setSessionState] = useState<StudentDashboardSessionState>("ok");
-  const activeCourse = learningCourses[0];
-  const nextCourse = learningCourses[1];
-  const recommendedCourse = plazaCourses[0];
-  const latestGroupMessage =
-    chatMessages.find((message) => message.kind === "student") ?? chatMessages[0];
+  const [learningLoopDashboard, setLearningLoopDashboard] =
+    useState<StudentLearningLoopDashboard>();
+  const [learningLoopState, setLearningLoopState] =
+    useState<LearningLoopDashboardState>("loading");
   const approvedMembership = classMemberships.find(
     (membership) => membership.membershipStatus === "approved",
   );
@@ -189,7 +232,7 @@ export function StudentDashboardPage() {
           method: "GET",
           headers: { accept: "application/json" },
         });
-        const body = (await response.json().catch(() => null)) as
+        const courseBody = (await response.json().catch(() => null)) as
           | StudentDashboardCourseResponse
           | null;
         if (isCancelled) {
@@ -203,18 +246,45 @@ export function StudentDashboardPage() {
           setSessionState("signed-out");
           return;
         }
-        if (!response.ok || !body) {
+        if (!response.ok || !courseBody) {
           setSessionState("unreachable");
           return;
         }
 
         setSessionState("ok");
-        setClassMemberships(createStudentClassMembershipItems(body));
-        setLearningGroups(createStudentLearningGroupItems(body));
+        setClassMemberships(createStudentClassMembershipItems(courseBody));
+        setLearningGroups(createStudentLearningGroupItems(courseBody));
+        try {
+          const learningLoopResponse = await fetch("/api/learning/dashboard", {
+            method: "GET",
+            headers: { accept: "application/json" },
+          });
+          const learningLoopBody = (await learningLoopResponse.json().catch(() => null)) as
+            | StudentLearningLoopDashboard
+            | null;
+          if (isCancelled) return;
+          if (learningLoopResponse.status === 401 || learningLoopResponse.status === 403) {
+            setSessionState("signed-out");
+            return;
+          }
+          if (learningLoopResponse.ok && isStudentLearningLoopDashboard(learningLoopBody)) {
+            setLearningLoopDashboard(learningLoopBody);
+            setLearningLoopState("ok");
+            return;
+          }
+          setLearningLoopDashboard(undefined);
+          setLearningLoopState("unreachable");
+        } catch {
+          if (!isCancelled) {
+            setLearningLoopDashboard(undefined);
+            setLearningLoopState("unreachable");
+          }
+        }
       } catch {
         // Reachability, not authorization: the dashboard stays up and says so.
         if (!isCancelled) {
           setSessionState("unreachable");
+          setLearningLoopState("unreachable");
         }
       }
     }
@@ -255,15 +325,17 @@ export function StudentDashboardPage() {
 
   return (
     <div className="space-y-6" data-uais-student-dashboard>
-      {/* Reachability only: the courses below are the template's own sample
-          content, and the read that would have replaced them can be retried. */}
+      {/* Reachability only. Personalized learning evidence is never replaced
+          by the template's sample courses when the server read fails. */}
       {sessionState === "unreachable" ? (
         <p
           data-uais-student-dashboard-unreachable="true"
           role="status"
           className="rounded-2xl border border-dashed border-[var(--border)] bg-[var(--surface-elevated)] px-4 py-3 text-sm leading-6 text-[var(--muted)]"
         >
-          {authCopy.networkRetry}
+          {locale === "zh-CN"
+            ? "暂时无法连接服务器；真实课程、提交与完成状态未加载，本页不会回退到演示进度。请刷新页面重试。"
+            : "The server is temporarily unreachable. Real courses, submissions, and completion states were not loaded, and this page will not fall back to demo progress. Refresh the page to try again."}
         </p>
       ) : null}
       <section className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5 shadow-[0_18px_48px_var(--shadow)] md:p-7">
@@ -370,23 +442,23 @@ export function StudentDashboardPage() {
           >
             <MetricCard
               icon={CheckCircle}
-              label={t.status}
-              value="2"
-              note={t.statusNote}
+              label={locale === "zh-CN" ? "教师已接受单元" : "Teacher-accepted units"}
+              value={String(countLearningLoopUnits(learningLoopDashboard, "accepted"))}
+              note={locale === "zh-CN" ? "只有教师接受当前提交版本才计为完成" : "Only teacher acceptance of the current version counts as completion"}
               tone="green"
             />
             <MetricCard
               icon={ClockCountdown}
-              label={t.nextTask}
-              value={locale === "zh-CN" ? "今天" : "Today"}
-              note={t.nextTaskNote}
+              label={locale === "zh-CN" ? "等待教师审阅" : "Awaiting teacher review"}
+              value={String(countLearningLoopUnits(learningLoopDashboard, "awaiting-review"))}
+              note={locale === "zh-CN" ? "来自已提交和已重新提交的真实状态" : "From real submitted and resubmitted states"}
               tone="amber"
             />
             <MetricCard
               icon={Sparkle}
-              label={t.aiReady}
-              value={String(aiAgents.length)}
-              note={t.aiReadyNote}
+              label={locale === "zh-CN" ? "需要修订" : "Needs revision"}
+              value={String(countLearningLoopUnits(learningLoopDashboard, "revision"))}
+              note={locale === "zh-CN" ? "下一步优先返回尚未完成的修订" : "The next action prioritizes an unfinished revision"}
               tone="violet"
             />
           </section>
@@ -405,26 +477,14 @@ export function StudentDashboardPage() {
                     {t.learningSnapshot}
                   </p>
                   <h2 className="mt-1 text-xl font-semibold text-[var(--foreground)]">
-                    {localizedText(activeCourse.title, locale)}
+                    {locale === "zh-CN" ? "可信学习证据" : "Trustworthy learning evidence"}
                   </h2>
                   <p className="mt-2 text-sm leading-6 text-[var(--muted)]">
-                    {localizedText(activeCourse.progress, locale)}
+                    {locale === "zh-CN" ? "分别显示形成性检查、提交、反馈和教师接受；课件播放进度不替代学习完成。" : "Checkpoint, submission, feedback, and teacher acceptance are shown separately. Playback does not replace learning completion."}
                   </p>
                 </div>
               </div>
-
-              <div className="mt-5 grid gap-3 md:grid-cols-2">
-                <InfoPanel
-                  label={t.activeCourse}
-                  value={localizedText(activeCourse.currentUnit, locale)}
-                  note={localizedText(activeCourse.focus, locale)}
-                />
-                <InfoPanel
-                  label={t.unitFocus}
-                  value={localizedText(nextCourse.title, locale)}
-                  note={localizedText(nextCourse.focus, locale)}
-                />
-              </div>
+              <RealLearningSnapshot dashboard={learningLoopDashboard} state={learningLoopState} locale={locale} />
             </article>
 
             {classMemberships.length > 0 ? (
@@ -533,7 +593,7 @@ export function StudentDashboardPage() {
                 icon={ChatTeardropText}
                 title={t.chatTitle}
                 label={t.groupSignal}
-                body={localizedText(latestGroupMessage.text, locale)}
+                body={locale === "zh-CN" ? "当前账号尚无真实学习小组；系统不会用演示群聊替代真实协作记录。" : "This account has no real learning group yet. Demo chat is not shown as real collaboration evidence."}
                 href="/learning/chatroom"
                 hrefLabel={t.openChatroom}
               />
@@ -542,7 +602,7 @@ export function StudentDashboardPage() {
               icon={Notebook}
               title={t.plazaTitle}
               label={t.courseOpportunity}
-              body={localizedText(recommendedCourse.description, locale)}
+              body={locale === "zh-CN" ? "浏览公开课程目录；课程广场内容不会被计入本人学习完成度。" : "Browse the public course catalog. Plaza content is not counted as your learning completion."}
               href="/courses"
               hrefLabel={t.browseCourses}
             />
@@ -551,6 +611,106 @@ export function StudentDashboardPage() {
       </section>
     </div>
   );
+}
+
+function RealLearningSnapshot({
+  dashboard,
+  state,
+  locale,
+}: {
+  dashboard?: StudentLearningLoopDashboard;
+  state: LearningLoopDashboardState;
+  locale: Locale;
+}) {
+  const zh = locale === "zh-CN";
+  if (state === "loading") {
+    return <p className="mt-5 text-sm text-[var(--muted)]">{zh ? "正在读取 Postgres 学习状态…" : "Loading Postgres learning state…"}</p>;
+  }
+  if (state === "unreachable") {
+    return <p role="status" className="mt-5 rounded-xl border border-dashed border-[var(--border)] p-4 text-sm leading-6 text-[var(--muted)]">{zh ? "真实学习聚合暂不可用；为避免误导，本页不会回退到演示进度。" : "The real learning projection is unavailable. This page will not fall back to demo progress."}</p>;
+  }
+  const courses = dashboard?.courses ?? [];
+  if (courses.length === 0 || courses.every((course) => course.units.length === 0)) {
+    return <p className="mt-5 rounded-xl border border-dashed border-[var(--border)] p-4 text-sm leading-6 text-[var(--muted)]">{zh ? "当前已批准课程尚未发布 P1 学习任务；这里不会显示虚构待办或完成度。" : "No P1 activity is published for your approved courses. No invented work or completion is shown."}</p>;
+  }
+
+  return (
+    <div className="mt-5 space-y-4" data-uais-real-learning-dashboard="true">
+      <div className="rounded-xl bg-[var(--accent-soft)] p-4">
+        <p className="text-xs font-semibold uppercase tracking-wide text-[var(--accent)]">{zh ? "确定性下一步" : "Deterministic next action"}</p>
+        <p className="mt-1 font-semibold text-[var(--foreground)]">{nextActionLabel(dashboard?.nextAction.type, zh)}</p>
+        <p className="mt-1 text-xs text-[var(--muted)]">{dashboard?.nextAction.reasonCode ?? "collect-more-evidence"} · {dashboard?.dataFreshAt ? formatHongKong(dashboard.dataFreshAt, locale) : "—"}</p>
+      </div>
+      {courses.map((course) => (
+        <section key={`${course.courseId}:${course.classId}`} className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-4">
+          <header className="flex flex-wrap items-start justify-between gap-3">
+            <div><h3 className="font-semibold text-[var(--foreground)]">{course.courseTitle}</h3><p className="mt-1 text-xs text-[var(--muted)]">{course.classId} · projection V{course.projectionVersion} · {formatHongKong(course.dataFreshAt, locale)}</p></div>
+            <Link href={`/learning?courseId=${encodeURIComponent(course.courseId)}&classId=${encodeURIComponent(course.classId)}`} className="inline-flex items-center gap-2 rounded-full bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-white">{nextActionLabel(course.nextAction.type, zh)}<ArrowRight size={15} /></Link>
+          </header>
+          {course.units.length === 0 ? <p className="text-sm text-[var(--muted)]">{zh ? "本班尚无已发布任务。" : "No activity is published for this class."}</p> : null}
+          {course.units.map((unit) => (
+            <article key={unit.activityId} className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2"><p className="text-sm font-semibold">{zh ? `单元 ${unit.position}` : `Unit ${unit.position}`} · {unit.lessonKey}</p>{unit.dueAt ? <span className="text-xs text-[var(--muted)]">{zh ? "截止" : "Due"}: {formatHongKong(unit.dueAt, locale)}</span> : null}</div>
+              <div className="mt-3 grid grid-cols-2 gap-2 text-xs sm:grid-cols-5">
+                <EvidenceState label={zh ? "播放" : "Playback"} value={zh ? "独立记录，非完成依据" : "Separate; not completion"} />
+                <EvidenceState label={zh ? "检查" : "Checkpoint"} value={unit.formative.attempted ? (zh ? "已尝试" : "Attempted") : (zh ? "未尝试" : "Not attempted")} />
+                <EvidenceState label={zh ? "提交" : "Submission"} value={submissionStateLabel(unit.submission.state, zh)} />
+                <EvidenceState label={zh ? "反馈" : "Feedback"} value={feedbackStateLabel(unit.feedback.status, zh)} />
+                <EvidenceState label={zh ? "完成" : "Completion"} value={unit.completion.completed ? (zh ? "教师已接受" : "Teacher accepted") : (zh ? "尚未完成" : "Not complete")} />
+              </div>
+            </article>
+          ))}
+        </section>
+      ))}
+    </div>
+  );
+}
+
+function EvidenceState({ label, value }: { label: string; value: string }) {
+  return <div className="rounded-lg bg-[var(--surface-elevated)] p-2"><p className="text-[var(--muted)]">{label}</p><p className="mt-1 font-semibold text-[var(--foreground)]">{value}</p></div>;
+}
+
+function countLearningLoopUnits(
+  dashboard: StudentLearningLoopDashboard | undefined,
+  type: "accepted" | "awaiting-review" | "revision",
+) {
+  return (dashboard?.courses ?? []).flatMap((course) => course.units).filter((unit) => {
+    if (type === "accepted") return unit.submission.state === "accepted";
+    if (type === "revision") return unit.submission.state === "revision_requested";
+    return unit.submission.state === "submitted" || unit.submission.state === "resubmitted";
+  }).length;
+}
+
+function nextActionLabel(value: string | undefined, zh: boolean) {
+  const labels: Record<string, [string, string]> = {
+    "revise-submission": ["优先修订学习产物", "Revise learning evidence"],
+    "await-teacher-review": ["等待教师审阅", "Await teacher review"],
+    "complete-checkpoint": ["完成形成性检查", "Complete checkpoint"],
+    "continue-draft": ["继续草稿", "Continue draft"],
+    "start-submission": ["开始学习产物", "Start submission"],
+    "open-next-lesson": ["打开下一单元", "Open next lesson"],
+    "course-complete": ["课程任务已完成", "Course activities complete"],
+    "collect-more-evidence": ["等待更多可信证据", "Collect more evidence"],
+  };
+  return (labels[value ?? "collect-more-evidence"] ?? labels["collect-more-evidence"])[zh ? 0 : 1];
+}
+
+function submissionStateLabel(value: StudentLearningLoopDashboard["courses"][number]["units"][number]["submission"]["state"], zh: boolean) {
+  const labels = { "not-started": ["未开始", "Not started"], draft: ["草稿中", "Draft"], submitted: ["已提交", "Submitted"], revision_requested: ["要求修订", "Revision requested"], resubmitted: ["已重新提交", "Resubmitted"], accepted: ["已接受", "Accepted"] } as const;
+  return labels[value][zh ? 0 : 1];
+}
+
+function feedbackStateLabel(value: StudentLearningLoopDashboard["courses"][number]["units"][number]["feedback"]["status"], zh: boolean) {
+  const labels = { none: ["暂无", "None"], "awaiting-teacher": ["等待教师", "Awaiting teacher"], "revision-required": ["已发布修订反馈", "Revision feedback released"], accepted: ["已发布接受反馈", "Acceptance feedback released"] } as const;
+  return labels[value][zh ? 0 : 1];
+}
+
+function formatHongKong(value: string, locale: Locale) {
+  return new Intl.DateTimeFormat(locale, { timeZone: "Asia/Hong_Kong", dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
+}
+
+function isStudentLearningLoopDashboard(value: unknown): value is StudentLearningLoopDashboard {
+  return typeof value === "object" && value !== null && Array.isArray((value as { courses?: unknown }).courses) && typeof (value as { dataFreshAt?: unknown }).dataFreshAt === "string";
 }
 
 function shouldLoadStudentClassMemberships() {
@@ -752,24 +912,6 @@ function MetricCard({
       <p className="mt-2 text-2xl font-semibold text-[var(--foreground)]">{value}</p>
       <p className="mt-2 text-sm leading-6 text-[var(--muted)]">{note}</p>
     </article>
-  );
-}
-
-function InfoPanel({
-  label,
-  note,
-  value,
-}: {
-  label: string;
-  note: string;
-  value: string;
-}) {
-  return (
-    <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-soft)] p-4">
-      <p className="text-xs font-semibold uppercase text-[var(--muted)]">{label}</p>
-      <p className="mt-2 text-base font-semibold text-[var(--foreground)]">{value}</p>
-      <p className="mt-2 text-sm leading-6 text-[var(--muted)]">{note}</p>
-    </div>
   );
 }
 

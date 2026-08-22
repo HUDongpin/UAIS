@@ -54,12 +54,13 @@ import { PptStage, SlideChapterRail } from "./learning-page-slides";
 import { NarrationDock } from "./learning-page-narration";
 import { StudyToolsPanel } from "./learning-page-study-tools";
 import { LangGraphTracePanel } from "./learning-page-trace-panel";
+import { LearningPracticePanel } from "./learning-practice-panel";
 
 
 const playbackJumpLinkClassName =
   "inline-flex h-10 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 text-sm font-semibold text-[var(--foreground)] outline-none transition hover:border-[var(--accent-border)] hover:text-[var(--accent)] focus-visible:ring-2 focus-visible:ring-[var(--accent)]";
 
-type PrimaryCompanionView = "ai" | "subtitles" | "outline";
+type PrimaryCompanionView = "ai" | "subtitles" | "outline" | "practice";
 
 
 type CompanionView = PrimaryCompanionView | StudyToolView;
@@ -647,6 +648,7 @@ export function LearningPage({ initialCourseId, initialClassId }: LearningPagePr
           guideDraft={guideDraft}
           onGuideDraftChange={setGuideDraft}
           guideFocusSequence={guideFocusSequence}
+          signInHref={playbackSignInHref}
         />
       </section>
     </div>
@@ -668,7 +670,7 @@ function LearningCompanionPanel({
   onStudyToolsOpenChange,
   guideDraft,
   onGuideDraftChange,
-  guideFocusSequence,
+  guideFocusSequence, signInHref,
 }: {
   locale: Locale;
   courseId: string;
@@ -685,6 +687,7 @@ function LearningCompanionPanel({
   guideDraft: string;
   onGuideDraftChange: (draft: string) => void;
   guideFocusSequence: number;
+  signInHref: string;
 }) {
   const sessionUser = useSessionUser();
   const learnerAccount =
@@ -741,7 +744,7 @@ function LearningCompanionPanel({
   const primaryTabs = [
     { view: "ai" as const, label: locale === "zh-CN" ? "智能导学" : "AI Guide" },
     { view: "subtitles" as const, label: locale === "zh-CN" ? "全部字幕" : "Subtitles" },
-    { view: "outline" as const, label: locale === "zh-CN" ? "课程目录" : "Outline" },
+    { view: "outline" as const, label: locale === "zh-CN" ? "课程目录" : "Outline" }, { view: "practice" as const, label: locale === "zh-CN" ? "实践" : "Practice" },
   ];
   const selectedStudyToolView = getSelectedStudyToolView(activeView);
 
@@ -1010,7 +1013,7 @@ function LearningCompanionPanel({
           <div
             role="group"
             aria-label={locale === "zh-CN" ? "我的学习右侧栏目切换" : "My Learning right column switcher"}
-            className="grid grid-cols-3 gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] p-1"
+            className="grid grid-cols-2 gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] p-1 sm:grid-cols-4"
           >
           {primaryTabs.map((tab) => {
             const active = activeView === tab.view;
@@ -1283,6 +1286,8 @@ function LearningCompanionPanel({
               onSelectPublishedSlide={onSelectPublishedSlide}
             />
           ) : null}
+
+          {!studyToolsOpen && activeView === "practice" ? <LearningPracticePanel locale={locale} courseId={eventCourseId} classId={eventCourseId ? classIdForCourse(eventCourseId) : undefined} lessonKey={publishedPlayback?.learningUnit.lessonKey} signInHref={signInHref} /> : null}
         </div>
       </div>
     </aside>

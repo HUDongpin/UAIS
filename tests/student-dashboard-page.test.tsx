@@ -330,6 +330,11 @@ describe("StudentDashboardPage", () => {
         container.querySelector("[data-uais-student-dashboard-unreachable]"),
       ).toBeTruthy();
     });
+    expect(
+      container.querySelector("[data-uais-student-dashboard-unreachable]")
+        ?.textContent,
+    ).toContain("不会回退到演示进度");
+    expect(screen.queryByText(/下面显示的是示例内容/)).toBeNull();
     expect(screen.getByText("今日学习状态")).toBeTruthy();
     expect(container.querySelector("[data-uais-student-dashboard-signed-out]")).toBeNull();
   });

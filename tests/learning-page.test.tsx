@@ -370,7 +370,8 @@ describe("LearningPage", () => {
     const { container } = render(<LearningPage />);
 
     const switcher = screen.getByRole("group", { name: "我的学习右侧栏目切换" });
-    expect(switcher.querySelectorAll("button").length).toBe(3);
+    expect(switcher.querySelectorAll("button").length).toBe(4);
+    expect(screen.getByRole("button", { name: "实践" })).toBeTruthy();
     expect(switcher.parentElement?.querySelector('button[aria-label="学习工具"]')).toBeNull();
     const narrationControls = container.querySelector(
       '[data-uais-learning-segment-controls="compact"]',
