@@ -111,18 +111,22 @@ export function PptStage({
   publishedPlayback,
   activePublishedSlide,
   publishedPlaybackError,
+  isPublishedPlaybackLoading,
   conceptCount,
   onStudyAction,
   signInHref,
+  onRetryPublishedPlayback,
 }: {
   locale: Locale;
   publishedPlayback?: LearningPptPlaybackManifest;
   activePublishedSlide?: LearningPptPlaybackSlide;
   publishedPlaybackError?: PublishedPlaybackError;
+  isPublishedPlaybackLoading?: boolean;
   conceptCount: number;
   onStudyAction: (action: StudyAction) => void;
   /** Where a signed-out deck refusal sends the learner, with a return path. */
   signInHref?: string;
+  onRetryPublishedPlayback?: () => void;
 }) {
   const pptFrameRef = useRef<HTMLElement | null>(null);
   const [isPptFullscreen, setIsPptFullscreen] = useState(false);
@@ -323,13 +327,17 @@ export function PptStage({
   }
 
   return (
-    <section className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-[0_18px_44px_var(--shadow)]">
+    <section
+      aria-busy={isPublishedPlaybackLoading || undefined}
+      className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-[0_18px_44px_var(--shadow)]"
+    >
       <div className="relative min-h-[470px] p-7 lg:p-9 xl:min-h-[555px]">
         {publishedPlaybackError ? (
           <div
+            role="alert"
             data-uais-learning-ppt-error={publishedPlaybackError}
             className={[
-              "absolute right-7 top-7 inline-flex items-center gap-2 rounded-full border px-3 py-1 text-sm font-semibold",
+              "absolute right-7 top-7 z-10 inline-flex flex-wrap items-center justify-end gap-2 rounded-xl border px-3 py-2 text-sm font-semibold",
               publishedPlaybackError === "unavailable"
                 ? "border-[var(--accent-border)] bg-[var(--accent-soft)] text-[var(--accent)]"
                 : "border-[#fed7aa] bg-[#fff7ed] text-[#c2410c] dark:border-[#7c4a1d] dark:bg-[#3a2410] dark:text-[#fdba74]",
@@ -348,6 +356,23 @@ export function PptStage({
                 {copy[locale].auth.signIn}
               </Link>
             ) : null}
+            {publishedPlaybackError === "unavailable" && onRetryPublishedPlayback ? (
+              <button
+                type="button"
+                className="inline-flex min-h-9 items-center rounded-full bg-[var(--accent)] px-3 text-xs font-semibold text-white outline-none transition hover:bg-[var(--accent-strong)] focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]"
+                onClick={onRetryPublishedPlayback}
+              >
+                {locale === "zh-CN" ? "重新加载课件" : "Retry loading slides"}
+              </button>
+            ) : null}
+          </div>
+        ) : isPublishedPlaybackLoading ? (
+          <div
+            role="status"
+            data-uais-learning-ppt-loading="true"
+            className="absolute right-7 top-7 z-10 rounded-full border border-[var(--border)] bg-[var(--surface-elevated)] px-3 py-2 text-sm font-semibold text-[var(--foreground)]"
+          >
+            {locale === "zh-CN" ? "正在加载课件…" : "Loading slides…"}
           </div>
         ) : null}
         {/*

@@ -98,6 +98,44 @@ test.describe("@e2e P2 core browser journeys", () => {
     await expect(next).toBeDisabled();
   });
 
+  test("student can retry a failed learning-media manifest without losing the route", async (
+    { page },
+    testInfo,
+  ) => {
+    const locale = localeForProject(testInfo);
+    let playbackRequestCount = 0;
+    await page.route("**/api/learning/ppt-playback/**", async (route) => {
+      if (route.request().method() === "GET" && playbackRequestCount === 0) {
+        playbackRequestCount += 1;
+        await route.fulfill({
+          status: 503,
+          contentType: "application/json",
+          body: JSON.stringify({ reasonCode: "playback-temporarily-unavailable" }),
+        });
+        return;
+      }
+      playbackRequestCount += 1;
+      await route.continue();
+    });
+
+    await authenticateFixture(page, testInfo, "student-a");
+    await page.goto(
+      "/learning?courseId=elementary-math-research&classId=elementary-math-research-class-1",
+    );
+    await expect(page.locator('[data-uais-learning-ppt-error="unavailable"]')).toBeVisible();
+
+    const retry = page.getByRole("button", {
+      name: locale === "zh-CN" ? "重新加载课件" : "Retry loading slides",
+    });
+    await expect(retry).toBeVisible();
+    await retry.click();
+
+    await expect(page).toHaveURL(/\/learning\?courseId=elementary-math-research/);
+    await expect(page.getByText(/(?:课件|PPT) 1 \/ 19/)).toBeVisible();
+    await expect(page.locator('[data-uais-learning-ppt-error="unavailable"]')).toHaveCount(0);
+    expect(playbackRequestCount).toBeGreaterThanOrEqual(2);
+  });
+
   test("chatroom supports multiline keyboard sending and authorized export", async (
     { context, page },
     testInfo,

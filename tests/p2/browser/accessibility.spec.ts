@@ -46,12 +46,63 @@ test.describe("@a11y WCAG 2.2 AA automated baseline", () => {
         }).fill("p2-no-accessibility-result");
         await expect(page.getByRole("status")).toBeVisible();
         await assertNoBlockingViolations(page, testInfo, "courses-no-results");
+
+        const locale = localeForProject(testInfo);
+        await page.getByLabel(locale === "zh-CN" ? "邀请码" : "Invite code").fill(
+          "invalid invite!",
+        );
+        await page.getByRole("button", {
+          name: locale === "zh-CN" ? "使用邀请码加入" : "Join with This Code",
+        }).click();
+        await expect(
+          page.getByText(
+            locale === "zh-CN"
+              ? "邀请码格式无效，请检查后重试。"
+              : "That invite code is not a valid code. Check it and try again.",
+            { exact: true },
+          ),
+        ).toBeVisible();
+        await assertNoBlockingViolations(page, testInfo, "courses-invite-error");
       }
     }
   });
 
-  test("chatroom message and recoverable provider error states are accessible", async (
+  test("learning media failure and recovery states are accessible", async (
     { page },
+    testInfo,
+  ) => {
+    const locale = localeForProject(testInfo);
+    let playbackRequestCount = 0;
+    await page.route("**/api/learning/ppt-playback/**", async (route) => {
+      if (route.request().method() === "GET" && playbackRequestCount === 0) {
+        playbackRequestCount += 1;
+        await route.fulfill({
+          status: 503,
+          contentType: "application/json",
+          body: JSON.stringify({ reasonCode: "playback-temporarily-unavailable" }),
+        });
+        return;
+      }
+      playbackRequestCount += 1;
+      await route.continue();
+    });
+
+    await authenticateFixture(page, testInfo, "student-a");
+    await page.goto(
+      "/learning?courseId=elementary-math-research&classId=elementary-math-research-class-1",
+    );
+    await expect(page.locator('[data-uais-learning-ppt-error="unavailable"]')).toBeVisible();
+    await assertNoBlockingViolations(page, testInfo, "learning-media-error");
+
+    await page.getByRole("button", {
+      name: locale === "zh-CN" ? "重新加载课件" : "Retry loading slides",
+    }).click();
+    await expect(page.getByText(/(?:课件|PPT) 1 \/ 19/)).toBeVisible();
+    await assertNoBlockingViolations(page, testInfo, "learning-media-recovered");
+  });
+
+  test("chatroom message and recoverable provider error states are accessible", async (
+    { context, page },
     testInfo,
   ) => {
     const locale = localeForProject(testInfo);
@@ -87,18 +138,69 @@ test.describe("@a11y WCAG 2.2 AA automated baseline", () => {
       copy[locale].learning.agentUnavailable,
     );
     await assertNoBlockingViolations(page, testInfo, "chatroom-provider-error");
+
+    const exportPagePromise = context.waitForEvent("page");
+    await page.getByRole("button", {
+      name: locale === "zh-CN" ? "导出文档" : "Export PDF",
+    }).click();
+    const exportPage = await exportPagePromise;
+    await exportPage.waitForLoadState("domcontentloaded");
+    await expect(exportPage.locator("main")).toBeVisible();
+    await assertNoBlockingViolations(exportPage, testInfo, "chatroom-export-complete");
+    await exportPage.close();
   });
 
   test("teacher surface has no serious or critical violations", async (
     { page },
     testInfo,
   ) => {
+    const locale = localeForProject(testInfo);
     await authenticateFixture(page, testInfo, "teacher-a");
     await page.goto("/teaching");
     await assertNoBlockingViolations(page, testInfo, "teaching");
     await page.getByRole("button", { name: /新增课程|New Course/i }).click();
     await expect(page.getByRole("dialog")).toBeVisible();
     await assertNoBlockingViolations(page, testInfo, "teaching-new-course-dialog");
+    await page.keyboard.press("Escape");
+
+    const groupPanel = page.locator(
+      '[data-uais-learning-group-panel="elementary-math-research"]',
+    );
+    await expect(groupPanel).toBeVisible();
+    await groupPanel.getByRole("button", {
+      name:
+        locale === "zh-CN"
+          ? "管理P2 演示课件播放课程的小组"
+          : "Manage groups for P2 演示课件播放课程",
+    }).click();
+    await expect(groupPanel.locator('[data-uais-learning-group="p2-group-a"]')).toBeVisible();
+    await assertNoBlockingViolations(page, testInfo, "teaching-groups");
+
+    await groupPanel.getByRole("button", {
+      name:
+        locale === "zh-CN"
+          ? "为P2 演示课件播放课程新建小组"
+          : "New group for P2 演示课件播放课程",
+    }).click();
+    await expect(page.locator('[data-uais-learning-group-dialog="create"]')).toBeVisible();
+    await assertNoBlockingViolations(page, testInfo, "teaching-group-dialog");
+    await page.keyboard.press("Escape");
+
+    const groupCard = groupPanel.locator('[data-uais-learning-group="p2-group-a"]');
+    await groupCard.getByRole("button", {
+      name: locale === "zh-CN" ? "删除P2 Group A" : "Delete P2 Group A",
+    }).click();
+    await expect(
+      groupCard.getByRole("button", {
+        name: locale === "zh-CN" ? "确认删除P2 Group A" : "Confirm deleting P2 Group A",
+      }),
+    ).toBeVisible();
+    await assertNoBlockingViolations(
+      page,
+      testInfo,
+      "teaching-danger-confirmation",
+      '[data-uais-learning-group="p2-group-a"]',
+    );
   });
 });
 
@@ -106,8 +208,13 @@ async function assertNoBlockingViolations(
   page: Page,
   testInfo: TestInfo,
   state: string,
+  rootSelector?: string,
 ) {
-  const results = await new AxeBuilder({ page }).withTags(wcagTags).analyze();
+  let builder = new AxeBuilder({ page }).withTags(wcagTags);
+  if (rootSelector) {
+    builder = builder.include(rootSelector);
+  }
+  const results = await builder.analyze();
   const compact = results.violations.map((violation) => ({
     id: violation.id,
     impact: violation.impact,

@@ -43,14 +43,13 @@ import {
   exportSlideStudyNotes,
   formatSlideDurationLabel,
   getPlaybackContent,
-  getPublishedPlaybackError,
   readCompletedNarrationSlideIds,
   resolveLearningEventCourseId,
   type SlideStudyContent,
-  type PublishedPlaybackError,
   type StudyAction,
   type StudyToolView,
 } from "./learning-page-helpers";
+import { usePublishedLearningPlayback } from "./learning-page-published-playback";
 import { PptStage, SlideChapterRail } from "./learning-page-slides";
 import { NarrationDock } from "./learning-page-narration";
 import { StudyToolsPanel } from "./learning-page-study-tools";
@@ -259,20 +258,23 @@ export function LearningPage({ initialCourseId, initialClassId }: LearningPagePr
   const t = copy[locale];
   const selectedCourseId = getValidatedCourseId(initialCourseId);
   const playback = getPlaybackContent(selectedCourseId, locale);
-  const [publishedPlayback, setPublishedPlayback] =
-    useState<LearningPptPlaybackManifest>();
+  const playbackCourseId = initialCourseId ?? publishedLearningPptCourseId;
+  const {
+    publishedPlayback,
+    publishedPlaybackError,
+    isPublishedPlaybackLoading,
+    activePublishedSlide,
+    activePublishedSlideIndex,
+    setActivePublishedSlideIndex,
+    retryPublishedPlayback,
+  } = usePublishedLearningPlayback({ courseId: playbackCourseId, locale });
   const [approvedInviteLearningContext, setApprovedInviteLearningContext] =
     useState<ApprovedInviteLearningContext>();
-  const [publishedPlaybackError, setPublishedPlaybackError] =
-    useState<PublishedPlaybackError>();
-  const [activePublishedSlideIndex, setActivePublishedSlideIndex] = useState(0);
   const [activeCompanionView, setActiveCompanionView] = useState<CompanionView>("ai");
   const [studyToolsOpen, setStudyToolsOpen] = useState(false);
   const [guideDraft, setGuideDraft] = useState("");
   const [guideFocusSequence, setGuideFocusSequence] = useState(0);
   const completedNarrationSlideIdsRef = useRef(new Set<string>());
-  const activePublishedSlide =
-    publishedPlayback?.slides[activePublishedSlideIndex] ?? publishedPlayback?.slides[0];
   const studyContent = useMemo(
     () =>
       createSlideStudyContent({
@@ -386,69 +388,10 @@ export function LearningPage({ initialCourseId, initialClassId }: LearningPagePr
     };
   }, [initialClassId, initialCourseId]);
 
-  // The course whose lesson this page plays.
-  //
-  // This used to be the demo course id, unconditionally: `/learning` fetched
-  // `elementary-math-research` no matter which course the student had actually
-  // enrolled in, and the effect did not even depend on the course. A student in
-  // the real September course therefore got a 403
-  // (`student-course-membership-required` - their membership is for a different
-  // courseId) over content that was not theirs anyway.
-  //
-  // The demo id remains the fallback for a bare `/learning` with no query, which
-  // is what the course plaza links to today and what keeps the demo walkthrough
-  // working.
-  const playbackCourseId = initialCourseId ?? publishedLearningPptCourseId;
-
   useEffect(() => {
-    let cancelled = false;
-
-    async function loadPublishedPlayback() {
-      try {
-        setPublishedPlaybackError(undefined);
-        const response = await fetch(
-          `/api/learning/ppt-playback/${encodeURIComponent(playbackCourseId)}?locale=${encodeURIComponent(locale)}`,
-        );
-        if (!response.ok) {
-          if (!cancelled) {
-            setPublishedPlayback(undefined);
-            setPublishedPlaybackError(getPublishedPlaybackError(response.status));
-          }
-          return;
-        }
-        const body = (await response.json()) as {
-          playback?: LearningPptPlaybackManifest;
-        };
-        if (!cancelled && body.playback && body.playback.slides.length > 0) {
-          setPublishedPlayback(body.playback);
-          setActivePublishedSlideIndex(0);
-          setPublishedPlaybackError(undefined);
-          return;
-        }
-        if (!cancelled) {
-          setPublishedPlayback(undefined);
-          setPublishedPlaybackError("unavailable");
-        }
-      } catch {
-        if (!cancelled) {
-          setPublishedPlayback(undefined);
-          setPublishedPlaybackError("unavailable");
-        }
-      }
-    }
-
-    // A course switch starts a new deck, so the narration dedupe set must not
-    // carry over: a slideId that collides with one already seen would otherwise
-    // suppress the new course's completion event. A ref, not state - the slide
-    // index is already reset inside `loadPublishedPlayback` on success, which
-    // keeps this effect free of a synchronous setState.
+    // A course or locale switch starts a new deck. Do not carry a narration
+    // dedupe key into another manifest; persistent progress is read separately.
     completedNarrationSlideIdsRef.current = new Set<string>();
-
-    void loadPublishedPlayback();
-
-    return () => {
-      cancelled = true;
-    };
   }, [locale, playbackCourseId]);
 
   const visibleApprovedInviteLearningContext =
@@ -668,9 +611,11 @@ export function LearningPage({ initialCourseId, initialClassId }: LearningPagePr
             publishedPlayback={publishedPlayback}
             activePublishedSlide={activePublishedSlide}
             publishedPlaybackError={publishedPlaybackError}
+            isPublishedPlaybackLoading={isPublishedPlaybackLoading}
             conceptCount={studyContent.concepts.length}
             onStudyAction={handleStudyAction}
             signInHref={playbackSignInHref}
+            onRetryPublishedPlayback={retryPublishedPlayback}
           />
           <NarrationDock
             locale={locale}

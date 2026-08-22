@@ -240,7 +240,7 @@ export function CourseClassManager({
                       </span>
                     </span>
                   </div>
-                  <div className="flex shrink-0 flex-wrap items-center gap-3">
+                  <div className="flex shrink-0 flex-wrap items-center gap-4">
                     <Link
                       href={createTeachingClassActionHref("students", classItem, "enter-class")}
                       aria-label={
@@ -248,7 +248,7 @@ export function CourseClassManager({
                           ? `进入${classItem.name}`
                           : `Enter ${classItem.name}`
                       }
-                      className="inline-flex h-9 items-center gap-2 rounded-full border border-[#7eb1ff] px-4 text-sm font-medium text-[#1557c0] outline-none transition hover:bg-[#f4f8ff] active:translate-y-px focus-visible:ring-2 focus-visible:ring-[#1557c0]"
+                      className="inline-flex min-h-11 items-center gap-2 rounded-full border border-[#7eb1ff] px-4 text-sm font-medium text-[#1557c0] outline-none transition hover:bg-[#f4f8ff] active:translate-y-px focus-visible:ring-2 focus-visible:ring-[#1557c0]"
                     >
                       <UsersThree size={16} weight="bold" />
                       {locale === "zh-CN" ? "进入班级" : "Take class"}
@@ -264,7 +264,7 @@ export function CourseClassManager({
                           ? `查看${classItem.name}活动列表`
                           : `View activity list for ${classItem.name}`
                       }
-                      className="inline-flex h-9 items-center gap-2 rounded-full bg-gradient-to-r from-[#1557c0] to-[#4338ca] px-4 text-sm font-medium text-white shadow-[0_8px_18px_rgba(83,115,255,0.24)] outline-none transition hover:shadow-[0_10px_22px_rgba(83,115,255,0.3)] active:translate-y-px focus-visible:ring-2 focus-visible:ring-[#1557c0]"
+                      className="inline-flex min-h-11 items-center gap-2 rounded-full bg-gradient-to-r from-[#1557c0] to-[#4338ca] px-4 text-sm font-medium text-white shadow-[0_8px_18px_rgba(83,115,255,0.24)] outline-none transition hover:shadow-[0_10px_22px_rgba(83,115,255,0.3)] active:translate-y-px focus-visible:ring-2 focus-visible:ring-[#1557c0]"
                     >
                       <ClipboardText size={16} weight="bold" />
                       {locale === "zh-CN" ? "活动列表" : "Activity List"}
@@ -281,7 +281,7 @@ export function CourseClassManager({
                           ? `打开${classItem.name}的邀请码`
                           : `Open invitation QR for ${classItem.name}`
                       }
-                      className="grid size-9 place-items-center rounded-full border border-[#e1e7f2] text-[#7b8499] outline-none transition hover:border-[#7eb1ff] hover:bg-[#f4f8ff] hover:text-[#2f7cff] active:translate-y-px focus-visible:ring-2 focus-visible:ring-[#2f7cff]"
+                      className="grid size-12 shrink-0 place-items-center rounded-full border border-[#e1e7f2] text-[#7b8499] outline-none transition hover:border-[#7eb1ff] hover:bg-[#f4f8ff] hover:text-[#2f7cff] active:translate-y-px focus-visible:ring-2 focus-visible:ring-[#2f7cff]"
                       onClick={() => onOpenInvitation(classItem)}
                     >
                       <QrCode size={18} weight="duotone" />
