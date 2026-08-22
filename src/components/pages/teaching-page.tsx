@@ -216,7 +216,7 @@ export function TeachingPage() {
         </section>
       ) : null}
 
-      <section className="grid gap-5 lg:grid-cols-[280px_1fr]">
+      <section className="grid grid-cols-[minmax(0,1fr)] gap-5 lg:grid-cols-[280px_minmax(0,1fr)] [&>*]:min-w-0">
         <aside className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-[0_18px_42px_var(--shadow)]">
           <h2 className="px-2 text-sm font-semibold text-[var(--muted)]">
             {t.teaching.operations}
@@ -296,4 +296,3 @@ export function TeachingPage() {
     </div>
   );
 }
-
