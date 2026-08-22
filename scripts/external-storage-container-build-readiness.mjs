@@ -5,7 +5,12 @@ import { existsSync, readFileSync } from "node:fs";
 
 const DEFAULT_DOCKERFILE = "Dockerfile.external-storage";
 const DEFAULT_DOCKERIGNORE = ".dockerignore";
-const DOCKER_PROBE_TIMEOUT_MS = 3_000;
+// Client discovery may cold-start through endpoint-security scanning when a
+// test or operator shim lives on an external volume. Keep that classification
+// distinct from the tighter daemon-liveness bound so a slow client launch is
+// not misreported as a missing installation.
+const DOCKER_CLIENT_PROBE_TIMEOUT_MS = 6_000;
+const DOCKER_DAEMON_PROBE_TIMEOUT_MS = 3_000;
 const DOCKER_BUILD_TIMEOUT_MS = 300_000;
 
 try {
@@ -207,7 +212,7 @@ function readDockerStatus(shouldProbe) {
     execFileSync("docker", ["--version"], {
       encoding: "utf8",
       stdio: ["ignore", "pipe", "pipe"],
-      timeout: DOCKER_PROBE_TIMEOUT_MS,
+      timeout: DOCKER_CLIENT_PROBE_TIMEOUT_MS,
     });
   } catch {
     return {
@@ -221,7 +226,7 @@ function readDockerStatus(shouldProbe) {
     execFileSync("docker", ["version", "--format", "{{.Server.Version}}"], {
       encoding: "utf8",
       stdio: ["ignore", "pipe", "pipe"],
-      timeout: DOCKER_PROBE_TIMEOUT_MS,
+      timeout: DOCKER_DAEMON_PROBE_TIMEOUT_MS,
     });
     return {
       client: "present",

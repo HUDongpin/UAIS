@@ -213,7 +213,7 @@ describe("external storage container build readiness evidence", () => {
     ], {
       cwd: process.cwd(),
       encoding: "utf8",
-      timeout: 7_000,
+      timeout: 12_000,
       env: {
         ...process.env,
         PATH: `${fakeBinDir}:${process.env.PATH ?? ""}`,
@@ -222,7 +222,7 @@ describe("external storage container build readiness evidence", () => {
     const durationMs = Date.now() - startedAt;
     const body = JSON.parse(output);
 
-    expect(durationMs).toBeLessThan(7_000);
+    expect(durationMs).toBeLessThan(10_000);
     expect(body.docker).toEqual({
       client: "present",
       daemon: "unavailable",
