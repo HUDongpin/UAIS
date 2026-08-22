@@ -32,9 +32,11 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
-    // Local agent tooling (git-ignored via .gitignore): agent worktrees under
-    // .claude/ carry their own build output, which must never reach lint.
+    // Local agent tooling (git-ignored via .gitignore): agent worktrees carry
+    // full source/test copies and build output, which must never reach lint.
     ".claude/**",
+    ".worktrees/**",
+    "worktrees/**",
     // Generated Next.js output nested anywhere (e.g. inside a stray worktree).
     "**/.next/**",
   ]),

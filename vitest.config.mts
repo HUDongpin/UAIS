@@ -11,11 +11,16 @@ export default defineConfig({
     globals: true,
     setupFiles: ["./tests/setup.ts"],
     testTimeout: 15000,
-    // Mirrors the `.claude/**` ignore in `eslint.config.mjs`. Agent worktrees
-    // under `.claude/` carry a full copy of `tests/`, so without this a root run
+    // Mirrors the local-worktree ignores in `eslint.config.mjs`. Agent
+    // worktrees carry a full copy of `tests/`, so without these a root run
     // executes every suite once per worktree - and those copies resolve
     // `process.cwd()` fixtures against the root checkout while importing their
     // own stale `src/`, which reports failures that belong to neither tree.
-    exclude: [...configDefaults.exclude, "**/.claude/**"],
+    exclude: [
+      ...configDefaults.exclude,
+      "**/.claude/**",
+      "**/.worktrees/**",
+      "**/worktrees/**",
+    ],
   },
 });
