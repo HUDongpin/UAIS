@@ -35,9 +35,21 @@ const eslintConfig = defineConfig([
     // Local agent tooling (git-ignored via .gitignore): agent worktrees carry
     // full source/test copies and build output, which must never reach lint.
     ".claude/**",
+    ".playwright-cli/**",
     ".worktrees/**",
     ".tmp/**",
+    "coverage/**",
+    "output/**",
+    "playwright-report/**",
+    "test-results/**",
     "worktrees/**",
+    // Generated evidence scratch directories can appear below coordination/
+    // as well as at the repository root.
+    "**/.scratch/**",
+    "**/coverage/**",
+    "**/output/**",
+    "**/playwright-report/**",
+    "**/test-results/**",
     // Generated Next.js output nested anywhere (e.g. inside a stray worktree).
     "**/.next/**",
   ]),

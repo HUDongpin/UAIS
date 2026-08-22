@@ -23,7 +23,13 @@ export default defineConfig({
     exclude: [
       ...configDefaults.exclude,
       "**/.claude/**",
+      "**/.playwright-cli/**",
+      "**/.scratch/**",
       "**/.worktrees/**",
+      "**/coverage/**",
+      "**/output/**",
+      "**/playwright-report/**",
+      "**/test-results/**",
       "**/worktrees/**",
       // Playwright owns this suite. Importing these files into Vitest calls
       // test.describe/test.use outside the Playwright runner and makes the

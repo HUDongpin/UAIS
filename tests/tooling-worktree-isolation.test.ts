@@ -1,3 +1,5 @@
+import { ESLint } from "eslint";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import eslintConfig from "../eslint.config.mjs";
@@ -40,6 +42,56 @@ describe("root quality-gate worktree isolation", () => {
 
     expect(config.test?.exclude).toEqual(
       expect.arrayContaining(["**/.worktrees/**", "**/worktrees/**"]),
+    );
+  });
+
+  it("keeps generated and scratch artifacts out of ESLint without hiding source or tests", async () => {
+    const eslint = new ESLint({ cwd: process.cwd() });
+
+    await expect(
+      eslint.isPathIgnored(
+        resolve("output/playwright/report/trace/assets/generated.js"),
+      ),
+    ).resolves.toBe(true);
+    await expect(
+      eslint.isPathIgnored(resolve("coordination/output/generated.js")),
+    ).resolves.toBe(true);
+    await expect(
+      eslint.isPathIgnored(resolve("coverage/generated.js")),
+    ).resolves.toBe(true);
+    await expect(
+      eslint.isPathIgnored(resolve("playwright-report/generated.js")),
+    ).resolves.toBe(true);
+    await expect(
+      eslint.isPathIgnored(resolve("test-results/generated.js")),
+    ).resolves.toBe(true);
+    await expect(
+      eslint.isPathIgnored(resolve("coordination/reports/.scratch/probe.ts")),
+    ).resolves.toBe(true);
+    await expect(
+      eslint.isPathIgnored(resolve(".scratch/tooling/probe.ts")),
+    ).resolves.toBe(true);
+    await expect(eslint.isPathIgnored(resolve("src/app/page.tsx"))).resolves.toBe(
+      false,
+    );
+    await expect(
+      eslint.isPathIgnored(resolve("tests/tooling-worktree-isolation.test.ts")),
+    ).resolves.toBe(false);
+  });
+
+  it("keeps generated and scratch test copies out of Vitest discovery", () => {
+    const config = vitestConfig as {
+      test?: { exclude?: string[] };
+    };
+
+    expect(config.test?.exclude).toEqual(
+      expect.arrayContaining([
+        "**/.scratch/**",
+        "**/coverage/**",
+        "**/output/**",
+        "**/playwright-report/**",
+        "**/test-results/**",
+      ]),
     );
   });
 });
