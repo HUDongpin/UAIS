@@ -61,6 +61,66 @@ describe("LoginPage", () => {
     expect(passwordIcon?.getAttribute("height")).toBe("21");
   });
 
+  it("keeps legal links large and identifiable without relying on color", () => {
+    render(<LoginPage />);
+
+    ["用户协议", "隐私政策"].forEach((name) => {
+      const classNames = screen
+        .getByRole("link", { name: new RegExp(name) })
+        .className.split(/\s+/);
+      expect(classNames).toContain("inline-flex");
+      expect(classNames).toContain("min-h-6");
+      expect(classNames).toContain("underline");
+      expect(classNames).toContain("focus-visible:ring-2");
+    });
+  });
+
+  it.each([
+    ["zh-CN", "账号或邮箱", "立即登录"],
+    ["en-US", "Account or email", "Log In"],
+  ] as const)(
+    "keeps the %s primary login before the large mobile promotion",
+    (locale, accountName, submitName) => {
+      mockPreferences.locale = locale;
+      render(<LoginPage />);
+
+      const account = screen.getByLabelText(accountName);
+      const submit = screen.getByRole("button", { name: submitName });
+      const promotion = document.querySelector(
+        "[data-uais-login-mobile-carousel]",
+      );
+      const main = account.closest("main");
+
+      expect(promotion).toBeTruthy();
+      expect(
+        account.compareDocumentPosition(promotion as Node) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+      expect(
+        submit.compareDocumentPosition(promotion as Node) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+      expect(main?.className.split(/\s+/)).toContain("items-start");
+      expect(main?.className.split(/\s+/)).toContain("lg:items-center");
+
+      const heading = screen.getByRole("heading", { level: 1 });
+      const headingClasses = heading.className.split(/\s+/);
+      expect(headingClasses).toContain("text-[1.75rem]");
+      expect(headingClasses).toContain("sm:text-4xl");
+      expect(headingClasses).toContain("lg:text-5xl");
+    },
+  );
+
+  it.each([
+    ["zh-CN", "优爱思 | 大学人工智能系统"],
+    ["en-US", "UAIS | University AI System"],
+  ] as const)("keeps the %s document title paired with the rendered locale", async (locale, title) => {
+    mockPreferences.locale = locale;
+    render(<LoginPage />);
+
+    await waitFor(() => expect(document.title).toBe(title));
+  });
+
   it("renders the asset-backed dual-card login design deck", () => {
     render(<LoginPage />);
 
@@ -151,7 +211,34 @@ describe("LoginPage", () => {
       expect(footerBand?.querySelector("span")?.className).not.toContain("truncate");
     });
 
-    expect(document.querySelector("[data-uais-login-mobile-carousel]")).toBeTruthy();
+    const mobileCards = document.querySelector("[data-uais-login-mobile-carousel]");
+    const mobileCardGrid = document.querySelector(
+      "[data-uais-login-mobile-card-grid]",
+    );
+    expect(mobileCards).toBeTruthy();
+    expect(mobileCards?.className).not.toContain("overflow-x-auto");
+    expect(mobileCards?.getAttribute("tabindex")).toBeNull();
+    expect(mobileCardGrid?.className).toContain("grid-cols-1");
+    expect(mobileCardGrid?.className).toContain("min-[680px]:grid-cols-2");
+    expect(mobileCardGrid?.className).not.toContain("w-max");
+    expect(mobileCardGrid?.className).not.toContain("snap-x");
+    mobileCardGrid?.querySelectorAll(":scope > div").forEach((card) => {
+      const classNames = card.className.split(/\s+/);
+      const cardStyle = card.getAttribute("style") ?? "";
+      const article = card.querySelector("article");
+      const assetFrame = card.querySelector("[data-uais-login-asset-frame]");
+
+      expect(classNames).toContain("w-full");
+      expect(classNames).toContain("min-w-0");
+      expect(classNames).toContain("max-w-[376px]");
+      expect(classNames).not.toContain("w-[376px]");
+      expect(classNames).not.toContain("shrink-0");
+      expect(classNames).not.toContain("snap-center");
+      expect(cardStyle).not.toContain("aspect-ratio");
+      expect(article?.className.split(/\s+/)).toContain("h-auto");
+      expect(article?.className.split(/\s+/)).not.toContain("h-full");
+      expect(assetFrame?.className.split(/\s+/)).toContain("min-h-[180px]");
+    });
     expect(screen.queryByText("学生登录")).toBeNull();
     expect(screen.queryByText("教师登录")).toBeNull();
     expect(screen.getAllByText("学生全自主学习").length).toBeGreaterThan(0);

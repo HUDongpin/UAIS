@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState, type FormEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { BookOpen } from "@phosphor-icons/react/dist/ssr/BookOpen";
@@ -32,6 +32,7 @@ import {
 
 const loginCopy = {
   "zh-CN": {
+    documentTitle: "优爱思 | 大学人工智能系统",
     language: "中文",
     brandName: "优爱思",
     brandSubline: "大学人工智能系统",
@@ -72,6 +73,7 @@ const loginCopy = {
     teacherCardFooter: "个性化教学、智能辅助，让教学更高效",
   },
   "en-US": {
+    documentTitle: "UAIS | University AI System",
     language: "EN",
     brandName: "UAIS",
     brandSubline: "University AI System",
@@ -138,6 +140,16 @@ export function LoginPage() {
   const [failure, setFailure] = useState<LoginFailure>();
   const [submitting, setSubmitting] = useState(false);
   const authCopy = copy[locale].auth;
+
+  useEffect(() => {
+    const previousTitle = document.title;
+    document.title = t.documentTitle;
+    return () => {
+      if (document.title === t.documentTitle) {
+        document.title = previousTitle;
+      }
+    };
+  }, [t.documentTitle]);
 
   const cards: LoginDeckCard[] = [
     {
@@ -262,7 +274,7 @@ export function LoginPage() {
           </div>
         </section>
 
-        <main className="relative flex min-h-[100dvh] items-center px-5 py-8 sm:px-8 lg:px-10 xl:px-16">
+        <main className="relative flex min-h-[100dvh] items-start px-5 py-8 sm:px-8 lg:items-center lg:px-10 xl:px-16">
           <button
             type="button"
             onClick={toggleLocale}
@@ -273,8 +285,8 @@ export function LoginPage() {
             <CaretDown size={14} weight="bold" />
           </button>
 
-          <div className="mx-auto w-full max-w-[560px] pt-16 lg:pt-0">
-            <div className="mb-10 flex items-center gap-3 lg:hidden">
+          <div className="mx-auto w-full max-w-[560px] pt-12 sm:pt-16 lg:pt-0">
+            <div className="mb-6 flex items-center gap-3 sm:mb-10 lg:hidden">
               <span className="flex size-11 items-center justify-center rounded-2xl bg-[#1f6feb] text-white shadow-[0_14px_34px_rgba(31,111,235,0.24)]">
                 <Sparkle size={23} weight="duotone" />
               </span>
@@ -286,17 +298,19 @@ export function LoginPage() {
               </span>
             </div>
 
-            <LoginMobileDesignCarousel cards={cards} />
-
-            <h1 className="text-4xl font-black leading-[1.16] tracking-normal text-[#171b35] dark:text-[#f5f8ff] sm:text-5xl">
+            <h1 className="text-[1.75rem] font-black leading-[1.22] tracking-normal text-[#171b35] dark:text-[#f5f8ff] sm:text-4xl sm:leading-[1.16] lg:text-5xl">
               {t.welcome}
             </h1>
 
-            <div className="mt-9 inline-flex border-b border-[#1f6feb] pb-2 text-base font-bold text-[#1f6feb]">
+            <div className="mt-6 inline-flex border-b border-[#1f6feb] pb-2 text-base font-bold text-[#1f6feb] sm:mt-9">
               {t.accountLogin}
             </div>
 
-            <form onSubmit={handleSubmit} className="mt-7 space-y-5" noValidate>
+            <form
+              onSubmit={handleSubmit}
+              className="mt-5 space-y-4 sm:mt-7 sm:space-y-5"
+              noValidate
+            >
               <label className="block space-y-2" htmlFor="uais-login-account">
                 <span className="text-sm font-semibold text-[#2a314a] dark:text-[#dce8fb]">
                   {t.accountLabel}
@@ -423,19 +437,21 @@ export function LoginPage() {
                 <span>{t.consent}</span>
                 <a
                   href="/terms"
-                  className="font-semibold text-[#1f6feb] underline-offset-4 hover:underline"
+                  className="inline-flex min-h-6 items-center rounded-sm font-semibold text-[#1f6feb] underline underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1f6feb] focus-visible:ring-offset-2"
                 >
                   {t.terms}
                 </a>
                 <span>{t.consentSeparator}</span>
                 <a
                   href="/privacy"
-                  className="font-semibold text-[#1f6feb] underline-offset-4 hover:underline"
+                  className="inline-flex min-h-6 items-center rounded-sm font-semibold text-[#1f6feb] underline underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1f6feb] focus-visible:ring-offset-2"
                 >
                   {t.privacy}
                 </a>
               </p>
             </form>
+
+            <LoginMobileDesignCarousel cards={cards} />
           </div>
         </main>
       </div>
@@ -450,20 +466,21 @@ function isSafeLocalRedirectTarget(value: string) {
 function LoginMobileDesignCarousel({ cards }: { cards: LoginDeckCard[] }) {
   return (
     <div
-      className="-mx-5 mb-8 overflow-x-auto px-5 pb-3 lg:hidden"
+      className="relative left-1/2 mt-10 w-[calc(100vw-2.5rem)] max-w-[656px] -translate-x-1/2 pb-8 lg:hidden"
       data-uais-login-mobile-carousel
       role="region"
-      tabIndex={0}
       aria-label="UAIS login illustration cards"
     >
-      <div className="flex w-max snap-x gap-4">
+      <div
+        className="grid grid-cols-1 gap-4 min-[680px]:grid-cols-2"
+        data-uais-login-mobile-card-grid
+      >
         {cards.map((card) => (
           <div
             key={card.id}
-            className="w-[376px] shrink-0 snap-center"
-            style={{ aspectRatio: "376 / 520" }}
+            className="mx-auto w-full min-w-0 max-w-[376px]"
           >
-            <LoginDesignCard card={card} />
+            <LoginDesignCard card={card} layout="mobile" />
           </div>
         ))}
       </div>
@@ -487,8 +504,15 @@ function LoginDesignDeck({ cards }: { cards: LoginDeckCard[] }) {
   );
 }
 
-function LoginDesignCard({ card }: { card: LoginDeckCard }) {
+function LoginDesignCard({
+  card,
+  layout = "desktop",
+}: {
+  card: LoginDeckCard;
+  layout?: "desktop" | "mobile";
+}) {
   const learner = card.id === "learner";
+  const mobile = layout === "mobile";
   const cardKind = learner ? "student" : "teacher";
   const primaryChip = learner ? card.chips[0] : card.chips[2];
   const secondaryChip = learner ? card.chips[2] : card.chips[1];
@@ -498,7 +522,7 @@ function LoginDesignCard({ card }: { card: LoginDeckCard }) {
 
   return (
     <article
-      className="relative flex h-full flex-col overflow-hidden rounded-[14px] border border-[#d8e6fb] bg-gradient-to-b from-white via-[#fbfdff] to-[#f2f7ff] px-[18px] pb-[16px] pt-[18px] shadow-[0_14px_42px_rgba(42,82,148,0.12)] 2xl:px-[20px] 2xl:pb-[18px] 2xl:pt-[20px]"
+      className={`relative flex ${mobile ? "h-auto" : "h-full"} flex-col overflow-hidden rounded-[14px] border border-[#d8e6fb] bg-gradient-to-b from-white via-[#fbfdff] to-[#f2f7ff] px-[18px] pb-[16px] pt-[18px] shadow-[0_14px_42px_rgba(42,82,148,0.12)] 2xl:px-[20px] 2xl:pb-[18px] 2xl:pt-[20px]`}
       data-uais-login-card={cardKind}
     >
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_42%,rgba(31,111,235,0.08),transparent_42%)]" />
@@ -513,11 +537,15 @@ function LoginDesignCard({ card }: { card: LoginDeckCard }) {
       </div>
 
       <div
-        className="relative z-20 mt-6 grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)_auto] gap-3 2xl:mt-7 2xl:gap-4"
+        className={`relative z-20 mt-6 grid min-h-0 ${
+          mobile
+            ? "grid-rows-[minmax(180px,auto)_auto]"
+            : "flex-1 grid-rows-[minmax(0,1fr)_auto]"
+        } gap-3 2xl:mt-7 2xl:gap-4`}
         data-uais-login-media-stack
       >
         <div
-          className="relative overflow-hidden rounded-[10px] border border-[#dfebfb] bg-[#f7fbff] shadow-[inset_0_1px_0_rgba(255,255,255,0.82)]"
+          className={`relative ${mobile ? "min-h-[180px]" : ""} overflow-hidden rounded-[10px] border border-[#dfebfb] bg-[#f7fbff] shadow-[inset_0_1px_0_rgba(255,255,255,0.82)]`}
           data-uais-login-asset-frame
         >
           <Image
