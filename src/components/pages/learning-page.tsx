@@ -56,15 +56,12 @@ import { StudyToolsPanel } from "./learning-page-study-tools";
 import { LangGraphTracePanel } from "./learning-page-trace-panel";
 import { LearningPracticePanel } from "./learning-practice-panel";
 
-
 const playbackJumpLinkClassName =
   "inline-flex h-10 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 text-sm font-semibold text-[var(--foreground)] outline-none transition hover:border-[var(--accent-border)] hover:text-[var(--accent)] focus-visible:ring-2 focus-visible:ring-[var(--accent)]";
 
 type PrimaryCompanionView = "ai" | "subtitles" | "outline" | "practice";
 
-
 type CompanionView = PrimaryCompanionView | StudyToolView;
-
 
 type AiGuideMessage = {
   id: string;
@@ -670,7 +667,8 @@ function LearningCompanionPanel({
   onStudyToolsOpenChange,
   guideDraft,
   onGuideDraftChange,
-  guideFocusSequence, signInHref,
+  guideFocusSequence,
+  signInHref,
 }: {
   locale: Locale;
   courseId: string;
@@ -744,7 +742,8 @@ function LearningCompanionPanel({
   const primaryTabs = [
     { view: "ai" as const, label: locale === "zh-CN" ? "智能导学" : "AI Guide" },
     { view: "subtitles" as const, label: locale === "zh-CN" ? "全部字幕" : "Subtitles" },
-    { view: "outline" as const, label: locale === "zh-CN" ? "课程目录" : "Outline" }, { view: "practice" as const, label: locale === "zh-CN" ? "实践" : "Practice" },
+    { view: "outline" as const, label: locale === "zh-CN" ? "课程目录" : "Outline" },
+    { view: "practice" as const, label: locale === "zh-CN" ? "实践" : "Practice" },
   ];
   const selectedStudyToolView = getSelectedStudyToolView(activeView);
 
@@ -1287,13 +1286,20 @@ function LearningCompanionPanel({
             />
           ) : null}
 
-          {!studyToolsOpen && activeView === "practice" ? <LearningPracticePanel locale={locale} courseId={eventCourseId} classId={eventCourseId ? classIdForCourse(eventCourseId) : undefined} lessonKey={publishedPlayback?.learningUnit.lessonKey} signInHref={signInHref} /> : null}
+          {!studyToolsOpen && activeView === "practice" ? (
+            <LearningPracticePanel
+              locale={locale}
+              courseId={eventCourseId}
+              classId={eventCourseId ? classIdForCourse(eventCourseId) : undefined}
+              lessonKey={publishedPlayback?.learningUnit.lessonKey}
+              signInHref={signInHref}
+            />
+          ) : null}
         </div>
       </div>
     </aside>
   );
 }
-
 
 function getAiGuideCopy(
   locale: Locale,
