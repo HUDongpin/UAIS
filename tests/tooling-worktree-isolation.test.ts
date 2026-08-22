@@ -1,6 +1,6 @@
 import { ESLint } from "eslint";
 import { resolve } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import eslintConfig from "../eslint.config.mjs";
 import vitestConfig from "../vitest.config.mts";
@@ -93,5 +93,36 @@ describe("root quality-gate worktree isolation", () => {
         "**/test-results/**",
       ]),
     );
+  });
+
+  it("keeps P2 browser gates out of the persistent Turbopack dev cache", async () => {
+    const previousBaseUrl = process.env.P2_BASE_URL;
+    try {
+      delete process.env.P2_BASE_URL;
+      vi.resetModules();
+      const { default: localConfig } = await import(
+        "../playwright.p2.config"
+      );
+      const webServer = Array.isArray(localConfig.webServer)
+        ? localConfig.webServer[0]
+        : localConfig.webServer;
+
+      expect(webServer?.command).toContain(" --webpack ");
+      expect(webServer?.env).not.toHaveProperty("UAIS_NEXT_DIST_DIR");
+
+      process.env.P2_BASE_URL = "https://staging.example.com";
+      vi.resetModules();
+      const { default: remoteConfig } = await import(
+        "../playwright.p2.config"
+      );
+      expect(remoteConfig.webServer).toBeUndefined();
+    } finally {
+      if (previousBaseUrl === undefined) {
+        delete process.env.P2_BASE_URL;
+      } else {
+        process.env.P2_BASE_URL = previousBaseUrl;
+      }
+      vi.resetModules();
+    }
   });
 });

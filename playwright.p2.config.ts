@@ -31,7 +31,7 @@ export default defineConfig({
   webServer: configuredBaseUrl
     ? undefined
     : {
-        command: "npm run dev -- --hostname 127.0.0.1 --port 3108",
+        command: "npm run dev -- --webpack --hostname 127.0.0.1 --port 3108",
         url: `${localBaseUrl}/healthz`,
         reuseExistingServer: false,
         timeout: 120_000,
