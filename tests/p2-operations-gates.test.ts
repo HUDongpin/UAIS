@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const cleanEnv = {
@@ -154,6 +155,89 @@ describe("P2 protected operations gates", () => {
       ],
     });
   });
+
+  it("requires dedicated P2 database URLs and internal guards before migrations or writes", () => {
+    const buildSource = readFileSync("scripts/p2-staging-build.mjs", "utf8");
+    const liveSource = readFileSync("scripts/p2-staging-live-load.mjs", "utf8");
+
+    for (const source of [buildSource, liveSource]) {
+      expect(source).toContain("UAIS_P2_STAGING_DATABASE_URL");
+      expect(source).toContain("UAIS_P2_STAGING_RESTORE_DATABASE_URL");
+      expect(source).toContain("isolated-p2-staging-source");
+      expect(source).toContain("isolated-p2-staging-restore");
+      expect(source).not.toContain("process.env.DATABASE_URL");
+      expect(source).not.toContain("process.env.POSTGRES_URL");
+    }
+
+    const buildGuard = buildSource.indexOf("await assertDatabaseGuard(");
+    const firstMigration = buildSource.indexOf(
+      'runNode(["scripts/apply-core-migrations.mjs"]',
+    );
+    expect(buildGuard).toBeGreaterThan(-1);
+    expect(firstMigration).toBeGreaterThan(buildGuard);
+
+    const liveGuard = liveSource.indexOf("await validateDatabaseGuards(");
+    const firstCleanup = liveSource.indexOf("await cleanupTaggedData(sourceSql");
+    expect(liveGuard).toBeGreaterThan(-1);
+    expect(firstCleanup).toBeGreaterThan(liveGuard);
+  });
+
+  it("binds manual staging fixtures and cleanup to the explicit load run ID", () => {
+    const buildSource = readFileSync("scripts/p2-staging-build.mjs", "utf8");
+    const liveSource = readFileSync("scripts/p2-staging-live-load.mjs", "utf8");
+
+    expect(buildSource).not.toMatch(/P2_LOAD_RUN_ID:\s*"p2-/);
+    expect(liveSource).toContain('const manualPrefix = `${runId}-manual-`;');
+    expect(liveSource).toContain(
+      "const manualStudentAccount = `${manualPrefix}student`;",
+    );
+    expect(liveSource).toContain(
+      "const manualTeacherAccount = `${manualPrefix}teacher`;",
+    );
+    expect(liveSource).not.toContain('"p2-manual-');
+    expect(liveSource).toContain("accountPrefixes: [manualPrefix]");
+    expect(liveSource).toContain("textMarkers: [runId]");
+  });
+
+  it("keeps the staging build independent from the one-shot live load", () => {
+    const buildSource = readFileSync("scripts/p2-staging-build.mjs", "utf8");
+
+    expect(buildSource).not.toContain("scripts/p2-staging-live-load.mjs");
+    expect(buildSource).not.toContain("P2_LOAD_RUN_ID");
+    expect(buildSource).not.toContain("P2_LOAD_CLEANUP_CONFIRM");
+  });
+
+  it("plans the read-only health aggregate without database or fixture credentials", () => {
+    const result = runTsx(
+      "scripts/p2-staging-live-load.mjs",
+      ["--dry-run", "--health-only"],
+      {
+        ...cleanEnv,
+        P2_LOAD_BASE_URL: "https://staging.uais.top",
+        P2_LOAD_ALLOWLIST: "staging.uais.top",
+        P2_LOAD_CONFIRM: "staging",
+        UAIS_DEPLOYMENT_ENV: "staging",
+        VERCEL_PROJECT_ID: "prj_dcWZvGLSYNtSWN3lnTyfZPyWKgQL",
+      },
+    );
+
+    expect(result.status).toBe(0);
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      target: "p2-isolated-staging-live-executor",
+      status: "PASS",
+      mode: "dry-run",
+      phase: "health-only",
+      blockedReasons: [],
+      plan: {
+        healthOnly: true,
+        healthSamples: 15,
+        healthIntervalSeconds: 60,
+      },
+      safety: {
+        networkUsed: false,
+      },
+    });
+  });
 });
 
 function run(
@@ -162,6 +246,19 @@ function run(
   env: Record<string, string | undefined>,
 ) {
   return spawnSync(process.execPath, [script, ...args], {
+    cwd: process.cwd(),
+    encoding: "utf8",
+    env,
+    timeout: 10_000,
+  });
+}
+
+function runTsx(
+  script: string,
+  args: string[],
+  env: Record<string, string | undefined>,
+) {
+  return spawnSync(process.execPath, ["--import", "tsx", script, ...args], {
     cwd: process.cwd(),
     encoding: "utf8",
     env,
