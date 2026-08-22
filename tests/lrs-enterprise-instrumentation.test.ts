@@ -6,9 +6,7 @@ import {
 } from "@/lib/learning-records/xapi-events";
 import {
   createLearningRecordQueue,
-  getLearningRecordFlushFailures,
   getXapiStatements,
-  resetLearningRecordFlushFailuresForTesting,
   type XapiStatementsQuery,
 } from "@/lib/learning-records/lrs-recorder";
 import {
@@ -18,12 +16,12 @@ import {
 import {
   createLearningRecordAnalyticsGetHandler,
 } from "@/app/api/learning-records/analytics/route";
-import {
-  createLearningRecordEventPostHandler,
-} from "@/app/api/learning-records/events/route";
+import { POST as learningRecordEventPost } from "@/app/api/learning-records/events/route";
 import { createUaisAiAccessSessionForTrustedActor } from "@/lib/server/ai-access-control";
 import { createUaisAppSessionCookie } from "@/lib/server/uais-app-session";
 
+const createLearningRecordEventPostHandler =
+  learningRecordEventPost.createForTesting;
 const aiAccessSigningSecret = "test-lrs-analytics-ai-access-secret";
 const readyLrsEnv = {
   NODE_ENV: "development",
@@ -70,6 +68,12 @@ describe("enterprise LRS/xAPI instrumentation", () => {
       "course.viewed",
       "lesson.viewed",
       "activity.attempted",
+      "formative-check.attempted",
+      "submission.submitted",
+      "submission.resubmitted",
+      "submission.revision-requested",
+      "submission.accepted",
+      "feedback.released",
       "question.answered",
       "course.completed",
       "competency.mastered",
@@ -322,18 +326,17 @@ describe("enterprise LRS/xAPI instrumentation", () => {
       authorizeLearnerEvent: async () => ({
         status: "authorized",
         reasonCode: "learner-course-membership-approved",
+        classId: "class-rm-2026-a",
         responsibleSession: "S12",
       }),
-      enqueue: () => ({
-        target: "learning-record-store",
-        status: "queued",
-        idempotencyKey: "student-001:lesson-view",
-        writeMode: "async-queued",
-        redaction: {
-          endpoint: "fingerprinted",
-          credentials: "omitted",
-          rawStatement: "omitted",
-        },
+      persist: async ({ traceId }) => ({
+        status: "persisted",
+        resourceId: "event-lesson-view",
+        state: "persisted",
+        revision: 1,
+        eventId: "event-lesson-view",
+        traceId,
+        persistedAt: "2026-06-27T14:50:00.000Z",
       }),
     });
 
@@ -358,7 +361,7 @@ describe("enterprise LRS/xAPI instrumentation", () => {
       },
     });
 
-    const queued = await postHandler(
+    const persisted = await postHandler(
       new Request("http://localhost/api/learning-records/events", {
         method: "POST",
         headers: {
@@ -375,10 +378,11 @@ describe("enterprise LRS/xAPI instrumentation", () => {
         }),
       }),
     );
-    expect(queued.status).toBe(202);
-    expect(await queued.json()).toMatchObject({
+    expect(persisted.status).toBe(200);
+    expect(await persisted.json()).toMatchObject({
       target: "learning-record-event",
-      status: "queued",
+      status: "persisted",
+      eventId: "event-lesson-view",
       access: {
         status: "authorized",
         reasonCode: "learner-course-membership-approved",
@@ -456,11 +460,10 @@ describe("enterprise LRS/xAPI instrumentation", () => {
     });
   });
 
-  // E16/PKG-10: the 202 the client receives means "queued", and the flush that
-  // follows used to be `flush().catch(() => undefined)` - every dropped
-  // statement vanished with no log line, no counter and no dead letter, so a
-  // deployment losing every write looked exactly like a healthy one.
-  it("logs the statements a post-response flush drops, with counts", async () => {
+  // P1 replaces the lossy post-response flush with a Postgres event + outbox
+  // transaction. An LRS outage therefore cannot turn a persisted classroom
+  // event into an untracked background promise.
+  it("acknowledges Postgres persistence without contacting the LRS inline", async () => {
     const studentCookie = createUaisAppSessionCookie(
       {
         account: "student-001",
@@ -474,23 +477,29 @@ describe("enterprise LRS/xAPI instrumentation", () => {
         ttlSeconds: 365 * 24 * 60 * 60,
       },
     );
-    resetLearningRecordFlushFailuresForTesting();
-    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
-    // Every attempt refused, so the recorder exhausts its retries and the
-    // statement stops existing anywhere.
     const fetchMock = vi.fn(async () => new Response("upstream busy", { status: 503 }));
     const postHandler = createLearningRecordEventPostHandler({
       env: readyLrsEnv,
       fetch: fetchMock,
-      now: () => "2026-06-27T14:50:00.000Z",
+      now: new Date("2026-06-27T14:50:00.000Z"),
       authorizeLearnerEvent: async () => ({
         status: "authorized",
         reasonCode: "learner-course-membership-approved",
+        classId: "class-rm-2026-a",
         responsibleSession: "S12",
+      }),
+      persist: async ({ traceId }) => ({
+        status: "persisted",
+        resourceId: "event-question-2",
+        state: "persisted",
+        revision: 4,
+        eventId: "event-question-2",
+        traceId,
+        persistedAt: "2026-06-27T14:50:00.000Z",
       }),
     });
 
-    const queued = await postHandler(
+    const response = await postHandler(
       new Request("http://localhost/api/learning-records/events", {
         method: "POST",
         headers: { cookie: studentCookie, "content-type": "application/json" },
@@ -501,37 +510,12 @@ describe("enterprise LRS/xAPI instrumentation", () => {
         }),
       }),
     );
-    // The client is still told "queued": that contract is unchanged, which is
-    // exactly why the loss has to be visible on the server.
-    expect(queued.status).toBe(202);
-
-    await vi.waitFor(() => expect(errorSpy).toHaveBeenCalled());
-    const [prefix, payload] = errorSpy.mock.calls[0] as [string, Record<string, unknown>];
-    expect(prefix).toBe("[learning-record-events]");
-    expect(payload).toEqual(
-      expect.objectContaining({
-        phase: "flush",
-        status: "statements-dropped",
-        attempted: 1,
-        written: 0,
-        failed: 1,
-      }),
-    );
-    expect(getLearningRecordFlushFailures()).toEqual(
-      expect.objectContaining({
-        failedWrites: 1,
-        lastFailure: expect.objectContaining({
-          status: "recorded",
-          httpStatus: 503,
-        }),
-      }),
-    );
-    // Nothing about the log line names the endpoint or the credentials.
-    expect(JSON.stringify(payload)).not.toContain("lrs.example.test");
-    expect(JSON.stringify(payload)).not.toContain("lrs-password");
-
-    errorSpy.mockRestore();
-    resetLearningRecordFlushFailuresForTesting();
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      status: "persisted",
+      eventId: "event-question-2",
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("requires signed admin access and an audit reason for admin LRS analytics", async () => {

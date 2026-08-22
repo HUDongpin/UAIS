@@ -76,6 +76,7 @@ export function createLearningPptPlaybackManifest(input: {
     courseTitle: publishedCopy.courseTitle,
     sourceDeckTitle: publishedCopy.sourceDeckTitle,
     audioManifestId: storedManifest.id,
+    learningUnit: createPublishedLearningUnitIdentity(published),
     teacherName: publishedCopy.teacherName,
     voiceLabel: publishedCopy.voiceLabel,
     slideCount: slides.length,
@@ -112,6 +113,7 @@ function createPublishedLearningPptPlaybackManifest(
     courseTitle: publishedCopy.courseTitle,
     sourceDeckTitle: publishedCopy.sourceDeckTitle,
     audioManifestId: published.audioManifestId,
+    learningUnit: createPublishedLearningUnitIdentity(published),
     teacherName: publishedCopy.teacherName,
     voiceLabel: publishedCopy.voiceLabel,
     slideCount: slides.length,
@@ -124,6 +126,24 @@ function createPublishedLearningPptPlaybackManifest(
   };
   assertLearningPlaybackIsDisplaySafe(playback);
   return playback;
+}
+
+function createPublishedLearningUnitIdentity(published: PublishedPptPlayback) {
+  if (published.learningUnit) {
+    return {
+      ...published.learningUnit,
+      identitySource: "explicit-manifest" as const,
+    };
+  }
+  return {
+    lessonKey: published.audioManifestId,
+    position: 1,
+    title: {
+      "zh-CN": published.localized?.["zh-CN"]?.sourceDeckTitle ?? published.sourceDeckTitle,
+      "en-US": published.localized?.["en-US"]?.sourceDeckTitle ?? published.sourceDeckTitle,
+    },
+    identitySource: "legacy-audio-manifest-fallback" as const,
+  };
 }
 
 function getPublishedPlaybackCopy(published: PublishedPptPlayback, locale: Locale) {

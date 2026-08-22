@@ -1,25 +1,19 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   createLearningPptPlaybackAudioGetHandler,
 } from "@/app/api/learning/ppt-playback/audio/[manifestId]/[audioId]/route";
-import {
-  createLearningPptPlaybackManifestGetHandler,
-} from "@/app/api/learning/ppt-playback/[courseId]/route";
+import { GET as learningPptPlaybackGet } from "@/app/api/learning/ppt-playback/[courseId]/route";
 import {
   createLearningPptPlaybackManifestForCourse,
   createPublishedLearningPptPlaybackManifestForCourse,
 } from "@/lib/learning/ppt-playback";
-import { createLearnerProfileFromXapiStatements } from "@/lib/learning-records/learner-profile";
-import type { LearningRecordQueueItem } from "@/lib/learning-records/lrs-recorder";
-import {
-  createIdempotentStatementId,
-  createLearningEventStatement,
-} from "@/lib/learning-records/xapi-events";
 import { createUaisAppSessionCookie } from "@/lib/server/uais-app-session";
 
+const createLearningPptPlaybackManifestGetHandler =
+  learningPptPlaybackGet.createForTesting;
 const kangXiaManifestId =
   "audio-manifest-elementary-math-research-natural-number-ordinal-theory-ppt1";
 const appSessionSigningSecret = "test-learning-ppt-playback-app-session-secret";
@@ -429,11 +423,9 @@ describe("student PPT playback API", () => {
 
   it("allows the owning teacher to preview the Kang Xia playback manifest", async () => {
     const fixture = await createApprovedLearningPptPlaybackFixture();
-    const recordLearningEvent = vi.fn();
     const handler = createLearningPptPlaybackManifestGetHandler({
       env: fixture.env,
       readStoredManifest: async () => createStoredKangXiaManifest(),
-      recordLearningEvent,
     });
 
     try {
@@ -471,7 +463,6 @@ describe("student PPT playback API", () => {
           slideCount: 2,
         }),
       );
-      expect(recordLearningEvent).not.toHaveBeenCalled();
     } finally {
       await rm(fixture.dataDir, { recursive: true, force: true });
     }
@@ -662,13 +653,11 @@ describe("student PPT playback API", () => {
     }
   });
 
-  it("queues a privacy-safe LRS lesson.viewed event after authorized manifest access", async () => {
+  it("keeps manifest GET side-effect free so events can only use Postgres plus outbox", async () => {
     const fixture = await createApprovedLearningPptPlaybackFixture();
-    const recordLearningEvent = vi.fn();
     const handler = createLearningPptPlaybackManifestGetHandler({
       env: fixture.env,
       readStoredManifest: async () => createStoredKangXiaManifest(),
-      recordLearningEvent,
     });
 
     try {
@@ -682,74 +671,9 @@ describe("student PPT playback API", () => {
       );
 
       expect(response.status).toBe(200);
-      expect(recordLearningEvent).toHaveBeenCalledWith({
-        actor: {
-          id: "Peter",
-          role: "learner",
-        },
-        event: {
-          type: "lesson.viewed",
-          object: {
-            id: "elementary-math-research/ppt-playback/audio-manifest-elementary-math-research-natural-number-ordinal-theory-ppt1",
-            name: "Elementary Mathematics Research PPT playback",
-            type: "lesson",
-          },
-          context: {
-            courseId: "elementary-math-research",
-            classId: "elementary-math-research-class-1",
-            lessonId:
-              "audio-manifest-elementary-math-research-natural-number-ordinal-theory-ppt1",
-            locale: "zh-CN",
-          },
-        },
-        idempotencyKey:
-          "Peter:elementary-math-research:audio-manifest-elementary-math-research-natural-number-ordinal-theory-ppt1:manifest-viewed",
-      });
-    } finally {
-      await rm(fixture.dataDir, { recursive: true, force: true });
-    }
-  });
-
-  it("does not report a viewed manifest as a completed lesson in the learner profile", async () => {
-    const fixture = await createApprovedLearningPptPlaybackFixture();
-    const queuedItems: LearningRecordQueueItem[] = [];
-    const handler = createLearningPptPlaybackManifestGetHandler({
-      env: fixture.env,
-      readStoredManifest: async () => createStoredKangXiaManifest(),
-      recordLearningEvent: (item) => {
-        queuedItems.push(item);
-      },
-    });
-
-    try {
-      const response = await handler(
-        new Request("http://localhost/api/learning/ppt-playback/elementary-math-research", {
-          headers: {
-            cookie: fixture.cookie,
-          },
-        }),
-        { params: { courseId: "elementary-math-research" } },
-      );
-
-      expect(response.status).toBe(200);
-      expect(queuedItems).toHaveLength(1);
-      expect(queuedItems[0].event.result).toBeUndefined();
-
-      const profile = createLearnerProfileFromXapiStatements({
-        statements: queuedItems.map((item) =>
-          createLearningEventStatement({
-            actor: item.actor,
-            event: item.event,
-            statementId: createIdempotentStatementId(item.idempotencyKey),
-            timestamp: "2026-06-22T12:05:00.000Z",
-          }),
-        ),
-      });
-
-      expect(profile.progress.completedLessonCount).toBe(0);
-      expect(profile.progress.completionRate).toBe(0);
-      expect(profile.completedLessonIds).toEqual([]);
-      expect(profile.progress.activeLessonCount).toBe(1);
+      const body = await response.json();
+      expect(body).not.toHaveProperty("learningEvent");
+      expect(body).not.toHaveProperty("lrs");
     } finally {
       await rm(fixture.dataDir, { recursive: true, force: true });
     }
@@ -772,7 +696,13 @@ describe("student PPT playback API", () => {
         { params: { courseId: "elementary-math-research" } },
       );
       const body = await response.json();
-      const serialized = JSON.stringify(body.playback);
+      const localizedSurface = JSON.stringify({
+        ...body.playback,
+        learningUnit: {
+          ...body.playback.learningUnit,
+          title: body.playback.learningUnit.title["en-US"],
+        },
+      });
 
       expect(response.status).toBe(200);
       expect(body.playback).toEqual(
@@ -794,7 +724,8 @@ describe("student PPT playback API", () => {
           narrationText: expect.stringContaining("three core threads"),
         }),
       );
-      expect(serialized).not.toMatch(/\p{Script=Han}/u);
+      expect(body.playback.learningUnit.title["zh-CN"]).toMatch(/\p{Script=Han}/u);
+      expect(localizedSurface).not.toMatch(/\p{Script=Han}/u);
     } finally {
       await rm(fixture.dataDir, { recursive: true, force: true });
     }

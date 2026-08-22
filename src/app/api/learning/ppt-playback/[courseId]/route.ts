@@ -1,4 +1,3 @@
-import { after } from "next/server";
 import {
   createLearningPptPlaybackManifestForCourse,
   createPublishedLearningPptPlaybackManifestForCourse,
@@ -10,10 +9,6 @@ import {
   createLearningPptPlaybackStoreErrorResponse,
   readSafeLearningPptPlaybackTraceId,
 } from "@/lib/server/learning-ppt-playback-access";
-import {
-  createLearningRecordQueue,
-  type LearningRecordQueueItem,
-} from "@/lib/learning-records/lrs-recorder";
 import type { StoredPptNarrationAudioManifest } from "@/lib/ai/voice/ppt-narration-assets";
 import type { LearningPptPlaybackManifest } from "@/lib/learning/ppt-playback-types";
 import { defaultLocale, supportedLocales, type Locale } from "@/i18n/copy";
@@ -25,9 +20,7 @@ type LearningPptPlaybackManifestRouteParams = {
 };
 
 type LearningPptPlaybackManifestRouteContext = {
-  params:
-    | LearningPptPlaybackManifestRouteParams
-    | Promise<LearningPptPlaybackManifestRouteParams>;
+  params: Promise<LearningPptPlaybackManifestRouteParams>;
 };
 
 type LearningPptPlaybackManifestGetHandlerDeps = {
@@ -39,17 +32,13 @@ type LearningPptPlaybackManifestGetHandlerDeps = {
     courseId: string;
     locale: Locale;
   }) => Promise<LearningPptPlaybackManifest | undefined>;
-  recordLearningEvent?: (input: LearningRecordQueueItem) => void | Promise<void>;
 };
 
-type StudentLearningPptPlaybackAccess = Extract<
-  Awaited<ReturnType<typeof authorizeLearningPptPlaybackAccess>>,
-  { reasonCode: "student-course-membership-approved" }
->;
+export const GET = Object.assign(createLearningPptPlaybackManifestGetHandler(), {
+  createForTesting: createLearningPptPlaybackManifestGetHandler,
+});
 
-export const GET = createLearningPptPlaybackManifestGetHandler();
-
-export function createLearningPptPlaybackManifestGetHandler(
+function createLearningPptPlaybackManifestGetHandler(
   deps: LearningPptPlaybackManifestGetHandlerDeps = {},
 ) {
   const env = deps.env ?? process.env;
@@ -98,20 +87,6 @@ export function createLearningPptPlaybackManifestGetHandler(
         );
       }
 
-      if (access.reasonCode === "student-course-membership-approved") {
-        recordPptPlaybackViewed({
-          access,
-          playback,
-          locale,
-          recordLearningEvent:
-            deps.recordLearningEvent ??
-            createDefaultLearningRecordEventRecorder({
-              env,
-              fetch: deps.fetch,
-            }),
-        });
-      }
-
       return createLearningPptPlaybackJsonResponse(200, {
         playback,
         access,
@@ -140,78 +115,6 @@ export function createLearningPptPlaybackManifestGetHandler(
       );
     }
   };
-}
-
-function recordPptPlaybackViewed(input: {
-  access: StudentLearningPptPlaybackAccess;
-  playback: LearningPptPlaybackManifest;
-  locale: Locale;
-  recordLearningEvent: (item: LearningRecordQueueItem) => void | Promise<void>;
-}) {
-  const item: LearningRecordQueueItem = {
-    actor: {
-      id: input.access.actor.actorId,
-      role: "learner",
-    },
-    event: {
-      type: "lesson.viewed",
-      object: {
-        id: `${input.playback.courseId}/ppt-playback/${input.playback.audioManifestId}`,
-        name: `${getStableEnglishPlaybackTitle(input.playback)} PPT playback`,
-        type: "lesson",
-      },
-      // Opening the manifest is a view, not a completion. Emitting
-      // `result.completion` here made `isCompletionStatement` treat a single
-      // page load as a finished lesson and pinned completionRate to 1.
-      context: {
-        courseId: input.playback.courseId,
-        classId: input.access.classId,
-        lessonId: input.playback.audioManifestId,
-        locale: input.locale,
-      },
-    },
-    idempotencyKey: [
-      input.access.actor.actorId,
-      input.playback.courseId,
-      input.playback.audioManifestId,
-      "manifest-viewed",
-    ].join(":"),
-  };
-  void Promise.resolve(input.recordLearningEvent(item)).catch(() => undefined);
-}
-
-function getStableEnglishPlaybackTitle(playback: LearningPptPlaybackManifest) {
-  return (
-    createPublishedLearningPptPlaybackManifestForCourse(playback.courseId, "en-US")
-      ?.courseTitle ?? playback.courseTitle
-  );
-}
-
-function createDefaultLearningRecordEventRecorder(input: {
-  env: Record<string, string | undefined>;
-  fetch?: typeof fetch;
-}) {
-  const queue = createLearningRecordQueue({
-    env: input.env,
-    fetch: input.fetch,
-  });
-  return (item: LearningRecordQueueItem) => {
-    queue.enqueue(item);
-    scheduleLearningRecordFlush(queue);
-  };
-}
-
-function scheduleLearningRecordFlush(queue: { flush: () => Promise<unknown> }) {
-  // Keep the async LRS write alive past the response so serverless runtimes do
-  // not freeze the function before the flush completes; fall back to a detached
-  // flush when `after` is unavailable (e.g. outside a request scope).
-  try {
-    after(async () => {
-      await queue.flush().catch(() => undefined);
-    });
-  } catch {
-    void queue.flush().catch(() => undefined);
-  }
 }
 
 function getPlaybackLocale(request: Request): Locale {

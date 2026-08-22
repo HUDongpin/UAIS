@@ -15,6 +15,15 @@ export type LearningPptPlaybackManifest = {
   courseTitle: string;
   sourceDeckTitle: string;
   audioManifestId: string;
+  learningUnit: {
+    lessonKey: string;
+    position: number;
+    title: {
+      "zh-CN": string;
+      "en-US": string;
+    };
+    identitySource: "explicit-manifest" | "legacy-audio-manifest-fallback";
+  };
   teacherName: string;
   voiceLabel: string;
   slideCount: number;

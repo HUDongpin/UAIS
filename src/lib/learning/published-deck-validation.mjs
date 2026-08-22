@@ -203,10 +203,37 @@ export function normalizePublishedDeck(value) {
     voiceLabel: requireText(value.voiceLabel, "voiceLabel"),
     audioManifestId,
     pptAssetId,
+    ...(value.learningUnit === undefined
+      ? {}
+      : { learningUnit: normalizeLearningUnit(value.learningUnit) }),
     slides,
     ...(isRecord(value.localized)
       ? { localized: normalizeLocalized(value.localized, slides.length) }
       : {}),
+  };
+}
+
+/**
+ * @param {unknown} value
+ * @returns {import("./ppt-playback-catalog").PublishedLearningUnit}
+ */
+function normalizeLearningUnit(value) {
+  if (!isRecord(value)) {
+    throw new Error("learningUnit must be an object.");
+  }
+  if (!Number.isInteger(value.position) || value.position <= 0) {
+    throw new Error("learningUnit position must be a positive integer.");
+  }
+  if (!isRecord(value.title)) {
+    throw new Error("learningUnit title must contain zh-CN and en-US.");
+  }
+  return {
+    lessonKey: requireSafeId(value.lessonKey, "learningUnit lessonKey"),
+    position: value.position,
+    title: {
+      "zh-CN": requireText(value.title["zh-CN"], "learningUnit title zh-CN"),
+      "en-US": requireText(value.title["en-US"], "learningUnit title en-US"),
+    },
   };
 }
 

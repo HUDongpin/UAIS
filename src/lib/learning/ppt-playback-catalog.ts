@@ -1,6 +1,15 @@
 import type { Locale } from "@/i18n/copy";
 import { readPublishedPlaybackFiles } from "@/lib/learning/published-playback-store";
 
+type PublishedLearningUnit = {
+  lessonKey: string;
+  position: number;
+  title: {
+    "zh-CN": string;
+    "en-US": string;
+  };
+};
+
 type PublishedPptPlayback = {
   courseId: string;
   courseTitle: string;
@@ -9,6 +18,7 @@ type PublishedPptPlayback = {
   voiceLabel: string;
   audioManifestId: string;
   pptAssetId: string;
+  learningUnit?: PublishedLearningUnit;
   slides: Array<{
     slideId: string;
     slideTitle: string;
@@ -400,4 +410,4 @@ function withKangXiaAudioMetadata(
   });
 }
 
-export type { PublishedPptPlayback };
+export type { PublishedLearningUnit, PublishedPptPlayback };

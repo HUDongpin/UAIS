@@ -1,18 +1,10 @@
-import { after } from "next/server";
+import type { LearningRecordEventInput } from "@/lib/learning-records/xapi-events";
 import {
-  createLearningRecordQueue,
-  getLearningRecordFlushFailures,
-  recordLearningRecordFlushFailure,
-  type LearningRecordFlushResult,
-  type LearningRecordQueueResult,
-} from "@/lib/learning-records/lrs-recorder";
-import type {
-  LearningRecordActor,
-  LearningRecordEventInput,
-} from "@/lib/learning-records/xapi-events";
-import {
-  authorizeLearningPptPlaybackAccess,
-} from "@/lib/server/learning-ppt-playback-access";
+  LearningLoopStoreError,
+  createUaisLearningLoopPostgresStore,
+  type LearningLoopPersistedReceipt,
+} from "@/lib/learning-loop/postgres-store";
+import { authorizeLearningPptPlaybackAccess } from "@/lib/server/learning-ppt-playback-access";
 import { getUaisAppSessionUserFromCookieString } from "@/lib/server/uais-app-session";
 
 export const dynamic = "force-dynamic";
@@ -21,6 +13,7 @@ type LearningRecordEventAccess =
   | {
       status: "authorized";
       reasonCode: "learner-course-membership-approved";
+      classId: string;
       responsibleSession: "S12";
     }
   | {
@@ -36,45 +29,53 @@ type LearningRecordEventAccess =
 type LearningRecordEventPostHandlerDeps = {
   env?: Record<string, string | undefined>;
   fetch?: typeof fetch;
-  now?: () => string;
+  now?: Date;
   authorizeLearnerEvent?: (input: {
     request: Request;
     actorId: string;
     event: LearningRecordEventInput;
   }) => Promise<LearningRecordEventAccess> | LearningRecordEventAccess;
-  enqueue?: (item: {
-    actor: LearningRecordActor;
+  persist?: (input: {
+    studentAccount: string;
+    classExternalId: string;
     event: LearningRecordEventInput;
     idempotencyKey: string;
-  }) => LearningRecordQueueResult;
+    traceId: string;
+  }) => Promise<LearningLoopPersistedReceipt>;
 };
 
-export const POST = createLearningRecordEventPostHandler();
+export const POST = Object.assign(createLearningRecordEventPostHandler(), {
+  createForTesting: createLearningRecordEventPostHandler,
+});
 
-export function createLearningRecordEventPostHandler(
+function createLearningRecordEventPostHandler(
   deps: LearningRecordEventPostHandlerDeps = {},
 ) {
   const env = deps.env ?? process.env;
 
   return async function POST(request: Request) {
+    const traceId = readSafeTraceId(request);
     const body = await parseRequestBody(request);
     if (!body) {
       return createEventJsonResponse(400, {
         target: "learning-record-event",
         status: "denied",
         access: createDeniedAccess("learning-event-invalid"),
+        traceId,
         redaction: createRedaction(),
       });
     }
 
     const user = getUaisAppSessionUserFromCookieString(request.headers.get("cookie"), {
       env,
+      now: deps.now,
     });
     if (!user || user.role !== "student") {
       return createEventJsonResponse(401, {
         target: "learning-record-event",
         status: "denied",
         access: createDeniedAccess("learner-session-required"),
+        traceId,
         redaction: createRedaction(),
       });
     }
@@ -84,6 +85,7 @@ export function createLearningRecordEventPostHandler(
         target: "learning-record-event",
         status: "denied",
         access: createDeniedAccess("learner-self-scope-required"),
+        traceId,
         redaction: createRedaction(),
       });
     }
@@ -99,6 +101,7 @@ export function createLearningRecordEventPostHandler(
           ...input,
           env,
           fetch: deps.fetch,
+          now: deps.now,
         }));
     const access = await authorizeLearnerEvent({
       request,
@@ -110,28 +113,49 @@ export function createLearningRecordEventPostHandler(
         target: "learning-record-event",
         status: "denied",
         access,
+        traceId,
         redaction: createRedaction(),
       });
     }
 
-    const enqueue = deps.enqueue ?? createDefaultEnqueue({ env, fetch: deps.fetch, now: deps.now });
-    const queueResult = enqueue({
-      actor: {
-        id: body.actorId,
-        role: "learner",
-        displayName: user.displayName,
-      },
-      event: body.event,
-      idempotencyKey: body.idempotencyKey ?? createIdempotencyKey(body.actorId, body.event),
-    });
-
-    return createEventJsonResponse(queueResult.status === "blocked" ? 424 : 202, {
-      target: "learning-record-event",
-      status: queueResult.status,
-      access,
-      queue: queueResult,
-      redaction: createRedaction(),
-    });
+    const event = sanitizeLearningRecordEvent(body.event, access.classId);
+    try {
+      const persist =
+        deps.persist ??
+        createUaisLearningLoopPostgresStore({ env }).recordLearningEvent;
+      const receipt = await persist({
+        studentAccount: body.actorId,
+        classExternalId: access.classId,
+        event,
+        idempotencyKey:
+          body.idempotencyKey ?? createIdempotencyKey(body.actorId, event),
+        traceId,
+      });
+      return createEventJsonResponse(200, {
+        target: "learning-record-event",
+        ...receipt,
+        access,
+        redaction: createRedaction(),
+      });
+    } catch (error) {
+      if (error instanceof LearningLoopStoreError) {
+        return createEventJsonResponse(error.status, {
+          target: "learning-record-event",
+          status: error.status === 409 ? "conflict" : "failed",
+          reasonCode: error.reasonCode,
+          ...(error.details ?? {}),
+          traceId,
+          redaction: createRedaction(),
+        });
+      }
+      return createEventJsonResponse(500, {
+        target: "learning-record-event",
+        status: "failed",
+        reasonCode: "learning-event-persistence-failed",
+        traceId,
+        redaction: createRedaction(),
+      });
+    }
   };
 }
 
@@ -141,155 +165,121 @@ async function defaultAuthorizeLearnerEvent(input: {
   event: LearningRecordEventInput;
   env: Record<string, string | undefined>;
   fetch?: typeof fetch;
+  now?: Date;
 }): Promise<LearningRecordEventAccess> {
   const access = await authorizeLearningPptPlaybackAccess({
     request: input.request,
     env: input.env,
     fetch: input.fetch,
+    now: input.now,
     courseId: input.event.context.courseId,
   });
-  if (access.status === "authorized") {
+  if (access.status === "authorized" && access.reasonCode === "student-course-membership-approved") {
     return {
       status: "authorized",
       reasonCode: "learner-course-membership-approved",
+      classId: access.classId,
       responsibleSession: "S12",
     };
   }
   return createDeniedAccess("learner-course-membership-required");
 }
 
-function createDefaultEnqueue(input: {
-  env: Record<string, string | undefined>;
-  fetch?: typeof fetch;
-  now?: () => string;
-}) {
-  const queue = createLearningRecordQueue(input);
-  return (item: {
-    actor: LearningRecordActor;
-    event: LearningRecordEventInput;
-    idempotencyKey: string;
-  }) => {
-    const result = queue.enqueue(item);
-    scheduleLearningRecordFlush(queue);
-    return result;
-  };
-}
-
-function scheduleLearningRecordFlush(queue: {
-  flush: () => Promise<LearningRecordFlushResult>;
-}) {
-  // Keep the async LRS write alive past the response so serverless runtimes do
-  // not freeze the function before the flush completes; fall back to a detached
-  // flush when `after` is unavailable (e.g. outside a request scope).
-  try {
-    after(async () => {
-      await runLearningRecordFlush(queue);
-    });
-  } catch {
-    void runLearningRecordFlush(queue);
-  }
-}
-
-// The route answers 202 "queued" BEFORE this runs, so a statement lost here is
-// lost after the client has already been told the write was accepted. The flush
-// result used to be discarded entirely (`.catch(() => undefined)`), which made
-// that loss invisible in every deployment log. It is now counted twice over: in
-// the recorder's process-wide tally, which the admin smoke route reports, and
-// in one server log line per lossy flush carrying the event counts.
-//
-// Out of scope by design (they need storage this route does not have): durable
-// retry across instances, a dead-letter queue, and per-actor loss attribution.
-async function runLearningRecordFlush(queue: {
-  flush: () => Promise<LearningRecordFlushResult>;
-}) {
-  try {
-    const result = await queue.flush();
-    if (result.failed > 0) {
-      const failures = getLearningRecordFlushFailures();
-      console.error("[learning-record-events]", {
-        phase: "flush",
-        status: "statements-dropped",
-        attempted: result.attempted,
-        written: result.written,
-        failed: result.failed,
-        processFailedWrites: failures.failedWrites,
-        lastFailure: failures.lastFailure,
-        redaction: createRedaction(),
-      });
-    }
-  } catch (error) {
-    // `flush()` resolves for an unwritable statement, so reaching here means the
-    // queue itself broke (a malformed event, a runtime fault): the whole batch
-    // is gone and the count is unknown, which is worth exactly one loud line.
-    recordLearningRecordFlushFailure(error);
-    const failures = getLearningRecordFlushFailures();
-    console.error("[learning-record-events]", {
-      phase: "flush",
-      status: "flush-failed",
-      processFailedWrites: failures.failedWrites,
-      lastFailure: failures.lastFailure,
-      redaction: createRedaction(),
-    });
-  }
-}
-
 async function parseRequestBody(request: Request) {
   const body = (await request.json().catch(() => undefined)) as
-    | {
-        actorId?: unknown;
-        event?: unknown;
-        idempotencyKey?: unknown;
-      }
+    | { actorId?: unknown; event?: unknown; idempotencyKey?: unknown }
     | undefined;
-  if (
-    !body ||
-    typeof body.actorId !== "string" ||
-    !isLearningRecordEventInput(body.event)
-  ) {
+  if (!body || typeof body.actorId !== "string" || !isLearningRecordEventInput(body.event)) {
     return undefined;
   }
+  const actorId = body.actorId.trim();
+  if (!actorId) return undefined;
+  const idempotencyKey =
+    typeof body.idempotencyKey === "string" && body.idempotencyKey.trim()
+      ? body.idempotencyKey.trim()
+      : undefined;
+  return { actorId, event: body.event, idempotencyKey };
+}
+
+function sanitizeLearningRecordEvent(
+  event: LearningRecordEventInput,
+  authorizedClassId: string,
+): LearningRecordEventInput {
+  const result = event.result
+    ? {
+        ...(typeof event.result.success === "boolean"
+          ? { success: event.result.success }
+          : {}),
+        ...(typeof event.result.completion === "boolean"
+          ? { completion: event.result.completion }
+          : {}),
+        ...(typeof event.result.duration === "string" && event.result.duration.length <= 80
+          ? { duration: event.result.duration }
+          : {}),
+      }
+    : undefined;
   return {
-    actorId: body.actorId.trim(),
-    event: body.event,
-    idempotencyKey:
-      typeof body.idempotencyKey === "string" && body.idempotencyKey.trim()
-        ? body.idempotencyKey.trim()
-        : undefined,
+    type: event.type,
+    object: {
+      id: event.object.id.trim().slice(0, 500),
+      name: event.object.name.trim().slice(0, 200),
+      ...(event.object.type ? { type: event.object.type } : {}),
+      ...(event.object.interactionType
+        ? { interactionType: event.object.interactionType.slice(0, 80) }
+        : {}),
+    },
+    ...(result && Object.keys(result).length > 0 ? { result } : {}),
+    context: {
+      courseId: event.context.courseId.trim(),
+      classId: authorizedClassId,
+      ...(event.context.lessonId ? { lessonId: event.context.lessonId.trim() } : {}),
+      ...(event.context.locale ? { locale: event.context.locale.slice(0, 20) } : {}),
+      ...(event.context.competencyIds
+        ? {
+            competencyIds: event.context.competencyIds
+              .filter((value) => typeof value === "string")
+              .slice(0, 20)
+              .map((value) => value.slice(0, 120)),
+          }
+        : {}),
+    },
   };
 }
 
 function isLearningRecordEventInput(value: unknown): value is LearningRecordEventInput {
-  if (!isRecord(value) || !isRecord(value.object) || !isRecord(value.context)) {
-    return false;
-  }
+  if (!isRecord(value) || !isRecord(value.object) || !isRecord(value.context)) return false;
   return (
     typeof value.type === "string" &&
     typeof value.object.id === "string" &&
+    Boolean(value.object.id.trim()) &&
     typeof value.object.name === "string" &&
-    typeof value.context.courseId === "string"
+    Boolean(value.object.name.trim()) &&
+    typeof value.context.courseId === "string" &&
+    Boolean(value.context.courseId.trim())
   );
 }
 
 function createIdempotencyKey(actorId: string, event: LearningRecordEventInput) {
-  return [actorId, event.type, event.context.courseId, event.object.id].join(":");
+  return [actorId, event.type, event.context.courseId, event.object.id].join(":").slice(0, 160);
+}
+
+function readSafeTraceId(request: Request) {
+  const candidate = request.headers.get("x-uais-trace-id")?.trim();
+  return candidate && /^[A-Za-z0-9][A-Za-z0-9._-]{0,119}$/.test(candidate)
+    ? candidate
+    : `trace-learning-event-${crypto.randomUUID()}`;
 }
 
 function createDeniedAccess(
   reasonCode: Extract<LearningRecordEventAccess, { status: "denied" }>["reasonCode"],
 ): Extract<LearningRecordEventAccess, { status: "denied" }> {
-  return {
-    status: "denied",
-    reasonCode,
-    responsibleSession: "S12",
-  };
+  return { status: "denied", reasonCode, responsibleSession: "S12" };
 }
 
 function createEventJsonResponse(status: number, body: unknown) {
   return Response.json(body, {
     status,
-    headers: {
-      "cache-control": "no-store",
-    },
+    headers: { "cache-control": "no-store" },
   });
 }
 
@@ -297,6 +287,7 @@ function createRedaction() {
   return {
     credentials: "omitted",
     rawStatement: "omitted",
+    studentContent: "omitted",
     localFiles: "omitted",
   };
 }
