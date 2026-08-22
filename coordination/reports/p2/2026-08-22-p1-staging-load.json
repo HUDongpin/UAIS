@@ -1,0 +1,86 @@
+{
+  "target": "uais-p1-staging-200-student-load",
+  "status": "PASS",
+  "candidate": {
+    "head": "487cc07d7e7806ab26c7a5f48ecefd81ecbcada3",
+    "p2BaseTip": "ebf0efa82b1fa2085a1bc719b6a4fb0e3bef9c8c",
+    "worktreeManifestSha256": "3d2c9f284d823d7821cbbf2c7b8fbc733b2a6ab127734c8b1d05c38d9749e207",
+    "loadBundleManifestSha256": "b5e7a737d42fbf04ae9747313fe40f7db21d16e6fe9f506f880261733bc77b8b"
+  },
+  "stagingBoundary": {
+    "project": "uais-staging",
+    "projectId": "sha256:0045cb9f495499db8bcbac0a22c320c516a160011a08c0ae5bd71a4dd395b8d1",
+    "canonicalUrl": "https://staging.uais.top",
+    "sourceNeonProjectId": "sha256:2462b4ccbcc1e613f505fe187a899321631586f72eef043377a2623618556d23",
+    "databaseGuard": "isolated-p2-staging-source",
+    "configuredFunctionRegion": "sin1",
+    "buildRegion": "cle1",
+    "productionProjectTouched": false,
+    "productionDatabaseTouched": false,
+    "productionFeatureFlagTouched": false
+  },
+  "execution": {
+    "deploymentId": "sha256:0923a74028bfeb608dc661e09b51603cf7307e10915237d375b8b587a48a86a7",
+    "requestId": "sha256:6e8c0a8f8f0a8aff489c64d2196d9b1eadc5069f0bf1a72c9f9aa38bb52ba10c",
+    "invocationStartedAt": "2026-08-22T14:29:12.348Z",
+    "evidenceSource": "Vercel nested serverless runtime logs plus independent Neon HTTP residual audit",
+    "clientResponseRecovered": false,
+    "clientSocketClosedBeforeResponse": true,
+    "runtimeFinalAggregateRecovered": true
+  },
+  "load": {
+    "studentCount": 200,
+    "counts": {
+      "attempts": 200,
+      "submissions": 200,
+      "versions": 200,
+      "accepted": 20,
+      "awaiting": 180,
+      "events": 440,
+      "outboxRows": 440,
+      "profiles": 200
+    },
+    "p95Ms": {
+      "taskRead": 490.53,
+      "checkpoint": 264.15,
+      "autosave": 401.44,
+      "submit": 429.56,
+      "teacherDecision": 191.32
+    },
+    "thresholdMs": 1500,
+    "windows": {
+      "autosaveElapsedMs": 300999,
+      "submitElapsedMs": 1263,
+      "submitMaximumMs": 30000
+    }
+  },
+  "cleanup": {
+    "status": "PASS",
+    "guardRows": 0,
+    "users": 0,
+    "courses": 0,
+    "auditRows": 0,
+    "independentlyRecheckedAfterInvocation": true
+  },
+  "operatorSurfaceClosure": {
+    "cleanCanonicalDeploymentId": "sha256:db2b26660511b163cbabd31b24e91919930bb00dea5f7255d00f22736406809a",
+    "cleanCanonicalReady": true,
+    "temporaryOperatorRouteInCleanBuild": false,
+    "unknownPostReturnsOperatorJson": false,
+    "healthzHttpStatus": 200
+  },
+  "diagnosticHistory": [
+    {
+      "status": "FAIL",
+      "reasonCode": "fixture-json-was-double-encoded",
+      "cleanupStatus": "PASS"
+    },
+    {
+      "status": "BLOCKED_ENV",
+      "reasonCode": "local-and-cle1-to-neon-tcp-timeouts",
+      "cleanupStatus": "PASS"
+    }
+  ],
+  "valueRedacted": true,
+  "evidenceRedaction": "Opaque infrastructure and trace identifiers are stored only as SHA-256 fingerprints."
+}

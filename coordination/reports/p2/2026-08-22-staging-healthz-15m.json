@@ -1,0 +1,136 @@
+{
+  "target": "p2-isolated-staging-live-executor",
+  "status": "PASS",
+  "mode": "execute",
+  "phase": "health-only",
+  "health": {
+    "status": "PASS",
+    "cadenceSeconds": 60,
+    "sampleCount": 15,
+    "successCount": 15,
+    "p95Milliseconds": 1336,
+    "samples": [
+      {
+        "sample": 1,
+        "status": 200,
+        "latencyMs": 1023,
+        "requestId": "sha256:11de8c55c27e2f0c1a4a16885100b1e07097ec1324d49f1dc8dacbda9b26eadf",
+        "checksOk": true
+      },
+      {
+        "sample": 2,
+        "status": 200,
+        "latencyMs": 885,
+        "requestId": "sha256:3edc243e8dd4559c004937c83d47486e05aebb23c14ca8083377698654019cfd",
+        "checksOk": true
+      },
+      {
+        "sample": 3,
+        "status": 200,
+        "latencyMs": 1124,
+        "requestId": "sha256:5c300ae5c40ca0b6e87d89884063708aafb0cea735736adf885762ba1662eb78",
+        "checksOk": true
+      },
+      {
+        "sample": 4,
+        "status": 200,
+        "latencyMs": 1039,
+        "requestId": "sha256:6811191dbc30f7cc18eeb6733d4c7dfc9adfc8565bac55953ccef4719d97d651",
+        "checksOk": true
+      },
+      {
+        "sample": 5,
+        "status": 200,
+        "latencyMs": 906,
+        "requestId": "sha256:d9f8a4e6e4efc16cf824feb0aadcba55a2a466f96dec21d361d3c97d38a33a5b",
+        "checksOk": true
+      },
+      {
+        "sample": 6,
+        "status": 200,
+        "latencyMs": 824,
+        "requestId": "sha256:29bb105042a9368c35fecea1f1d5fa690caff469d8e549a8628f88312e6ded06",
+        "checksOk": true
+      },
+      {
+        "sample": 7,
+        "status": 200,
+        "latencyMs": 1336,
+        "requestId": "sha256:a424c80a16bb6f0023b7533743d72fd6da5965a684c4cf74c700eae47c3f91cc",
+        "checksOk": true
+      },
+      {
+        "sample": 8,
+        "status": 200,
+        "latencyMs": 839,
+        "requestId": "sha256:7b4ec03d01ca35e3d1b437800057d270b206fce88887cd57c0191c39d6c86e81",
+        "checksOk": true
+      },
+      {
+        "sample": 9,
+        "status": 200,
+        "latencyMs": 837,
+        "requestId": "sha256:38df8885ec0eae93e8ec37059e01ae8ecf42202835ea174759e6263d56c6f957",
+        "checksOk": true
+      },
+      {
+        "sample": 10,
+        "status": 200,
+        "latencyMs": 835,
+        "requestId": "sha256:ebf92fe19d3d6b5ac658575c2f684f2badd01f625ede164fa445854a75f8d0b2",
+        "checksOk": true
+      },
+      {
+        "sample": 11,
+        "status": 200,
+        "latencyMs": 944,
+        "requestId": "sha256:c69e989264b5342092cbea4f721a3538ce64d319978686fed278d305625fff53",
+        "checksOk": true
+      },
+      {
+        "sample": 12,
+        "status": 200,
+        "latencyMs": 1236,
+        "requestId": "sha256:5140252b2a9562e155a21aad2eb54a0cce95330762ca27b23722ae64a82e2adc",
+        "checksOk": true
+      },
+      {
+        "sample": 13,
+        "status": 200,
+        "latencyMs": 834,
+        "requestId": "sha256:0bbdc3b12962633e9b8c7cef20a58893f12f912a2407c4b3bbcb7c84f50607a7",
+        "checksOk": true
+      },
+      {
+        "sample": 14,
+        "status": 200,
+        "latencyMs": 1134,
+        "requestId": "sha256:d94da17d986c496f92e8d6c5e27981e4eb9282be2aad5e65d9a95ab6de31eda4",
+        "checksOk": true
+      },
+      {
+        "sample": 15,
+        "status": 200,
+        "latencyMs": 839,
+        "requestId": "sha256:42a5adfe11156ed655db2994b96404b136bacf5d4ff48de791cafb7f333181bb",
+        "checksOk": true
+      }
+    ]
+  },
+  "blockedReasons": [],
+  "elapsedSeconds": 915,
+  "safety": {
+    "networkUsed": true,
+    "isolatedStagingProjectRequired": true,
+    "productionProjectRejected": true,
+    "productionHostnamesRejected": true,
+    "productionNeonProjectRejected": true,
+    "distinctRestoreTargetRequired": true,
+    "explicitStagingConfirmationRequired": true,
+    "cleanupByRunIdRequired": true,
+    "fixtureCredentialsOmitted": true,
+    "liveProviderUsed": false,
+    "productionFeatureFlagsModified": false
+  },
+  "evidenceRedaction": "Opaque infrastructure and trace identifiers are stored only as SHA-256 fingerprints."
+}

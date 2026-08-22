@@ -1,0 +1,22 @@
+{
+  "target": "uais-p1-staging-200-student-load-job",
+  "status": "BLOCKED_ENV",
+  "blockedReasons": [
+    "isolated-p1-load-test-guard-required"
+  ],
+  "preflight": {
+    "guardReady": false,
+    "users": 0,
+    "courses": 0,
+    "auditRows": 0,
+    "residualTaggedRows": 0
+  },
+  "valueRedacted": true,
+  "execution": {
+    "deploymentId": "sha256:551f01e635fbb2ccf6e363bb6a4cfaff66d7cb21389f31f055ea98c1c0bdf6f6",
+    "loadWritesStarted": false,
+    "canonicalAliasChanged": false,
+    "productionStateTouched": false
+  },
+  "evidenceRedaction": "Opaque infrastructure and trace identifiers are stored only as SHA-256 fingerprints."
+}
