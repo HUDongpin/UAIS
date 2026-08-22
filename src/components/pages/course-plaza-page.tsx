@@ -218,6 +218,7 @@ export function CoursePlazaPage({ inviteParam }: CoursePlazaPageProps = {}) {
   const [manualInviteJoinStatus, setManualInviteJoinStatus] =
     useState<InviteJoinStatus>(idleInviteJoinStatus);
   const [manualInviteJoinReturnPath, setManualInviteJoinReturnPath] = useState<string>();
+  const [courseSearchQuery, setCourseSearchQuery] = useState("");
   // Set only by a `student-session-required` refusal, which is the server saying
   // in so many words that signing in is the missing step.
   const [inviteJoinRequiresSignIn, setInviteJoinRequiresSignIn] = useState(false);
@@ -250,6 +251,29 @@ export function CoursePlazaPage({ inviteParam }: CoursePlazaPageProps = {}) {
   // the samples are demoted to a labelled example row behind them.
   const [plazaMemberships, setPlazaMemberships] = useState<StudentClassMembershipItem[]>([]);
   const hasPlazaMemberships = plazaMemberships.length > 0;
+  const normalizedCourseSearchQuery = courseSearchQuery.trim().toLocaleLowerCase();
+  const matchesCourseSearch = (values: Array<string | undefined>) =>
+    !normalizedCourseSearchQuery ||
+    values.some((value) =>
+      value?.toLocaleLowerCase().includes(normalizedCourseSearchQuery),
+    );
+  const filteredPlazaMemberships = plazaMemberships.filter((membership) =>
+    matchesCourseSearch([
+      membership.courseName,
+      membership.className,
+      membership.semester,
+    ]),
+  );
+  const filteredDisplayedCourses = displayedCourses.filter((course) =>
+    matchesCourseSearch([
+      ...Object.values(course.title),
+      ...Object.values(course.description),
+      ...Object.values(course.teacher),
+      ...Object.values(course.teacherHint),
+    ]),
+  );
+  const hasCourseSearchResults =
+    filteredPlazaMemberships.length > 0 || filteredDisplayedCourses.length > 0;
 
   useEffect(() => {
     if (!shouldLoadPlazaMemberships()) {
@@ -443,6 +467,22 @@ export function CoursePlazaPage({ inviteParam }: CoursePlazaPageProps = {}) {
           <h1 className="text-3xl font-semibold tracking-tight text-[var(--foreground)] sm:text-4xl">
             {t.coursePlaza.title}
           </h1>
+          <div className="max-w-xl pt-2">
+            <label
+              htmlFor="course-plaza-search"
+              className="block text-sm font-semibold text-[var(--foreground)]"
+            >
+              {t.coursePlaza.searchLabel}
+            </label>
+            <input
+              id="course-plaza-search"
+              type="search"
+              value={courseSearchQuery}
+              placeholder={t.coursePlaza.searchPlaceholder}
+              className="mt-2 h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] px-4 text-sm font-medium text-[var(--foreground)] outline-none transition placeholder:text-[var(--placeholder)] focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-soft)]"
+              onChange={(event) => setCourseSearchQuery(event.target.value)}
+            />
+          </div>
         </div>
         <aside className="rounded-2xl border border-[var(--border)] bg-[var(--surface-soft)] p-4">
           <div className="flex items-center gap-3">
@@ -614,7 +654,25 @@ export function CoursePlazaPage({ inviteParam }: CoursePlazaPageProps = {}) {
         ) : null}
       </section>
 
-      {hasPlazaMemberships ? (
+      {normalizedCourseSearchQuery && !hasCourseSearchResults ? (
+        <section
+          role="status"
+          className="rounded-2xl border border-dashed border-[var(--border)] bg-[var(--surface)] p-6 text-center shadow-[0_18px_42px_var(--shadow)]"
+        >
+          <p className="text-sm font-medium text-[var(--muted)]">
+            {t.coursePlaza.searchNoResults}
+          </p>
+          <button
+            type="button"
+            className="mt-4 inline-flex min-h-11 items-center justify-center rounded-full border border-[var(--accent-border)] bg-[var(--accent-soft)] px-5 text-sm font-semibold text-[var(--accent)] outline-none transition hover:bg-[var(--surface-soft)] focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+            onClick={() => setCourseSearchQuery("")}
+          >
+            {t.coursePlaza.searchClear}
+          </button>
+        </section>
+      ) : null}
+
+      {filteredPlazaMemberships.length > 0 ? (
         <section
           data-uais-plaza-my-courses="true"
           className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5 shadow-[0_18px_42px_var(--shadow)]"
@@ -626,7 +684,7 @@ export function CoursePlazaPage({ inviteParam }: CoursePlazaPageProps = {}) {
             {t.coursePlaza.myCoursesSummary}
           </p>
           <div className="mt-4 grid gap-4 md:grid-cols-2">
-            {plazaMemberships.map((membership) => (
+            {filteredPlazaMemberships.map((membership) => (
               <article
                 key={membership.id}
                 data-uais-plaza-membership={membership.id}
@@ -692,6 +750,7 @@ export function CoursePlazaPage({ inviteParam }: CoursePlazaPageProps = {}) {
           the page above. A signed-out visitor is exactly the person with no
           other cards to compare these against, so leaving them unlabelled is
           where "示例课程" is needed most. */}
+      {filteredDisplayedCourses.length > 0 ? (
       <div data-uais-plaza-sample-heading="true">
         <h2 className="text-xl font-semibold tracking-tight text-[var(--foreground)]">
           {t.coursePlaza.sampleCourses}
@@ -700,12 +759,14 @@ export function CoursePlazaPage({ inviteParam }: CoursePlazaPageProps = {}) {
           {t.coursePlaza.sampleCoursesSummary}
         </p>
       </div>
+      ) : null}
 
+      {filteredDisplayedCourses.length > 0 ? (
       <section
         data-uais-plaza-sample-courses={hasPlazaMemberships ? "demoted" : "primary"}
         className="grid gap-5 md:grid-cols-2"
       >
-        {displayedCourses.map((course) => {
+        {filteredDisplayedCourses.map((course) => {
           const courseTitle = localizedText(course.title, locale);
 
           return (
@@ -775,6 +836,7 @@ export function CoursePlazaPage({ inviteParam }: CoursePlazaPageProps = {}) {
           );
         })}
       </section>
+      ) : null}
     </div>
   );
 }

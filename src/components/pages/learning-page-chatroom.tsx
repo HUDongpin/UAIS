@@ -16,7 +16,13 @@
 // session's to extend).
 
 import Link from "next/link";
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+  type KeyboardEvent,
+} from "react";
 import { ArrowClockwise } from "@phosphor-icons/react/dist/ssr/ArrowClockwise";
 import { ArrowDown } from "@phosphor-icons/react/dist/ssr/ArrowDown";
 import { ArrowLeft } from "@phosphor-icons/react/dist/ssr/ArrowLeft";
@@ -144,7 +150,7 @@ function SupportChannelNote({ label }: { label: string }) {
   return (
     <span
       data-uais-support-channel
-      className="mt-1 block text-xs font-medium text-[var(--muted)]"
+      className="mt-1 block text-xs font-medium text-[var(--foreground)]"
     >
       {label}
     </span>
@@ -904,7 +910,7 @@ function AgentDock({
               type="button"
               disabled={room.composerDisabled}
               onClick={() => room.mentionAgent(handle)}
-              className="rounded-2xl border border-[var(--border)] bg-[var(--surface-elevated)] p-3 text-left outline-none transition hover:border-[var(--accent)] hover:bg-[var(--accent-soft)] active:translate-y-px focus-visible:ring-2 focus-visible:ring-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:border-[var(--border)] disabled:hover:bg-[var(--surface-elevated)]"
+              className="rounded-2xl border border-[var(--border)] bg-[var(--surface-elevated)] p-3 text-left outline-none transition hover:border-[var(--accent)] hover:bg-[var(--accent-soft)] active:translate-y-px focus-visible:ring-2 focus-visible:ring-[var(--accent)] disabled:cursor-not-allowed disabled:border-[var(--border)] disabled:bg-[var(--surface-elevated)]"
             >
               <span className="flex items-center gap-2">
                 <span
@@ -939,6 +945,19 @@ function Composer({ room }: { room: LearningChatroomController }) {
   const draftMentions = tokenizeMentionText(room.draft, locale).filter(
     (token) => token.type === "mention",
   );
+
+  function handleComposerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (
+      event.key !== "Enter" ||
+      event.shiftKey ||
+      event.nativeEvent.isComposing
+    ) {
+      return;
+    }
+
+    event.preventDefault();
+    event.currentTarget.form?.requestSubmit();
+  }
 
   return (
     <form
@@ -987,27 +1006,33 @@ function Composer({ room }: { room: LearningChatroomController }) {
         </p>
       ) : null}
       <div className="mt-2 flex flex-col gap-2 sm:flex-row">
-        <input
+        <textarea
           id="group-message"
           value={room.draft}
           onChange={(event) => room.setDraft(event.target.value)}
+          onKeyDown={handleComposerKeyDown}
           placeholder={t.learning.inputPlaceholder}
           maxLength={chatroomMessageMaxLength}
+          rows={2}
           disabled={room.composerDisabled}
-          className="min-h-11 flex-1 rounded-2xl border border-[var(--border)] bg-[var(--surface-elevated)] px-4 text-sm text-[var(--foreground)] outline-none transition placeholder:text-[var(--placeholder)] focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-soft)] disabled:cursor-not-allowed disabled:opacity-60"
+          className="min-h-11 max-h-32 flex-1 resize-y rounded-2xl border border-[var(--border)] bg-[var(--surface-elevated)] px-4 py-3 text-sm text-[var(--foreground)] outline-none transition placeholder:text-[var(--placeholder)] focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-soft)] disabled:cursor-not-allowed disabled:opacity-60"
         />
         <button
           type="submit"
           disabled={room.agentsPending || room.composerDisabled}
           aria-busy={room.agentsPending}
-          className="inline-flex h-11 items-center justify-center gap-2 rounded-full bg-[var(--accent)] px-5 text-sm font-semibold text-white outline-none transition hover:bg-[var(--accent-strong)] active:translate-y-px focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[var(--accent)]"
+          className="inline-flex h-11 items-center justify-center gap-2 rounded-full bg-[var(--accent)] px-5 text-sm font-semibold text-white outline-none transition hover:bg-[var(--accent-strong)] active:translate-y-px focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)] disabled:cursor-not-allowed disabled:hover:bg-[var(--accent)]"
         >
           <PaperPlaneTilt size={17} weight="bold" aria-hidden="true" />
           {t.learning.send}
         </button>
       </div>
       {room.error ? (
-        <p className="mt-2 text-sm font-medium text-[var(--danger)]">
+        <p
+          role="alert"
+          data-uais-chatroom-error="true"
+          className="mt-2 text-sm font-medium text-[var(--danger)]"
+        >
           {room.error}
           {isSignInRequiredMessage(room.error, t) ? (
             <SignInHandoffLink label={t.auth.signIn} />
@@ -1151,7 +1176,7 @@ function MessageRow({
           )}
         </p>
         {isSelf ? (
-          <span className="mt-1 block text-right text-xs font-medium text-white/70">
+          <span className="mt-1 block text-right text-xs font-medium text-white">
             {message.time}
           </span>
         ) : null}

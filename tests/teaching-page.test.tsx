@@ -7802,6 +7802,42 @@ describe("TeachingPage", () => {
     expect(container.querySelector('[data-uais-inline-invitation-qr="55395057"]')).toBeTruthy();
   });
 
+  it("moves focus into the new course dialog, traps Tab, and restores the trigger", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json({
+          courses: [],
+          classes: [],
+          receipt: {
+            action: "list-courses",
+            actorId: "teacher-kang",
+            status: "read",
+          },
+        }),
+      ),
+    );
+
+    render(<TeachingPage />);
+    const trigger = screen.getByRole("button", { name: "新增课程" });
+    trigger.focus();
+    fireEvent.click(trigger);
+
+    const nameInput = screen.getByLabelText("名称");
+    await waitFor(() => expect(document.activeElement).toBe(nameInput));
+
+    fireEvent.change(nameInput, { target: { value: "焦点管理课程" } });
+    const closeButton = screen.getByRole("button", { name: "关闭新增课程弹窗" });
+    const doneButton = screen.getByRole("button", { name: "完成" });
+    doneButton.focus();
+    fireEvent.keyDown(doneButton, { key: "Tab" });
+    expect(document.activeElement).toBe(closeButton);
+
+    fireEvent.keyDown(closeButton, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "新增课程" })).toBeNull());
+    expect(document.activeElement).toBe(trigger);
+  });
+
   it("persists the new course through the backend before adding it to the teacher list", async () => {
     const persistedCourse = {
       courseId: "teacher-course-ai-supported-elementary-math-20260623",
@@ -8452,6 +8488,7 @@ describe("TeachingPage", () => {
 
     expect(container.querySelector('[data-uais-new-course-field-row="unit-description"]')).toBeTruthy();
     expect(container.querySelector('[data-uais-new-course-cover-panel="compact"]')).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "修改封面" })).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "生成封面" }));
 

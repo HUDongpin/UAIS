@@ -54,6 +54,10 @@ export const copy = {
     coursePlaza: {
       title: "课程广场",
       summary: "选择课程，进入清晰、节制、可继续扩展的大学课堂学习空间。",
+      searchLabel: "搜索课程",
+      searchPlaceholder: "搜索课程、班级或教师",
+      searchNoResults: "没有找到匹配的课程。请调整关键词或清除搜索。",
+      searchClear: "清除搜索",
       empty: "暂无更多课程。当前模板只展示两门示例课程。",
       // 广场此前只渲染两门模板示例课程，学生已加入的真实班级一门都看不到。
       // 真实班级排在最上方，示例课程降级到明确标注的示例区。
@@ -323,6 +327,10 @@ export const copy = {
     coursePlaza: {
       title: "Course Plaza",
       summary: "Choose a course and enter a calm university learning workspace.",
+      searchLabel: "Search courses",
+      searchPlaceholder: "Search courses, classes, or teachers",
+      searchNoResults: "No matching courses were found. Try another term or clear the search.",
+      searchClear: "Clear search",
       empty: "No more courses. This template intentionally shows two sample courses.",
       myCourses: "My Courses",
       myCoursesSummary: "These classes come from invite codes you joined or applied to.",

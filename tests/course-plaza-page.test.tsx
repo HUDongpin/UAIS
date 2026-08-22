@@ -149,6 +149,23 @@ describe("CoursePlazaPage", () => {
     ]);
   });
 
+  it("filters courses and offers a clear action from the no-results state", () => {
+    render(<CoursePlazaPage />);
+
+    const search = screen.getByRole("searchbox", { name: "搜索课程" });
+    fireEvent.change(search, { target: { value: "不存在的课程" } });
+
+    expect(screen.getByRole("status").textContent).toContain("没有找到匹配的课程");
+    expect(screen.queryByRole("heading", { name: "数学教学法" })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "大学研究方法" })).toBeNull();
+    expect(screen.getByLabelText("邀请码")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "清除搜索" }));
+    expect((search as HTMLInputElement).value).toBe("");
+    expect(screen.getByRole("heading", { name: "数学教学法" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "大学研究方法" })).toBeTruthy();
+  });
+
   // E16/R1: the "第 1 / 12 单元, 8%" bar was template art - nobody had ever
   // completed a unit of these. It used to be hidden only once the visitor's own
   // classes appeared above it, which left the invented figure showing to exactly

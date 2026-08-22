@@ -10,7 +10,7 @@
 
 
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { BookOpen } from "@phosphor-icons/react/dist/ssr/BookOpen";
 import { CaretDown } from "@phosphor-icons/react/dist/ssr/CaretDown";
@@ -62,6 +62,98 @@ import type {
   CourseCoverGenerationResponse,
   GeneratedCourseCover,
 } from "./teaching-page-types";
+
+const dialogFocusableSelector = [
+  "a[href]",
+  "button:not([disabled])",
+  "input:not([disabled])",
+  "select:not([disabled])",
+  "textarea:not([disabled])",
+  '[tabindex]:not([tabindex="-1"])',
+].join(",");
+
+function useDialogFocusManagement({
+  dialogRef,
+  onClose,
+  closeDisabled = false,
+  initialFocusSelector,
+}: {
+  dialogRef: React.RefObject<HTMLElement | null>;
+  onClose: () => void;
+  closeDisabled?: boolean;
+  initialFocusSelector?: string;
+}) {
+  const onCloseRef = useRef(onClose);
+  const closeDisabledRef = useRef(closeDisabled);
+
+  useEffect(() => {
+    onCloseRef.current = onClose;
+    closeDisabledRef.current = closeDisabled;
+  }, [closeDisabled, onClose]);
+
+  useEffect(() => {
+    const previouslyFocused =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : undefined;
+    const focusInitialControl = window.setTimeout(() => {
+      const dialog = dialogRef.current;
+      const preferred = initialFocusSelector
+        ? dialog?.querySelector<HTMLElement>(initialFocusSelector)
+        : undefined;
+      const firstFocusable = dialog?.querySelector<HTMLElement>(
+        dialogFocusableSelector,
+      );
+      (preferred ?? firstFocusable ?? dialog)?.focus();
+    }, 0);
+
+    function handleDialogKeyDown(event: KeyboardEvent) {
+      const dialog = dialogRef.current;
+      if (!dialog) {
+        return;
+      }
+
+      if (event.key === "Escape") {
+        if (!closeDisabledRef.current) {
+          event.preventDefault();
+          onCloseRef.current();
+        }
+        return;
+      }
+
+      if (event.key !== "Tab") {
+        return;
+      }
+
+      const focusable = Array.from(
+        dialog.querySelectorAll<HTMLElement>(dialogFocusableSelector),
+      ).filter((element) => element.getAttribute("aria-hidden") !== "true");
+      if (focusable.length === 0) {
+        event.preventDefault();
+        dialog.focus();
+        return;
+      }
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const active = document.activeElement;
+      if (event.shiftKey && (active === first || !dialog.contains(active))) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && active === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
+
+    window.addEventListener("keydown", handleDialogKeyDown);
+    return () => {
+      window.clearTimeout(focusInitialControl);
+      window.removeEventListener("keydown", handleDialogKeyDown);
+      previouslyFocused?.focus();
+    };
+  }, [dialogRef, initialFocusSelector]);
+}
 
 export function CourseClassManager({
   course,
@@ -117,7 +209,7 @@ export function CourseClassManager({
         aria-label={
           locale === "zh-CN" ? `为${courseTitle}新建班级` : `New class for ${courseTitle}`
         }
-        className="inline-flex h-11 items-center gap-2 rounded-full bg-gradient-to-r from-[#5db1ff] to-[#635bff] px-5 text-base font-semibold text-white shadow-[0_12px_28px_rgba(83,115,255,0.24)] outline-none transition hover:shadow-[0_16px_34px_rgba(83,115,255,0.32)] active:translate-y-px focus-visible:ring-2 focus-visible:ring-[#2f7cff] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface-elevated)]"
+        className="inline-flex h-11 items-center gap-2 rounded-full bg-gradient-to-r from-[#1557c0] to-[#4338ca] px-5 text-base font-semibold text-white shadow-[0_12px_28px_rgba(83,115,255,0.24)] outline-none transition hover:shadow-[0_16px_34px_rgba(83,115,255,0.32)] active:translate-y-px focus-visible:ring-2 focus-visible:ring-[#1557c0] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface-elevated)]"
         onClick={onNewClass}
       >
         <Plus size={21} weight="bold" />
@@ -139,7 +231,7 @@ export function CourseClassManager({
                         <span className="truncate">{classItem.name}</span>
                         <QrCode size={18} weight="duotone" className="shrink-0 text-[#c4cad8]" />
                       </span>
-                      <span className="mt-2 flex flex-wrap gap-x-7 gap-y-1 text-sm font-medium text-[#8b92a4]">
+                      <span className="mt-2 flex flex-wrap gap-x-7 gap-y-1 text-sm font-medium text-[var(--muted)]">
                         <span>
                           {locale === "zh-CN" ? "学生：" : "Students:"}
                           {classItem.students}
@@ -156,7 +248,7 @@ export function CourseClassManager({
                           ? `进入${classItem.name}`
                           : `Enter ${classItem.name}`
                       }
-                      className="inline-flex h-9 items-center gap-2 rounded-full border border-[#7eb1ff] px-4 text-sm font-medium text-[#2f7cff] outline-none transition hover:bg-[#f4f8ff] active:translate-y-px focus-visible:ring-2 focus-visible:ring-[#2f7cff]"
+                      className="inline-flex h-9 items-center gap-2 rounded-full border border-[#7eb1ff] px-4 text-sm font-medium text-[#1557c0] outline-none transition hover:bg-[#f4f8ff] active:translate-y-px focus-visible:ring-2 focus-visible:ring-[#1557c0]"
                     >
                       <UsersThree size={16} weight="bold" />
                       {locale === "zh-CN" ? "进入班级" : "Take class"}
@@ -172,7 +264,7 @@ export function CourseClassManager({
                           ? `查看${classItem.name}活动列表`
                           : `View activity list for ${classItem.name}`
                       }
-                      className="inline-flex h-9 items-center gap-2 rounded-full bg-gradient-to-r from-[#78b7ff] to-[#635bff] px-4 text-sm font-medium text-white shadow-[0_8px_18px_rgba(83,115,255,0.24)] outline-none transition hover:shadow-[0_10px_22px_rgba(83,115,255,0.3)] active:translate-y-px focus-visible:ring-2 focus-visible:ring-[#2f7cff]"
+                      className="inline-flex h-9 items-center gap-2 rounded-full bg-gradient-to-r from-[#1557c0] to-[#4338ca] px-4 text-sm font-medium text-white shadow-[0_8px_18px_rgba(83,115,255,0.24)] outline-none transition hover:shadow-[0_10px_22px_rgba(83,115,255,0.3)] active:translate-y-px focus-visible:ring-2 focus-visible:ring-[#1557c0]"
                     >
                       <ClipboardText size={16} weight="bold" />
                       {locale === "zh-CN" ? "活动列表" : "Activity List"}
@@ -241,17 +333,13 @@ export function NewClassDialog({
   const [formError, setFormError] = useState<string>();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const isReady = className.trim().length > 0;
-
-  useEffect(() => {
-    function closeOnEscape(event: KeyboardEvent) {
-      if (event.key === "Escape" && !isSubmitting) {
-        onCancel();
-      }
-    }
-
-    window.addEventListener("keydown", closeOnEscape);
-    return () => window.removeEventListener("keydown", closeOnEscape);
-  }, [isSubmitting, onCancel]);
+  const dialogRef = useRef<HTMLFormElement>(null);
+  useDialogFocusManagement({
+    dialogRef,
+    onClose: onCancel,
+    closeDisabled: isSubmitting,
+    initialFocusSelector: "#new-class-name",
+  });
 
   async function submitNewClass(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -277,7 +365,9 @@ export function NewClassDialog({
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/35 px-4 py-10 backdrop-blur-sm">
       <form
+        ref={dialogRef}
         role="dialog"
+        tabIndex={-1}
         aria-modal="true"
         aria-labelledby="new-class-title"
         className="w-full max-w-3xl overflow-hidden rounded-[14px] border border-[#dfe4ee] bg-white text-[#111827] shadow-[0_28px_80px_rgba(36,53,90,0.22)]"
@@ -328,7 +418,7 @@ export function NewClassDialog({
           <button
             type="button"
             disabled={isSubmitting}
-            className="inline-flex h-14 min-w-36 items-center justify-center rounded-full border border-[#7eb1ff] bg-white px-8 text-lg font-medium text-[#2f7cff] outline-none transition hover:bg-[#f4f8ff] focus-visible:ring-2 focus-visible:ring-[#2f7cff] disabled:cursor-not-allowed disabled:opacity-60"
+            className="inline-flex h-14 min-w-36 items-center justify-center rounded-full border border-[#7eb1ff] bg-white px-8 text-lg font-semibold text-[#1557c0] outline-none transition hover:bg-[#f4f8ff] focus-visible:ring-2 focus-visible:ring-[#1557c0] disabled:cursor-not-allowed"
             onClick={onCancel}
           >
             {locale === "zh-CN" ? "取消" : "Cancel"}
@@ -336,7 +426,7 @@ export function NewClassDialog({
           <button
             type="submit"
             disabled={!isReady || isSubmitting}
-            className="inline-flex h-14 min-w-36 items-center justify-center rounded-full bg-gradient-to-r from-[#71b8ff] to-[#635bff] px-8 text-lg font-medium text-white shadow-[0_14px_28px_rgba(92,129,255,0.24)] outline-none transition focus-visible:ring-2 focus-visible:ring-[#2f7cff] disabled:cursor-not-allowed disabled:opacity-70 disabled:shadow-none"
+            className="inline-flex h-14 min-w-36 items-center justify-center rounded-full bg-gradient-to-r from-[#1557c0] to-[#4338ca] px-8 text-lg font-semibold text-white shadow-[0_14px_28px_rgba(92,129,255,0.24)] outline-none transition focus-visible:ring-2 focus-visible:ring-[#1557c0] disabled:cursor-not-allowed disabled:shadow-none"
           >
             {isSubmitting
               ? locale === "zh-CN"
@@ -370,6 +460,8 @@ export function ClassInvitationDialog({
   // expected to hand out. The invite-code workspace already had working copy
   // buttons, which made this one read as broken rather than absent.
   const [copyStatus, setCopyStatus] = useState<"idle" | "copied" | "failed">("idle");
+  const dialogRef = useRef<HTMLElement>(null);
+  useDialogFocusManagement({ dialogRef, onClose });
 
   async function copyInvitationCode() {
     try {
@@ -386,7 +478,9 @@ export function ClassInvitationDialog({
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/35 px-4 py-8 backdrop-blur-sm">
       <section
+        ref={dialogRef}
         role="dialog"
+        tabIndex={-1}
         aria-modal="true"
         aria-label={
           locale === "zh-CN"
@@ -475,7 +569,7 @@ export function ClassInvitationDialog({
 function InvitationPolicyEntry({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-lg border border-[#eceff4] bg-[#fafbfe] px-4 py-3">
-      <dt className="text-xs font-semibold uppercase tracking-wide text-[#8b92a4]">{label}</dt>
+      <dt className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">{label}</dt>
       <dd className="mt-1 text-base font-semibold text-[#252a3a]">{value}</dd>
     </div>
   );
@@ -502,17 +596,13 @@ export function NewCourseDialog({
   const [formError, setFormError] = useState<string>();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const isReady = draft.name.trim().length > 0;
-
-  useEffect(() => {
-    function closeOnEscape(event: KeyboardEvent) {
-      if (event.key === "Escape" && !isSubmitting) {
-        onCancel();
-      }
-    }
-
-    window.addEventListener("keydown", closeOnEscape);
-    return () => window.removeEventListener("keydown", closeOnEscape);
-  }, [isSubmitting, onCancel]);
+  const dialogRef = useRef<HTMLFormElement>(null);
+  useDialogFocusManagement({
+    dialogRef,
+    onClose: onCancel,
+    closeDisabled: isSubmitting || isGeneratingCover,
+    initialFocusSelector: "#new-course-name",
+  });
 
   function updateDraft<Field extends keyof NewCourseDraft>(
     field: Field,
@@ -633,7 +723,9 @@ export function NewCourseDialog({
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/35 px-3 py-4 backdrop-blur-sm md:py-6">
       <form
+        ref={dialogRef}
         role="dialog"
+        tabIndex={-1}
         aria-modal="true"
         aria-labelledby="new-course-title"
         className="flex max-h-[calc(100dvh-32px)] w-full max-w-6xl flex-col overflow-hidden rounded-[22px] border border-[#d8e0ec] bg-white text-[#1b2433] shadow-[0_26px_80px_rgba(36,53,90,0.28)]"
@@ -794,13 +886,6 @@ export function NewCourseDialog({
               <div className="mt-4 flex flex-wrap items-center gap-x-8 gap-y-2">
                 <button
                   type="button"
-                  className="inline-flex min-h-10 items-center gap-2 text-base font-medium text-[#2f7cff] outline-none transition hover:text-[#1f5fe5] focus-visible:ring-2 focus-visible:ring-[#2f7cff]"
-                >
-                  <PencilSimple size={22} weight="bold" />
-                  {locale === "zh-CN" ? "修改封面" : "Modify the cover"}
-                </button>
-                <button
-                  type="button"
                   disabled={!isReady || isGeneratingCover}
                   className="inline-flex min-h-10 items-center gap-2 text-base font-semibold italic text-[#6777ff] outline-none transition hover:text-[#4058f2] focus-visible:ring-2 focus-visible:ring-[#2f7cff] disabled:cursor-not-allowed disabled:text-[#aab3c2]"
                   onClick={generateCourseCover}
@@ -815,10 +900,10 @@ export function NewCourseDialog({
                       : "Generate Cover"}
                 </button>
               </div>
-              <p className="mt-3 text-sm leading-6 text-[#8b95a6]">
+              <p className="mt-3 text-sm leading-6 text-[#596579]">
                 {locale === "zh-CN"
-                  ? "支持常见图片格式，推荐分辨率 800*480。"
-                  : "Supports jpg/jpeg/gif/png. Recommended resolution: 800*480."}
+                  ? "可使用 AI 生成 800×480 的课程封面。"
+                  : "Generate an 800×480 course cover with AI."}
               </p>
               {coverError ? (
                 <p
@@ -841,7 +926,7 @@ export function NewCourseDialog({
         </div>
 
         <footer className="flex flex-col gap-4 border-t border-[#edf0f5] bg-white px-7 py-5 shadow-[0_-18px_40px_rgba(30,45,75,0.06)] sm:flex-row sm:items-center sm:justify-between md:px-10">
-          <div className="inline-flex items-center gap-3 text-lg font-medium text-[#2f7cff]">
+          <div className="inline-flex items-center gap-3 text-lg font-semibold text-[#1557c0]">
             <Package size={25} weight="duotone" />
             {locale === "zh-CN" ? "正在使用演示教学包" : "Using Demonstration Teaching Package"}
           </div>
@@ -849,7 +934,7 @@ export function NewCourseDialog({
             <button
               type="button"
               disabled={isSubmitting}
-              className="inline-flex h-14 min-w-36 items-center justify-center rounded-full border border-[#7eb1ff] bg-white px-8 text-lg font-medium text-[#2f7cff] outline-none transition hover:bg-[#f4f8ff] focus-visible:ring-2 focus-visible:ring-[#2f7cff] disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex h-14 min-w-36 items-center justify-center rounded-full border border-[#7eb1ff] bg-white px-8 text-lg font-semibold text-[#1557c0] outline-none transition hover:bg-[#f4f8ff] focus-visible:ring-2 focus-visible:ring-[#1557c0] disabled:cursor-not-allowed"
               onClick={onCancel}
             >
               {locale === "zh-CN" ? "取消" : "Cancel"}
@@ -857,7 +942,7 @@ export function NewCourseDialog({
             <button
               type="submit"
               disabled={!isReady || isSubmitting || isGeneratingCover}
-              className="inline-flex h-14 min-w-36 items-center justify-center rounded-full bg-gradient-to-r from-[#a9ddff] to-[#9fa9ff] px-8 text-lg font-medium text-white outline-none transition hover:shadow-[0_14px_28px_rgba(92,129,255,0.24)] focus-visible:ring-2 focus-visible:ring-[#2f7cff] disabled:cursor-not-allowed disabled:opacity-70 disabled:hover:shadow-none"
+              className="inline-flex h-14 min-w-36 items-center justify-center rounded-full bg-gradient-to-r from-[#1557c0] to-[#4338ca] px-8 text-lg font-semibold text-white outline-none transition hover:shadow-[0_14px_28px_rgba(92,129,255,0.24)] focus-visible:ring-2 focus-visible:ring-[#1557c0] disabled:cursor-not-allowed disabled:hover:shadow-none"
             >
               {isSubmitting
                 ? locale === "zh-CN"
@@ -929,10 +1014,7 @@ function NewCourseCoverPreview({
 
   if (imageUrl) {
     return (
-      <div
-        aria-label="Course cover preview"
-        className="relative aspect-[5/3] w-full overflow-hidden rounded-lg bg-[#e8eef9] shadow-[0_16px_32px_rgba(39,78,160,0.14)]"
-      >
+      <div className="relative aspect-[5/3] w-full overflow-hidden rounded-lg bg-[#e8eef9] shadow-[0_16px_32px_rgba(39,78,160,0.14)]">
         <div
           role="img"
           aria-label={coverLabel}
@@ -945,7 +1027,7 @@ function NewCourseCoverPreview({
 
   return (
     <div
-      aria-label="Course cover preview"
+      aria-hidden="true"
       className="relative aspect-[5/3] w-full overflow-hidden rounded-lg bg-[#356bd8] shadow-[0_16px_32px_rgba(39,78,160,0.14)]"
     >
       <div className="absolute -left-6 top-16 h-24 w-24 rotate-[-28deg] border-[14px] border-[#8ed9ff] border-t-transparent bg-transparent opacity-95" />
@@ -970,4 +1052,3 @@ function NewCourseCoverPreview({
     </div>
   );
 }
-

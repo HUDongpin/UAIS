@@ -5,20 +5,20 @@
 :root {
   --background: #f5f9ff;
   --foreground: #172033;
-  --muted: #59657a;
+  --muted: #556176;
   --placeholder: #7a8599;
   --surface: #fbfdff;
   --surface-elevated: #edf5ff;
   --surface-soft: #e5f0ff;
   --border: #cfe0f5;
-  --accent: #1f6feb;
-  --accent-strong: #1557c0;
+  --accent: #1557c0;
+  --accent-strong: #0f469e;
   --accent-soft: #dbeafe;
   --accent-border: #93c5fd;
   --danger: #a12f56;
   --shadow: rgb(22 78 150 / 0.1);
   --shadow-strong: rgb(22 78 150 / 0.17);
-  --shadow-accent: rgb(31 111 235 / 0.24);
+  --shadow-accent: rgb(21 87 192 / 0.24);
 }
 
 @theme inline {

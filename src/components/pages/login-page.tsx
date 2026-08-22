@@ -44,6 +44,7 @@ const loginCopy = {
     passwordLabel: "密码",
     passwordPlaceholder: "请输入密码",
     submit: "立即登录",
+    submitting: "正在登录",
     showPassword: "显示密码",
     hidePassword: "隐藏密码",
     // 这里从未真正收集过同意：页面上没有勾选框，按钮也不检查任何状态。
@@ -82,6 +83,7 @@ const loginCopy = {
     passwordLabel: "Password",
     passwordPlaceholder: "Enter password",
     submit: "Log In",
+    submitting: "Signing in",
     showPassword: "Show password",
     hidePassword: "Hide password",
     consent: "By signing in you agree to the",
@@ -308,7 +310,12 @@ export function LoginPage() {
                   <input
                     id="uais-login-account"
                     value={account}
-                    onChange={(event) => setAccount(event.target.value)}
+                    onChange={(event) => {
+                      setAccount(event.target.value);
+                      setFailure(undefined);
+                    }}
+                    aria-invalid={failure ? true : undefined}
+                    aria-describedby={failure ? "uais-login-error" : undefined}
                     className="h-14 w-full rounded-lg border border-[#c8d9f5] bg-white pl-12 pr-4 text-base font-medium text-[#18213a] outline-none transition placeholder:text-[#8794aa] focus:border-[#1f6feb] focus:ring-4 focus:ring-[#1f6feb]/15 dark:border-[#31507a] dark:bg-[#111c2e] dark:text-[#eef6ff] dark:placeholder:text-[#8ea2bd]"
                     autoComplete="username"
                     // A student typing an address on a phone should get the
@@ -338,7 +345,12 @@ export function LoginPage() {
                   <input
                     id="uais-login-password"
                     value={password}
-                    onChange={(event) => setPassword(event.target.value)}
+                    onChange={(event) => {
+                      setPassword(event.target.value);
+                      setFailure(undefined);
+                    }}
+                    aria-invalid={failure ? true : undefined}
+                    aria-describedby={failure ? "uais-login-error" : undefined}
                     className="h-14 w-full rounded-lg border border-[#c8d9f5] bg-white pl-12 pr-12 text-base font-medium text-[#18213a] outline-none transition placeholder:text-[#8794aa] focus:border-[#1f6feb] focus:ring-4 focus:ring-[#1f6feb]/15 dark:border-[#31507a] dark:bg-[#111c2e] dark:text-[#eef6ff] dark:placeholder:text-[#8ea2bd]"
                     autoComplete="current-password"
                     placeholder={t.passwordPlaceholder}
@@ -364,6 +376,7 @@ export function LoginPage() {
 
               {failure ? (
                 <div
+                  id="uais-login-error"
                   role="alert"
                   data-uais-login-failure
                   className="rounded-lg border border-[#f0b7c9] bg-[#fff1f5] px-4 py-3 text-sm font-semibold text-[#a12f56] dark:border-[#89435b] dark:bg-[#321420] dark:text-[#ffb7ca]"
@@ -399,9 +412,10 @@ export function LoginPage() {
               <button
                 type="submit"
                 disabled={submitting}
+                aria-busy={submitting}
                 className="inline-flex h-14 w-full items-center justify-center rounded-xl bg-[#1f6feb] px-6 text-base font-bold text-white shadow-[0_14px_34px_rgba(31,111,235,0.25)] outline-none transition hover:bg-[#1557c0] active:translate-y-px focus-visible:ring-4 focus-visible:ring-[#1f6feb]/25"
               >
-                {t.submit}
+                {submitting ? t.submitting : t.submit}
               </button>
 
               <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-[#69758d] dark:text-[#aebeda]">
@@ -438,6 +452,8 @@ function LoginMobileDesignCarousel({ cards }: { cards: LoginDeckCard[] }) {
     <div
       className="-mx-5 mb-8 overflow-x-auto px-5 pb-3 lg:hidden"
       data-uais-login-mobile-carousel
+      role="region"
+      tabIndex={0}
       aria-label="UAIS login illustration cards"
     >
       <div className="flex w-max snap-x gap-4">
@@ -509,8 +525,7 @@ function LoginDesignCard({ card }: { card: LoginDeckCard }) {
             alt={card.assetAlt}
             fill
             sizes="300px"
-            priority
-            unoptimized
+            priority={learner}
             className="object-contain object-center"
             data-uais-login-asset
           />

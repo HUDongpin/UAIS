@@ -223,9 +223,9 @@ function teacherCoursesResponse(fixtures: StudentCourseFixture[]) {
 }
 
 function composerInput(container: HTMLElement) {
-  const input = container.querySelector<HTMLInputElement>("#group-message");
+  const input = container.querySelector<HTMLTextAreaElement>("#group-message");
   expect(input).toBeTruthy();
-  return input as HTMLInputElement;
+  return input as HTMLTextAreaElement;
 }
 
 function sendMessage(container: HTMLElement, value: string) {
@@ -400,7 +400,8 @@ describe("learner chatroom live multi-agent endpoint", () => {
     // A learner without an approved membership would only get 403, so the room
     // must not let the message leave at all.
     expect(chatroomCalls(calls)).toHaveLength(0);
-    expect(screen.queryByText("学生想在示例课程里发消息")).toBeNull();
+    expectNoBubbleWithText("学生想在示例课程里发消息");
+    expect(input.value).toBe("学生想在示例课程里发消息");
   });
 
   it("shows the load-failed copy, not the no-courses copy, when the course fetch answers 500", async () => {
@@ -447,6 +448,27 @@ describe("learner chatroom live multi-agent endpoint", () => {
     resolveCourses?.(studentCoursesResponse([courseA]));
     await waitForCourseA();
     expect(input.disabled).toBe(false);
+  });
+
+  it("sends with Enter while Shift+Enter preserves a multiline draft", async () => {
+    const { calls } = stubSingleCourseStudent();
+    const { container } = renderSignedInChatroom();
+    await waitForCourseA();
+
+    const input = composerInput(container);
+    expect(input.tagName).toBe("TEXTAREA");
+
+    fireEvent.change(input, { target: { value: "第一行" } });
+    fireEvent.keyDown(input, { key: "Enter", code: "Enter", shiftKey: true });
+    expect(chatroomCalls(calls)).toHaveLength(0);
+
+    fireEvent.change(input, { target: { value: "第一行\n第二行" } });
+    fireEvent.keyDown(input, { key: "Enter", code: "Enter" });
+
+    await waitFor(() => expect(chatroomCalls(calls)).toHaveLength(1));
+    const body = chatroomCalls(calls)[0].body as unknown as ChatroomRequestBody;
+    expect(body.messages.at(-1)?.content).toBe("第一行\n第二行");
+    expect(input.value).toBe("");
   });
 
   it("renders multiple turns in the order returned by the endpoint", async () => {

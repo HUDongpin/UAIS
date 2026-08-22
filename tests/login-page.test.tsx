@@ -6,6 +6,16 @@ const replace = vi.fn();
 
 const mockPreferences = vi.hoisted(() => ({ locale: "zh-CN" as "zh-CN" | "en-US" }));
 
+function resolveImageAsset(element: Element | null | undefined) {
+  const source = element?.getAttribute("src") ?? "";
+
+  if (!source.startsWith("/_next/image?")) {
+    return source;
+  }
+
+  return new URL(source, "http://localhost").searchParams.get("url") ?? "";
+}
+
 vi.mock("next/navigation", () => ({
   useRouter: () => ({
     replace,
@@ -63,20 +73,24 @@ describe("LoginPage", () => {
     expect(teacherCard).toBeTruthy();
     expect(deck?.querySelectorAll("[data-uais-login-asset]").length).toBe(2);
     expect(
-      deck
-        .querySelector('[data-uais-login-card="student"] [data-uais-login-asset]')
-        ?.getAttribute("src"),
-    ).toContain("/login/uais-student-card-illustration");
+      resolveImageAsset(
+        deck?.querySelector(
+          '[data-uais-login-card="student"] [data-uais-login-asset]',
+        ),
+      ),
+    ).toBe("/login/uais-student-card-illustration.png");
     expect(
       deck
         .querySelector('[data-uais-login-card="student"] [data-uais-login-asset]')
         ?.getAttribute("alt"),
     ).toContain("平板电脑和笔记本电脑");
     expect(
-      deck
-        .querySelector('[data-uais-login-card="teacher"] [data-uais-login-asset]')
-        ?.getAttribute("src"),
-    ).toContain("/login/uais-teacher-card-illustration");
+      resolveImageAsset(
+        deck?.querySelector(
+          '[data-uais-login-card="teacher"] [data-uais-login-asset]',
+        ),
+      ),
+    ).toBe("/login/uais-teacher-card-illustration.png");
     expect(
       deck
         .querySelector('[data-uais-login-card="teacher"] [data-uais-login-asset]')
@@ -335,6 +349,56 @@ describe("LoginPage", () => {
     // noise dressed as help. Nothing was sent, either.
     expect(document.querySelector("[data-uais-support-channel]")).toBeNull();
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("associates login errors with both fields and clears stale feedback while editing", () => {
+    render(<LoginPage />);
+
+    const account = screen.getByLabelText("账号或邮箱");
+    const password = screen.getByLabelText("密码");
+    fireEvent.click(screen.getByRole("button", { name: "立即登录" }));
+
+    const alert = screen.getByRole("alert");
+    expect(alert.id).toBe("uais-login-error");
+    expect(account.getAttribute("aria-describedby")).toBe("uais-login-error");
+    expect(password.getAttribute("aria-describedby")).toBe("uais-login-error");
+    expect(account.getAttribute("aria-invalid")).toBe("true");
+    expect(password.getAttribute("aria-invalid")).toBe("true");
+
+    fireEvent.change(account, { target: { value: "Peter" } });
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(account.getAttribute("aria-invalid")).toBeNull();
+    expect(password.getAttribute("aria-invalid")).toBeNull();
+  });
+
+  it("announces a bilingual pending state and prevents duplicate login submission", async () => {
+    let resolveLogin: ((response: Response) => void) | undefined;
+    const fetchMock = vi.fn(
+      () =>
+        new Promise<Response>((resolve) => {
+          resolveLogin = resolve;
+        }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    render(<LoginPage />);
+
+    fireEvent.change(screen.getByLabelText("账号或邮箱"), {
+      target: { value: "Peter" },
+    });
+    fireEvent.change(screen.getByLabelText("密码"), {
+      target: { value: "12345" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "立即登录" }));
+
+    const pending = await screen.findByRole("button", { name: "正在登录" });
+    expect((pending as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(pending);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    resolveLogin?.(
+      Response.json({ status: "ok", redirectTarget: "/student-dashboard" }),
+    );
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/student-dashboard"));
   });
 
   it("falls back to a bilingual sentence and collapses an unmapped server string", async () => {
