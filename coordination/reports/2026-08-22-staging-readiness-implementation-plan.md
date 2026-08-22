@@ -64,7 +64,7 @@
 
 - [x] Run focused P1/P2 tests.
 - [x] Run deterministic full Vitest lanes, `npm run lint`, `npm run build`, the 17-route Next 16 contract test, Playwright critical journeys, and automated accessibility coverage.
-- [ ] Run `git diff --check`, secret-pattern review, production-feature-flag review, and `npm run release:clean-check` with the known intentional worktree changes accounted for.
+- [x] Run `git diff --check`, secret-pattern review, production-feature-flag review, and `npm run release:clean-check` after committing the reviewed takeover slices.
 - [x] Kept same-SHA staging acceptance unclaimed because the deployed build is not yet bound to the exact committed candidate content and isolated target identities under the current contract.
 
 ### Task 4: Establish the isolated staging control plane
