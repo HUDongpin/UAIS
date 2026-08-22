@@ -3,19 +3,18 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { createUaisAppSessionPostHandler } from "@/app/api/auth/app-session/route";
-import { createLearningRecordEventPostHandler } from "@/app/api/learning-records/events/route";
+import { POST as learningRecordEventPost } from "@/app/api/learning-records/events/route";
 import { createTeachingClassMembershipApprovePostHandler } from "@/app/api/teaching/classes/[classId]/memberships/[membershipId]/approve/route";
 import { createTeachingCourseClassPostHandler } from "@/app/api/teaching/courses/[courseId]/classes/route";
 import { createTeachingCoursePostHandler } from "@/app/api/teaching/courses/route";
 import { createTeachingInviteCodeJoinPostHandler } from "@/app/api/teaching/invite-codes/[code]/join/route";
 import { type UaisAppSessionUser } from "@/lib/auth/uais-app-session";
-import type {
-  LearningRecordActor,
-  LearningRecordEventInput,
-} from "@/lib/learning-records/xapi-events";
+import type { LearningRecordEventInput } from "@/lib/learning-records/xapi-events";
 import { createUaisAppSessionCookie } from "@/lib/server/uais-app-session";
 import { createUaisTeacherAuthSessionCookieHeader } from "@/lib/server/teacher-auth-session";
 
+const createLearningRecordEventPostHandler =
+  learningRecordEventPost.createForTesting;
 const teacherAuthSecret = "test-critical-flow-teacher-session-secret";
 const appSessionSecret = "test-critical-flow-app-session-secret";
 const teacherCookie = createUaisTeacherAuthSessionCookieHeader({
@@ -350,34 +349,35 @@ describe("critical UAIS backend user flows", () => {
   });
 
   it("learner evidence: records a playback progress event for the signed student and rejects spoofed actors", async () => {
-    const enqueued: Array<{
-      actor: LearningRecordActor;
+    const persisted: Array<{
+      studentAccount: string;
+      classExternalId: string;
       event: LearningRecordEventInput;
       idempotencyKey: string;
+      traceId: string;
     }> = [];
     const postEvent = createLearningRecordEventPostHandler({
       env: { UAIS_APP_SESSION_SIGNING_SECRET: appSessionSecret },
       // Authorize deterministically so the journey does not depend on the live
       // PPT-playback membership fetch (covered separately). This test exercises
       // the route's own contract: the student-session gate, the self-scope
-      // check, the enqueue call, and the response status.
+      // check, the authoritative persistence call, and the response status.
       authorizeLearnerEvent: () => ({
         status: "authorized",
         reasonCode: "learner-course-membership-approved",
+        classId,
         responsibleSession: "S12",
       }),
-      enqueue: (item) => {
-        enqueued.push(item);
+      persist: async (item) => {
+        persisted.push(item);
         return {
-          target: "learning-record-store",
-          status: "queued",
-          idempotencyKey: item.idempotencyKey,
-          writeMode: "async-queued",
-          redaction: {
-            endpoint: "fingerprinted",
-            credentials: "omitted",
-            rawStatement: "omitted",
-          },
+          status: "persisted",
+          resourceId: "event-critical-flow-1",
+          state: "persisted",
+          revision: 1,
+          eventId: "event-critical-flow-1",
+          traceId: item.traceId,
+          persistedAt: "2026-07-08T09:20:00.000Z",
         };
       },
     });
@@ -406,23 +406,22 @@ describe("critical UAIS backend user flows", () => {
         body: JSON.stringify(body),
       });
 
-    // 1) Happy path: the signed student's own playback event is accepted + queued.
+    // 1) Happy path: success is returned only after the signed student's event
+    // has reached the authoritative Postgres boundary.
     const acceptedResponse = await postEvent(
       recordRequest({ actorId: "Peter", event: playbackEvent }, studentCookie),
     );
     const acceptedBody = await acceptedResponse.json();
-    expect(acceptedResponse.status, JSON.stringify(acceptedBody)).toBe(202);
-    expect(acceptedBody.status).toBe("queued");
-    expect(acceptedBody.queue.idempotencyKey).toBe(
-      `Peter:lesson.viewed:${courseId}:${lessonId}`,
-    );
-    expect(enqueued).toHaveLength(1);
-    expect(enqueued[0].actor).toEqual({
-      id: "Peter",
-      role: "learner",
-      displayName: "Peter",
+    expect(acceptedResponse.status, JSON.stringify(acceptedBody)).toBe(200);
+    expect(acceptedBody.status).toBe("persisted");
+    expect(acceptedBody.eventId).toBe("event-critical-flow-1");
+    expect(persisted).toHaveLength(1);
+    expect(persisted[0]).toMatchObject({
+      studentAccount: "Peter",
+      classExternalId: classId,
+      idempotencyKey: `Peter:lesson.viewed:${courseId}:${lessonId}`,
     });
-    expect(enqueued[0].event.type).toBe("lesson.viewed");
+    expect(persisted[0].event.type).toBe("lesson.viewed");
     expect(JSON.stringify(acceptedBody)).not.toContain(appSessionSecret);
 
     // 2) No signed session -> 401 (unauthenticated cannot record evidence).
@@ -443,7 +442,7 @@ describe("critical UAIS backend user flows", () => {
     );
     expect(invalidResponse.status).toBe(400);
 
-    // Only the authorized happy-path event reached the queue.
-    expect(enqueued).toHaveLength(1);
+    // Only the authorized happy-path event reached authoritative persistence.
+    expect(persisted).toHaveLength(1);
   });
 });
