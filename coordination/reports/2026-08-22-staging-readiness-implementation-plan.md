@@ -1,6 +1,6 @@
 # UAIS Staging Readiness Remediation Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use `subagent-driven-development` or `executing-plans` task-by-task. Every behavior change follows RED -> GREEN -> regression verification. This run must not stage, commit, branch, switch, merge, rebase, push, reset, restore, delete, deploy to production, or change production environment variables or feature flags.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use `subagent-driven-development` or `executing-plans` task-by-task. Every behavior change follows RED -> GREEN -> regression verification. The initial S23 run was not authorized to stage or commit. On 2026-08-23 the owner authorized takeover review and local exact-pathspec commits in this integration worktree only. Branch switching, merging, rebasing, pushing, resetting, destructive cleanup, production deployment, production migration, and production environment or feature-flag changes remain unauthorized.
 
 **Goal:** Remove the five independently verified integration blockers, preserve the approved P1/P2 contracts, and then collect same-candidate evidence for the isolated staging release gates.
 
@@ -62,10 +62,10 @@
 
 - Update evidence only under `coordination/reports/` and `coordination/session-logs/`.
 
-- [ ] Run focused P1/P2 tests.
-- [ ] Run deterministic full Vitest lanes, `npm run lint`, `npm run build`, the 17-route Next 16 contract test, Playwright critical journeys, and automated accessibility coverage.
+- [x] Run focused P1/P2 tests.
+- [x] Run deterministic full Vitest lanes, `npm run lint`, `npm run build`, the 17-route Next 16 contract test, Playwright critical journeys, and automated accessibility coverage.
 - [ ] Run `git diff --check`, secret-pattern review, production-feature-flag review, and `npm run release:clean-check` with the known intentional worktree changes accounted for.
-- [ ] Do not claim same-SHA staging evidence until the deployed build is bound to the exact candidate content and isolated target identities.
+- [x] Kept same-SHA staging acceptance unclaimed because the deployed build is not yet bound to the exact committed candidate content and isolated target identities under the current contract.
 
 ### Task 4: Establish the isolated staging control plane
 
