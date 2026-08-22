@@ -346,6 +346,8 @@ describe("enterprise LRS/xAPI instrumentation", () => {
         headers: {
           cookie: studentCookie,
           "content-type": "application/json",
+          host: "localhost",
+          origin: "http://localhost",
         },
         body: JSON.stringify({
           actorId: "student-002",
@@ -367,6 +369,8 @@ describe("enterprise LRS/xAPI instrumentation", () => {
         headers: {
           cookie: studentCookie,
           "content-type": "application/json",
+          host: "localhost",
+          origin: "http://localhost",
         },
         body: JSON.stringify({
           actorId: "student-001",
@@ -502,7 +506,12 @@ describe("enterprise LRS/xAPI instrumentation", () => {
     const response = await postHandler(
       new Request("http://localhost/api/learning-records/events", {
         method: "POST",
-        headers: { cookie: studentCookie, "content-type": "application/json" },
+        headers: {
+          cookie: studentCookie,
+          "content-type": "application/json",
+          host: "localhost",
+          origin: "http://localhost",
+        },
         body: JSON.stringify({
           actorId: "student-001",
           event: baseEvent,

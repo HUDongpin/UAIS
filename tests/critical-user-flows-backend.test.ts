@@ -401,6 +401,8 @@ describe("critical UAIS backend user flows", () => {
         method: "POST",
         headers: {
           "content-type": "application/json",
+          host: "www.uais.top",
+          origin: "https://www.uais.top",
           ...(cookie ? { cookie } : {}),
         },
         body: JSON.stringify(body),
@@ -419,7 +421,7 @@ describe("critical UAIS backend user flows", () => {
     expect(persisted[0]).toMatchObject({
       studentAccount: "Peter",
       classExternalId: classId,
-      idempotencyKey: `Peter:lesson.viewed:${courseId}:${lessonId}`,
+      idempotencyKey: expect.stringMatching(/^learning-event:[0-9a-f]{64}$/),
     });
     expect(persisted[0].event.type).toBe("lesson.viewed");
     expect(JSON.stringify(acceptedBody)).not.toContain(appSessionSecret);

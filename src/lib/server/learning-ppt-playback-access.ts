@@ -139,6 +139,17 @@ export async function authorizeLearningPptPlaybackAccess(input: {
     return createDeniedAccess("student-course-membership-not-approved", resource, actor);
   }
 
+  const course = database.courses.find((item) => item.courseId === input.courseId);
+  const classItem = database.classes.find(
+    (item) =>
+      item.classId === membership.classId &&
+      item.courseId === input.courseId &&
+      item.ownerTeacherId === course?.ownerTeacherId,
+  );
+  if (!course || !classItem) {
+    return createDeniedAccess("student-course-membership-required", resource, actor);
+  }
+
   return {
     status: "authorized",
     reasonCode: "student-course-membership-approved",

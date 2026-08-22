@@ -10,6 +10,7 @@ import {
   createLearningPptPlaybackManifestForCourse,
   createPublishedLearningPptPlaybackManifestForCourse,
 } from "@/lib/learning/ppt-playback";
+import { authorizeLearningPptPlaybackAccess } from "@/lib/server/learning-ppt-playback-access";
 import { createUaisAppSessionCookie } from "@/lib/server/uais-app-session";
 
 const createLearningPptPlaybackManifestGetHandler =
@@ -55,7 +56,13 @@ function createTeacherCookie(account = learningPptTeacherId) {
   );
 }
 
-async function createApprovedLearningPptPlaybackFixture(account = learningPptStudentId) {
+async function createApprovedLearningPptPlaybackFixture(
+  account = learningPptStudentId,
+  options: {
+    classCourseId?: string;
+    classOwnerTeacherId?: string;
+  } = {},
+) {
   const dataDir = await mkdtemp(join(tmpdir(), "uais-learning-ppt-playback-access-"));
   await mkdir(dataDir, { recursive: true });
   const now = "2026-06-22T12:00:00.000Z";
@@ -72,8 +79,8 @@ async function createApprovedLearningPptPlaybackFixture(account = learningPptStu
       updatedAt: now,
       courses: [
         {
-          courseId: learningPptCourseId,
-          ownerTeacherId: "teacher-kang",
+          courseId: options.classCourseId ?? learningPptCourseId,
+          ownerTeacherId: options.classOwnerTeacherId ?? "teacher-kang",
           courseName: "初等数学研究",
           instructor: "康霞",
           unit: "广州大学（404）",
@@ -181,6 +188,60 @@ function createStoredKangXiaManifest(assetCount = 2) {
 }
 
 describe("student PPT playback API", () => {
+  it("validates the course, class, owner and approved membership relationship", async () => {
+    const fixture = await createApprovedLearningPptPlaybackFixture();
+
+    try {
+      const access = await authorizeLearningPptPlaybackAccess({
+        request: new Request(
+          "http://localhost/api/learning-records/events",
+          { headers: { cookie: fixture.cookie } },
+        ),
+        env: fixture.env,
+        courseId: learningPptCourseId,
+      });
+
+      expect(access).toMatchObject({
+        status: "authorized",
+        reasonCode: "student-course-membership-approved",
+        classId: `${learningPptCourseId}-class-1`,
+      });
+      expect(access).not.toHaveProperty("scopeProjection");
+    } finally {
+      await rm(fixture.dataDir, { recursive: true, force: true });
+    }
+  });
+
+  it.each([
+    ["another course", { classCourseId: "another-course" }],
+    ["another owner", { classOwnerTeacherId: "another-teacher" }],
+  ])(
+    "denies an approved membership whose class belongs to %s without an optional projection flag",
+    async (_label, options) => {
+      const fixture = await createApprovedLearningPptPlaybackFixture(
+        learningPptStudentId,
+        options,
+      );
+
+      try {
+        const access = await authorizeLearningPptPlaybackAccess({
+          request: new Request("http://localhost/api/learning/ppt-playback/course", {
+            headers: { cookie: fixture.cookie },
+          }),
+          env: fixture.env,
+          courseId: learningPptCourseId,
+        });
+
+        expect(access).toMatchObject({
+          status: "denied",
+          reasonCode: "student-course-membership-required",
+        });
+      } finally {
+        await rm(fixture.dataDir, { recursive: true, force: true });
+      }
+    },
+  );
+
   it("blocks the learning PPT playback manifest without an app session", async () => {
     const handler = createLearningPptPlaybackManifestGetHandler({
       env: {

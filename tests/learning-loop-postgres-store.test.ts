@@ -19,7 +19,6 @@ const ids = {
   feedback: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
   decisionEvent: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
 };
-
 type FakeQuery = { text: string; values: unknown[] };
 
 function createFakeDatabase(resolve: (query: FakeQuery) => unknown[]) {
@@ -590,7 +589,86 @@ describe("P1 learning-loop Postgres store", () => {
     ]) {
       expect(fake.queries.some((query) => query.text.includes(fragment)), fragment).toBe(true);
     }
+    expect(fake.queries.some((query) => query.text.includes("INSERT INTO uais_courses"))).toBe(false);
+    expect(fake.queries.some((query) => query.text.includes("INSERT INTO uais_classes"))).toBe(false);
     expect(fake.beginCount).toBe(1);
+  });
+
+  it("keeps relational scope fail closed until an explicit backfill has completed", async () => {
+    const fake = createFakeDatabase(({ text }) => {
+      if (text.includes("pg_advisory_xact_lock")) return [];
+      if (text.includes("FROM uais_idempotency_records")) return [];
+      if (text.includes("FROM uais_users") && text.includes("role = 'student'")) {
+        return [{ id: ids.student }];
+      }
+      if (text.includes("FROM uais_courses c") && text.includes("JOIN uais_classes cl")) {
+        return [];
+      }
+      return [];
+    });
+    const store = createUaisLearningLoopPostgresStore({
+      env: { UAIS_CORE_DATABASE_URL: "postgres://redacted@example.test/uais" },
+      createDatabase: fake.createDatabase,
+      now: () => new Date("2026-08-20T17:46:00.000Z"),
+    });
+
+    await expect(
+      store.recordLearningEvent({
+        studentAccount: "student-1",
+        classExternalId: "class-1",
+        event: {
+          type: "course.viewed",
+          object: { id: "course-1", name: "Client-provided object name", type: "course" },
+          context: { courseId: "course-1", classId: "client-forged-class" },
+        },
+        idempotencyKey: "event-snapshot-projection-1",
+        traceId: "trace-event-snapshot-projection-1",
+      }),
+    ).rejects.toMatchObject({
+      status: 409,
+      reasonCode: "learning-scope-projection-required",
+    });
+
+    expect(fake.queries.some((query) => query.text.includes("role = 'teacher'"))).toBe(false);
+    expect(fake.queries.some((query) => query.text.includes("INSERT INTO uais_courses"))).toBe(false);
+    expect(fake.queries.some((query) => query.text.includes("INSERT INTO uais_classes"))).toBe(false);
+  });
+
+  it("keeps missing trusted projection fail closed when the relational scope is absent", async () => {
+    const fake = createFakeDatabase(({ text }) => {
+      if (text.includes("pg_advisory_xact_lock")) return [];
+      if (text.includes("FROM uais_idempotency_records")) return [];
+      if (text.includes("FROM uais_users") && text.includes("role = 'student'")) {
+        return [{ id: ids.student }];
+      }
+      if (text.includes("FROM uais_courses c") && text.includes("JOIN uais_classes cl")) {
+        return [];
+      }
+      return [];
+    });
+    const store = createUaisLearningLoopPostgresStore({
+      env: { UAIS_CORE_DATABASE_URL: "postgres://redacted@example.test/uais" },
+      createDatabase: fake.createDatabase,
+      now: () => new Date("2026-08-20T17:48:00.000Z"),
+    });
+
+    await expect(
+      store.recordLearningEvent({
+        studentAccount: "student-1",
+        classExternalId: "class-1",
+        event: {
+          type: "lesson.viewed",
+          object: { id: "lesson-1", name: "Lesson one" },
+          context: { courseId: "course-1" },
+        },
+        idempotencyKey: "event-missing-snapshot-1",
+        traceId: "trace-event-missing-snapshot-1",
+      }),
+    ).rejects.toMatchObject({
+      status: 409,
+      reasonCode: "learning-scope-projection-required",
+    });
+    expect(fake.queries.some((query) => query.text.includes("role = 'teacher'"))).toBe(false);
   });
 
   it("releases feedback and accepts the exact sealed version in one transaction", async () => {

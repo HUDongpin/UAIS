@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { LearningRecordEventInput } from "@/lib/learning-records/xapi-events";
 import {
   LearningLoopStoreError,
@@ -8,6 +9,24 @@ import { authorizeLearningPptPlaybackAccess } from "@/lib/server/learning-ppt-pl
 import { getUaisAppSessionUserFromCookieString } from "@/lib/server/uais-app-session";
 
 export const dynamic = "force-dynamic";
+
+const browserLearningEventTypes = new Set<LearningRecordEventInput["type"]>([
+  "course.viewed",
+  "lesson.viewed",
+  "activity.attempted",
+  "question.answered",
+  "course.completed",
+  "ai.feedback.requested",
+  "collaboration.contributed",
+]);
+const maxExplicitIdempotencyKeyLength = 1024;
+const maxObjectIdLength = 500;
+const maxObjectNameLength = 200;
+const maxInteractionTypeLength = 80;
+const maxDurationLength = 80;
+const maxLocaleLength = 20;
+const maxCompetencyIds = 20;
+const maxCompetencyIdLength = 120;
 
 type LearningRecordEventAccess =
   | {
@@ -22,6 +41,7 @@ type LearningRecordEventAccess =
         | "learner-session-required"
         | "learner-self-scope-required"
         | "learner-course-membership-required"
+        | "learning-event-origin-invalid"
         | "learning-event-invalid";
       responsibleSession: "S12";
     };
@@ -55,6 +75,15 @@ function createLearningRecordEventPostHandler(
 
   return async function POST(request: Request) {
     const traceId = readSafeTraceId(request);
+    if (!hasValidSameOrigin(request)) {
+      return createEventJsonResponse(403, {
+        target: "learning-record-event",
+        status: "denied",
+        access: createDeniedAccess("learning-event-origin-invalid"),
+        traceId,
+        redaction: createRedaction(),
+      });
+    }
     const body = await parseRequestBody(request);
     if (!body) {
       return createEventJsonResponse(400, {
@@ -127,14 +156,13 @@ function createLearningRecordEventPostHandler(
         studentAccount: body.actorId,
         classExternalId: access.classId,
         event,
-        idempotencyKey:
-          body.idempotencyKey ?? createIdempotencyKey(body.actorId, event),
+        idempotencyKey: createIdempotencyKey(body.actorId, event, body.idempotencyKey),
         traceId,
       });
       return createEventJsonResponse(200, {
         target: "learning-record-event",
         ...receipt,
-        access,
+        access: createPublicAuthorizedAccess(access),
         redaction: createRedaction(),
       });
     } catch (error) {
@@ -174,7 +202,10 @@ async function defaultAuthorizeLearnerEvent(input: {
     now: input.now,
     courseId: input.event.context.courseId,
   });
-  if (access.status === "authorized" && access.reasonCode === "student-course-membership-approved") {
+  if (
+    access.status === "authorized" &&
+    access.reasonCode === "student-course-membership-approved"
+  ) {
     return {
       status: "authorized",
       reasonCode: "learner-course-membership-approved",
@@ -194,10 +225,17 @@ async function parseRequestBody(request: Request) {
   }
   const actorId = body.actorId.trim();
   if (!actorId) return undefined;
-  const idempotencyKey =
-    typeof body.idempotencyKey === "string" && body.idempotencyKey.trim()
-      ? body.idempotencyKey.trim()
-      : undefined;
+  let idempotencyKey: string | undefined;
+  if (Object.hasOwn(body, "idempotencyKey")) {
+    if (
+      typeof body.idempotencyKey !== "string" ||
+      body.idempotencyKey.length > maxExplicitIdempotencyKeyLength
+    ) {
+      return undefined;
+    }
+    idempotencyKey = body.idempotencyKey.trim();
+    if (!idempotencyKey) return undefined;
+  }
   return { actorId, event: body.event, idempotencyKey };
 }
 
@@ -221,11 +259,11 @@ function sanitizeLearningRecordEvent(
   return {
     type: event.type,
     object: {
-      id: event.object.id.trim().slice(0, 500),
-      name: event.object.name.trim().slice(0, 200),
+      id: event.object.id.trim(),
+      name: event.object.name.trim(),
       ...(event.object.type ? { type: event.object.type } : {}),
       ...(event.object.interactionType
-        ? { interactionType: event.object.interactionType.slice(0, 80) }
+        ? { interactionType: event.object.interactionType }
         : {}),
     },
     ...(result && Object.keys(result).length > 0 ? { result } : {}),
@@ -233,13 +271,10 @@ function sanitizeLearningRecordEvent(
       courseId: event.context.courseId.trim(),
       classId: authorizedClassId,
       ...(event.context.lessonId ? { lessonId: event.context.lessonId.trim() } : {}),
-      ...(event.context.locale ? { locale: event.context.locale.slice(0, 20) } : {}),
+      ...(event.context.locale ? { locale: event.context.locale } : {}),
       ...(event.context.competencyIds
         ? {
-            competencyIds: event.context.competencyIds
-              .filter((value) => typeof value === "string")
-              .slice(0, 20)
-              .map((value) => value.slice(0, 120)),
+            competencyIds: [...event.context.competencyIds],
           }
         : {}),
     },
@@ -249,18 +284,122 @@ function sanitizeLearningRecordEvent(
 function isLearningRecordEventInput(value: unknown): value is LearningRecordEventInput {
   if (!isRecord(value) || !isRecord(value.object) || !isRecord(value.context)) return false;
   return (
-    typeof value.type === "string" &&
+    isBrowserLearningEventType(value.type) &&
     typeof value.object.id === "string" &&
+    value.object.id.length <= maxObjectIdLength &&
     Boolean(value.object.id.trim()) &&
     typeof value.object.name === "string" &&
+    value.object.name.length <= maxObjectNameLength &&
     Boolean(value.object.name.trim()) &&
+    isOptionalString(value.object.type) &&
+    isOptionalString(value.object.interactionType, maxInteractionTypeLength) &&
     typeof value.context.courseId === "string" &&
-    Boolean(value.context.courseId.trim())
+    Boolean(value.context.courseId.trim()) &&
+    isOptionalString(value.context.lessonId) &&
+    isOptionalString(value.context.locale, maxLocaleLength) &&
+    isOptionalStringArray(
+      value.context.competencyIds,
+      maxCompetencyIds,
+      maxCompetencyIdLength,
+    ) &&
+    isOptionalLearningEventResult(value.result)
   );
 }
 
-function createIdempotencyKey(actorId: string, event: LearningRecordEventInput) {
-  return [actorId, event.type, event.context.courseId, event.object.id].join(":").slice(0, 160);
+function isOptionalLearningEventResult(value: unknown) {
+  if (value === undefined) return true;
+  if (!isRecord(value)) return false;
+  return (
+    (value.success === undefined || typeof value.success === "boolean") &&
+    (value.completion === undefined || typeof value.completion === "boolean") &&
+    isOptionalString(value.duration, maxDurationLength)
+  );
+}
+
+function isOptionalString(value: unknown, maxLength?: number) {
+  return (
+    value === undefined ||
+    (typeof value === "string" &&
+      (maxLength === undefined || value.length <= maxLength))
+  );
+}
+
+function isOptionalStringArray(
+  value: unknown,
+  maxItems: number,
+  maxItemLength: number,
+) {
+  return (
+    value === undefined ||
+    (Array.isArray(value) &&
+      value.length <= maxItems &&
+      value.every(
+        (item) => typeof item === "string" && item.length <= maxItemLength,
+      ))
+  );
+}
+
+function isBrowserLearningEventType(
+  value: unknown,
+): value is LearningRecordEventInput["type"] {
+  return (
+    typeof value === "string" &&
+    browserLearningEventTypes.has(value as LearningRecordEventInput["type"])
+  );
+}
+
+function createIdempotencyKey(
+  actorId: string,
+  event: LearningRecordEventInput,
+  explicitKey?: string,
+) {
+  const identity =
+    explicitKey === undefined
+      ? { source: "normalized-event", actorId, event }
+      : { source: "explicit", actorId, key: explicitKey };
+  const digest = createHash("sha256").update(JSON.stringify(identity)).digest("hex");
+  return `learning-event:${digest}`;
+}
+
+function hasValidSameOrigin(request: Request) {
+  const serializedOrigin = request.headers.get("origin");
+  const host = request.headers.get("host");
+  const protocol = readRequestProtocol(request);
+  if (
+    !serializedOrigin ||
+    !host ||
+    !protocol ||
+    host.length > 259 ||
+    !/^(?:\[[0-9A-Fa-f:.]+\]|[A-Za-z0-9.-]+)(?::[0-9]{1,5})?$/.test(host)
+  ) {
+    return false;
+  }
+
+  try {
+    const origin = new URL(serializedOrigin);
+    const expectedOrigin = new URL(`${protocol}//${host}`).origin;
+    return serializedOrigin === origin.origin && origin.origin === expectedOrigin;
+  } catch {
+    return false;
+  }
+}
+
+function readRequestProtocol(request: Request): "http:" | "https:" | undefined {
+  const forwardedProtocol = request.headers.get("x-forwarded-proto");
+  if (forwardedProtocol !== null) {
+    const normalized = forwardedProtocol.trim().toLowerCase();
+    if (normalized === "http" || normalized === "https") {
+      return `${normalized}:`;
+    }
+    return undefined;
+  }
+
+  try {
+    const protocol = new URL(request.url).protocol;
+    return protocol === "http:" || protocol === "https:" ? protocol : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function readSafeTraceId(request: Request) {
@@ -274,6 +413,17 @@ function createDeniedAccess(
   reasonCode: Extract<LearningRecordEventAccess, { status: "denied" }>["reasonCode"],
 ): Extract<LearningRecordEventAccess, { status: "denied" }> {
   return { status: "denied", reasonCode, responsibleSession: "S12" };
+}
+
+function createPublicAuthorizedAccess(
+  access: Extract<LearningRecordEventAccess, { status: "authorized" }>,
+) {
+  return {
+    status: access.status,
+    reasonCode: access.reasonCode,
+    classId: access.classId,
+    responsibleSession: access.responsibleSession,
+  };
 }
 
 function createEventJsonResponse(status: number, body: unknown) {
