@@ -36,6 +36,7 @@ const eslintConfig = defineConfig([
     // full source/test copies and build output, which must never reach lint.
     ".claude/**",
     ".worktrees/**",
+    ".tmp/**",
     "worktrees/**",
     // Generated Next.js output nested anywhere (e.g. inside a stray worktree).
     "**/.next/**",

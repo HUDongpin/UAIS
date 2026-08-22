@@ -5,6 +5,8 @@ import { existsSync, readFileSync } from "node:fs";
 
 const DEFAULT_DOCKERFILE = "Dockerfile.external-storage";
 const DEFAULT_DOCKERIGNORE = ".dockerignore";
+const DOCKER_PROBE_TIMEOUT_MS = 3_000;
+const DOCKER_BUILD_TIMEOUT_MS = 300_000;
 
 try {
   const options = parseArgs(process.argv.slice(2));
@@ -20,7 +22,8 @@ try {
 function buildContainerReadiness(options) {
   const dockerfile = readDockerfileStatus(options.dockerfile);
   const dockerignore = readDockerignoreStatus(options.dockerignore);
-  const docker = readDockerStatus();
+  const shouldProbeDocker = options.probeDocker || options.mode === "build";
+  const docker = readDockerStatus(shouldProbeDocker);
   const image = {
     tagStatus: hasValue(options.imageTag) ? "present" : "missing",
     valueRedacted: true,
@@ -28,10 +31,10 @@ function buildContainerReadiness(options) {
   const preBuildBlockedReasons = [
     ...readDockerfileBlockedReasons(dockerfile),
     ...readDockerignoreBlockedReasons(dockerignore),
-    ...(docker.client === "present" ? [] : ["docker-client-missing"]),
-    ...(docker.daemon === "available" || docker.daemon === "not-checked"
-      ? []
-      : ["docker-daemon-unavailable"]),
+    ...(shouldProbeDocker && docker.client !== "present" ? ["docker-client-missing"] : []),
+    ...(shouldProbeDocker && docker.daemon !== "available" && docker.client === "present"
+      ? ["docker-daemon-unavailable"]
+      : []),
   ];
   const build = readBuildStatus({
     options,
@@ -61,6 +64,7 @@ function buildContainerReadiness(options) {
       secretsExcludedFromContext: dockerignore.secretExclusion === "passed",
       buildNotRunInDryRun: options.mode === "dry-run",
       buildRunInApprovedMode: options.mode === "build" && options.approved === true,
+      dockerProbeRun: shouldProbeDocker,
     },
   };
 }
@@ -111,6 +115,7 @@ function readBuildStatus({ options, preBuildBlockedReasons }) {
     ], {
       encoding: "utf8",
       stdio: ["ignore", "pipe", "pipe"],
+      timeout: DOCKER_BUILD_TIMEOUT_MS,
     });
     return {
       ...base,
@@ -189,11 +194,20 @@ function readDockerignoreStatus(path) {
   };
 }
 
-function readDockerStatus() {
+function readDockerStatus(shouldProbe) {
+  if (!shouldProbe) {
+    return {
+      client: "not-checked",
+      daemon: "not-checked",
+      outputRedacted: true,
+    };
+  }
+
   try {
     execFileSync("docker", ["--version"], {
       encoding: "utf8",
       stdio: ["ignore", "pipe", "pipe"],
+      timeout: DOCKER_PROBE_TIMEOUT_MS,
     });
   } catch {
     return {
@@ -207,6 +221,7 @@ function readDockerStatus() {
     execFileSync("docker", ["version", "--format", "{{.Server.Version}}"], {
       encoding: "utf8",
       stdio: ["ignore", "pipe", "pipe"],
+      timeout: DOCKER_PROBE_TIMEOUT_MS,
     });
     return {
       client: "present",
@@ -259,6 +274,7 @@ function parseArgs(args) {
     imageTag: undefined,
     releaseRunId: undefined,
     approved: false,
+    probeDocker: false,
   };
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index];
@@ -268,6 +284,8 @@ function parseArgs(args) {
       options.mode = "build";
     } else if (arg === "--approved") {
       options.approved = true;
+    } else if (arg === "--probe-docker") {
+      options.probeDocker = true;
     } else if (arg === "--image-tag") {
       options.imageTag = readArgValue(args, index, arg);
       index += 1;
@@ -283,10 +301,10 @@ function parseArgs(args) {
     } else if (arg === "--help" || arg === "-h") {
       process.stdout.write(
         [
-          "Usage: node scripts/external-storage-container-build-readiness.mjs --dry-run [--image-tag TAG] [--release-run-id ID]",
+          "Usage: node scripts/external-storage-container-build-readiness.mjs --dry-run [--probe-docker] [--image-tag TAG] [--release-run-id ID]",
           "       node scripts/external-storage-container-build-readiness.mjs --build --approved --image-tag TAG [--release-run-id ID]",
           "",
-          "Emits redacted readiness for the external storage container artifact. Dry-run checks Dockerfile, .dockerignore, and Docker daemon availability without building an image. Build mode requires explicit approval and omits Docker output.",
+          "Emits redacted readiness for the external storage container artifact. Offline dry-run checks only repository artifacts; --probe-docker explicitly checks the local client and daemon. Build mode requires explicit approval and omits Docker output.",
         ].join("\n"),
       );
       process.exit(0);

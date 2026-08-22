@@ -4,6 +4,7 @@ import { spawnSync } from "node:child_process";
 import { createHash, createHmac } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
+import { delimiter, resolve } from "node:path";
 
 const route = "/teaching/course-settings";
 const operationId = "course-settings";
@@ -3552,16 +3553,39 @@ function isRecord(value) {
 }
 
 function canResolvePlaywrightRuntime() {
-  try {
-    createRequire(import.meta.url).resolve("playwright");
-    return true;
-  } catch {
-    return false;
-  }
+  return resolvePlaywrightRuntime() !== undefined;
 }
 
 function loadPlaywrightRuntime() {
-  return createRequire(import.meta.url)("playwright");
+  const resolution = resolvePlaywrightRuntime();
+  if (!resolution) {
+    throw new Error("Playwright runtime is unavailable.");
+  }
+  return resolution.runtimeRequire(resolution.specifier);
+}
+
+function resolvePlaywrightRuntime() {
+  const runtimeRequire = createRequire(import.meta.url);
+  const explicitNodePath = process.env.NODE_PATH?.trim();
+  const specifiers = explicitNodePath
+    ? explicitNodePath
+        .split(delimiter)
+        .map((entry) => entry.trim())
+        .filter(Boolean)
+        .map((entry) => resolve(entry, "playwright"))
+    : ["playwright"];
+
+  for (const specifier of specifiers) {
+    try {
+      runtimeRequire.resolve(specifier);
+      return { runtimeRequire, specifier };
+    } catch {
+      // NODE_PATH is an explicit runtime selection for the documented npx
+      // launcher and deterministic contract fixtures; do not fall through to
+      // an unrelated repository-local package when the override is invalid.
+    }
+  }
+  return undefined;
 }
 
 function createRuntimeSetup() {

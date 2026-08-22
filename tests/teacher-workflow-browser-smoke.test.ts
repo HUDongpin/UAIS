@@ -350,6 +350,8 @@ describe("deployed teacher workflow browser smoke", () => {
 
   it("reports a missing Playwright runtime before live browser interactions", () => {
     const tmpDir = mkdtempSync(join(tmpdir(), "uais-teacher-browser-runtime-missing-"));
+    const emptyNodeModulesDir = join(tmpDir, "empty-node-modules");
+    mkdirSync(emptyNodeModulesDir, { recursive: true });
     const baseUrl = "https://teacher-browser.example.test";
     const vercelProductionDeployment = writeVercelDeploymentEvidenceForTest(tmpDir, {
       baseUrl,
@@ -374,6 +376,10 @@ describe("deployed teacher workflow browser smoke", () => {
       {
         cwd: process.cwd(),
         encoding: "utf8",
+        env: {
+          ...process.env,
+          NODE_PATH: emptyNodeModulesDir,
+        },
         stdio: "pipe",
       },
     );

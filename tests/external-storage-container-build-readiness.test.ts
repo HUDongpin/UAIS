@@ -1,5 +1,11 @@
 import { execFileSync } from "node:child_process";
-import { chmodSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -41,10 +47,11 @@ describe("external storage container build readiness evidence", () => {
           tagStatus: "present",
           valueRedacted: true,
         },
-        docker: expect.objectContaining({
-          client: expect.stringMatching(/^(present|missing)$/),
-          daemon: expect.stringMatching(/^(available|unavailable|not-checked)$/),
-        }),
+        docker: {
+          client: "not-checked",
+          daemon: "not-checked",
+          outputRedacted: true,
+        },
         safety: {
           imageTagOmitted: true,
           dockerOutputOmitted: true,
@@ -52,12 +59,48 @@ describe("external storage container build readiness evidence", () => {
           secretsExcludedFromContext: true,
           buildNotRunInDryRun: true,
           buildRunInApprovedMode: false,
+          dockerProbeRun: false,
         },
       }),
     );
     expect(output).not.toContain("registry.example.test");
     expect(output).not.toContain("secret-build-tag");
     expect(output).not.toContain("/Users/");
+  });
+
+  it("does not invoke Docker during the default offline dry-run", () => {
+    const fakeBinDir = mkdtempSync(join(tmpdir(), "uais-fake-docker-offline-dry-run-"));
+    const fakeDocker = join(fakeBinDir, "docker");
+    const invocationLog = join(fakeBinDir, "docker-invocations.log");
+    writeFileSync(
+      fakeDocker,
+      [
+        "#!/bin/sh",
+        `echo "$@" >> "${invocationLog}"`,
+        "exit 1",
+        "",
+      ].join("\n"),
+    );
+    chmodSync(fakeDocker, 0o755);
+
+    const output = execFileSync("node", [
+      "scripts/external-storage-container-build-readiness.mjs",
+      "--dry-run",
+    ], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        PATH: `${fakeBinDir}:${process.env.PATH ?? ""}`,
+      },
+    });
+
+    expect(JSON.parse(output).docker).toEqual({
+      client: "not-checked",
+      daemon: "not-checked",
+      outputRedacted: true,
+    });
+    expect(existsSync(invocationLog)).toBe(false);
   });
 
   it("blocks when the docker artifact files are missing without leaking local paths", () => {
@@ -117,6 +160,7 @@ describe("external storage container build readiness evidence", () => {
     const output = execFileSync("node", [
       "scripts/external-storage-container-build-readiness.mjs",
       "--dry-run",
+      "--probe-docker",
     ], {
       cwd: process.cwd(),
       encoding: "utf8",
@@ -140,6 +184,51 @@ describe("external storage container build readiness evidence", () => {
     );
     expect(output).not.toContain(fakeBinDir);
     expect(output).not.toContain("/private/docker.sock");
+    expect(output).not.toContain("/Users/");
+  });
+
+  it("bounds a stalled docker daemon probe in dry-run mode", () => {
+    const fakeBinDir = mkdtempSync(join(tmpdir(), "uais-fake-docker-stalled-daemon-"));
+    const fakeDocker = join(fakeBinDir, "docker");
+    writeFileSync(
+      fakeDocker,
+      [
+        "#!/bin/sh",
+        "if [ \"$1\" = \"--version\" ]; then",
+        "  echo 'Docker version 29.5.2, build fixture'",
+        "  exit 0",
+        "fi",
+        "sleep 10",
+        "exit 1",
+        "",
+      ].join("\n"),
+    );
+    chmodSync(fakeDocker, 0o755);
+
+    const startedAt = Date.now();
+    const output = execFileSync("node", [
+      "scripts/external-storage-container-build-readiness.mjs",
+      "--dry-run",
+      "--probe-docker",
+    ], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+      timeout: 7_000,
+      env: {
+        ...process.env,
+        PATH: `${fakeBinDir}:${process.env.PATH ?? ""}`,
+      },
+    });
+    const durationMs = Date.now() - startedAt;
+    const body = JSON.parse(output);
+
+    expect(durationMs).toBeLessThan(7_000);
+    expect(body.docker).toEqual({
+      client: "present",
+      daemon: "unavailable",
+      outputRedacted: true,
+    });
+    expect(output).not.toContain(fakeBinDir);
     expect(output).not.toContain("/Users/");
   });
 

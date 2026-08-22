@@ -6,6 +6,7 @@ import { readFileSync } from "node:fs";
 import { request as httpRequest } from "node:http";
 import { request as httpsRequest } from "node:https";
 import { createRequire } from "node:module";
+import { delimiter, resolve } from "node:path";
 
 const route = "/teaching";
 const teacherAuthIssuerProofTtlSeconds = 300;
@@ -1293,16 +1294,39 @@ function createRedactedRequestError() {
 }
 
 function canResolvePlaywrightRuntime() {
-  try {
-    createRequire(import.meta.url).resolve("playwright");
-    return true;
-  } catch {
-    return false;
-  }
+  return resolvePlaywrightRuntime() !== undefined;
 }
 
 function loadPlaywrightRuntime() {
-  return createRequire(import.meta.url)("playwright");
+  const resolution = resolvePlaywrightRuntime();
+  if (!resolution) {
+    throw new Error("Playwright runtime is unavailable.");
+  }
+  return resolution.runtimeRequire(resolution.specifier);
+}
+
+function resolvePlaywrightRuntime() {
+  const runtimeRequire = createRequire(import.meta.url);
+  const explicitNodePath = process.env.NODE_PATH?.trim();
+  const specifiers = explicitNodePath
+    ? explicitNodePath
+        .split(delimiter)
+        .map((entry) => entry.trim())
+        .filter(Boolean)
+        .map((entry) => resolve(entry, "playwright"))
+    : ["playwright"];
+
+  for (const specifier of specifiers) {
+    try {
+      runtimeRequire.resolve(specifier);
+      return { runtimeRequire, specifier };
+    } catch {
+      // Try the next explicit runtime root. When NODE_PATH is present it is an
+      // intentional override (including for the documented npx command), so a
+      // repository-local package must not silently replace it.
+    }
+  }
+  return undefined;
 }
 
 function createRuntimeSetup() {
