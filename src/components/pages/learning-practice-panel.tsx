@@ -178,7 +178,7 @@ export function LearningPracticePanel({
   }, [loadUnit]);
 
   useEffect(() => {
-    if (!storageKey) return;
+    if (!storageKey || !draftRecoveryScope) return;
     if (draftText === persistedText) {
       window.localStorage.removeItem(storageKey);
     } else {
