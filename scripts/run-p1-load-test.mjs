@@ -82,6 +82,8 @@ const test = spawnSync(
   [
     "node_modules/vitest/vitest.mjs",
     "run",
+    "--environment",
+    "node",
     "--no-file-parallelism",
     "tests/learning-loop-postgres-load.integration.test.ts",
   ],

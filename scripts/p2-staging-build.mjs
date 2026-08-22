@@ -38,6 +38,9 @@ if (!restoreNeonProjectId) blockedReasons.push("restore-neon-project-id-missing"
 if (sourceNeonProjectId === productionNeonProjectId) {
   blockedReasons.push("production-neon-project-id-rejected");
 }
+if (restoreNeonProjectId === productionNeonProjectId) {
+  blockedReasons.push("production-restore-neon-project-id-rejected");
+}
 if (
   sourceDatabaseUrl === restoreDatabaseUrl ||
   sourceNeonProjectId === restoreNeonProjectId

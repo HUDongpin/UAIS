@@ -7,6 +7,16 @@ const cleanEnv = {
   HOME: process.env.HOME,
 };
 
+const candidateGitSha = "1".repeat(40);
+const candidateContentSha = "a".repeat(64);
+const evidenceBindingEnv = {
+  P2_CANDIDATE_GIT_SHA: candidateGitSha,
+  P2_CANDIDATE_CONTENT_SHA: candidateContentSha,
+  P2_DEPLOYMENT_ID: "dpl_1234567890abcdefghijklmnopqrstuv",
+  P2_IMMUTABLE_DEPLOYMENT_URL:
+    "https://uais-staging-a1b2c3d4-owner.vercel.app",
+};
+
 describe("P2 protected operations gates", () => {
   it("reports BLOCKED_ENV instead of contacting a load target when staging is absent", () => {
     const result = run("scripts/p2-load-test.mjs", [], cleanEnv);
@@ -182,6 +192,277 @@ describe("P2 protected operations gates", () => {
     expect(firstCleanup).toBeGreaterThan(liveGuard);
   });
 
+  it("blocks unbound staging evidence before any network or database use", () => {
+    const result = runTsx(
+      "scripts/p2-staging-live-load.mjs",
+      ["--dry-run", "--health-only"],
+      {
+        ...cleanEnv,
+        P2_LOAD_BASE_URL: "https://staging.uais.top",
+        P2_LOAD_ALLOWLIST: "staging.uais.top",
+        P2_LOAD_CONFIRM: "staging",
+        UAIS_DEPLOYMENT_ENV: "staging",
+        VERCEL_PROJECT_ID: "prj_dcWZvGLSYNtSWN3lnTyfZPyWKgQL",
+      },
+    );
+
+    expect(result.status).toBe(2);
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      target: "p2-isolated-staging-live-executor",
+      status: "BLOCKED_ENV",
+      failureCode: "UNBOUND_EVIDENCE",
+      generatedAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
+      blockedReasons: expect.arrayContaining([
+        "missing-P2_CANDIDATE_GIT_SHA",
+        "missing-P2_CANDIDATE_CONTENT_SHA",
+        "missing-P2_DEPLOYMENT_ID",
+        "missing-P2_IMMUTABLE_DEPLOYMENT_URL",
+      ]),
+      safety: { networkUsed: false },
+    });
+  });
+
+  it("rejects malformed candidate and deployment identities before network use", () => {
+    const result = runTsx(
+      "scripts/p2-staging-live-load.mjs",
+      ["--dry-run", "--health-only"],
+      {
+        ...cleanEnv,
+        P2_LOAD_BASE_URL: "https://staging.uais.top",
+        P2_LOAD_ALLOWLIST: "staging.uais.top",
+        P2_LOAD_CONFIRM: "staging",
+        UAIS_DEPLOYMENT_ENV: "staging",
+        VERCEL_PROJECT_ID: "prj_dcWZvGLSYNtSWN3lnTyfZPyWKgQL",
+        P2_CANDIDATE_GIT_SHA: "main",
+        P2_CANDIDATE_CONTENT_SHA: "short",
+        P2_DEPLOYMENT_ID: "latest",
+        P2_IMMUTABLE_DEPLOYMENT_URL: "https://staging.uais.top",
+      },
+    );
+
+    expect(result.status).toBe(2);
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      status: "BLOCKED_ENV",
+      failureCode: "UNBOUND_EVIDENCE",
+      blockedReasons: expect.arrayContaining([
+        "invalid-P2_CANDIDATE_GIT_SHA",
+        "invalid-P2_CANDIDATE_CONTENT_SHA",
+        "invalid-P2_DEPLOYMENT_ID",
+        "invalid-P2_IMMUTABLE_DEPLOYMENT_URL",
+      ]),
+      safety: { networkUsed: false },
+    });
+  });
+
+  it("rejects the production Neon project on both source and restore boundaries", () => {
+    const sourceBuildResult = run("scripts/p2-staging-build.mjs", [], {
+      ...cleanEnv,
+      VERCEL_PROJECT_ID: "intentionally-wrong-project-id",
+      UAIS_DEPLOYMENT_ENV: "staging",
+      UAIS_LEARNING_CHATROOM_GROUPS_MODE: "on",
+      UAIS_P2_STAGING_DATABASE_URL: "postgres://source.invalid/uais",
+      UAIS_P2_STAGING_RESTORE_DATABASE_URL: "postgres://restore.invalid/uais",
+      NEON_PROJECT_ID: "late-sunset-59152574",
+      RESTORE_NEON_PROJECT_ID: "staging-restore-project",
+    });
+
+    expect(sourceBuildResult.status).toBe(2);
+    expect(JSON.parse(sourceBuildResult.stdout)).toMatchObject({
+      status: "BLOCKED_ENV",
+      blockedReasons: expect.arrayContaining(["production-neon-project-id-rejected"]),
+      valuesRedacted: true,
+    });
+
+    const buildResult = run("scripts/p2-staging-build.mjs", [], {
+      ...cleanEnv,
+      VERCEL_PROJECT_ID: "intentionally-wrong-project-id",
+      UAIS_DEPLOYMENT_ENV: "staging",
+      UAIS_LEARNING_CHATROOM_GROUPS_MODE: "on",
+      UAIS_P2_STAGING_DATABASE_URL: "postgres://source.invalid/uais",
+      UAIS_P2_STAGING_RESTORE_DATABASE_URL: "postgres://restore.invalid/uais",
+      NEON_PROJECT_ID: "staging-source-project",
+      RESTORE_NEON_PROJECT_ID: "late-sunset-59152574",
+    });
+
+    expect(buildResult.status).toBe(2);
+    expect(JSON.parse(buildResult.stdout)).toMatchObject({
+      status: "BLOCKED_ENV",
+      blockedReasons: expect.arrayContaining([
+        "production-restore-neon-project-id-rejected",
+      ]),
+      valuesRedacted: true,
+    });
+
+    const liveResult = runTsx(
+      "scripts/p2-staging-live-load.mjs",
+      ["--dry-run"],
+      {
+        ...cleanEnv,
+        ...evidenceBindingEnv,
+        P2_LOAD_BASE_URL: "https://staging.uais.top",
+        P2_LOAD_ALLOWLIST: "staging.uais.top",
+        P2_LOAD_CONFIRM: "staging",
+        P2_LOAD_RUN_ID: "p2-restore-guard",
+        P2_LOAD_CLEANUP_CONFIRM: "run-id-cleanup",
+        P2_MANUAL_TEST_PASSWORD: "a-secure-manual-password-value-1234",
+        UAIS_DEPLOYMENT_ENV: "staging",
+        UAIS_LEARNING_CHATROOM_GROUPS_MODE: "on",
+        VERCEL_PROJECT_ID: "prj_dcWZvGLSYNtSWN3lnTyfZPyWKgQL",
+        UAIS_P2_STAGING_DATABASE_URL: "postgres://source.invalid/uais",
+        UAIS_P2_STAGING_RESTORE_DATABASE_URL: "postgres://restore.invalid/uais",
+        NEON_PROJECT_ID: "staging-source-project",
+        RESTORE_NEON_PROJECT_ID: "late-sunset-59152574",
+      },
+    );
+
+    expect(liveResult.status).toBe(2);
+    expect(JSON.parse(liveResult.stdout)).toMatchObject({
+      status: "BLOCKED_ENV",
+      mode: "dry-run",
+      blockedReasons: expect.arrayContaining([
+        "production-restore-neon-project-id-rejected",
+      ]),
+      safety: { networkUsed: false },
+    });
+
+    const sourceLiveResult = runTsx(
+      "scripts/p2-staging-live-load.mjs",
+      ["--dry-run"],
+      {
+        ...cleanEnv,
+        ...evidenceBindingEnv,
+        P2_LOAD_BASE_URL: "https://staging.uais.top",
+        P2_LOAD_ALLOWLIST: "staging.uais.top",
+        P2_LOAD_CONFIRM: "staging",
+        P2_LOAD_RUN_ID: "p2-source-guard",
+        P2_LOAD_CLEANUP_CONFIRM: "run-id-cleanup",
+        P2_MANUAL_TEST_PASSWORD: "a-secure-manual-password-value-1234",
+        UAIS_DEPLOYMENT_ENV: "staging",
+        UAIS_LEARNING_CHATROOM_GROUPS_MODE: "on",
+        VERCEL_PROJECT_ID: "prj_dcWZvGLSYNtSWN3lnTyfZPyWKgQL",
+        UAIS_P2_STAGING_DATABASE_URL: "postgres://source.invalid/uais",
+        UAIS_P2_STAGING_RESTORE_DATABASE_URL: "postgres://restore.invalid/uais",
+        NEON_PROJECT_ID: "late-sunset-59152574",
+        RESTORE_NEON_PROJECT_ID: "staging-restore-project",
+      },
+    );
+
+    expect(sourceLiveResult.status).toBe(2);
+    expect(JSON.parse(sourceLiveResult.stdout)).toMatchObject({
+      status: "BLOCKED_ENV",
+      mode: "dry-run",
+      blockedReasons: ["production-neon-project-id-rejected"],
+      safety: { networkUsed: false },
+    });
+  });
+
+  it("preserves the migration 0009 learning-event and profile fields across restore", () => {
+    const liveSource = readFileSync("scripts/p2-staging-live-load.mjs", "utf8");
+    const seedEvent = sliceBetween(
+      liveSource,
+      'currentStage = "core-learning-event-insert";',
+      'currentStage = "core-learner-profile-insert";',
+    );
+    const capture = sliceBetween(
+      liveSource,
+      "async function captureTaggedBackup()",
+      "async function restoreTaggedBackup(backup)",
+    );
+    const restore = sliceBetween(
+      liveSource,
+      "async function restoreTaggedBackup(backup)",
+      "async function verifyRestoredBackup(",
+    );
+    const verification = sliceBetween(
+      liveSource,
+      "async function verifyRestoredBackup(",
+      "async function cleanupTaggedData(",
+    );
+
+    for (const field of [
+      "assessment_id",
+      "submission_id",
+      "idempotency_key",
+      "schema_version",
+      "source",
+      "projection_version",
+    ]) {
+      expect(seedEvent).toContain(field);
+      expect(capture).toContain(field);
+      expect(restore).toContain(field);
+    }
+    expect(seedEvent).toContain("learning-loop-api");
+    expect(seedEvent).toContain("p2-seed:");
+
+    for (const field of ["progress", "projection_version", "last_event_at"]) {
+      expect(capture).toContain(field);
+      expect(restore).toContain(field);
+    }
+
+    for (const field of [
+      "assessment_id",
+      "submission_id",
+      "idempotency_key",
+      "schema_version",
+      "source",
+      "projection_version",
+      "progress",
+      "last_event_at",
+    ]) {
+      expect(verification).toContain(field);
+    }
+    expect(verification).toContain("createDeterministicChecksum");
+    expect(verification).toContain("checksumsMatch");
+    expect(verification).not.toMatch(
+      /SELECT count\(\*\)::int AS count\s+FROM uais_learning_(?:events|profiles)/,
+    );
+  });
+
+  it("accepts the clean-commit content sentinel as an explicit operator input", () => {
+    const result = runTsx(
+      "scripts/p2-staging-live-load.mjs",
+      ["--dry-run"],
+      {
+        ...cleanEnv,
+        ...evidenceBindingEnv,
+        P2_CANDIDATE_CONTENT_SHA: "clean-commit",
+        P2_LOAD_BASE_URL: "https://staging.uais.top",
+        P2_LOAD_ALLOWLIST: "staging.uais.top",
+        P2_LOAD_CONFIRM: "staging",
+        P2_LOAD_RUN_ID: "p2-binding-proof",
+        P2_LOAD_CLEANUP_CONFIRM: "run-id-cleanup",
+        P2_MANUAL_TEST_PASSWORD: "a-secure-manual-password-value-1234",
+        UAIS_DEPLOYMENT_ENV: "staging",
+        UAIS_LEARNING_CHATROOM_GROUPS_MODE: "on",
+        VERCEL_PROJECT_ID: "prj_dcWZvGLSYNtSWN3lnTyfZPyWKgQL",
+        UAIS_P2_STAGING_DATABASE_URL: "postgres://source.invalid/uais",
+        UAIS_P2_STAGING_RESTORE_DATABASE_URL: "postgres://restore.invalid/uais",
+        NEON_PROJECT_ID: "staging-source-project",
+        RESTORE_NEON_PROJECT_ID: "staging-restore-project",
+      },
+    );
+
+    expect(result.status).toBe(0);
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      status: "PASS",
+      mode: "dry-run",
+      generatedAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
+      evidenceBinding: {
+        candidateGitSha,
+        candidateContent: {
+          kind: "clean-commit-sentinel",
+          value: "clean-commit",
+        },
+        deploymentIdFingerprint: expect.stringMatching(/^sha256:[0-9a-f]{64}$/),
+        immutableDeploymentUrlFingerprint: expect.stringMatching(
+          /^sha256:[0-9a-f]{64}$/,
+        ),
+        attestation: "operator-input-only-not-remote-verification",
+      },
+      safety: { networkUsed: false },
+    });
+  });
+
   it("binds manual staging fixtures and cleanup to the explicit load run ID", () => {
     const buildSource = readFileSync("scripts/p2-staging-build.mjs", "utf8");
     const liveSource = readFileSync("scripts/p2-staging-live-load.mjs", "utf8");
@@ -219,6 +500,7 @@ describe("P2 protected operations gates", () => {
       ["--dry-run", "--health-only"],
       {
         ...cleanEnv,
+        ...evidenceBindingEnv,
         P2_LOAD_BASE_URL: "https://staging.uais.top",
         P2_LOAD_ALLOWLIST: "staging.uais.top",
         P2_LOAD_CONFIRM: "staging",
@@ -234,6 +516,19 @@ describe("P2 protected operations gates", () => {
       mode: "dry-run",
       phase: "health-only",
       blockedReasons: [],
+      generatedAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
+      evidenceBinding: {
+        candidateGitSha,
+        candidateContent: {
+          kind: "sha256",
+          value: candidateContentSha,
+        },
+        deploymentIdFingerprint: expect.stringMatching(/^sha256:[0-9a-f]{64}$/),
+        immutableDeploymentUrlFingerprint: expect.stringMatching(
+          /^sha256:[0-9a-f]{64}$/,
+        ),
+        attestation: "operator-input-only-not-remote-verification",
+      },
       plan: {
         healthOnly: true,
         healthSamples: 15,
@@ -270,4 +565,12 @@ function runTsx(
     env,
     timeout: 10_000,
   });
+}
+
+function sliceBetween(source: string, start: string, end: string) {
+  const startIndex = source.indexOf(start);
+  const endIndex = source.indexOf(end, startIndex + start.length);
+  expect(startIndex).toBeGreaterThan(-1);
+  expect(endIndex).toBeGreaterThan(startIndex);
+  return source.slice(startIndex, endIndex);
 }

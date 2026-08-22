@@ -55,7 +55,7 @@ describe.skipIf(!databaseUrl)("P1 isolated 200-student Postgres load lane", () =
     await loadSql`
       INSERT INTO uais_users (account, role, display_name, department, status)
       SELECT account, role, display_name, department, 'active'
-      FROM jsonb_to_recordset(${JSON.stringify([
+      FROM jsonb_to_recordset(${loadSql.json([
         {
           account: teacherAccount,
           role: "teacher",

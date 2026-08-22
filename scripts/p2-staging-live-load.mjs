@@ -92,17 +92,33 @@ const restoreDatabaseUrl =
   process.env.UAIS_P2_STAGING_RESTORE_DATABASE_URL?.trim() ?? "";
 const sourceNeonProjectId = process.env.NEON_PROJECT_ID?.trim() ?? "";
 const restoreNeonProjectId = process.env.RESTORE_NEON_PROJECT_ID?.trim() ?? "";
-const blockedReasons = healthOnly
+const candidateGitSha = process.env.P2_CANDIDATE_GIT_SHA?.trim() ?? "";
+const candidateContentSha =
+  process.env.P2_CANDIDATE_CONTENT_SHA?.trim() ?? "";
+const deploymentId = process.env.P2_DEPLOYMENT_ID?.trim() ?? "";
+const immutableDeploymentUrl =
+  process.env.P2_IMMUTABLE_DEPLOYMENT_URL?.trim() ?? "";
+const evidenceBindingReasons = validateEvidenceBinding();
+const executionBoundaryReasons = healthOnly
   ? validateHealthExecutionBoundary()
   : validateExecutionBoundary();
+const blockedReasons = [
+  ...new Set([...evidenceBindingReasons, ...executionBoundaryReasons]),
+];
 
 if (dryRun || blockedReasons.length > 0) {
   emit({
     target: "p2-isolated-staging-live-executor",
     status: blockedReasons.length === 0 ? "PASS" : "BLOCKED_ENV",
+    failureCode:
+      evidenceBindingReasons.length > 0 ? "UNBOUND_EVIDENCE" : undefined,
     mode: "dry-run",
     phase: healthOnly ? "health-only" : "load-and-restore",
     blockedReasons,
+    evidenceBinding:
+      evidenceBindingReasons.length === 0
+        ? createEvidenceBindingRecord()
+        : { status: "UNBOUND" },
     plan: {
       healthOnly,
       users: expectedUserCount,
@@ -134,6 +150,7 @@ if (healthOnly) {
     phase: "health-only",
     health,
     blockedReasons: [],
+    evidenceBinding: createEvidenceBindingRecord(),
     elapsedSeconds: Math.round((Date.now() - healthStartedAt) / 1_000),
     safety: createSafetyRecord(true),
   });
@@ -149,6 +166,7 @@ if (databaseGuardReasons.length > 0) {
     status: "BLOCKED_ENV",
     mode: "execute",
     blockedReasons: databaseGuardReasons,
+    evidenceBinding: createEvidenceBindingRecord(),
     requiredDatabaseGuards: [
       "isolated-p2-staging-source",
       "isolated-p2-staging-restore",
@@ -200,6 +218,7 @@ const report = {
   status: "FAIL",
   mode: "execute",
   runId,
+  evidenceBinding: createEvidenceBindingRecord(),
   candidate: {
     baseUrl,
     vercelProjectFingerprint: fingerprint(process.env.VERCEL_PROJECT_ID ?? ""),
@@ -558,6 +577,7 @@ try {
     relationships: "PASS",
     groupIsolation: "PASS",
     migrations: "PASS",
+    fieldChecksums: restored.checksums,
     operator: "S22",
   };
 
@@ -780,14 +800,22 @@ async function seedCoreRelationshipFixture(userIdsByAccount) {
   currentStage = "core-learning-event-insert";
   await sourceSql`
     INSERT INTO uais_learning_events (
-      user_id, course_id, class_id, verb, object_id, context, occurred_at
+      user_id, course_id, class_id, assessment_id, submission_id,
+      verb, object_id, idempotency_key, schema_version, source,
+      projection_version, context, occurred_at
     )
     SELECT
       id,
       ${course.id},
       ${classItem.id},
+      NULL,
+      NULL,
       'experienced',
       ${`${runId}-lesson`},
+      ${`p2-seed:${runId}:`} || id::text,
+      1,
+      'learning-loop-api',
+      0,
       jsonb_build_object('runId', ${runId}::text),
       now()
     FROM uais_users
@@ -795,12 +823,18 @@ async function seedCoreRelationshipFixture(userIdsByAccount) {
   `;
   currentStage = "core-learner-profile-insert";
   await sourceSql`
-    INSERT INTO uais_learner_profiles (user_id, course_id, mastery, preferences)
+    INSERT INTO uais_learner_profiles (
+      user_id, course_id, mastery, preferences, progress,
+      projection_version, last_event_at
+    )
     SELECT
       id,
       ${course.id},
       jsonb_build_object('p2', 0.25, 'runId', ${runId}::text),
-      jsonb_build_object('locale', 'zh-CN')
+      jsonb_build_object('locale', 'zh-CN'),
+      jsonb_build_object('experienced', true),
+      0,
+      now()
     FROM uais_users
     WHERE account LIKE ${`${loadPrefix}student-%`}
   `;
@@ -935,15 +969,17 @@ async function captureTaggedBackup() {
     : [];
   const events = courseIds.length
     ? await sourceSql`
-        SELECT id, user_id, course_id, class_id, verb, object_id, context,
-          occurred_at, created_at
+        SELECT id, user_id, course_id, class_id, assessment_id, submission_id,
+          verb, object_id, idempotency_key, schema_version, source,
+          projection_version, context, occurred_at, created_at
         FROM uais_learning_events
         WHERE course_id = ANY(${courseIds}::uuid[])
       `
     : [];
   const profiles = courseIds.length
     ? await sourceSql`
-        SELECT user_id, course_id, mastery, preferences, updated_at
+        SELECT user_id, course_id, mastery, preferences, progress,
+          projection_version, last_event_at, updated_at
         FROM uais_learner_profiles
         WHERE course_id = ANY(${courseIds}::uuid[])
       `
@@ -1028,25 +1064,32 @@ async function restoreTaggedBackup(backup) {
     for (const row of backup.events) {
       await sql`
         INSERT INTO uais_learning_events (
-          id, user_id, course_id, class_id, verb, object_id, context,
-          occurred_at, created_at
+          id, user_id, course_id, class_id, assessment_id, submission_id,
+          verb, object_id, idempotency_key, schema_version, source,
+          projection_version, context, occurred_at, created_at
         )
         VALUES (
           ${row.id}, ${row.user_id}, ${row.course_id}, ${row.class_id},
-          ${row.verb}, ${row.object_id}, ${JSON.stringify(row.context)}::text::jsonb,
-          ${row.occurred_at}, ${row.created_at}
+          ${row.assessment_id}, ${row.submission_id}, ${row.verb},
+          ${row.object_id}, ${row.idempotency_key}, ${row.schema_version},
+          ${row.source}, ${row.projection_version},
+          ${JSON.stringify(row.context)}::text::jsonb, ${row.occurred_at},
+          ${row.created_at}
         )
       `;
     }
     for (const row of backup.profiles) {
       await sql`
         INSERT INTO uais_learner_profiles (
-          user_id, course_id, mastery, preferences, updated_at
+          user_id, course_id, mastery, preferences, progress,
+          projection_version, last_event_at, updated_at
         )
         VALUES (
           ${row.user_id}, ${row.course_id},
           ${JSON.stringify(row.mastery)}::text::jsonb,
           ${JSON.stringify(row.preferences)}::text::jsonb,
+          ${JSON.stringify(row.progress)}::text::jsonb,
+          ${row.projection_version}, ${row.last_event_at},
           ${row.updated_at}
         )
       `;
@@ -1087,8 +1130,18 @@ async function restoreTaggedBackup(backup) {
 }
 
 async function verifyRestoredBackup(backup, plaintextPassword) {
-  const [migrationRows, schemaRows, userRows, courseRows, enrollmentRows, eventRows, profileRows,
-    snapshotRows, claimRows, transcriptRows] = await Promise.all([
+  const [
+    migrationRows,
+    schemaRows,
+    userRows,
+    courseRows,
+    enrollmentRows,
+    eventRows,
+    profileRows,
+    snapshotRows,
+    claimRows,
+    transcriptRows,
+  ] = await Promise.all([
     restoreSql`SELECT version FROM uais_schema_migrations ORDER BY version`,
     restoreSql`SELECT schema_name FROM information_schema.schemata WHERE schema_name = 'uais_langgraph'`,
     restoreSql`
@@ -1105,16 +1158,20 @@ async function verifyRestoredBackup(backup, plaintextPassword) {
       WHERE c.slug = ${loadCoreCourseSlug}
     `,
     restoreSql`
-      SELECT count(*)::int AS count
+      SELECT e.id, e.assessment_id, e.submission_id, e.idempotency_key,
+        e.schema_version, e.source, e.projection_version
       FROM uais_learning_events e
       JOIN uais_courses c ON c.id = e.course_id
       WHERE c.slug = ${loadCoreCourseSlug}
+      ORDER BY e.id
     `,
     restoreSql`
-      SELECT count(*)::int AS count
+      SELECT p.user_id, p.course_id, p.progress, p.projection_version,
+        p.last_event_at
       FROM uais_learner_profiles p
       JOIN uais_courses c ON c.id = p.course_id
       WHERE c.slug = ${loadCoreCourseSlug}
+      ORDER BY p.user_id, p.course_id
     `,
     restoreSql`
       SELECT database
@@ -1151,12 +1208,41 @@ async function verifyRestoredBackup(backup, plaintextPassword) {
       encoded: lastUser.password_hash,
     }));
   const transcriptMessages = countTranscriptMessages(transcriptRows);
+  const eventChecksumFields = (row) => ({
+    id: row.id,
+    assessment_id: row.assessment_id,
+    submission_id: row.submission_id,
+    idempotency_key: row.idempotency_key,
+    schema_version: row.schema_version,
+    source: row.source,
+    projection_version: row.projection_version,
+  });
+  const profileChecksumFields = (row) => ({
+    user_id: row.user_id,
+    course_id: row.course_id,
+    progress: row.progress,
+    projection_version: row.projection_version,
+    last_event_at: row.last_event_at,
+  });
+  const checksums = {
+    learningEvents: {
+      source: createDeterministicChecksum(backup.events, eventChecksumFields),
+      restored: createDeterministicChecksum(eventRows, eventChecksumFields),
+    },
+    learnerProfiles: {
+      source: createDeterministicChecksum(backup.profiles, profileChecksumFields),
+      restored: createDeterministicChecksum(profileRows, profileChecksumFields),
+    },
+  };
+  const checksumsMatch =
+    checksums.learningEvents.source === checksums.learningEvents.restored &&
+    checksums.learnerProfiles.source === checksums.learnerProfiles.restored;
   const counts = {
     users: userRows.length,
     coreCourses: courseRows.length,
     enrollments: enrollmentRows[0]?.count ?? 0,
-    learningEvents: eventRows[0]?.count ?? 0,
-    learnerProfiles: profileRows[0]?.count ?? 0,
+    learningEvents: eventRows.length,
+    learnerProfiles: profileRows.length,
     courseSnapshots: snapshotRows.length,
     inviteClaims: claimRows[0]?.count ?? 0,
     memberships: memberships.length,
@@ -1187,8 +1273,10 @@ async function verifyRestoredBackup(backup, plaintextPassword) {
       JSON.stringify(actualMigrationVersions) === JSON.stringify(expectedMigrationVersions) &&
       schemaRows.length === 1 &&
       Boolean(hashesVerify) &&
+      checksumsMatch &&
       JSON.stringify(counts) === JSON.stringify(expectedCounts),
     counts,
+    checksums,
   };
 }
 
@@ -1371,6 +1459,70 @@ async function bestEffortCleanup() {
   }).catch(() => undefined);
 }
 
+function validateEvidenceBinding() {
+  const reasons = [];
+  if (!candidateGitSha) {
+    reasons.push("missing-P2_CANDIDATE_GIT_SHA");
+  } else if (!/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/i.test(candidateGitSha)) {
+    reasons.push("invalid-P2_CANDIDATE_GIT_SHA");
+  }
+  if (!candidateContentSha) {
+    reasons.push("missing-P2_CANDIDATE_CONTENT_SHA");
+  } else if (
+    candidateContentSha !== "clean-commit" &&
+    !/^[0-9a-f]{64}$/i.test(candidateContentSha)
+  ) {
+    reasons.push("invalid-P2_CANDIDATE_CONTENT_SHA");
+  }
+  if (!deploymentId) {
+    reasons.push("missing-P2_DEPLOYMENT_ID");
+  } else if (!/^dpl_[A-Za-z0-9]{24,64}$/.test(deploymentId)) {
+    reasons.push("invalid-P2_DEPLOYMENT_ID");
+  }
+  if (!immutableDeploymentUrl) {
+    reasons.push("missing-P2_IMMUTABLE_DEPLOYMENT_URL");
+  } else {
+    try {
+      const url = new URL(immutableDeploymentUrl);
+      const hostname = url.hostname.toLowerCase();
+      if (
+        url.protocol !== "https:" ||
+        !hostname.endsWith(".vercel.app") ||
+        productionHostnames.has(hostname) ||
+        hostname === requiredStagingHostname ||
+        url.username ||
+        url.password ||
+        url.pathname !== "/" ||
+        url.search ||
+        url.hash
+      ) {
+        reasons.push("invalid-P2_IMMUTABLE_DEPLOYMENT_URL");
+      }
+    } catch {
+      reasons.push("invalid-P2_IMMUTABLE_DEPLOYMENT_URL");
+    }
+  }
+  return [...new Set(reasons)];
+}
+
+function createEvidenceBindingRecord() {
+  return {
+    candidateGitSha: candidateGitSha.toLowerCase(),
+    candidateContent: {
+      kind:
+        candidateContentSha === "clean-commit"
+          ? "clean-commit-sentinel"
+          : "sha256",
+      value: candidateContentSha.toLowerCase(),
+    },
+    deploymentIdFingerprint: sha256Fingerprint(deploymentId),
+    immutableDeploymentUrlFingerprint: sha256Fingerprint(
+      new URL(immutableDeploymentUrl).origin.toLowerCase(),
+    ),
+    attestation: "operator-input-only-not-remote-verification",
+  };
+}
+
 function validateExecutionBoundary() {
   const reasons = validateHealthExecutionBoundary();
   if (process.env.P2_LOAD_CLEANUP_CONFIRM !== "run-id-cleanup") {
@@ -1392,6 +1544,9 @@ function validateExecutionBoundary() {
   if (!restoreNeonProjectId) reasons.push("restore-neon-project-id-missing");
   if (sourceNeonProjectId === productionNeonProjectId) {
     reasons.splice(0, reasons.length, "production-neon-project-id-rejected");
+  }
+  if (restoreNeonProjectId === productionNeonProjectId) {
+    reasons.splice(0, reasons.length, "production-restore-neon-project-id-rejected");
   }
   if (sourceNeonProjectId && sourceNeonProjectId === restoreNeonProjectId) {
     reasons.push("source-and-restore-neon-project-must-differ");
@@ -1575,6 +1730,31 @@ function roundRate(value) {
   return Number(value.toFixed(6));
 }
 
+function createDeterministicChecksum(rows, selectFields) {
+  const records = rows
+    .map((row) => JSON.stringify(normalizeChecksumValue(selectFields(row))))
+    .sort();
+  return sha256Fingerprint(JSON.stringify(records));
+}
+
+function normalizeChecksumValue(value) {
+  if (value instanceof Date) return value.toISOString();
+  if (typeof value === "bigint") return value.toString();
+  if (Array.isArray(value)) return value.map(normalizeChecksumValue);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.keys(value)
+        .sort()
+        .map((key) => [key, normalizeChecksumValue(value[key])]),
+    );
+  }
+  return value ?? null;
+}
+
+function sha256Fingerprint(value) {
+  return `sha256:${createHash("sha256").update(value).digest("hex")}`;
+}
+
 function fingerprint(value) {
   return value ? createHash("sha256").update(value).digest("hex").slice(0, 12) : "missing";
 }
@@ -1670,5 +1850,7 @@ function emitProgress(phase, fields) {
 }
 
 function emit(value) {
-  process.stdout.write(`${JSON.stringify(value)}\n`);
+  process.stdout.write(
+    `${JSON.stringify({ generatedAt: new Date().toISOString(), ...value })}\n`,
+  );
 }
