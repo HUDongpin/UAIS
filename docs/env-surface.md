@@ -77,6 +77,17 @@ runtime: `npm run vercel-build` applies the migrations from there, and `/healthz
 reports `checks.migrations` as `behind` (503) for a deployment whose database
 never received them.
 
+## Durable Learning-Record Outbox
+
+P1 learning events are committed to Postgres before an API success response and
+then mirrored to the LRS by a protected outbox dispatcher. The dispatcher uses
+`UAIS_LEARNING_RECORD_OUTBOX_SECRET`, a server-only value of at least 32
+characters. It is required in a deployment that runs the P1 learning loop and
+must never be placed in a `NEXT_PUBLIC_*` variable, request log, xAPI statement,
+or evidence report. LRS credentials remain separate; pausing or failing the LRS
+dispatcher does not roll back classroom submissions or feedback stored in
+Postgres.
+
 ## Local JSON Data Directories
 
 `UAIS_TEACHING_COURSES_DATA_DIR` and `UAIS_LEARNING_CHATROOM_TRANSCRIPTS_DATA_DIR`
@@ -108,6 +119,16 @@ decisions D6 and D9). As of 2026-08-08 all four are read by
   switch, enforced unless set to `off`.
 - `UAIS_LEARNING_CHATROOM_HISTORY_RATE_LIMIT_PER_MINUTE`: default 30.
 - `UAIS_LEARNING_CHATROOM_HISTORY_RATE_LIMIT_PER_DAY`: default 2000.
+
+## P1 Teacher Feedback AI
+
+`UAIS_LEARNING_FEEDBACK_AI_ENABLED` is a server-only, exact-`true` opt-in for
+teacher-requested AI feedback drafts. It remains `false` or unset until the
+owner and S19 approve a UAIS-specific provider credential source, cost/rate
+limit boundary, and target environment. Enabling it also requires the existing
+server-only `DEEPSEEK_API_KEY`; neither value is exposed to the browser or
+recorded in evidence. When disabled or unavailable, teachers retain the full
+manual feedback and decision path.
 
 ## Operating Rule
 

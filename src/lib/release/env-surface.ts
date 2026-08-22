@@ -187,6 +187,16 @@ export const uaisEnvSurfaceCatalog = [
     purpose: "xAPI version override; defaults to 1.0.3 when omitted.",
   },
   {
+    name: "UAIS_LEARNING_RECORD_OUTBOX_SECRET",
+    tier: "active-production",
+    owner: "S19/S12",
+    valueKind: "secret",
+    serverOnly: true,
+    productionDefault: "required",
+    purpose:
+      "Protects the server-only learning-record outbox dispatch endpoint. It must contain at least 32 characters and is never exposed to browsers, xAPI statements, logs, or evidence reports.",
+  },
+  {
     name: "SENTRY_DSN",
     tier: "active-production",
     owner: "S19/S22",
@@ -412,6 +422,16 @@ export const uaisEnvSurfaceCatalog = [
     serverOnly: true,
     productionDefault: "optional",
     purpose: "Per-actor learning ask-box AI requests allowed per day; defaults to 600.",
+  },
+  {
+    name: "UAIS_LEARNING_FEEDBACK_AI_ENABLED",
+    tier: "optional-live-ai",
+    owner: "S07/S19",
+    valueKind: "mode",
+    serverOnly: true,
+    productionDefault: "blocked-until-approved",
+    purpose:
+      "Exact true opt-in for teacher-requested P1 feedback drafts after owner approval; false or unset keeps the manual feedback path only.",
   },
   {
     name: "DEEPSEEK_API_KEY",

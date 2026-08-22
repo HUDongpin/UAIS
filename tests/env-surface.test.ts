@@ -39,7 +39,7 @@ describe("B-21 environment surface", () => {
     // deployed teacher could read courses and 401 on every write while they sat
     // in quarantine), the demo-auth escape hatch that had no catalog entry at
     // all, and the teaching-operations snapshot selector that live code reads.
-    expect(summary.counts["active-production"]).toBeLessThanOrEqual(28);
+    expect(summary.counts["active-production"]).toBeLessThanOrEqual(29);
     expect(summary.activeProductionNames).toEqual(
       expect.arrayContaining([
         "UAIS_APP_SESSION_SIGNING_SECRET",
@@ -50,6 +50,7 @@ describe("B-21 environment surface", () => {
         "UAIS_CORE_DATABASE_URL",
         "UAIS_LANGGRAPH_PERSISTENCE_BACKEND",
         "UAIS_LRS_ENDPOINT",
+        "UAIS_LEARNING_RECORD_OUTBOX_SECRET",
         "SENTRY_DSN",
         "NEXT_PUBLIC_SENTRY_DSN",
         "UAIS_UPTIME_CHECK_URL",
@@ -60,7 +61,11 @@ describe("B-21 environment surface", () => {
       ]),
     );
     expect(summary.optionalLiveAiNames).toEqual(
-      expect.arrayContaining(["DEEPSEEK_API_KEY", "DASHSCOPE_API_KEY"]),
+      expect.arrayContaining([
+        "UAIS_LEARNING_FEEDBACK_AI_ENABLED",
+        "DEEPSEEK_API_KEY",
+        "DASHSCOPE_API_KEY",
+      ]),
     );
     expect(summary.quarantinedLegacyNames).toEqual(
       expect.arrayContaining([
@@ -77,6 +82,16 @@ describe("B-21 environment surface", () => {
     expect(summary.quarantinedLegacyNames).not.toContain(
       "UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET",
     );
+  });
+
+  it("catalogs the server-only secret that protects durable outbox dispatch", () => {
+    expect(classifyUaisEnvName("UAIS_LEARNING_RECORD_OUTBOX_SECRET")).toMatchObject({
+      tier: "active-production",
+      owner: "S19/S12",
+      valueKind: "secret",
+      serverOnly: true,
+      productionDefault: "required",
+    });
   });
 
   // The September launch configuration, name by name. The catalog described a
