@@ -142,6 +142,7 @@ test.describe("@a11y WCAG 2.2 AA automated baseline", () => {
     await expect(page.locator('[data-uais-chatroom-error="true"]')).toContainText(
       copy[locale].learning.agentUnavailable,
     );
+    await assertPlaceholderContrast(page, "#group-message");
     await assertNoBlockingViolations(page, testInfo, "chatroom-provider-error");
 
     const exportPagePromise = context.waitForEvent("page");
@@ -235,4 +236,54 @@ async function assertNoBlockingViolations(
     (violation) => violation.impact === "critical" || violation.impact === "serious",
   );
   expect(blocking, JSON.stringify(blocking, null, 2)).toEqual([]);
+}
+
+async function assertPlaceholderContrast(page: Page, selector: string) {
+  const contrast = await page.locator(selector).evaluate((element) => {
+    const parseRgb = (value: string) => {
+      const channels = value.match(/[\d.]+/g)?.map(Number) ?? [];
+      return {
+        red: channels[0] ?? 0,
+        green: channels[1] ?? 0,
+        blue: channels[2] ?? 0,
+        alpha: channels[3] ?? 1,
+      };
+    };
+    const luminance = (red: number, green: number, blue: number) =>
+      [red, green, blue]
+        .map((channel) => channel / 255)
+        .map((channel) =>
+          channel <= 0.04045
+            ? channel / 12.92
+            : ((channel + 0.055) / 1.055) ** 2.4,
+        )
+        .reduce(
+          (total, channel, index) =>
+            total + channel * [0.2126, 0.7152, 0.0722][index],
+          0,
+        );
+
+    const background = parseRgb(getComputedStyle(element).backgroundColor);
+    const placeholder = parseRgb(getComputedStyle(element, "::placeholder").color);
+    const blended = {
+      red: placeholder.red * placeholder.alpha + background.red * (1 - placeholder.alpha),
+      green:
+        placeholder.green * placeholder.alpha + background.green * (1 - placeholder.alpha),
+      blue:
+        placeholder.blue * placeholder.alpha + background.blue * (1 - placeholder.alpha),
+    };
+    const foregroundLuminance = luminance(blended.red, blended.green, blended.blue);
+    const backgroundLuminance = luminance(
+      background.red,
+      background.green,
+      background.blue,
+    );
+
+    return (
+      (Math.max(foregroundLuminance, backgroundLuminance) + 0.05) /
+      (Math.min(foregroundLuminance, backgroundLuminance) + 0.05)
+    );
+  });
+
+  expect(contrast).toBeGreaterThanOrEqual(4.5);
 }
