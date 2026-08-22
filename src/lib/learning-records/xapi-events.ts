@@ -25,6 +25,30 @@ export const learningEventCatalog = {
     verb: "attempted",
     defaultActivityType: "learning-activity",
   },
+  "formative-check.attempted": {
+    verb: "attempted",
+    defaultActivityType: "assessment-question",
+  },
+  "submission.submitted": {
+    verb: "submitted",
+    defaultActivityType: "learning-activity",
+  },
+  "submission.resubmitted": {
+    verb: "submitted",
+    defaultActivityType: "learning-activity",
+  },
+  "submission.revision-requested": {
+    verb: "requested",
+    defaultActivityType: "learning-activity",
+  },
+  "submission.accepted": {
+    verb: "completed",
+    defaultActivityType: "learning-activity",
+  },
+  "feedback.released": {
+    verb: "responded",
+    defaultActivityType: "learning-activity",
+  },
   "question.answered": {
     verb: "answered",
     defaultActivityType: "assessment-question",
