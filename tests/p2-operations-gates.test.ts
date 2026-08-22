@@ -195,6 +195,12 @@ describe("P2 protected operations gates", () => {
       "const manualTeacherAccount = `${manualPrefix}teacher`;",
     );
     expect(liveSource).not.toContain('"p2-manual-');
+    expect(liveSource).toContain('courseName: "P2 Quality Pilot"');
+    expect(liveSource).toContain('courseName: "P2 Manual Accessibility"');
+    expect(liveSource).not.toContain('courseName: `P2 Quality Pilot ${runId}`');
+    expect(liveSource).not.toContain('courseName: `P2 Manual Accessibility ${runId}`');
+    expect(liveSource).toContain('currentStage = "manual-membership-join";');
+    expect(liveSource).toContain('/^p2-[a-z0-9-]{8,23}$/');
     expect(liveSource).toContain("accountPrefixes: [manualPrefix]");
     expect(liveSource).toContain("textMarkers: [runId]");
   });

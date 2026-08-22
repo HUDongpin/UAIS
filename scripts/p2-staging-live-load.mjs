@@ -183,12 +183,12 @@ const isolatedSourceEnv = {
 const fixtureNow = new Date("2026-08-22T06:30:00.000Z");
 const loadCourseId = createProvisionalTeachingCourseId({
   actorId: loadTeacherAccount,
-  courseName: `P2 Quality Pilot ${runId}`,
+  courseName: "P2 Quality Pilot",
   now: fixtureNow,
 });
 const manualCourseId = createProvisionalTeachingCourseId({
   actorId: manualTeacherAccount,
-  courseName: `P2 Manual Accessibility ${runId}`,
+  courseName: "P2 Manual Accessibility",
   now: fixtureNow,
 });
 const healthAbortController = new AbortController();
@@ -255,6 +255,7 @@ try {
     courseId: manualCourseId,
     name: "P2 Manual Accessibility Journey",
   });
+  currentStage = "manual-membership-join";
   const manualMembership = await joinTeachingClassByInviteCode({
     dataDir: "/tmp/uais-p2-staging-fixture",
     repository,
@@ -264,6 +265,7 @@ try {
       studentDisplayName: "P2 Manual Student",
     },
   });
+  currentStage = "manual-membership-approve";
   await approveTeachingClassMembership({
     dataDir: "/tmp/uais-p2-staging-fixture",
     repository,
@@ -599,6 +601,15 @@ try {
   report.failureDiagnostic = {
     stage: currentStage,
     kind: error instanceof Error ? error.constructor.name : typeof error,
+    storeStatus:
+      error && typeof error === "object" && typeof error.status === "number"
+        ? error.status
+        : "unavailable",
+    storeReasonCode:
+      error && typeof error === "object" && typeof error.reasonCode === "string"
+        ? error.reasonCode.slice(0, 48)
+        : "unavailable",
+    knownStoreFailure: classifyKnownStoreFailure(error),
     code:
       error && typeof error === "object" && typeof error.code === "string"
         ? error.code.slice(0, 40)
@@ -1386,7 +1397,7 @@ function validateExecutionBoundary() {
     reasons.push("source-and-restore-neon-project-must-differ");
   }
   if (manualPassword.length < 32) reasons.push("manual-test-password-missing-or-weak");
-  if (!/^p2-[a-z0-9-]{8,70}$/.test(runId)) reasons.push("invalid-P2_LOAD_RUN_ID");
+  if (!/^p2-[a-z0-9-]{8,23}$/.test(runId)) reasons.push("invalid-P2_LOAD_RUN_ID");
   return [...new Set(reasons)];
 }
 
@@ -1597,6 +1608,34 @@ function classifySqlOperation(query) {
     return "course-snapshot-read";
   }
   return "other-redacted-sql";
+}
+
+function classifyKnownStoreFailure(error) {
+  const message = error instanceof Error ? error.message : "";
+  const knownFailures = new Map([
+    ["Teaching course was not found.", "course-not-found"],
+    ["Teaching course ownership is required.", "course-ownership-required"],
+    ["Teaching class already exists.", "class-already-exists"],
+    ["Teaching class invite code capacity is exhausted.", "invite-code-capacity-exhausted"],
+    ["Teaching class invite code already exists.", "invite-code-conflict"],
+    [
+      "Postgres teaching course management snapshot changed; retry required.",
+      "postgres-snapshot-contention",
+    ],
+    [
+      "Teaching course management snapshot changed; retry required.",
+      "snapshot-contention-exhausted",
+    ],
+  ]);
+  const knownFailure = knownFailures.get(message);
+  if (knownFailure) return knownFailure;
+
+  const invalidLabel = /^Invalid ([a-z ]+)\.$/.exec(message)?.[1] ?? "";
+  return invalidLabel
+    ? `invalid-${invalidLabel.replaceAll(" ", "-")}`
+    : message === "Teaching course management path escapes the configured data directory."
+      ? "configured-data-directory-path-escape"
+      : "unclassified-message-omitted";
 }
 
 async function waitUntil(timestamp) {
