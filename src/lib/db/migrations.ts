@@ -73,6 +73,20 @@ export const UAIS_CORE_DATABASE_MIGRATIONS = [
       "uais_teaching_course_management_snapshots_retired",
     ],
   },
+  {
+    version: "0008_learning_closed_loop_domain",
+    path: "migrations/0008_learning_closed_loop_domain.sql",
+    tables: [
+      "uais_submission_versions",
+      "uais_feedback",
+      "uais_formative_attempts",
+    ],
+  },
+  {
+    version: "0009_learning_event_outbox",
+    path: "migrations/0009_learning_event_outbox.sql",
+    tables: ["uais_xapi_outbox", "uais_idempotency_records"],
+  },
 ] as const;
 
 export type UaisCoreDatabaseMigrationVersion =
