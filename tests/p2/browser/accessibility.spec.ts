@@ -72,10 +72,15 @@ test.describe("@a11y WCAG 2.2 AA automated baseline", () => {
     testInfo,
   ) => {
     const locale = localeForProject(testInfo);
-    let playbackRequestCount = 0;
+    let playbackManifestUnavailable = true;
     await page.route("**/api/learning/ppt-playback/**", async (route) => {
-      if (route.request().method() === "GET" && playbackRequestCount === 0) {
-        playbackRequestCount += 1;
+      const request = route.request();
+      const requestUrl = new URL(request.url());
+      const isPlaybackManifest =
+        request.method() === "GET" &&
+        requestUrl.pathname ===
+          "/api/learning/ppt-playback/elementary-math-research";
+      if (isPlaybackManifest && playbackManifestUnavailable) {
         await route.fulfill({
           status: 503,
           contentType: "application/json",
@@ -83,7 +88,6 @@ test.describe("@a11y WCAG 2.2 AA automated baseline", () => {
         });
         return;
       }
-      playbackRequestCount += 1;
       await route.continue();
     });
 
@@ -94,6 +98,7 @@ test.describe("@a11y WCAG 2.2 AA automated baseline", () => {
     await expect(page.locator('[data-uais-learning-ppt-error="unavailable"]')).toBeVisible();
     await assertNoBlockingViolations(page, testInfo, "learning-media-error");
 
+    playbackManifestUnavailable = false;
     await page.getByRole("button", {
       name: locale === "zh-CN" ? "重新加载课件" : "Retry loading slides",
     }).click();
