@@ -1,65 +1,61 @@
-# UAIS P2 Current Baseline
+# UAIS P2 current baseline
 
-Evidence date: 2026-08-22 Asia/Hong_Kong
-Planning baseline: `fd09ef322d14316cabaf8cc6d33f23dacc0b61b3`
-S10 isolation baseline: `0eb5f1dc44ccfb8d77c94cb1b6919f4236302c92`
-Validated P2 code SHA: `6e48ea8491a1542f54a2fff084f19fac1422c646`
-Local automated status: `PASS`
-Production readiness: `BLOCKED_ENV`
+Evidence date: 2026-08-23 Asia/Hong_Kong
 
-| Field | Value |
-| --- | --- |
-| Branch | `codex/p2-quality-ux-a11y-ops` |
-| Worktree | `/Volumes/Starship/UAIS/.worktrees/p2-quality-ux-a11y-ops` |
-| Runtime | Node `v24.15.0`; npm `11.12.1` |
-| Browser projects | Chromium `1440×900` and `390×844`; `zh-CN` and `en-US` |
-| Test identities | `p2-student-a`, `p2-student-b`, `p2-teacher-a` |
-| Test course | `p2-quality-pilot`; existing public 19-page demonstration deck/audio |
-| Git boundary | Local commits only; no push, merge, deployment, or production mutation |
+- Clean deployed Git SHA: `0e156b25b7b9a003a07b7f94cf7c8f8d7323ec3e`.
+- Clean Git-archive SHA-256: `8e1f2bf51939b220e3032e41cdeb294ccfc40b9e45a810028df13ccdb1d660f2`.
+- Branch: `codex/p1-p2-integration-candidate-20260822-final`.
+- Runtime: Node 24.15.0; npm 11.12.1; Next.js 16.3.2.
+- Local automated status: `PASS`.
+- Isolated same-SHA deployment and 15-minute health: `PASS`.
+- Complete staging acceptance and production readiness: `BLOCKED_ENV`.
 
-## Current local evidence
+The deployed candidate is the clean SHA above. The current working tree adds
+an undeployed, fail-closed five-stage load harness plus refreshed evidence. No
+claim about staging execution includes that local overlay.
 
-| ID | Status | Command | Result | Production blocker |
-| --- | --- | --- | --- | --- |
-| P2-BASE-01 | `PASS` | `npm run lint` | ESLint completed with no errors | Yes if regressed |
-| P2-BASE-02 | `PASS` | `npm test` | Five sequential bounded shards; 197 files total, 2,717 passed assertions, 18 conditional skips | Yes if regressed |
-| P2-BASE-03 | `PASS` | `npm run test:critical` | 6 files, 106/106 tests passed | Yes if regressed |
-| P2-BASE-04 | `PASS` | `npm run build` | Next.js 16.2.9 build passed; TypeScript passed; 24/24 static pages generated | Yes if regressed |
-| P2-BASE-05 | `PASS` | `npm run test:p2:e2e` | 50 passed, 2 desktop-only mobile-navigation skips, 0 failed | Yes if regressed |
-| P2-BASE-06 | `PASS` | `npm run test:p2:a11y` | 20/20 tests passed; 72 redacted axe state attachments across 18 unique states; 0 violations at every impact level | Yes if regressed |
-| P2-BASE-07 | `PASS` | `npm run test:p2:performance` | Five pages passed fixed lab budgets; scores 99–100 | Yes if regressed |
-| P2-BASE-08 | `BLOCKED_ENV` | `npm run test:external` | Ended in 1.68s before tests; isolated `UAIS_CORE_DATABASE_URL` not present | Yes |
-| P2-BASE-09 | `BLOCKED_ENV` | `npm run test:provider:live` | No network request; budget/rate/timeout/monitoring/approved credential evidence absent | Yes |
-| P2-BASE-10 | `PASS` | `npm run test:p2:gate` | All eight bounded local stages completed and the final evidence check passed | Yes if regressed |
+## Fresh evidence
 
-## Determinism corrections proven during implementation
+| Gate | Status | Result |
+| --- | --- | --- |
+| Full deterministic suite | `PASS` | Five sequential shards; 2,885 passed, 20 conditionally skipped, zero failed |
+| Lint | `PASS` | Zero errors; one pre-existing internal-navigation warning |
+| Production build | `PASS` | TypeScript and 24 static pages completed |
+| Local E2E | `PASS` | 50 passed, 2 expected project skips, zero failed across desktop/mobile and both locales |
+| Automated accessibility | `PASS` | 20/20 passed across desktop/mobile and both locales |
+| Local Lighthouse | `PASS` | Five pages scored 99-100; all LCP/CLS/TBT budgets passed |
+| Field INP p75 | `NOT_RUN` | Every performance result explicitly requires field or repeated-interaction evidence |
+| P2 canonical evidence check | `PASS` | Seven required current reports present, status-valid, and redacted |
+| Current-candidate closure gate | `BLOCKED_ENV` | Machine-readable manifest validates 11/11 gate rows, 11/11 workspace rows, exact HEAD/deployment binding, and 7/7 credential-source categories; only gate 2 passes |
+| Dedicated DB suite | `BLOCKED_ENV` | Fresh exit 2: `UAIS_DB_TEST_DATABASE_URL` required; no test executed |
+| Real provider/data journeys | `BLOCKED_ENV` | No approved credential sources or exact-deployment execution |
 
-- Default Vitest runs with `fileParallelism: false` through five sequential
-  shards, each with a 300-second process deadline and fail-fast behavior.
-- `tests/p2/browser/**` belongs only to Playwright and is excluded from Vitest.
-- Docker readiness dry-run starts no Docker process. Explicit Docker client and
-  daemon probes have startup/health deadlines and diagnostic cleanup.
-- Smoke loaders honor an explicit `NODE_PATH` Playwright runtime before the
-  pinned local dependency; an invalid explicit runtime fails closed.
-- `.next/**`, `.tmp/**`, `.worktrees/**`, and `worktrees/**` are excluded from
-  ESLint; nested worktrees are excluded from Vitest.
+## External state
 
-## Environment and evidence boundaries
+| Surface | Status | Current boundary |
+| --- | --- | --- |
+| Isolated Vercel staging project | `PASS` | `uais-staging` exists; current immutable deployment is `READY` and metadata-bound to the clean SHA/archive hash |
+| Immutable deployment health | `PASS` | 16/16 app/database/migration samples passed at 60-second cadence over 961 seconds |
+| Mutable `staging.uais.top` alias | `BLOCKED_ENV` | It points to an older deployment and cannot be used as current-SHA evidence |
+| Dedicated DB tests/load/restore | `BLOCKED_ENV` | Staging environment contains generic source/restore database aliases with distinct non-production identifiers, but dedicated P2/test aliases and an approved source record are absent; local read-only connectivity probes timed out |
+| Current PITR/OSS recovery | `NOT_RUN` | Historical logical restore evidence is not a current PITR/OSS drill |
+| Five-stage load | `NOT_RUN` | Local harness is ready; 5, 20, 50, 100, and 200 stages were not executed |
+| VoiceOver/Safari | `NOT_RUN` | macOS 26.5.2, Safari 26.5.2, and VoiceOver 10 are installed, but no approved staging identities/bypass or VoiceOver utterance attestation exists; the service was not started |
+| Windows NVDA/Chrome | `BLOCKED_ENV` | No Windows host or local Windows VM execution surface is available |
+| Production journey/readback | `NOT_RUN` | Current production and `origin/main` are both `fd09ef322d14316cabaf8cc6d33f23dacc0b61b3`, not this candidate; no production authorization, login, DB/OSS readback, or mutation occurred |
 
-- Independent Postgres/Neon staging database: `BLOCKED_ENV`; no connection
-  value was read or printed.
-- Independent Vercel project `uais-staging`: `BLOCKED_ENV`; not created or
-  mutated.
-- VoiceOver/Safari manual run: `NOT_RUN`.
-- Windows NVDA/Chrome manual run: `BLOCKED_ENV` on this macOS host.
-- Field or repeated-interaction INP p75: `NOT_RUN`; Lighthouse TBT is not used
-  as a substitute.
-- Sentry/uptime alert delivery, 15-minute health observation, restore drill,
-  200-user execution, and 24-hour observation: `BLOCKED_ENV` until isolated
-  staging exists.
-- `npm audit` reports inherited dependency debt: 40 findings (1 low,
-  14 moderate, 24 high, 1 critical). No forced upgrade was applied; this must
-  be triaged before production authorization.
-- No credential, production account, production database, private course
-  material, real provider call, push, merge, deploy, domain change, or feature
-  flag mutation occurred.
+## Evidence integrity
+
+- Historical P1/P2 staging/load/restore JSON is retained only as historical
+  audit material and cannot satisfy a current row.
+- Local tests, Vercel `READY`, health checks, lab TBT, and UI completeness are
+  different evidence classes.
+- Secrets, database URLs, cookies, passwords, raw provider payloads, and user
+  data are omitted.
+- No Git push/merge, production project deployment, production database or OSS
+  mutation, email, paid-provider call, production login, domain change, or
+  production feature-flag change occurred.
+
+The baseline is therefore locally validated and same-SHA staging-health
+verified, but not staging-accepted, production-ready, or evidence that any of
+the eleven teacher workspaces is `real-complete`.

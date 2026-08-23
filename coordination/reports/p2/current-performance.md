@@ -1,49 +1,50 @@
-# UAIS P2 Current Performance Report
+# UAIS P2 current performance report
 
-Evidence date: 2026-08-22 Asia/Hong_Kong
-Planning baseline: `fd09ef322d14316cabaf8cc6d33f23dacc0b61b3`
-Validated P2 code SHA: `6e48ea8491a1542f54a2fff084f19fac1422c646`
+Evidence date: 2026-08-23 Asia/Hong_Kong
+Clean deployed Git SHA: `0e156b25b7b9a003a07b7f94cf7c8f8d7323ec3e`
 Local Lighthouse laboratory status: `PASS`
+Field INP status: `NOT_RUN`
 Complete production performance status: `BLOCKED_ENV`
 
-## Fixed local laboratory results
+## Fresh local laboratory results
 
 Command: `npm run test:p2:performance`
-Evidence contract: `scripts/p2-performance-test.mjs`
-Browser/runtime: pinned Chromium and Lighthouse on Node `v24.15.0`
-Budgets: LCP ≤ 2,500 ms; CLS ≤ 0.10; TBT ≤ 200 ms; Lighthouse
-Performance ≥ 85.
 
-| ID | Status | Page | Performance score | LCP | CLS | TBT | Residual boundary | Responsible roles | Next step | Blocks production |
-| --- | --- | --- | ---: | ---: | ---: | ---: | --- | --- | --- | --- |
-| P2-PERF-01 | `PASS` | `/login` | 100 | 662.795 ms | 0 | 0 ms | Local deterministic identity fixture, not staging auth | S06/S11/S12 | Repeat on isolated staging | Yes until staging/INP evidence |
-| P2-PERF-02 | `PASS` | `/courses` | 100 | 612.381 ms | 0 | 0 ms | Local fixed course data, not database-backed staging | S02/S06/S11 | Repeat with staging dataset | Yes until staging/INP evidence |
-| P2-PERF-03 | `PASS` | `/learning` | 100 | 629.133 ms | 0.001542 | 0 ms | Existing demonstration media is local | S03/S06/S11/S24 | Repeat with staging media path | Yes until staging/INP evidence |
-| P2-PERF-04 | `PASS` | `/learning/chatroom` | 100 | 727.422 ms | 0.045812 | 0 ms | Deterministic provider state; no multi-user traffic | S04/S06/S11 | Repeat after group load on staging | Yes until staging/INP evidence |
-| P2-PERF-05 | `PASS` | `/teaching` | 99 | 686.034 ms | 0.063639 | 0 ms | Deterministic teacher fixture; no persistent write | S05/S06/S11 | Repeat with staging data | Yes until staging/INP evidence |
-| P2-PERF-06 | `NOT_RUN` | All five pages | INP p75 ≤ 200 ms | — | — | — | Lighthouse TBT is laboratory responsiveness evidence, not field/repeated-interaction INP p75 | S06/S11/S22 | Collect authorized existing analytics or a bounded staging interaction sample | Yes |
-| P2-PERF-07 | `BLOCKED_ENV` | All five pages on canonical staging URL | Same complete budget | — | — | — | Independent Vercel staging project/database is not provisioned | S06/S11/S22 | Re-run the same SHA and visible fixture state on staging | Yes |
+Budgets: Lighthouse performance >= 85; LCP <= 2,500 ms; CLS <= 0.10;
+TBT <= 200 ms.
 
-## Method and integrity controls
+| Page | Status | Performance | LCP | CLS | TBT | INP p75 |
+| --- | --- | ---: | ---: | ---: | ---: | --- |
+| `/login` | `PASS` | 100 | 635.814 ms | 0 | 0 ms | `NOT_RUN` |
+| `/courses` | `PASS` | 100 | 591.256 ms | 0 | 0 ms | `NOT_RUN` |
+| `/learning` | `PASS` | 100 | 630.024 ms | 0.001542 | 0 ms | `NOT_RUN` |
+| `/learning/chatroom` | `PASS` | 100 | 726.933 ms | 0.045812 | 0 ms | `NOT_RUN` |
+| `/teaching` | `PASS` | 99 | 731.285 ms | 0.063639 | 0 ms | `NOT_RUN` |
 
-- The harness permits its managed local server by default. A remote target must
-  be explicitly allowlisted and confirmed as staging; production hostnames are
-  refused before the browser starts.
-- Auth/session headers are written only to a mode-`0600` temporary file for the
-  managed run and deleted in cleanup. Header values and response bodies are not
-  emitted to the report.
-- Raw Lighthouse files are removed after metric extraction. The canonical
-  report contains only route names and aggregate performance metrics.
-- The measured pages render their real visible local feature state. No content,
-  interaction, image, or accessibility behavior was hidden or disabled to
-  improve the score.
-- Image dimensions and optimized Next.js image delivery prevent avoidable
-  layout shifts; larger interactive modules remain loaded only when required by
-  the user path.
-- The run does not add or call a public Web Vitals endpoint and does not collect
-  user-identifying telemetry.
+Every page returned the explicit INP reason
+`field-or-repeated-interaction-evidence-required`. TBT is laboratory evidence
+and is not an INP substitute.
 
-All five local Lighthouse pages meet the measurable lab budgets, but this does
-not satisfy the production performance gate. INP p75 remains `NOT_RUN`, and the
-same candidate has not been measured on isolated staging under representative
-database, media, and concurrent-user conditions.
+## External performance gates
+
+| Gate | Status | Current evidence | Remaining boundary |
+| --- | --- | --- | --- |
+| Immutable deployment health | `PASS` | 16/16 `/healthz` samples passed over 961 seconds | Health and CLI latency are not page-performance or INP evidence |
+| Exact-deployment Lighthouse | `BLOCKED_ENV` | The isolated deployment is `READY`, but browser access requires an approved Vercel protection bypass | Re-run the same five pages against the exact immutable URL with staging identities and dataset |
+| Field INP p75 | `NOT_RUN` | The app includes Vercel Analytics, but the installed Vercel CLI exposes no field-INP retrieval command and no approved dashboard/API evidence source or current-candidate distribution was supplied | Collect an authorized, privacy-safe dataset with enough representative interactions and report p75 by route/device |
+| Loaded staging performance | `NOT_RUN` | The 5 -> 200 load has not executed | Repeat browser measurements during/after the approved load and correlate to the exact deployment |
+| Production performance | `NOT_RUN` | Read-only control-plane audit binds production to `fd09ef322d14316cabaf8cc6d33f23dacc0b61b3`, not the current candidate; no journey or field dataset was collected | Requires separate owner authorization after staging gates pass |
+
+## Integrity controls
+
+- The local harness used its managed loopback server and fixed test identities.
+- Production targets are rejected; remote staging requires explicit confirmation
+  and allowlisting.
+- Temporary auth header files are mode `0600`; values are omitted and removed.
+- Raw Lighthouse reports are removed after aggregate extraction.
+- No field dataset, private analytics payload, user identifier, credential,
+  cookie, or response body is retained.
+
+The five local pages meet their laboratory budgets. Complete performance
+acceptance remains `BLOCKED_ENV` because exact-deployment browser performance,
+representative load, field INP p75, and production evidence are still absent.

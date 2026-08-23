@@ -1,125 +1,39 @@
-# UAIS P2 Current Operations Report
+# UAIS P2 current operations report
 
-Evidence date: 2026-08-22 Asia/Hong_Kong
-Planning baseline: `fd09ef322d14316cabaf8cc6d33f23dacc0b61b3`
-Validated P2 code SHA: `6e48ea8491a1542f54a2fff084f19fac1422c646`
-Local deterministic operations status: `PASS`
-Staging and production operations status: `BLOCKED_ENV`
+Evidence date: 2026-08-23 Asia/Hong_Kong
+Clean deployed Git SHA: `0e156b25b7b9a003a07b7f94cf7c8f8d7323ec3e`
+Current operations boundary: `same-SHA staging health verified; disaster and provider operations blocked`
 
-## Acceptance ledger
+## Current operations ledger
 
-| ID | Status | Operation | Evidence/command | Failure or residual boundary | Responsible roles | Next step | Blocks production |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| P2-OPS-01 | `PASS` | Default offline suite is bounded and reproducible | `npm test` | Five sequential shards passed: 197 files total, 2,717 assertions passed, 18 conditional skips; each shard has a 300-second deadline | S10/S11 | Preserve deterministic classification and deadlines | Yes if regressed |
-| P2-OPS-02 | `PASS` | Docker/external-process readiness is explicit and bounded | `npm test`; focused readiness regressions | Default dry-run starts no Docker; explicit client/daemon probes have startup, health, and total deadlines plus cleanup diagnostics | S10/S22 | Keep external execution outside default unit lane | Yes if regressed |
-| P2-OPS-03 | `BLOCKED_ENV` | Explicit external database suite | `npm run test:external` | Ended in 1.68 seconds with five suites and zero tests before any connection because isolated `UAIS_CORE_DATABASE_URL` is absent | S10/S11/S12 | Supply only an isolated staging database reference, then run explicit lane | Yes |
-| P2-OPS-04 | `BLOCKED_ENV` | Independent Vercel project `uais-staging` and independent Neon branch/database | External control-plane review | No project/database was created or mutated; isolation IDs and redacted variable parity cannot be proven locally | S19/S22 | Prove project binding and database ID/host differ from production before any write | Yes |
-| P2-OPS-05 | `BLOCKED_ENV` | Fifteen-minute `/healthz` steady-state observation | One request per minute, retaining status, latency, and request ID only | No isolated staging deployment or canonical staging URL exists | S22 | Correlate 15 samples with deploy, DB, Sentry, and function logs | Yes |
-| P2-OPS-06 | `BLOCKED_ENV` | Sentry/uptime alert trigger, delivery, deduplication, recovery, and owner acknowledgement | Redacted control-plane evidence | Staging environment marker and alert delivery path have not been authorized/configured | S19/S22 | Exercise one safe synthetic failure and recovery | Yes |
-| P2-OPS-07 | `BLOCKED_ENV` | Backup/snapshot restore into a new target | Staging recovery drill below | No isolated database or snapshot target exists | S12/S22 | Execute non-overwriting recovery and verify relationships/counts/migrations | Yes |
-| P2-OPS-08 | `BLOCKED_ENV` | Twenty-four-hour staging stability observation | Candidate deployment timeline | No staging deployment was performed | S11/S22 | Begin only after local, a11y, load, alert, and restore prerequisites | Yes |
-| P2-OPS-09 | `INHERITED_DEBT` | Dependency vulnerability inventory | `npm audit` | 40 findings: 1 low, 14 moderate, 24 high, 1 critical. No auto-fix or forced major upgrade was applied | S10/S22/security owner | Triage reachability and upgrade plan; critical/high risk needs explicit closure | Yes |
-| P2-OPS-10 | `PASS` | Production/non-production mutation boundary | Git and command review | No push, merge, deploy, Vercel/Neon/domain/Sentry/env mutation, live provider call, or production feature-flag change occurred | S10/S22/S25 | Preserve until separate authorization | Yes if violated |
+| Operation | Status | Fresh evidence | Remaining boundary |
+| --- | --- | --- | --- |
+| Isolated deployment identity | `PASS` | `uais-staging` immutable deployment is `READY`; metadata matches Git and archive hashes | Preserve exact ID/SHA on all later evidence |
+| Steady health | `PASS` | 16/16 app/database/migration health samples passed at 60-second cadence over 961 seconds | This is not a 24-hour soak or alert-delivery drill |
+| Dedicated DB integration | `BLOCKED_ENV` | Fresh runner refused to launch without `UAIS_DB_TEST_DATABASE_URL`. Redacted staging inventory found generic source/restore aliases with distinct non-production Neon identifiers, but no dedicated P2/test aliases; read-only local `SELECT 1` probes timed out | Record the approved source, bind dedicated aliases, then run the read-only guard and DB suite from a network surface that can reach the databases |
+| Read-only DB guard | `BLOCKED_ENV` | New `--guard-only` path verifies both internal environment guards and both migration ledgers, emits counts only, and exits before migrations/build. Focused RED→GREEN test passes; staging `vercel env run` exits 2 before DB access because dedicated aliases, staging marker, and groups mode are absent | Execute this undeployed guard in the isolated Vercel runtime only after owner-approved source intake and source deployment authorization |
+| Current restore | `BLOCKED_ENV` | Retained failed/historical restore evidence was not promoted | Execute non-overwriting current-candidate restore and verify schema, relationships, counts, checksums, login, RPO/RTO, and zero residue |
+| PITR | `NOT_RUN` | Logical dump/restore evidence, where present historically, is explicitly not classified as PITR | Execute provider PITR into a distinct target |
+| OSS recovery | `NOT_RUN` | No approved OSS source or recovery target | Upload tagged object, delete/damage only test data, restore/read back, and reconcile cleanup |
+| Job replay | `BLOCKED_ENV` | Local LRS outbox retry/dead-letter tests pass | Execute real isolated outbox/provider replay with idempotent readback |
+| Provider outage/recovery | `BLOCKED_ENV` | Local failover and partial-failure contracts pass | Trigger one bounded staging failure, observe alert/fallback, recover, and reconcile provider state |
+| Delete reconciliation | `BLOCKED_ENV` | Local disposable voice-revoke contract passes | Execute approved real voice/object/index deletion and prove provider/local/ledger agreement |
+| Sentry/uptime alert path | `BLOCKED_ENV` | Staging env inventory lacks the required monitoring configuration | Configure approved staging-only alert target and prove trigger, dedupe, delivery, recovery, and acknowledgement |
+| Twenty-four-hour soak | `NOT_RUN` | Only the bounded 15-minute health run exists | Begin only after DB/load/restore/provider/alert gates pass |
+| Production operation | `NOT_RUN` | No production action occurred | Separate immediate owner authorization is required |
 
-## Required staging isolation preflight
+## Safety boundary
 
-Before any write-capable staging command, S19/S22 must record only names and
-redacted `present`/`missing` states and verify:
+- Production Git refs, project, domain, database, OSS, provider accounts, and
+  feature flags were not changed.
+- Credential values, URLs containing credentials, cookies, passwords, raw
+  provider payloads, and user data are not retained.
+- Exact-deployment execution is fail-closed; a mutable staging alias cannot be
+  used as same-SHA evidence.
+- Historical staging/load/restore JSON is preserved for audit but cannot be
+  upgraded to current evidence.
+- Generic `DATABASE_URL`/`POSTGRES_URL` aliases are never promoted into the
+  dedicated DB-test or P2 source/restore contract.
 
-1. The Vercel project is `uais-staging`, not the production `uais` project.
-2. Database host, database name, or Neon branch ID differs from production.
-3. Staging session/auth secrets are distinct; no value is printed or copied to
-   this repository.
-4. `SENTRY_ENVIRONMENT` resolves to the staging marker.
-5. Groups are enabled only in staging; production
-   `UAIS_LEARNING_CHATROOM_GROUPS_MODE` remains `off`.
-6. Automated/load AI mode is deterministic stub; live mode is fail-closed.
-7. General Git previews remain disabled and the candidate SHA is deployed
-   manually only to the independent staging project.
-8. A run-ID cleanup method and database rebuild/delete procedure are known.
-
-If database isolation cannot be proven, migration, fixture creation, load, and
-recovery commands must stop before the first write.
-
-## Incident runbook
-
-### `/healthz` anomaly
-
-1. Record UTC/local time, status, latency, request ID, candidate SHA, and current
-   deployment ID; do not retain a response body containing user data.
-2. Continue the bounded probe to distinguish one transient 503 from sustained
-   failure. A single sample is an anomaly, not a diagnosis.
-3. Correlate the same interval with deployment events, database health,
-   migration state, Sentry errors, and Vercel Function logs.
-4. If failures persist, stop promotion and new writes, identify the failing
-   dependency, and notify the named release owner.
-5. Record recovery samples and cause; do not declare recovery from one isolated
-   successful request.
-
-### Database outage or migration failure
-
-1. Freeze further migrations, fixture creation, and load traffic.
-2. Verify target project/database identity using redacted IDs before inspecting
-   schema state.
-3. Compare applied migration records with the candidate manifest. Never retry a
-   partially applied non-idempotent migration blindly.
-4. Restore or roll back only through the pre-tested staging procedure and only
-   within the authorized environment.
-5. Validate login, course relationships, group isolation, message counts,
-   learning progress, and migration status before reopening writes.
-
-### AI provider outage, timeout, or cost anomaly
-
-1. Disable live-provider mode and retain the deterministic stub or a clear
-   recoverable unavailable state.
-2. Confirm request deadline, rate limit, hard budget/cost cap, and circuit-
-   breaker state through redacted control-plane evidence.
-3. Do not automatically retry rejected or timed-out requests at high frequency.
-4. Escalate unexpected spend to S19/S22 and the provider owner; rotate a
-   credential only through its approved secret manager and responsibility map.
-5. Never paste provider responses, prompts, keys, or private chat into reports.
-
-### Error-rate or export-failure spike
-
-1. Segment sanitized metrics by route, status class, deployment, and staging
-   environment; do not retain export/chat bodies.
-2. Check unhandled promise rejections and critical browser console errors.
-3. Reproduce with a test identity and deterministic data, then either correct
-   the candidate or stop promotion.
-4. Confirm the alert sends a deduplicated trigger and recovery notification to
-   the named owner.
-
-### Test-data cleanup failure
-
-1. Stop subsequent load, restore, and release steps.
-2. Query only by test prefix/run ID and record created, cleaned, and residual
-   counts.
-3. Remove data using the staging-only cleanup contract; never broaden a delete
-   target based on an unresolved variable or wildcard.
-4. Resume only when residual count is zero or the isolated staging database is
-   safely rebuilt.
-
-### Rollback and feature flags
-
-1. Production rollback, push, merge, deployment, and alias changes require a
-   separate owner authorization; this report is preparation, not authority.
-2. Bind rollback to the last known-good deployment and its migration
-   compatibility; appoint release and rollback owners before promotion.
-3. Stop any group enablement on the first persistent health, data-isolation,
-   migration, or P1/P2 error. Production groups remain `off` throughout P2.
-4. After rollback, run consecutive health and core-route probes and document
-   deployment identity separately from Git identity.
-
-## Recovery drill acceptance contract
-
-The staging drill must create representative users, courses, groups, messages,
-and progress; take a recoverable snapshot; damage only tagged staging fixtures;
-restore into a new target; and verify login, relationships, group isolation,
-message counts, progress, and schema/migration state. Record RPO, RTO, actual
-recovery duration, lost record count, operator, snapshot/target redacted IDs,
-and rollback steps. Restoring over the source staging database is not accepted.
-
-No external operations were performed during this local implementation. The
-local harness is ready to fail closed, but the project is not staging-validated
-or production-ready until all `BLOCKED_ENV`, `NOT_RUN`, and security debt gates
-above are resolved.
+The operational gate remains `BLOCKED_ENV` until every external drill above is
+executed with approved sources and current-candidate evidence.

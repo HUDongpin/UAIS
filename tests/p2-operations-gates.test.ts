@@ -1,10 +1,25 @@
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const cleanEnv = {
   PATH: process.env.PATH,
   HOME: process.env.HOME,
+};
+const repositoryHeadSha = spawnSync("git", ["rev-parse", "HEAD"], {
+  cwd: process.cwd(),
+  encoding: "utf8",
+  env: cleanEnv,
+}).stdout.trim();
+
+type ClosureManifestFixture = {
+  candidate: {
+    gitSha: string;
+    deployment: { gitSha: string };
+  };
+  requirements: Array<{ id: number; status: string }>;
 };
 
 const candidateGitSha = "1".repeat(40);
@@ -49,7 +64,7 @@ describe("P2 protected operations gates", () => {
     });
   });
 
-  it("builds the 200-user staging load plan without using the network", () => {
+  it("builds the 5-to-200 staging ramp plan without using the network", () => {
     const result = run("scripts/p2-load-test.mjs", ["--dry-run"], {
       ...cleanEnv,
       P2_LOAD_BASE_URL: "https://staging.uais.top",
@@ -63,7 +78,11 @@ describe("P2 protected operations gates", () => {
       mode: "dry-run",
       networkUsed: false,
       scenarios: [
-        expect.objectContaining({ id: "invite-join", users: 200 }),
+        expect.objectContaining({
+          id: "invite-join",
+          users: 200,
+          userRamp: [5, 20, 50, 100, 200],
+        }),
         expect.objectContaining({
           id: "group-collaboration",
           users: 200,
@@ -166,6 +185,96 @@ describe("P2 protected operations gates", () => {
     });
   });
 
+  it("keeps the current-candidate closure gate blocked until all eleven external gates pass", () => {
+    const temporaryDirectory = mkdtempSync(
+      join(tmpdir(), "uais-p2-closure-gate-"),
+    );
+    try {
+      const manifestPath = writeClosureManifest(temporaryDirectory);
+      const result = run(
+        "scripts/p2-current-candidate-closure-gate.mjs",
+        ["--manifest", manifestPath],
+        cleanEnv,
+      );
+
+      expect(result.status).toBe(2);
+      expect(JSON.parse(result.stdout)).toMatchObject({
+        target: "p2-current-candidate-closure",
+        status: "BLOCKED_ENV",
+        releaseReady: false,
+        candidate: {
+          gitSha: repositoryHeadSha,
+          sameShaImmutableDeployment: "PASS",
+        },
+        requirements: {
+          total: 11,
+          passed: 1,
+          passedIds: [2],
+          blockedIds: [1, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+        },
+        teacherWorkspaces: {
+          total: 11,
+          realComplete: 0,
+          implementedUnverified: 11,
+        },
+        credentialSources: {
+          total: 7,
+          ownerApproved: 0,
+          missing: 7,
+        },
+        safety: {
+          valuesRedacted: true,
+          historicalEvidenceCannotPass: true,
+        },
+      });
+    } finally {
+      rmSync(temporaryDirectory, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects a historical restore record promoted to PASS", () => {
+    const temporaryDirectory = mkdtempSync(
+      join(tmpdir(), "uais-p2-closure-gate-"),
+    );
+    try {
+      const manifestPath = writeClosureManifest(
+        temporaryDirectory,
+        (manifest) => {
+          const restoreRequirement = manifest.requirements.find(
+            (requirement) => requirement.id === 3,
+          );
+          if (!restoreRequirement) {
+            throw new Error("Restore requirement fixture is missing.");
+          }
+          restoreRequirement.status = "PASS";
+        },
+      );
+
+      const result = run(
+        "scripts/p2-current-candidate-closure-gate.mjs",
+        ["--manifest", manifestPath],
+        cleanEnv,
+      );
+
+      expect(result.status).toBe(1);
+      expect(JSON.parse(result.stdout)).toMatchObject({
+        target: "p2-current-candidate-closure",
+        status: "FAIL",
+        releaseReady: false,
+        validationErrors: expect.arrayContaining([
+          "requirement-3-pass-requires-current-evidence",
+          "requirement-3-historical-evidence-cannot-pass",
+        ]),
+        safety: {
+          valuesRedacted: true,
+          historicalEvidenceCannotPass: true,
+        },
+      });
+    } finally {
+      rmSync(temporaryDirectory, { recursive: true, force: true });
+    }
+  });
+
   it("requires dedicated P2 database URLs and internal guards before migrations or writes", () => {
     const buildSource = readFileSync("scripts/p2-staging-build.mjs", "utf8");
     const liveSource = readFileSync("scripts/p2-staging-live-load.mjs", "utf8");
@@ -192,14 +301,46 @@ describe("P2 protected operations gates", () => {
     expect(firstCleanup).toBeGreaterThan(liveGuard);
   });
 
+  it("keeps the staging database guard-only mode read-only", () => {
+    const buildSource = readFileSync("scripts/p2-staging-build.mjs", "utf8");
+    const sourceGuard = buildSource.indexOf(
+      'await assertDatabaseGuard(\n  sourceDatabaseUrl,\n  "isolated-p2-staging-source",',
+    );
+    const guardOnlyExit = buildSource.indexOf(
+      'target: "p2-isolated-staging-database-guard"',
+    );
+    const firstMigration = buildSource.indexOf(
+      'runNode(["scripts/apply-core-migrations.mjs"]',
+    );
+
+    expect(buildSource).toContain(
+      'const guardOnly = process.argv.includes("--guard-only");',
+    );
+    expect(sourceGuard).toBeGreaterThan(-1);
+    expect(guardOnlyExit).toBeGreaterThan(sourceGuard);
+    expect(firstMigration).toBeGreaterThan(guardOnlyExit);
+    expect(buildSource).toContain("noMutationPerformed: true");
+  });
+
+  it("keeps the live executor on the declared 5-to-200 cumulative ramp", () => {
+    const liveSource = readFileSync("scripts/p2-staging-live-load.mjs", "utf8");
+
+    expect(liveSource).toContain(
+      "const expectedUserRamp = Object.freeze([5, 20, 50, 100, 200]);",
+    );
+    expect(liveSource).toContain("for (const targetUsers of expectedUserRamp)");
+    expect(liveSource).toContain('emitProgress("invite-join-ramp-stage-complete"');
+  });
+
   it("blocks unbound staging evidence before any network or database use", () => {
     const result = runTsx(
       "scripts/p2-staging-live-load.mjs",
       ["--dry-run", "--health-only"],
       {
         ...cleanEnv,
-        P2_LOAD_BASE_URL: "https://staging.uais.top",
-        P2_LOAD_ALLOWLIST: "staging.uais.top",
+        P2_LOAD_BASE_URL:
+          "https://uais-staging-a1b2c3d4-owner.vercel.app",
+        P2_LOAD_ALLOWLIST: "uais-staging-a1b2c3d4-owner.vercel.app",
         P2_LOAD_CONFIRM: "staging",
         UAIS_DEPLOYMENT_ENV: "staging",
         VERCEL_PROJECT_ID: "prj_dcWZvGLSYNtSWN3lnTyfZPyWKgQL",
@@ -218,6 +359,56 @@ describe("P2 protected operations gates", () => {
         "missing-P2_DEPLOYMENT_ID",
         "missing-P2_IMMUTABLE_DEPLOYMENT_URL",
       ]),
+      safety: { networkUsed: false },
+    });
+  });
+
+  it("rejects a mutable staging alias when evidence names an immutable deployment", () => {
+    const result = runTsx(
+      "scripts/p2-staging-live-load.mjs",
+      ["--dry-run", "--health-only"],
+      {
+        ...cleanEnv,
+        ...evidenceBindingEnv,
+        P2_LOAD_BASE_URL: "https://staging.uais.top",
+        P2_LOAD_ALLOWLIST: "staging.uais.top",
+        P2_LOAD_CONFIRM: "staging",
+        UAIS_DEPLOYMENT_ENV: "staging",
+        VERCEL_PROJECT_ID: "prj_dcWZvGLSYNtSWN3lnTyfZPyWKgQL",
+      },
+    );
+
+    expect(result.status).toBe(2);
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      status: "BLOCKED_ENV",
+      blockedReasons: expect.arrayContaining([
+        "immutable-deployment-target-required",
+      ]),
+      safety: { networkUsed: false },
+    });
+  });
+
+  it("blocks immutable execution without a protection bypass before network use", () => {
+    const result = runTsx(
+      "scripts/p2-staging-live-load.mjs",
+      ["--health-only"],
+      {
+        ...cleanEnv,
+        ...evidenceBindingEnv,
+        P2_LOAD_BASE_URL:
+          "https://uais-staging-a1b2c3d4-owner.vercel.app",
+        P2_LOAD_ALLOWLIST: "uais-staging-a1b2c3d4-owner.vercel.app",
+        P2_LOAD_CONFIRM: "staging",
+        UAIS_DEPLOYMENT_ENV: "staging",
+        VERCEL_PROJECT_ID: "prj_dcWZvGLSYNtSWN3lnTyfZPyWKgQL",
+      },
+    );
+
+    expect(result.status).toBe(2);
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      status: "BLOCKED_ENV",
+      mode: "preflight",
+      blockedReasons: ["missing-P2_VERCEL_PROTECTION_BYPASS_SECRET"],
       safety: { networkUsed: false },
     });
   });
@@ -426,8 +617,9 @@ describe("P2 protected operations gates", () => {
         ...cleanEnv,
         ...evidenceBindingEnv,
         P2_CANDIDATE_CONTENT_SHA: "clean-commit",
-        P2_LOAD_BASE_URL: "https://staging.uais.top",
-        P2_LOAD_ALLOWLIST: "staging.uais.top",
+        P2_LOAD_BASE_URL:
+          "https://uais-staging-a1b2c3d4-owner.vercel.app",
+        P2_LOAD_ALLOWLIST: "uais-staging-a1b2c3d4-owner.vercel.app",
         P2_LOAD_CONFIRM: "staging",
         P2_LOAD_RUN_ID: "p2-binding-proof",
         P2_LOAD_CLEANUP_CONFIRM: "run-id-cleanup",
@@ -501,8 +693,9 @@ describe("P2 protected operations gates", () => {
       {
         ...cleanEnv,
         ...evidenceBindingEnv,
-        P2_LOAD_BASE_URL: "https://staging.uais.top",
-        P2_LOAD_ALLOWLIST: "staging.uais.top",
+        P2_LOAD_BASE_URL:
+          "https://uais-staging-a1b2c3d4-owner.vercel.app",
+        P2_LOAD_ALLOWLIST: "uais-staging-a1b2c3d4-owner.vercel.app",
         P2_LOAD_CONFIRM: "staging",
         UAIS_DEPLOYMENT_ENV: "staging",
         VERCEL_PROJECT_ID: "prj_dcWZvGLSYNtSWN3lnTyfZPyWKgQL",
@@ -531,6 +724,7 @@ describe("P2 protected operations gates", () => {
       },
       plan: {
         healthOnly: true,
+        userRamp: [5, 20, 50, 100, 200],
         healthSamples: 15,
         healthIntervalSeconds: 60,
       },
@@ -573,4 +767,22 @@ function sliceBetween(source: string, start: string, end: string) {
   expect(startIndex).toBeGreaterThan(-1);
   expect(endIndex).toBeGreaterThan(startIndex);
   return source.slice(startIndex, endIndex);
+}
+
+function writeClosureManifest(
+  directory: string,
+  mutate?: (manifest: ClosureManifestFixture) => void,
+) {
+  const manifest = JSON.parse(
+    readFileSync(
+      "coordination/reports/p2/current-candidate-closure.json",
+      "utf8",
+    ),
+  ) as ClosureManifestFixture;
+  manifest.candidate.gitSha = repositoryHeadSha;
+  manifest.candidate.deployment.gitSha = repositoryHeadSha;
+  mutate?.(manifest);
+  const manifestPath = join(directory, "current-candidate-closure.json");
+  writeFileSync(manifestPath, JSON.stringify(manifest));
+  return manifestPath;
 }

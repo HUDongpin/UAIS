@@ -1,8 +1,7 @@
 # UAIS P2 Current Accessibility Report
 
-Evidence date: 2026-08-22 Asia/Hong_Kong
-Planning baseline: `fd09ef322d14316cabaf8cc6d33f23dacc0b61b3`
-Validated P2 code SHA: `6e48ea8491a1542f54a2fff084f19fac1422c646`
+Evidence date: 2026-08-23 Asia/Hong_Kong
+Clean deployed Git SHA: `0e156b25b7b9a003a07b7f94cf7c8f8d7323ec3e`
 Standard: WCAG 2.2 AA
 Automated Chromium status: `PASS`
 Complete production accessibility status: `BLOCKED_ENV`
@@ -11,13 +10,14 @@ Complete production accessibility status: `BLOCKED_ENV`
 
 | ID | Status | Check | Command or manual step | Evidence path | Failure or residual boundary | Responsible roles | Next step | Blocks production |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| P2-A11Y-01 | `PASS` | axe scan of core pages and UI states | `npm run test:p2:a11y`; redacted JSON reporter verification | `tests/p2/browser/accessibility.spec.ts`; ignored `.tmp/p2-a11y-results.json` during review | 20/20 tests passed; 72 state attachments across 18 unique states; critical 0, serious 0, moderate 0, minor 0, unknown 0 | S09/S11 | Re-run unchanged candidate against staging | Yes if regressed |
+| P2-A11Y-01 | `PASS` | axe scan of core pages and UI states | Fresh `npm run test:p2:a11y`; redacted JSON reporter verification | `tests/p2/browser/accessibility.spec.ts`; ignored `.tmp/p2-a11y-results.json` during review | 20/20 tests passed across desktop/mobile and both locales; critical 0, serious 0, moderate 0, minor 0, unknown 0 | S09/S11 | Re-run through the exact immutable deployment after an approved protection bypass is available | Yes until staging/manual evidence |
 | P2-A11Y-02A | `PASS` | Automated keyboard/focus regressions: skip link, mobile nav, dialog trap/Escape/restore, composer Enter/Shift+Enter, and focus retention | `npm run test:p2:e2e`; `npm test` | browser and focused regression tests in `tests/p2/browser/` and `tests/` | Automation passed, but it is support evidence rather than a manual keyboard sign-off | S01/S05/S09/S11 | Preserve tests and perform human-only keyboard journey | Yes until P2-A11Y-02B passes |
 | P2-A11Y-02B | `NOT_RUN` | Human keyboard-only completion of every core journey and visual/order review | Manual checklist below | This report | No qualified manual pass recorded | S09/S11 | Execute in both locales on desktop and mobile-width layouts | Yes |
-| P2-A11Y-03 | `NOT_RUN` | VoiceOver + Safari complete student and teacher journeys | Manual macOS checklist below | This report | Safari/VoiceOver session not performed; Chromium automation cannot substitute | S09/S11 | Record redacted versions, date, SHA, steps, and results | Yes |
-| P2-A11Y-04 | `BLOCKED_ENV` | NVDA + Chrome complete student and teacher journeys | Windows checklist below | This report | Current host is macOS and has no Windows/NVDA execution surface | S09/S11 | Run on an authorized Windows host | Yes |
+| P2-A11Y-03 | `NOT_RUN` | VoiceOver + Safari complete student and teacher journeys | Manual macOS checklist below | This report | macOS 26.5.2, Safari 26.5.2, and VoiceOver 10 are installed, but there are no approved staging identities/bypass. VoiceOver was not started: a computer-accessibility tree is not a VoiceOver utterance attestation and cannot complete the student/teacher journeys | S09/S11 | Supply approved staging identities/bypass and execute the human checklist with sanitized utterance observations | Yes |
+| P2-A11Y-04 | `BLOCKED_ENV` | NVDA + Chrome complete student and teacher journeys | Windows checklist below | This report | Current host is macOS; no Windows host, QEMU, VirtualBox, Parallels, or UTM execution surface is available | S09/S11 | Run on an authorized Windows host | Yes |
 | P2-A11Y-05 | `NOT_RUN` | 200% text zoom/reflow, reduced motion, target size, and non-color cues | Manual responsive checklist below | This report | Automated viewport/axe coverage does not prove these perceptual checks | S06/S09/S11 | Complete and attach redacted observations | Yes |
 | P2-A11Y-06 | `PASS` | No blanket axe suppression or unscoped waiver | Review of Playwright configuration and axe tests | `playwright.p2.config.ts`; `tests/p2/browser/accessibility.spec.ts` | No global axe rule was disabled; no waiver is active | S09/S11 | Any future waiver must be element-scoped and time-bounded | Yes if regressed |
+| P2-A11Y-07 | `BLOCKED_ENV` | Exact immutable staging browser matrix | Remote Playwright against the same deployment ID/SHA | This report | Deployment exists and health passes, but browser access requires an approved Vercel protection bypass and staging identities | S09/S11/S22 | Run after approved source intake | Yes |
 
 ## Automated coverage and impact totals
 

@@ -1,51 +1,46 @@
-# UAIS P2 Current Release Gate
+# UAIS P2 current release gate
 
-Evidence date: 2026-08-22 Asia/Hong_Kong
-Planning baseline: `fd09ef322d14316cabaf8cc6d33f23dacc0b61b3`
-Validated P2 code SHA: `6e48ea8491a1542f54a2fff084f19fac1422c646`
-Current completion boundary: `local automated validated`
-Staging validation: `BLOCKED_ENV`
-Ready for production: `BLOCKED_ENV`
+Evidence date: 2026-08-23 Asia/Hong_Kong
 
-| ID | Status | Gate and evidence | Failure or residual boundary | Responsible roles | Next step | Blocks production |
-| --- | --- | --- | --- | --- | --- | --- |
-| P2-GIT-01 | `PASS` | S10 isolation commit `0eb5f1d`; isolated branch/worktree; P2 code commits `2466851`, `ccfb90a`, and `6e48ea8` | Local commits only; final documentation commit remains to be created | S10/S25 | Use exact pathspec and prove both worktrees clean | Yes if regressed |
-| P2-LOCAL-01 | `PASS` | `npm run lint` | No errors | S10/S11 | Preserve | Yes if regressed |
-| P2-LOCAL-02 | `PASS` | `npm test`: five bounded sequential shards; 197 files; 2,717 passed; 18 conditional skips | Default lane is local/offline; external integration is deliberately separate | S10/S11 | Preserve classification/deadlines | Yes if regressed |
-| P2-LOCAL-03 | `PASS` | `npm run test:critical`: 6 files, 106/106 passed | No local failure | S11 | Re-run unchanged candidate | Yes if regressed |
-| P2-LOCAL-04 | `PASS` | `npm run build`: Next.js 16.2.9, TypeScript pass, 24/24 static pages | No local failure | S10/S22 | Re-run unchanged candidate | Yes if regressed |
-| P2-LOCAL-05 | `PASS` | Aggregate `npm run test:p2:gate` | All bounded stages passed in order: lint, default tests, critical, build, E2E, axe, Lighthouse, and evidence validation | S10/S11/S22 | Preserve the exact aggregate contract | Yes if regressed |
-| P2-UX-01 | `PASS` | `npm run test:p2:e2e`: 50 passed, 2 expected desktop skips, 0 failed across desktop/mobile and both locales | Staging auth/data/runtime not exercised | Route owners/S11 | Repeat on isolated staging | Yes until staging proof |
-| P2-A11Y-01 | `PASS` | `npm run test:p2:a11y`: 20/20 passed, 72 state attachments across 18 unique states, zero axe violations at all impact levels | Chromium automation is not a human assistive-technology sign-off | S09/S11 | Re-run staging and complete manual gates | Yes until manual/staging proof |
-| P2-A11Y-02 | `NOT_RUN` | Human keyboard-only matrix | No qualified manual run recorded | S09/S11 | Execute both locales and key responsive states | Yes |
-| P2-A11Y-03 | `NOT_RUN` | VoiceOver + Safari student/teacher journeys | No manual run recorded | S09/S11 | Execute checklist in `current-a11y.md` | Yes |
-| P2-A11Y-04 | `BLOCKED_ENV` | NVDA + Chrome student/teacher journeys | No Windows/NVDA host is available in the current environment | S09/S11 | Execute on authorized Windows host | Yes |
-| P2-A11Y-05 | `NOT_RUN` | 200% reflow, reduced-motion, target-size, and color-cue review | Human perceptual review not recorded | S06/S09/S11 | Complete manual checklist | Yes |
-| P2-PERF-01 | `PASS` | `npm run test:p2:performance`: five local pages meet Lighthouse score/LCP/CLS/TBT budgets | Local laboratory only | S06/S11 | Repeat on isolated staging | Yes until staging/INP proof |
-| P2-PERF-02 | `NOT_RUN` | INP p75 ≤ 200 ms | No field or bounded repeated-interaction p75 evidence; TBT is not a substitute | S06/S11/S22 | Collect approved staging/analytics evidence | Yes |
-| P2-EXT-01 | `BLOCKED_ENV` | `npm run test:external` | Isolated `UAIS_CORE_DATABASE_URL` absent; explicit lane exited before tests | S11/S12/S22 | Run only against proven staging database | Yes |
-| P2-STAGE-01 | `BLOCKED_ENV` | Independent `uais-staging` project, database, secrets, and canonical URL | No external staging resources were created or modified | S19/S22 | Provision and prove isolation with redacted IDs | Yes |
-| P2-LOAD-01 | `BLOCKED_ENV` | Actual 200-user invite/group load and zero-residual cleanup | Guard/dry-run pass; no actual staging executor or data | S11/S14/S22 | Run only after isolation proof | Yes |
-| P2-AI-01 | `BLOCKED_ENV` | At most three real-provider requests with budget/rate/timeout/monitoring controls | No approved UAIS credential source or control-plane proof | S07/S19/S22 | Obtain separate owner authorization if still required | Yes |
-| P2-OPS-01 | `BLOCKED_ENV` | Fifteen-minute health checks and alert trigger/recovery | No staging deployment/monitoring path | S19/S22 | Execute on isolated staging | Yes |
-| P2-OPS-02 | `BLOCKED_ENV` | Backup/snapshot restore into a new target | No isolated database/snapshot target | S12/S22 | Execute and record RPO/RTO/counts | Yes |
-| P2-OPS-03 | `BLOCKED_ENV` | Twenty-four-hour staging observation | No candidate staging deployment | S11/S22 | Start after earlier staging gates pass | Yes |
-| P2-SEC-01 | `INHERITED_DEBT` | `npm audit`: 1 low, 14 moderate, 24 high, 1 critical | Reachability/upgrade triage is incomplete; no forced dependency change was made | S10/S22/security owner | Close or explicitly mitigate all production-relevant findings | Yes |
-| P2-EVID-01 | `PASS` | Seven canonical current reports contain only allowed status terms and redacted evidence | Must be rechecked after the final report update | S10/S11 | Run `node scripts/p2-evidence-check.mjs` | Yes if regressed |
-| P2-EVID-02 | `PASS` | `npm run release:package-gate` with an eight-line exact pathspec file | 8 dirty entries matched 8 pathspecs; zero missing, stale, duplicate, wildcard, mismatch, or retained intermediate-map findings; `releaseReady` correctly remained false | S10/S22/S25 | Stage exactly the same eight paths | Yes if regressed |
-| P2-PROD-01 | `BLOCKED_ENV` | Push, merge, deployment, alias, production migration, live smoke, and production observation | Explicitly outside current authorization; none occurred | Release owner/S22/S25 | Seek separate authorization only after all blocking gates pass | Yes |
+- Clean deployed Git SHA: `0e156b25b7b9a003a07b7f94cf7c8f8d7323ec3e`.
+- Clean Git-archive SHA-256: `8e1f2bf51939b220e3032e41cdeb294ccfc40b9e45a810028df13ccdb1d660f2`.
+- Isolated immutable staging deployment: `dpl_8yQGJ5irPzpfnJU8aCLpJ9DRNrVi` in the `uais-staging` project.
+- Current completion boundary: `same-SHA staging deployment and health verified; external acceptance incomplete`.
+- Ready for production: `BLOCKED_ENV`.
+
+The deployed SHA remains clean and immutable. A later local working-tree patch
+adds a fail-closed `5 -> 20 -> 50 -> 100 -> 200` load ramp and exact-deployment
+targeting; that patch is not deployed and is not represented as staging
+evidence.
+
+## Current gate ledger
+
+| Gate | Status | Fresh evidence | Remaining boundary |
+| --- | --- | --- | --- |
+| Candidate local suite | `PASS` | Deterministic `npm test` passed all five shards: 2,885 passed, 20 conditionally skipped, zero failed; lint passed with zero errors and one pre-existing warning; Next.js 16.3.2 build and 24 static pages passed | External integrations are excluded from this local classification |
+| Isolated same-SHA deployment | `PASS` | Vercel control-plane state `READY`; deployment metadata matches the exact Git SHA and archive hash above | The staging project uses its own production target; this is not the production `uais` project or `uais.top` |
+| Fifteen-minute deployment health | `PASS` | 16/16 immutable-deployment `/healthz` samples passed over 961 seconds; app, database, and migrations all returned `ok` | CLI end-to-end p95 4,587 ms includes CLI startup/auth and is not field or route-performance acceptance |
+| Machine closure ledger | `BLOCKED_ENV` | `release:p2:closure` validates the exact SHA/deployment binding, all 11 requested gates, all 11 teacher workspaces, and all 7 credential-source categories without network or secret values; it reports only gate 2 as `PASS` | It deliberately exits 2 until all remaining gates pass, every workspace is `real-complete`, approved source handles are recorded, and the local overlay is deployed |
+| Dedicated DB suite | `BLOCKED_ENV` | Fresh `npm run test:db` exited 2 with `dedicated-db-test-database-url-required` | No approved usable `UAIS_DB_TEST_DATABASE_URL`; this is not `PASS` |
+| Current restore/recovery | `BLOCKED_ENV` | Historical load/restore JSON remains preserved and classified as historical; the retained current-candidate restore result is not a pass | Execute exact-deployment PITR and OSS recovery plus relationship/count/migration checks |
+| Credential-source closure | `BLOCKED_ENV` | Redacted presence-only inventory performed | Owner-approved UAIS sources are still unrecorded for OSS, Function Compute, DirectMail, DeepSeek/DashScope, LRS, DB, and deployment credentials |
+| Real provider/data journeys | `BLOCKED_ENV` | 4 local/mock contract files, 244 tests passed for failover, outbox retry, export, local restore, and disposable voice revoke | Real provider, mail, OSS, KB, export, narration, and voice-revocation execution remains absent |
+| Five-stage load | `BLOCKED_ENV` | Local harness and gates implement cumulative 5, 20, 50, 100, 200 invite/join stages and final 200-user group load | Not executed against an approved guarded DB and the exact deployment; no live thresholds or zero-residue proof |
+| Failure/replay/deletion drills | `BLOCKED_ENV` | Local failure and retry contracts pass | No current PITR, OSS restore, live job replay, provider outage, or delete-reconciliation drill |
+| Human accessibility and field INP | `NOT_RUN` | Existing automated Chromium/axe and laboratory evidence is retained as local evidence only. Safari and VoiceOver are installed locally, but no approved staging identities/bypass or human utterance attestation exists; no Windows/NVDA surface or field-INP data source is available | Safari + VoiceOver, Windows + NVDA, and field INP p75 remain open |
+| Production journey/SHA/readback | `NOT_RUN` | Read-only audit binds current `uais.top` deployment and `origin/main` to `fd09ef322d14316cabaf8cc6d33f23dacc0b61b3`; this differs from candidate `0e156b25b7b9a003a07b7f94cf7c8f8d7323ec3e`. No authenticated journey, DB/OSS readback, or mutation occurred | Requires separate immediate owner authorization after the other blocking gates close |
+| Full Wave 1-5 domain acceptance | `BLOCKED_ENV` | Source implements substantial domain projections and fail-closed adapters | Course ACL, collaborators, relational backfill, structured content, KB, agents, formative grades, analytics, export, and voice are not fully externally verified |
+| Eleven teacher workspaces | `BLOCKED_ENV` | Current ledger explicitly marks every workspace `implemented-unverified` | No workspace may be promoted to `real-complete` from local UI/contract evidence alone |
 
 ## Boundary decision
 
-The candidate has reached `local automated validated`: deterministic local
-quality, browser journeys, axe, and Lighthouse laboratory checks pass. It has
-not reached `staging validated` because no isolated Vercel project/database was
-provisioned or exercised. It is not `ready for production` because manual
-keyboard, VoiceOver, NVDA, reflow/target checks, INP p75, external DB tests,
-actual load, monitoring/alerts, recovery, 24-hour observation, and dependency
-risk triage remain open.
+The current candidate has a real isolated, immutable same-SHA staging
+deployment and a fresh 15-minute health observation. It has not completed the
+dedicated DB, current restore, credential-source, real-provider, five-stage
+load, recovery/failure, human AT, field INP, production, or full-domain gates.
+No push, merge, production project deployment, production migration, domain
+change, production login, paid-provider call, email, OSS write, or production
+feature-flag change was performed.
 
-Groups remain off in production. No push, merge, deployment, production
-migration, domain/alias change, production smoke, or live-provider request has
-occurred. Allowed ledger statuses are `PASS`, `FAIL`, `BLOCKED_ENV`, `NOT_RUN`,
-and `INHERITED_DEBT`; a local `PASS` never substitutes for an external gate.
+Historical JSON, a local `PASS`, Vercel `READY`, or a passing health endpoint
+cannot substitute for the unresolved gates above.

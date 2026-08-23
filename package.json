@@ -25,6 +25,7 @@
     "db:migrate:deploy": "node scripts/apply-core-migrations.mjs --deploy",
     "release:dirty-map": "node scripts/release-dirty-map.mjs",
     "release:clean-check": "node scripts/release-clean-check.mjs",
+    "release:p2:closure": "node scripts/p2-current-candidate-closure-gate.mjs",
     "release:chatroom-readiness": "node scripts/chatroom-production-readiness.mjs",
     "release:package-gate": "node scripts/enterprise-runthrough-package-gate.mjs",
     "ai:provider:smoke": "node scripts/ai-provider-smoke.mjs --dry-run",

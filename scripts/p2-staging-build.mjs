@@ -10,6 +10,7 @@ import postgres from "postgres";
 
 const expectedStagingProjectId = "prj_dcWZvGLSYNtSWN3lnTyfZPyWKgQL";
 const productionNeonProjectId = "late-sunset-59152574";
+const guardOnly = process.argv.includes("--guard-only");
 const sourceDatabaseUrl =
   process.env.UAIS_P2_STAGING_DATABASE_URL?.trim() ?? "";
 const restoreDatabaseUrl =
@@ -91,6 +92,44 @@ if (databaseGuardReasons.length > 0) {
   process.exit(2);
 }
 
+if (guardOnly) {
+  const [sourceMigrationLedger, restoreMigrationLedger] = await Promise.all([
+    inspectMigrationLedger(sourceDatabaseUrl),
+    inspectMigrationLedger(restoreDatabaseUrl),
+  ]);
+  const migrationLedgerReady =
+    sourceMigrationLedger.ready && restoreMigrationLedger.ready;
+  process.stdout.write(
+    `${JSON.stringify({
+      target: "p2-isolated-staging-database-guard",
+      status: migrationLedgerReady ? "PASS" : "BLOCKED_ENV",
+      source: {
+        guard: "PASS",
+        migrationLedger: sourceMigrationLedger.ready ? "PASS" : "BLOCKED_ENV",
+        appliedMigrationCount: sourceMigrationLedger.appliedMigrationCount,
+      },
+      restore: {
+        guard: "PASS",
+        migrationLedger: restoreMigrationLedger.ready ? "PASS" : "BLOCKED_ENV",
+        appliedMigrationCount: restoreMigrationLedger.appliedMigrationCount,
+      },
+      blockedReasons: migrationLedgerReady
+        ? []
+        : ["source-or-restore-migration-ledger-required"],
+      valuesRedacted: true,
+      safety: {
+        readOnly: true,
+        urlsOmitted: true,
+        identifiersOmitted: true,
+        noMutationPerformed: true,
+        migrationsRun: false,
+        buildRun: false,
+      },
+    })}\n`,
+  );
+  process.exit(migrationLedgerReady ? 0 : 2);
+}
+
 const sourceEnv = createDatabaseEnv(sourceDatabaseUrl);
 const restoreEnv = createDatabaseEnv(restoreDatabaseUrl);
 
@@ -136,6 +175,35 @@ async function assertDatabaseGuard(databaseUrl, environment) {
     return rows.length === 1;
   } catch {
     return false;
+  } finally {
+    await sql.end({ timeout: 5 }).catch(() => undefined);
+  }
+}
+
+async function inspectMigrationLedger(databaseUrl) {
+  const sql = postgres(databaseUrl, {
+    max: 1,
+    prepare: false,
+    connect_timeout: 10,
+  });
+  try {
+    const tableRows = await sql`
+      SELECT to_regclass('public.uais_schema_migrations') IS NOT NULL AS ready
+    `;
+    if (tableRows[0]?.ready !== true) {
+      return { ready: false, appliedMigrationCount: null };
+    }
+    const countRows = await sql`
+      SELECT count(*)::int AS count
+      FROM uais_schema_migrations
+    `;
+    return {
+      ready: true,
+      appliedMigrationCount:
+        typeof countRows[0]?.count === "number" ? countRows[0].count : null,
+    };
+  } catch {
+    return { ready: false, appliedMigrationCount: null };
   } finally {
     await sql.end({ timeout: 5 }).catch(() => undefined);
   }

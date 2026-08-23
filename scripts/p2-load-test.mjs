@@ -5,6 +5,7 @@ const productionHostnames = new Set([
   "www.uais.top",
   "uais.vercel.app",
 ]);
+const userRamp = Object.freeze([5, 20, 50, 100, 200]);
 
 const options = parseArgs(process.argv.slice(2));
 const baseUrl = process.env.P2_LOAD_BASE_URL?.trim();
@@ -50,6 +51,7 @@ const scenarios = [
   {
     id: "invite-join",
     users: 200,
+    userRamp,
     maxRetriesPerUser: 2,
     successRateMinimum: 0.99,
     serverErrorRateMaximum: 0.005,

@@ -43,8 +43,9 @@ const expectedStagingProjectId = "prj_dcWZvGLSYNtSWN3lnTyfZPyWKgQL";
 const productionProjectId = "prj_MZIjawDPTU4tj4yuTBsd9hyLxHXA";
 const productionNeonProjectId = "late-sunset-59152574";
 const productionHostnames = new Set(["uais.top", "www.uais.top", "uais.vercel.app"]);
-const requiredStagingHostname = "staging.uais.top";
-const expectedUserCount = 200;
+const mutableStagingAlias = "staging.uais.top";
+const expectedUserRamp = Object.freeze([5, 20, 50, 100, 200]);
+const expectedUserCount = expectedUserRamp.at(-1);
 const expectedGroupCount = 40;
 const expectedGroupSize = 5;
 const expectedLoadDurationSeconds = 600;
@@ -98,6 +99,8 @@ const candidateContentSha =
 const deploymentId = process.env.P2_DEPLOYMENT_ID?.trim() ?? "";
 const immutableDeploymentUrl =
   process.env.P2_IMMUTABLE_DEPLOYMENT_URL?.trim() ?? "";
+const vercelProtectionBypassSecret =
+  process.env.P2_VERCEL_PROTECTION_BYPASS_SECRET?.trim() ?? "";
 const evidenceBindingReasons = validateEvidenceBinding();
 const executionBoundaryReasons = healthOnly
   ? validateHealthExecutionBoundary()
@@ -112,7 +115,7 @@ if (dryRun || blockedReasons.length > 0) {
     status: blockedReasons.length === 0 ? "PASS" : "BLOCKED_ENV",
     failureCode:
       evidenceBindingReasons.length > 0 ? "UNBOUND_EVIDENCE" : undefined,
-    mode: "dry-run",
+    mode: dryRun ? "dry-run" : "preflight",
     phase: healthOnly ? "health-only" : "load-and-restore",
     blockedReasons,
     evidenceBinding:
@@ -122,6 +125,7 @@ if (dryRun || blockedReasons.length > 0) {
     plan: {
       healthOnly,
       users: expectedUserCount,
+      userRamp: expectedUserRamp,
       groups: expectedGroupCount,
       usersPerGroup: expectedGroupSize,
       durationSeconds: expectedLoadDurationSeconds,
@@ -332,32 +336,71 @@ try {
     studentLogins.map((login) => [login.account, login]),
   );
 
-  currentStage = "invite-join";
-  const joins = await mapLimit(
-    studentLogins,
-    joinConcurrency,
-    async (login, index) =>
-      requestWithRetries({
-        id: `join-${index + 1}`,
-        expectedStatus: 201,
-        run: () =>
-          fetch(`${baseUrl}/api/teaching/invite-codes/${loadFixture.classItem.invitationCode}/join`, {
-            method: "POST",
-            headers: {
-              accept: "application/json",
-              cookie: login.cookie,
-              "x-uais-trace-id": `${runId}-join-${index + 1}`,
-            },
-            signal: AbortSignal.timeout(20_000),
-          }),
-      }),
-  );
+  const joins = [];
+  const joinStages = [];
+  let previousTargetUsers = 0;
+  for (const targetUsers of expectedUserRamp) {
+    currentStage = `invite-join-ramp-${targetUsers}`;
+    const stageLogins = studentLogins.slice(previousTargetUsers, targetUsers);
+    const stageJoins = await mapLimit(
+      stageLogins,
+      joinConcurrency,
+      async (login, stageIndex) => {
+        const userIndex = previousTargetUsers + stageIndex;
+        return requestWithRetries({
+          id: `join-${userIndex + 1}`,
+          expectedStatus: 201,
+          run: () =>
+            stagingFetch(
+              `${baseUrl}/api/teaching/invite-codes/${loadFixture.classItem.invitationCode}/join`,
+              {
+                method: "POST",
+                headers: {
+                  accept: "application/json",
+                  cookie: login.cookie,
+                  "x-uais-trace-id": `${runId}-join-${userIndex + 1}`,
+                },
+                signal: AbortSignal.timeout(20_000),
+              },
+            ),
+        });
+      },
+    );
+    joins.push(...stageJoins);
+    const stageMetrics = summarizeMetrics(stageJoins);
+    const stage = {
+      status: metricsPass(stageMetrics) ? "PASS" : "FAIL",
+      targetUsers,
+      addedUsers: stageLogins.length,
+      concurrency: joinConcurrency,
+      ...stageMetrics,
+    };
+    joinStages.push(stage);
+    emitProgress("invite-join-ramp-stage-complete", stage);
+    report.scenarioA = {
+      status: stage.status === "PASS" ? "IN_PROGRESS" : "FAIL",
+      users: targetUsers,
+      finalUsers: expectedUserCount,
+      userRamp: expectedUserRamp,
+      concurrency: joinConcurrency,
+      maximumAttempts: maximumLogicalAttempts,
+      stages: joinStages,
+      ...summarizeMetrics(joins),
+    };
+    if (!metricsPass(stageMetrics)) {
+      throw new P2ExecutionError(`invite-join-ramp-${targetUsers}-threshold-failed`);
+    }
+    previousTargetUsers = targetUsers;
+  }
   const joinMetrics = summarizeMetrics(joins);
   report.scenarioA = {
     status: metricsPass(joinMetrics) ? "PASS" : "FAIL",
     users: expectedUserCount,
+    finalUsers: expectedUserCount,
+    userRamp: expectedUserRamp,
     concurrency: joinConcurrency,
     maximumAttempts: maximumLogicalAttempts,
+    stages: joinStages,
     ...joinMetrics,
   };
   if (!metricsPass(joinMetrics)) {
@@ -430,7 +473,7 @@ try {
             expectedStatus: 200,
             validateBody: (body) => body?.transcript?.status === "persisted",
             run: () =>
-              fetch(`${baseUrl}/api/learning/chatroom`, {
+              stagingFetch(`${baseUrl}/api/learning/chatroom`, {
                 method: "POST",
                 headers: {
                   accept: "application/json",
@@ -843,7 +886,7 @@ async function seedCoreRelationshipFixture(userIdsByAccount) {
 
 async function loginAccount(account, password) {
   const started = performance.now();
-  const response = await fetch(`${baseUrl}/api/auth/app-session`, {
+  const response = await stagingFetch(`${baseUrl}/api/auth/app-session`, {
     method: "POST",
     headers: { accept: "application/json", "content-type": "application/json" },
     body: JSON.stringify({ account, password }),
@@ -1392,7 +1435,7 @@ async function observeHealth(signal) {
     if (signal.aborted) break;
     const started = performance.now();
     try {
-      const response = await fetch(`${baseUrl}/healthz`, {
+      const response = await stagingFetch(`${baseUrl}/healthz`, {
         headers: { accept: "application/json" },
         cache: "no-store",
         signal: AbortSignal.any([signal, AbortSignal.timeout(20_000)]),
@@ -1489,7 +1532,6 @@ function validateEvidenceBinding() {
         url.protocol !== "https:" ||
         !hostname.endsWith(".vercel.app") ||
         productionHostnames.has(hostname) ||
-        hostname === requiredStagingHostname ||
         url.username ||
         url.password ||
         url.pathname !== "/" ||
@@ -1559,25 +1601,50 @@ function validateExecutionBoundary() {
 function validateHealthExecutionBoundary() {
   const reasons = [];
   let hostname = "";
+  let targetOrigin = "";
+  let immutableOrigin = "";
   try {
     const url = new URL(baseUrlValue);
     hostname = url.hostname.toLowerCase();
+    targetOrigin = url.origin.toLowerCase();
     if (url.protocol !== "https:") reasons.push("staging-target-must-use-https");
+    if (
+      url.username ||
+      url.password ||
+      url.pathname !== "/" ||
+      url.search ||
+      url.hash
+    ) {
+      reasons.push("invalid-P2_LOAD_BASE_URL");
+    }
   } catch {
     reasons.push("invalid-P2_LOAD_BASE_URL");
   }
+  try {
+    immutableOrigin = new URL(immutableDeploymentUrl).origin.toLowerCase();
+  } catch {
+    // The evidence-binding validator records the missing or malformed URL.
+  }
   if (!baseUrlValue) reasons.push("missing-P2_LOAD_BASE_URL");
   if (process.env.P2_LOAD_CONFIRM !== "staging") reasons.push("missing-P2_LOAD_CONFIRM");
-  if (!allowlist.has(requiredStagingHostname) || !allowlist.has(hostname)) {
+  if (!allowlist.has(hostname)) {
     reasons.push("hostname-not-allowlisted");
+  }
+  if (hostname && !hostname.endsWith(".vercel.app")) {
+    reasons.push("immutable-vercel-deployment-host-required");
+  }
+  if (targetOrigin && immutableOrigin && targetOrigin !== immutableOrigin) {
+    reasons.push("immutable-deployment-target-required");
+  }
+  if (!dryRun && !vercelProtectionBypassSecret) {
+    reasons.push("missing-P2_VERCEL_PROTECTION_BYPASS_SECRET");
   }
   if (
     productionHostnames.has(hostname) ||
-    (hostname.endsWith(".uais.top") && hostname !== requiredStagingHostname)
+    (hostname.endsWith(".uais.top") && hostname !== mutableStagingAlias)
   ) {
     reasons.splice(0, reasons.length, "production-hostname-rejected");
   }
-  if (hostname && hostname !== requiredStagingHostname) reasons.push("canonical-staging-host-required");
   if (process.env.UAIS_DEPLOYMENT_ENV !== "staging") reasons.push("staging-deployment-marker-missing");
   if (process.env.VERCEL_PROJECT_ID !== expectedStagingProjectId) {
     reasons.push("isolated-staging-project-id-mismatch");
@@ -1642,9 +1709,20 @@ function metricsPass(metrics) {
 }
 
 async function fetchJson(url, options) {
-  const response = await fetch(url, options);
+  const response = await stagingFetch(url, options);
   const body = await response.json().catch(() => undefined);
   return { status: response.status, body, headers: response.headers };
+}
+
+function stagingFetch(url, options = {}) {
+  const headers = new Headers(options.headers);
+  if (vercelProtectionBypassSecret) {
+    headers.set(
+      "x-vercel-protection-bypass",
+      vercelProtectionBypassSecret,
+    );
+  }
+  return fetch(url, { ...options, headers });
 }
 
 function readCookieHeader(response) {
@@ -1703,6 +1781,8 @@ function createSafetyRecord(networkUsed) {
     isolatedStagingProjectRequired: true,
     productionProjectRejected: true,
     productionHostnamesRejected: true,
+    immutableDeploymentTargetRequired: true,
+    vercelProtectionBypassRequiredForExecution: true,
     productionNeonProjectRejected: true,
     distinctRestoreTargetRequired: true,
     explicitStagingConfirmationRequired: true,

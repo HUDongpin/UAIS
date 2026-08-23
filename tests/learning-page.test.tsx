@@ -1515,7 +1515,7 @@ describe("LearningPage", () => {
       "/api/learning/ppt-playback/audio/audio-manifest-elementary-math-research-natural-number-ordinal-theory-ppt1/tts_natural-number-ordinal-theory-ppt1_slide-01",
     );
     expect(audio?.getAttribute("controls")).toBeNull();
-    expect(audio?.playbackRate).toBe(1.25);
+    await waitFor(() => expect(audio?.playbackRate).toBe(1.25));
     fireEvent.click(screen.getByRole("button", { name: /1\.25 倍/ }));
     expect(audio?.playbackRate).toBe(1);
     expect(screen.getByRole("button", { name: /1 倍/ }).textContent).toBe("1 倍");
