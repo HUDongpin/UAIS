@@ -31,6 +31,7 @@ import type {
   TeacherClassItem,
   TeacherClassMembershipItem,
 } from "@/lib/teaching/course-readback";
+import type { TeacherGroupSuggestionDraft } from "./group-suggestion-review";
 import {
   learningGroupMaxMembers,
   learningGroupMinMembers,
@@ -50,7 +51,10 @@ export type ApprovedCourseMember = {
 };
 
 type LearningGroupDialogState =
-  | { mode: "create" }
+  | {
+      mode: "create";
+      suggestion?: TeacherGroupSuggestionDraft["suggestedGroups"][number];
+    }
   | { mode: "edit"; group: TeachingLearningGroupItem };
 
 export function createLearningGroupChatroomHref(group: {
@@ -104,6 +108,8 @@ export function LearningGroupManager({
   onUpdateGroup,
   onDeleteGroup,
   onAutoSplitGroups,
+  pendingSuggestion,
+  onSuggestionApplied,
 }: {
   course: TeacherCourse;
   classes: TeacherClassItem[];
@@ -117,6 +123,8 @@ export function LearningGroupManager({
   onUpdateGroup: (groupId: string, patch: TeachingLearningGroupPatch) => Promise<void>;
   onDeleteGroup: (groupId: string) => Promise<void>;
   onAutoSplitGroups: (input: { groupSize: number }) => Promise<void>;
+  pendingSuggestion?: TeacherGroupSuggestionDraft;
+  onSuggestionApplied?: (suggestionKey: string) => void;
 }) {
   const t = copy[locale].teaching;
   const courseTitle = localizedText(course.title, locale);
@@ -144,6 +152,24 @@ export function LearningGroupManager({
   const ungroupedMemberCount = approvedMembers.filter(
     (member) => !groupNamesByStudentId[member.studentId],
   ).length;
+  const approvedMemberIds = useMemo(
+    () => new Set(approvedMembers.map((member) => member.studentId)),
+    [approvedMembers],
+  );
+  const reviewableSuggestedGroups =
+    pendingSuggestion?.courseId === course.id
+      ? pendingSuggestion.suggestedGroups.map((suggestion) => {
+          const eligibleMemberCount = suggestion.members.filter(
+            (member) =>
+              approvedMemberIds.has(member.studentId) &&
+              !groupNamesByStudentId[member.studentId],
+          ).length;
+          return {
+            ...suggestion,
+            unavailableMemberCount: suggestion.members.length - eligibleMemberCount,
+          };
+        })
+      : [];
 
   async function runAutoSplit() {
     if (!isAutoSplitSizeValid || isAutoSplitting) {
@@ -200,6 +226,69 @@ export function LearningGroupManager({
         </button>
       </div>
       <p className="mt-2 text-sm leading-6 text-[var(--muted)]">{t.groupPanelSummary}</p>
+
+      {reviewableSuggestedGroups.length > 0 ? (
+        <section
+          aria-label={
+            locale === "zh-CN" ? "待教师复核的分组建议" : "Group suggestions awaiting teacher review"
+          }
+          data-uais-pending-group-suggestions={pendingSuggestion?.receiptId}
+          className="mt-4 rounded-xl border border-[var(--accent-border)] bg-[var(--accent-soft)] px-4 py-4"
+        >
+          <h5 className="text-sm font-semibold text-[var(--foreground)]">
+            {locale === "zh-CN"
+              ? "待教师复核的分组建议"
+              : "Group suggestions awaiting teacher review"}
+          </h5>
+          <p className="mt-1 text-sm leading-6 text-[var(--muted)]">
+            {locale === "zh-CN"
+              ? "建议尚未分配任何学生。请逐组打开草稿，核对名称和成员，再由教师提交创建。"
+              : "No students have been assigned. Open each draft, review its name and members, then submit it as the teacher."}
+          </p>
+          <div className="mt-3 space-y-2">
+            {reviewableSuggestedGroups.map((suggestion) => (
+              <article
+                key={suggestion.suggestionKey}
+                className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-3"
+              >
+                <div>
+                  <p className="text-sm font-semibold text-[var(--foreground)]">
+                    {suggestion.groupName}
+                  </p>
+                  <p className="mt-1 text-sm text-[var(--muted)]">
+                    {suggestion.members.map((member) => member.studentDisplayName).join("、")}
+                  </p>
+                  {suggestion.unavailableMemberCount > 0 ? (
+                    <p className="mt-1 text-sm font-semibold text-rose-700 dark:text-rose-200">
+                      {locale === "zh-CN"
+                        ? `${suggestion.unavailableMemberCount} 名建议成员状态已变化，请重新生成分组建议。`
+                        : `${suggestion.unavailableMemberCount} suggested member(s) changed status. Generate suggestions again.`}
+                    </p>
+                  ) : null}
+                </div>
+                <button
+                  type="button"
+                  disabled={suggestion.unavailableMemberCount > 0}
+                  aria-label={
+                    suggestion.unavailableMemberCount > 0
+                      ? locale === "zh-CN"
+                        ? `${suggestion.groupName}成员状态已变化，不能打开复核草稿`
+                        : `${suggestion.groupName} has changed members and cannot be reviewed`
+                      : locale === "zh-CN"
+                        ? `复核并创建${suggestion.groupName}`
+                        : `Review and create ${suggestion.groupName}`
+                  }
+                  className="inline-flex h-9 items-center gap-2 rounded-full border border-[var(--accent-border)] bg-[var(--surface)] px-4 text-sm font-semibold text-[var(--accent)] outline-none transition hover:bg-[var(--surface-soft)] focus-visible:ring-2 focus-visible:ring-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-60"
+                  onClick={() => setDialogState({ mode: "create", suggestion })}
+                >
+                  <PencilSimple size={16} weight="bold" />
+                  {locale === "zh-CN" ? "复核草稿" : "Review draft"}
+                </button>
+              </article>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       {isOpen ? (
         <div className="mt-4 space-y-3">
@@ -411,6 +500,14 @@ export function LearningGroupManager({
           groupNamesByStudentId={groupNamesByStudentId}
           locale={locale}
           group={dialogState.mode === "edit" ? dialogState.group : undefined}
+          suggestedGroupName={
+            dialogState.mode === "create" ? dialogState.suggestion?.groupName : undefined
+          }
+          suggestedMemberIds={
+            dialogState.mode === "create"
+              ? dialogState.suggestion?.members.map((member) => member.studentId)
+              : undefined
+          }
           onCancel={() => setDialogState(undefined)}
           onSubmit={async (draft) => {
             if (dialogState.mode === "edit") {
@@ -420,6 +517,9 @@ export function LearningGroupManager({
               });
             } else {
               await onCreateGroup(draft);
+              if (dialogState.suggestion) {
+                onSuggestionApplied?.(dialogState.suggestion.suggestionKey);
+              }
             }
             setDialogState(undefined);
           }}
@@ -460,14 +560,12 @@ export function LearningGroupDialog({
   groupNamesByStudentId,
   group,
   locale,
-  // Seam for the `generate-student-group-suggestions` receipt action: a teacher-
-  // reviewed suggestion can pre-fill the picker by passing the suggested student
-  // ids here. It stays a seam rather than a button, because plan E9 pointed the
-  // one-click path at the server's own auto-split instead: the suggestion action
-  // proposes a partition and persists no group, while auto-split applies exactly
-  // that partition in one write. Two buttons that both said "group my students"
-  // and only one of which did is what made the old one read as dead.
+  // The verified suggestion panel opens this same dialog only after an explicit
+  // teacher review click. Suggested values remain editable and submit through
+  // the normal receipt-and-readback create handler; generation itself persists
+  // no learning group. Auto-split remains a separate, explicitly labelled write.
   suggestedMemberIds,
+  suggestedGroupName,
   onCancel,
   onSubmit,
 }: {
@@ -480,12 +578,13 @@ export function LearningGroupDialog({
   group?: TeachingLearningGroupItem;
   locale: Locale;
   suggestedMemberIds?: string[];
+  suggestedGroupName?: string;
   onCancel: () => void;
   onSubmit: (draft: TeachingLearningGroupDraft) => Promise<void>;
 }) {
   const t = copy[locale].teaching;
   const isEditing = Boolean(group);
-  const [groupName, setGroupName] = useState(group?.groupName ?? "");
+  const [groupName, setGroupName] = useState(group?.groupName ?? suggestedGroupName ?? "");
   const [classId, setClassId] = useState(group?.classId ?? "");
   const [selectedMemberIds, setSelectedMemberIds] = useState<string[]>(
     () => group?.members.map((member) => member.studentId) ?? suggestedMemberIds ?? [],

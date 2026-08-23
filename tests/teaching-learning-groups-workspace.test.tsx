@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import type { AnchorHTMLAttributes, ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { TeachingPage } from "@/components/pages/teaching-page";
+import { LearningGroupManager } from "@/components/teaching/learning-group-workspace";
 
 // Phase 4 teaching-workspace group management: the course-settings Group
 // Collaboration panel lists persisted learning groups, offers the approved
@@ -240,6 +241,208 @@ function readLearningGroupPanel(container: HTMLElement) {
 }
 
 describe("teaching workspace learning group panel", () => {
+  it("requires an explicit teacher review before creating a generated group suggestion", async () => {
+    const onCreateGroup = vi.fn(async () => undefined);
+    const onSuggestionApplied = vi.fn();
+
+    render(
+      <LearningGroupManager
+        course={{
+          id: courseId,
+          title: { "zh-CN": courseName, "en-US": courseNameEn },
+          status: { "zh-CN": "进行中", "en-US": "In progress" },
+          students: 3,
+          currentFocus: { "zh-CN": "小组协作", "en-US": "Group collaboration" },
+        }}
+        classes={[
+          {
+            id: classId,
+            courseId,
+            name: "研究方法实验班",
+            students: 3,
+            semester: "2026 春季",
+            invitationCode: "66334455",
+          },
+        ]}
+        membershipsByClass={{
+          [classId]: [
+            {
+              id: "membership-student-lin",
+              courseId,
+              classId,
+              invitationCode: "66334455",
+              studentId: "student-lin",
+              studentDisplayName: "林若晨",
+              membershipStatus: "approved",
+            },
+            {
+              id: "membership-student-zhao",
+              courseId,
+              classId,
+              invitationCode: "66334455",
+              studentId: "student-zhao",
+              studentDisplayName: "赵一诺",
+              membershipStatus: "approved",
+            },
+            {
+              id: "membership-student-chen",
+              courseId,
+              classId,
+              invitationCode: "66334455",
+              studentId: "student-chen",
+              studentDisplayName: "陈嘉树",
+              membershipStatus: "approved",
+            },
+          ],
+        }}
+        groups={[]}
+        isOpen={false}
+        locale="zh-CN"
+        pendingSuggestion={{
+          receiptId: "operation-record-group-suggestions-reviewed",
+          courseId,
+          reviewPolicy: "teacher-review-before-group-assignment",
+          ungroupedStudentCount: 3,
+          suggestedGroups: [
+            {
+              suggestionKey: "operation-record-group-suggestions-reviewed:0",
+              groupName: "第1组",
+              members: [
+                { studentId: "student-lin", studentDisplayName: "林若晨" },
+                { studentId: "student-zhao", studentDisplayName: "赵一诺" },
+              ],
+            },
+          ],
+        }}
+        onToggle={vi.fn()}
+        onCreateGroup={onCreateGroup}
+        onUpdateGroup={vi.fn(async () => undefined)}
+        onDeleteGroup={vi.fn(async () => undefined)}
+        onAutoSplitGroups={vi.fn(async () => undefined)}
+        onSuggestionApplied={onSuggestionApplied}
+      />,
+    );
+
+    // Generating a suggestion is never itself a group write.
+    expect(onCreateGroup).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "复核并创建第1组" }));
+
+    const dialog = within(screen.getByRole("dialog"));
+    expect((dialog.getByLabelText("小组名称") as HTMLInputElement).value).toBe("第1组");
+    expect((dialog.getByLabelText("林若晨") as HTMLInputElement).checked).toBe(true);
+    expect((dialog.getByLabelText("赵一诺") as HTMLInputElement).checked).toBe(true);
+    expect((dialog.getByLabelText("陈嘉树") as HTMLInputElement).checked).toBe(false);
+    expect(onCreateGroup).not.toHaveBeenCalled();
+
+    fireEvent.change(dialog.getByLabelText("小组名称"), {
+      target: { value: "教师复核一组" },
+    });
+    fireEvent.click(dialog.getByRole("button", { name: "创建" }));
+
+    await waitFor(() => {
+      expect(onCreateGroup).toHaveBeenCalledWith({
+        groupName: "教师复核一组",
+        memberIds: ["student-lin", "student-zhao"],
+      });
+    });
+    expect(onSuggestionApplied).toHaveBeenCalledWith(
+      "operation-record-group-suggestions-reviewed:0",
+    );
+  });
+
+  it("refuses to silently rewrite a suggestion when a proposed member is no longer eligible", () => {
+    const onCreateGroup = vi.fn(async () => undefined);
+    render(
+      <LearningGroupManager
+        course={{
+          id: courseId,
+          title: { "zh-CN": courseName, "en-US": courseNameEn },
+          status: { "zh-CN": "进行中", "en-US": "In progress" },
+          students: 3,
+          currentFocus: { "zh-CN": "小组协作", "en-US": "Group collaboration" },
+        }}
+        classes={[
+          {
+            id: classId,
+            courseId,
+            name: "研究方法实验班",
+            students: 3,
+            semester: "2026 春季",
+            invitationCode: "66334455",
+          },
+        ]}
+        membershipsByClass={{
+          [classId]: [
+            {
+              id: "membership-student-lin",
+              courseId,
+              classId,
+              invitationCode: "66334455",
+              studentId: "student-lin",
+              studentDisplayName: "林若晨",
+              membershipStatus: "approved",
+            },
+            {
+              id: "membership-student-zhao",
+              courseId,
+              classId,
+              invitationCode: "66334455",
+              studentId: "student-zhao",
+              studentDisplayName: "赵一诺",
+              membershipStatus: "approved",
+            },
+          ],
+        }}
+        groups={[
+          createPersistedLearningGroup({
+            members: [
+              {
+                studentId: "student-lin",
+                studentDisplayName: "林若晨",
+                addedAt: "2026-08-08T02:00:00.000Z",
+              },
+              {
+                studentId: "student-chen",
+                studentDisplayName: "陈嘉树",
+                addedAt: "2026-08-08T02:00:00.000Z",
+              },
+            ],
+          }),
+        ]}
+        isOpen={false}
+        locale="zh-CN"
+        pendingSuggestion={{
+          receiptId: "operation-record-stale-suggestion",
+          courseId,
+          reviewPolicy: "teacher-review-before-group-assignment",
+          ungroupedStudentCount: 2,
+          suggestedGroups: [
+            {
+              suggestionKey: "operation-record-stale-suggestion:0",
+              groupName: "第1组",
+              members: [
+                { studentId: "student-lin", studentDisplayName: "林若晨" },
+                { studentId: "student-zhao", studentDisplayName: "赵一诺" },
+              ],
+            },
+          ],
+        }}
+        onToggle={vi.fn()}
+        onCreateGroup={onCreateGroup}
+        onUpdateGroup={vi.fn(async () => undefined)}
+        onDeleteGroup={vi.fn(async () => undefined)}
+        onAutoSplitGroups={vi.fn(async () => undefined)}
+      />,
+    );
+
+    expect(screen.getByText("1 名建议成员状态已变化，请重新生成分组建议。")).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "第1组成员状态已变化，不能打开复核草稿" }),
+    ).toHaveProperty("disabled", true);
+    expect(onCreateGroup).not.toHaveBeenCalled();
+  });
+
   it("lists persisted groups with member chips and a teacher observe deep link", async () => {
     window.history.replaceState(null, "", "/teaching");
     stubTeachingFetch(

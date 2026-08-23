@@ -73,7 +73,16 @@ async function waitForInviteClassTarget() {
 // A signed course readback carrying the demo research-methods course together
 // with its one class, so the invite workspace has a real class to target instead
 // of the first-class fallback plan E9 removed.
-function createResearchMethodsClassCourseListReadback() {
+function createResearchMethodsClassCourseListReadback(options?: {
+  enableLearningGroups?: boolean;
+}) {
+  const suggestedStudents = [
+    ["student-chen", "陈可"],
+    ["student-li", "李明"],
+    ["student-wu", "吴敏"],
+    ["student-zhao", "赵一鸣"],
+    ["student-he", "何雨桐"],
+  ] as const;
   return Response.json({
     courses: [
       {
@@ -96,6 +105,23 @@ function createResearchMethodsClassCourseListReadback() {
         invitationCode: "55395057",
       },
     ],
+    ...(options?.enableLearningGroups
+      ? {
+          memberships: suggestedStudents.map(([studentId, studentDisplayName]) => ({
+            membershipId: `membership-${studentId}`,
+            courseId: "teacher-research-methods",
+            classId: "teacher-research-methods-class-1",
+            invitationCode: "55395057",
+            studentId,
+            studentDisplayName,
+            membershipStatus: "approved",
+            joinedAt: "2026-06-22T09:00:00.000Z",
+            approvedAt: "2026-06-22T09:05:00.000Z",
+          })),
+          learningGroups: [],
+          features: { learningChatroomGroups: true },
+        }
+      : {}),
     receipt: {
       action: "list-courses",
       actorId: "teacher-kang",
@@ -3629,11 +3655,14 @@ describe("TeachingPage", () => {
   });
 
   it("shows the teacher the partition the group-suggestion action proposed", async () => {
+    window.history.replaceState(null, "", "/teaching");
     const recordId = "operation-record-group-suggestions-returned";
     const traceId = "trace-inline-group-suggestions-returned";
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       if (String(input) === "/api/teaching/courses") {
-        return createResearchMethodsClassCourseListReadback();
+        return createResearchMethodsClassCourseListReadback({
+          enableLearningGroups: true,
+        });
       }
       if (String(input) === "/api/teaching/operations") {
         expect(init?.method).toBe("POST");
@@ -3690,6 +3719,19 @@ describe("TeachingPage", () => {
           actionSlot: "secondary",
         });
       }
+      if (
+        String(input) ===
+        `/api/teaching/operations/records/${recordId}/rollback`
+      ) {
+        expect(init?.method).toBe("POST");
+        return Response.json({
+          receipt: {
+            action: "rollback-teaching-operation-record",
+            targetRecordId: recordId,
+            status: "persisted",
+          },
+        });
+      }
       expect(String(input)).toBe("/api/teaching/operations/audit/alerts");
       return createClearInlineOperationAuditAlertsResponse(traceId);
     });
@@ -3698,6 +3740,10 @@ describe("TeachingPage", () => {
     render(<TeachingPage />);
     await chooseWorkspaceCourse("teacher-research-methods");
 
+    fireEvent.click(screen.getByRole("link", { name: "课程设置" }));
+    expect(
+      await screen.findByRole("button", { name: "管理大学研究方法的小组" }),
+    ).toBeTruthy();
     fireEvent.click(screen.getByRole("link", { name: "学生管理" }));
     fireEvent.click(screen.getByRole("button", { name: "生成分组建议" }));
 
@@ -3711,6 +3757,42 @@ describe("TeachingPage", () => {
     expect(screen.getByText(/分组建议已生成，等待教师确认。/)).toBeTruthy();
     expect(screen.getByText(/覆盖 5 名尚未分组的学生/)).toBeTruthy();
     expect(screen.getByText(/等待教师确认后才会写入/)).toBeTruthy();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "在课程设置中复核分组建议" }),
+    );
+    fireEvent.click(
+      await screen.findByRole("button", { name: "复核并创建第1组" }),
+    );
+
+    const dialog = screen.getByRole("dialog");
+    expect(
+      (dialog.querySelector("#learning-group-name") as HTMLInputElement).value,
+    ).toBe("第1组");
+    expect((screen.getByLabelText("陈可") as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByLabelText("李明") as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByLabelText("何雨桐") as HTMLInputElement).checked).toBe(false);
+    // Opening the reviewed draft is still read-only with respect to group state.
+    expect(
+      fetchMock.mock.calls.some(
+        ([request, requestInit]) =>
+          String(request).endsWith("/groups") && requestInit?.method === "POST",
+      ),
+    ).toBe(false);
+
+    fireEvent.click(screen.getByRole("button", { name: "关闭小组弹窗" }));
+    fireEvent.click(screen.getByRole("link", { name: "学生管理" }));
+    expect(
+      screen.getByRole("button", { name: "在课程设置中复核分组建议" }),
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "撤回本次操作" }));
+
+    await waitFor(() => {
+      expect(screen.getByText(`已撤回：${recordId}`)).toBeTruthy();
+    });
+    expect(
+      screen.queryByRole("button", { name: "在课程设置中复核分组建议" }),
+    ).toBeNull();
   });
 
   it("requires knowledge index business readback before claiming knowledge sync success", async () => {

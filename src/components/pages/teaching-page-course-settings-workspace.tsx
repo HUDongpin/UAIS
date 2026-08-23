@@ -11,6 +11,7 @@ import Link from "next/link";
 import { ArrowRight } from "@phosphor-icons/react/dist/ssr/ArrowRight";
 import { Plus } from "@phosphor-icons/react/dist/ssr/Plus";
 import { LearningGroupManager } from "@/components/teaching/learning-group-workspace";
+import type { TeacherGroupSuggestionDraft } from "@/components/teaching/group-suggestion-review";
 import {
   getTeachingCourseActionHref,
 } from "@/components/teaching/teaching-operation-data";
@@ -53,6 +54,7 @@ type CourseSettingsWorkspaceProps = {
   // Server-computed chatroom-groups feature state (plan D9), read off the same
   // signed teacher course list this workspace already loads.
   learningChatroomGroupsEnabled: boolean;
+  pendingGroupSuggestionsByCourse: Record<string, TeacherGroupSuggestionDraft>;
   membershipApprovalStatuses: Record<string, string>;
   // Plan E9 roster lifecycle: bulk approval per class, reject/remove per row.
   membershipLifecycleStatuses: Record<string, string>;
@@ -104,6 +106,7 @@ type CourseSettingsWorkspaceProps = {
     recordId: string;
     courseId?: string;
   }) => void;
+  removePendingGroupSuggestion: (courseId: string, suggestionKey: string) => void;
 };
 
 export function CourseSettingsWorkspace({
@@ -116,6 +119,7 @@ export function CourseSettingsWorkspace({
   courseClasses,
   classMemberships,
   learningChatroomGroupsEnabled,
+  pendingGroupSuggestionsByCourse,
   membershipApprovalStatuses,
   membershipLifecycleStatuses,
   classRosterStatuses,
@@ -141,6 +145,7 @@ export function CourseSettingsWorkspace({
   queueInlineWorkspaceAuditAlertNotifications,
   runInlineWorkspaceAction,
   runInlineWorkspaceRollback,
+  removePendingGroupSuggestion,
 }: CourseSettingsWorkspaceProps) {
     // Learning-group state is owned here rather than threaded from the page shell:
     // the panel is a course-settings surface, and keeping the hook local means the
@@ -372,6 +377,10 @@ export function CourseSettingsWorkspace({
                     }
                     onDeleteGroup={(groupId) => deleteLearningGroup(course.id, groupId)}
                     onAutoSplitGroups={(input) => autoSplitLearningGroups(course.id, input)}
+                    pendingSuggestion={pendingGroupSuggestionsByCourse[course.id]}
+                    onSuggestionApplied={(suggestionKey) =>
+                      removePendingGroupSuggestion(course.id, suggestionKey)
+                    }
                   />
                 ) : null}
               </article>

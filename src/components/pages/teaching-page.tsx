@@ -54,6 +54,7 @@ export function TeachingPage() {
     inlineWorkspaceAlertStatuses,
     inlineWorkspaceAlertNotificationStatuses,
     inlineWorkspaceRollbackStatuses,
+    pendingGroupSuggestionsByCourse,
     textReasoningProvider,
     multimodalProvider,
     voiceCloneJob,
@@ -84,6 +85,7 @@ export function TeachingPage() {
     invitePolicyDraftError,
     selectInviteClass,
     updateInvitePolicyDraft,
+    removePendingGroupSuggestion,
   } = useTeachingWorkspace();
   // The workspace-wide course selector. `manage` is the action every inline
   // operation runs under; the label the context panel shows comes from it.
@@ -104,6 +106,7 @@ export function TeachingPage() {
           courseClasses={courseClasses}
           classMemberships={classMemberships}
           learningChatroomGroupsEnabled={learningChatroomGroupsEnabled}
+          pendingGroupSuggestionsByCourse={pendingGroupSuggestionsByCourse}
           membershipApprovalStatuses={membershipApprovalStatuses}
           membershipLifecycleStatuses={membershipLifecycleStatuses}
           classRosterStatuses={classRosterStatuses}
@@ -129,6 +132,7 @@ export function TeachingPage() {
           queueInlineWorkspaceAuditAlertNotifications={queueInlineWorkspaceAuditAlertNotifications}
           runInlineWorkspaceAction={runInlineWorkspaceAction}
           runInlineWorkspaceRollback={runInlineWorkspaceRollback}
+          removePendingGroupSuggestion={removePendingGroupSuggestion}
         />
       );
     }
@@ -175,6 +179,12 @@ export function TeachingPage() {
         inviteWorkspaceJoinUrl={inviteWorkspaceJoinUrl}
         inviteWorkspaceStatus={inviteWorkspaceStatus}
         courseCards={courseCards}
+        learningChatroomGroupsEnabled={learningChatroomGroupsEnabled}
+        pendingGroupSuggestion={
+          selectedCourseAction?.courseId
+            ? pendingGroupSuggestionsByCourse[selectedCourseAction.courseId]
+            : undefined
+        }
         inviteCourseClasses={inviteCourseClasses}
         selectedInviteClass={selectedInviteClass}
         selectedInviteClassId={selectedInviteClassId}
@@ -191,6 +201,7 @@ export function TeachingPage() {
         runInlineWorkspaceAction={runInlineWorkspaceAction}
         runInlineWorkspaceRollback={runInlineWorkspaceRollback}
         runInviteWorkspaceAction={runInviteWorkspaceAction}
+        onReviewGroupSuggestions={() => openWorkspaceItem("course-settings")}
       />
     );
   }

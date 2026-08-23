@@ -12,6 +12,7 @@ import { teacherSidebarItems } from "@/data/uais";
 import type { TeacherCourse } from "@/data/uais";
 import type { TeachingOperationId } from "@/components/teaching/teaching-operation-data";
 import type { InviteCodePolicyDraft } from "@/components/teaching/invite-code-policy";
+import type { TeacherGroupSuggestionDraft } from "@/components/teaching/group-suggestion-review";
 import type { Locale, LocalizedText } from "@/i18n/copy";
 import type { TeacherClassItem } from "@/lib/teaching/course-readback";
 import { dashboardIcons } from "./teaching-page-dashboard-icons";
@@ -43,6 +44,8 @@ type EnterpriseWorkspaceProps = {
   inviteWorkspaceJoinUrl: string;
   inviteWorkspaceStatus: LocalizedText;
   courseCards: TeacherCourse[];
+  learningChatroomGroupsEnabled: boolean;
+  pendingGroupSuggestion?: TeacherGroupSuggestionDraft;
   inviteCourseClasses: TeacherClassItem[];
   selectedInviteClass?: TeacherClassItem;
   selectedInviteClassId?: string;
@@ -69,6 +72,7 @@ type EnterpriseWorkspaceProps = {
     courseId?: string;
   }) => void;
   runInviteWorkspaceAction: (actionSlot: "primary" | "secondary") => void;
+  onReviewGroupSuggestions: () => void;
 };
 
 export function EnterpriseWorkspace({
@@ -84,6 +88,8 @@ export function EnterpriseWorkspace({
   inviteWorkspaceJoinUrl,
   inviteWorkspaceStatus,
   courseCards,
+  learningChatroomGroupsEnabled,
+  pendingGroupSuggestion,
   inviteCourseClasses,
   selectedInviteClass,
   selectedInviteClassId,
@@ -100,6 +106,7 @@ export function EnterpriseWorkspace({
   runInlineWorkspaceAction,
   runInlineWorkspaceRollback,
   runInviteWorkspaceAction,
+  onReviewGroupSuggestions,
 }: EnterpriseWorkspaceProps) {
     const config = createEnterpriseWorkspaceConfig(
       activeWorkspaceItemId as TeachingOperationId,
@@ -167,6 +174,49 @@ export function EnterpriseWorkspace({
               runInlineWorkspaceRollback={runInlineWorkspaceRollback}
               queueInlineWorkspaceAuditAlertNotifications={queueInlineWorkspaceAuditAlertNotifications}
             />}
+
+          {config.id === "students" &&
+          learningChatroomGroupsEnabled &&
+          pendingGroupSuggestion ? (
+            <section
+              aria-label={
+                locale === "zh-CN"
+                  ? "已验证并等待教师复核的分组建议"
+                  : "Verified group suggestions awaiting teacher review"
+              }
+              className="mt-5 rounded-2xl border border-[var(--accent-border)] bg-[var(--accent-soft)] p-4"
+            >
+              <h3 className="text-base font-semibold text-[var(--foreground)]">
+                {locale === "zh-CN"
+                  ? "分组建议已验证，尚未写入小组"
+                  : "Suggestions verified; no groups created yet"}
+              </h3>
+              <ul className="mt-3 flex flex-wrap gap-2">
+                {pendingGroupSuggestion.suggestedGroups.map((suggestion) => (
+                  <li
+                    key={suggestion.suggestionKey}
+                    className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-1 text-sm font-medium text-[var(--foreground)]"
+                  >
+                    {`${suggestion.groupName} · ${suggestion.members.length}`}
+                  </li>
+                ))}
+              </ul>
+              <button
+                type="button"
+                aria-label={
+                  locale === "zh-CN"
+                    ? "在课程设置中复核分组建议"
+                    : "Review group suggestions in course settings"
+                }
+                className="mt-4 inline-flex h-10 items-center rounded-full bg-[var(--accent)] px-4 text-sm font-semibold text-white outline-none transition hover:bg-[var(--accent-strong)] focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+                onClick={onReviewGroupSuggestions}
+              >
+                {locale === "zh-CN"
+                  ? "进入课程设置逐组复核"
+                  : "Review each group in course settings"}
+              </button>
+            </section>
+          ) : null}
 
           <div className="mt-5 grid gap-3 md:grid-cols-3">
             {config.metrics.map((metric) => (

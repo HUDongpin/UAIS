@@ -45,6 +45,10 @@ import {
 import { useAppPreferences } from "@/components/providers/app-preferences";
 import { createInviteCodePolicyPatch } from "@/components/teaching/invite-code-policy";
 import {
+  createTeacherGroupSuggestionDraft,
+  type TeacherGroupSuggestionDraft,
+} from "@/components/teaching/group-suggestion-review";
+import {
   isTeachingOperationId,
   type TeachingOperationId,
 } from "@/components/teaching/teaching-operation-data";
@@ -203,6 +207,9 @@ export function useTeachingWorkspace() {
     useState<Partial<Record<TeachingOperationId, InlineWorkspaceAlertNotificationStatus>>>({});
   const [inlineWorkspaceRollbackStatuses, setInlineWorkspaceRollbackStatuses] = useState<
     Partial<Record<TeachingOperationId, InlineWorkspaceRollbackStatus>>
+  >({});
+  const [pendingGroupSuggestionsByCourse, setPendingGroupSuggestionsByCourse] = useState<
+    Record<string, TeacherGroupSuggestionDraft>
   >({});
   const inlineWorkspaceAttemptIdsRef = useRef<Partial<Record<TeachingOperationId, number>>>({});
   const [courseSettingsDrafts, setCourseSettingsDrafts] = useState<
@@ -525,6 +532,17 @@ export function useTeachingWorkspace() {
     }
 
     const attemptId = createInlineWorkspaceAttemptId(operationId);
+    if (operationId === "students" && actionSlot === "secondary") {
+      const courseId = selectedCourseAction.courseId;
+      // A new generation attempt invalidates the earlier proposal immediately.
+      // If the new receipt or audit later fails, no stale partition remains
+      // available for the teacher to mistake for the current result.
+      setPendingGroupSuggestionsByCourse((currentSuggestions) => {
+        const nextSuggestions = { ...currentSuggestions };
+        delete nextSuggestions[courseId];
+        return nextSuggestions;
+      });
+    }
     const actionConfig = createInlineWorkspaceActionConfig(operationId, locale);
     setInlineWorkspaceStatuses((currentStatuses) => ({
       ...currentStatuses,
@@ -592,10 +610,19 @@ export function useTeachingWorkspace() {
         receipt?: InlineTeachingOperationBackendReceipt;
         domainPersistenceSummary?: InlineTeachingOperationDomainPersistenceSummary;
         // The partition the students/secondary action proposed. Present only on
-        // that action, and read for display only — it grants nothing and assigns
-        // nobody, which is exactly what the sentence it produces says.
+        // that action. Its untrusted fields are normalized only after the signed
+        // operation receipt and semantic audit readback have both verified.
         studentGroupSuggestionReceipt?: {
-          suggestedGroups?: Array<{ groupName?: string; members?: unknown[] }>;
+          action?: unknown;
+          status?: unknown;
+          reviewPolicy?: unknown;
+          suggestedGroups?: Array<{
+            groupName?: string;
+            members?: Array<{
+              studentId?: string;
+              studentDisplayName?: string;
+            }>;
+          }>;
           ungroupedStudentCount?: number;
         };
         traceId?: string;
@@ -693,6 +720,11 @@ export function useTeachingWorkspace() {
           ...currentStatuses,
           [operationId]: localizedText(TEACHING_OPERATION_AUDIT_PENDING_MESSAGE, locale),
         }));
+        const pendingGroupSuggestion = createTeacherGroupSuggestionDraft({
+          receiptId: recordId,
+          courseId: payload.receipt?.courseId ?? courseId,
+          suggestionReceipt: payload.studentGroupSuggestionReceipt,
+        });
         void readInlineWorkspaceAuditEvidence({
           operationId,
           courseId: payload.receipt?.courseId ?? courseId,
@@ -702,6 +734,7 @@ export function useTeachingWorkspace() {
           attemptId,
           actionSlot,
           courseSettingsPatch,
+          pendingGroupSuggestion,
         });
       } else {
         if (
@@ -745,6 +778,7 @@ export function useTeachingWorkspace() {
     attemptId: number;
     actionSlot: "primary" | "secondary";
     courseSettingsPatch?: CourseSettingsPatchPayload;
+    pendingGroupSuggestion?: TeacherGroupSuggestionDraft;
   }) {
     if (!isCurrentInlineWorkspaceAttempt(input.operationId, input.attemptId)) {
       return;
@@ -871,6 +905,12 @@ export function useTeachingWorkspace() {
         matchingRecord?.courseId ?? input.courseId,
         input.courseSettingsPatch,
       );
+      if (input.pendingGroupSuggestion) {
+        setPendingGroupSuggestionsByCourse((currentSuggestions) => ({
+          ...currentSuggestions,
+          [input.pendingGroupSuggestion!.courseId]: input.pendingGroupSuggestion!,
+        }));
+      }
       setInlineWorkspaceAuditStatuses((currentStatuses) => ({
         ...currentStatuses,
         [input.operationId]: {
@@ -1030,6 +1070,28 @@ export function useTeachingWorkspace() {
     return hasCompleteInlineTeachingAuthSession(authSession);
   }
 
+  function removePendingGroupSuggestion(courseId: string, suggestionKey: string) {
+    setPendingGroupSuggestionsByCourse((currentSuggestions) => {
+      const currentCourseSuggestion = currentSuggestions[courseId];
+      if (!currentCourseSuggestion) {
+        return currentSuggestions;
+      }
+      const suggestedGroups = currentCourseSuggestion.suggestedGroups.filter(
+        (suggestion) => suggestion.suggestionKey !== suggestionKey,
+      );
+      const nextSuggestions = { ...currentSuggestions };
+      if (suggestedGroups.length === 0) {
+        delete nextSuggestions[courseId];
+      } else {
+        nextSuggestions[courseId] = {
+          ...currentCourseSuggestion,
+          suggestedGroups,
+        };
+      }
+      return nextSuggestions;
+    });
+  }
+
   async function queueInlineWorkspaceAuditAlertNotifications(
     operationId: TeachingOperationId,
     notificationRoute?: string,
@@ -1150,6 +1212,16 @@ export function useTeachingWorkspace() {
       };
       if (payload.receipt?.status !== "persisted") {
         throw new Error("Teaching operation rollback receipt was not persisted.");
+      }
+      if (input.operationId === "students") {
+        const targetRecordId = payload.receipt?.targetRecordId ?? input.recordId;
+        setPendingGroupSuggestionsByCourse((currentSuggestions) =>
+          Object.fromEntries(
+            Object.entries(currentSuggestions).filter(
+              ([, suggestion]) => suggestion.receiptId !== targetRecordId,
+            ),
+          ),
+        );
       }
       setInlineWorkspaceRollbackStatuses((currentStatuses) => ({
         ...currentStatuses,
@@ -1495,6 +1567,7 @@ export function useTeachingWorkspace() {
     setInlineWorkspaceAlertNotificationStatuses,
     inlineWorkspaceRollbackStatuses,
     setInlineWorkspaceRollbackStatuses,
+    pendingGroupSuggestionsByCourse,
     inlineWorkspaceAttemptIdsRef,
     courseSettingsDrafts,
     setCourseSettingsDrafts,
@@ -1528,6 +1601,7 @@ export function useTeachingWorkspace() {
     isCurrentInlineWorkspaceAttempt,
     isInlineAuditRecordForAction,
     isVerifiedInlineAuditAuthSession,
+    removePendingGroupSuggestion,
     queueInlineWorkspaceAuditAlertNotifications,
     runInlineWorkspaceRollback,
     runInviteWorkspaceAction,
