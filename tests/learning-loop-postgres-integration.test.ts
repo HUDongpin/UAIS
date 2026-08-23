@@ -245,5 +245,8 @@ describe.skipIf(!databaseUrl)("P1 closed learning loop on real Postgres", () => 
     `;
     expect(JSON.stringify(serializedEvents)).not.toContain("V2 已补充证据与推理");
     expect(JSON.stringify(serializedEvents)).not.toContain("修订已达到要求");
-  }, 60_000);
+  // This full V1 -> revision -> V2 -> acceptance loop spans many independent
+  // managed-Postgres transactions. Keep the timeout scoped to this real-DB
+  // test; HTTP latency remains governed by the separate P2 load thresholds.
+  }, 180_000);
 });

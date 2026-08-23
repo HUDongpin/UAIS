@@ -604,6 +604,9 @@ describe("P2 protected operations gates", () => {
     }
     expect(verification).toContain("createDeterministicChecksum");
     expect(verification).toContain("checksumsMatch");
+    expect(verification).toContain("expectedCounts");
+    expect(verification).toContain("mismatchReasons");
+    expect(liveSource).toContain("report.restore = restoreVerificationRecord");
     expect(verification).not.toMatch(
       /SELECT count\(\*\)::int AS count\s+FROM uais_learning_(?:events|profiles)/,
     );
@@ -655,12 +658,14 @@ describe("P2 protected operations gates", () => {
     });
   });
 
-  it("binds manual staging fixtures and cleanup to the explicit load run ID", () => {
+  it("keeps manual staging fixtures run-bound but outside the load restore namespace", () => {
     const buildSource = readFileSync("scripts/p2-staging-build.mjs", "utf8");
     const liveSource = readFileSync("scripts/p2-staging-live-load.mjs", "utf8");
 
     expect(buildSource).not.toMatch(/P2_LOAD_RUN_ID:\s*"p2-/);
-    expect(liveSource).toContain('const manualPrefix = `${runId}-manual-`;');
+    expect(liveSource).toContain('const loadPrefix = `${runId}-`;');
+    expect(liveSource).toContain('const manualPrefix = `manual-${runId}-`;');
+    expect(liveSource).not.toContain('const manualPrefix = `${loadPrefix}manual-`;');
     expect(liveSource).toContain(
       "const manualStudentAccount = `${manualPrefix}student`;",
     );

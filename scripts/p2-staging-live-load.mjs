@@ -186,7 +186,12 @@ if (databaseGuardReasons.length > 0) {
 
 const loadPassword = `${randomBytes(32).toString("base64url")}Aa9!`;
 const loadPrefix = `${runId}-`;
-const manualPrefix = `${runId}-manual-`;
+// Keep the reversible manual journey bound to the run ID without making it a
+// child of the load namespace. Restore verification selects load accounts by
+// `loadPrefix` and checks their load password; a nested manual prefix silently
+// included the two manual-password accounts and made every restore fail its
+// password-hash check even when every restored row was otherwise correct.
+const manualPrefix = `manual-${runId}-`;
 const loadTeacherAccount = `${loadPrefix}teacher`;
 const loadStudentAccounts = Array.from(
   { length: expectedUserCount },
@@ -601,27 +606,37 @@ try {
   await restoreTaggedBackup(backup);
   const restored = await verifyRestoredBackup(backup, loadPassword);
   const recoveryDurationMs = Math.round(performance.now() - recoveryStartedAt);
-  if (!restored.ok) {
-    throw new P2ExecutionError("restore-verification-failed");
-  }
-  restoreCompleted = true;
-  report.restore = {
-    status: "PASS",
+  const restoreVerificationRecord = {
+    status: restored.ok ? "PASS" : "FAIL",
     strategy: "tagged-logical-snapshot-to-distinct-neon-target",
     sourceNeonFingerprint: fingerprint(sourceNeonProjectId),
     targetNeonFingerprint: fingerprint(restoreNeonProjectId),
     sourceAndTargetDistinct: sourceNeonProjectId !== restoreNeonProjectId,
     backupTakenAt: new Date(backupTakenAt).toISOString(),
     recoveryDurationMs,
+    restoredCounts: restored.counts,
+    expectedCounts: restored.expectedCounts,
+    verificationChecks: restored.checks,
+    mismatchReasons: restored.mismatchReasons,
+    fieldChecksums: restored.checksums,
+    operator: "S22",
+  };
+  if (!restored.ok) {
+    // Preserve aggregate mismatch evidence before cleanup. The previous
+    // failure path emitted only a generic code, which made a deterministic
+    // fixture-namespace bug indistinguishable from a damaged restore.
+    report.restore = restoreVerificationRecord;
+    throw new P2ExecutionError("restore-verification-failed");
+  }
+  restoreCompleted = true;
+  report.restore = {
+    ...restoreVerificationRecord,
     rpoSeconds: 0,
     lostRecordCount: 0,
-    restoredCounts: restored.counts,
     loginHashVerification: "PASS",
     relationships: "PASS",
     groupIsolation: "PASS",
     migrations: "PASS",
-    fieldChecksums: restored.checksums,
-    operator: "S22",
   };
 
   restoreLoadCleanup = await cleanupTaggedData(restoreSql, {
@@ -1311,14 +1326,23 @@ async function verifyRestoredBackup(backup, plaintextPassword) {
     transcriptRows: backup.transcripts.length,
     transcriptMessages: expectedUserCount * (expectedLoadDurationSeconds / 60),
   };
+  const checks = {
+    migrationVersions:
+      JSON.stringify(actualMigrationVersions) ===
+      JSON.stringify(expectedMigrationVersions),
+    langGraphSchema: schemaRows.length === 1,
+    passwordHashes: Boolean(hashesVerify),
+    fieldChecksums: checksumsMatch,
+    recordCounts: JSON.stringify(counts) === JSON.stringify(expectedCounts),
+  };
   return {
-    ok:
-      JSON.stringify(actualMigrationVersions) === JSON.stringify(expectedMigrationVersions) &&
-      schemaRows.length === 1 &&
-      Boolean(hashesVerify) &&
-      checksumsMatch &&
-      JSON.stringify(counts) === JSON.stringify(expectedCounts),
+    ok: Object.values(checks).every(Boolean),
     counts,
+    expectedCounts,
+    checks,
+    mismatchReasons: Object.entries(checks)
+      .filter(([, passed]) => !passed)
+      .map(([name]) => name),
     checksums,
   };
 }

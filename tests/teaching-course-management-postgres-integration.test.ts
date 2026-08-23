@@ -267,6 +267,10 @@ describe.skipIf(!databaseUrl)(
       });
       const rivalClaimed = await repository.read({ courseId: rivalCourseId });
       expect(rivalClaimed.database.classes[0]?.invitationCode).toBe(invitationCode);
-    });
+    // This scenario intentionally performs a long sequence of managed-Postgres
+    // reads, writes, a uniqueness failure, rollback readback, release and retry.
+    // The 15-second jsdom default is appropriate for offline tests, but is not
+    // a realistic budget for this explicitly remote integration case.
+    }, 120_000);
   },
 );
