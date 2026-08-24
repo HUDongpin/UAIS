@@ -63,6 +63,19 @@ function deploymentProtectionChallenge(status = 401) {
   });
 }
 
+function deploymentProtectionRedirectChallenge(
+  location = `https://vercel.com/sso-api?url=${encodeURIComponent(
+    `${baseUrl}/healthz`,
+  )}&nonce=test-only-redirect-nonce-1234`,
+) {
+  const headers = new Headers(deploymentProtectionChallenge().headers);
+  headers.set("location", location);
+  return new Response("test-only Vercel Authentication redirect", {
+    status: 302,
+    headers,
+  });
+}
+
 function healthyResponse() {
   return new Response(JSON.stringify(healthyBody()), {
     status: 200,
@@ -145,6 +158,70 @@ describe("P2 isolated staging remote attestation", () => {
         bypassedBoundApplicationReached: "PASS",
       },
     });
+  });
+
+  it("accepts only an exact Vercel SSO redirect bound to the immutable health target", () => {
+    const bypassed = assess();
+    expect(
+      assessUaisStagingProtectionDifferential({
+        unprotectedHttpStatus: 302,
+        unprotectedHeaders: deploymentProtectionRedirectChallenge().headers,
+        targetUrl: `${baseUrl}/healthz`,
+        immutableDeploymentUrl: baseUrl,
+        bypassed,
+      }),
+    ).toEqual({
+      status: "PASS",
+      failureCodes: [],
+      checks: {
+        unprotectedDeploymentProtectionChallenge: "PASS",
+        bypassedBoundApplicationReached: "PASS",
+      },
+    });
+  });
+
+  it.each([
+    [
+      "non-Vercel host",
+      `https://ordinary-app.example.test/sso-api?url=${encodeURIComponent(
+        `${baseUrl}/healthz`,
+      )}&nonce=test-only-redirect-nonce-1234`,
+    ],
+    [
+      "wrong SSO path",
+      `https://vercel.com/not-sso-api?url=${encodeURIComponent(
+        `${baseUrl}/healthz`,
+      )}&nonce=test-only-redirect-nonce-1234`,
+    ],
+    [
+      "different callback target",
+      `https://vercel.com/sso-api?url=${encodeURIComponent(
+        `${baseUrl}/not-healthz`,
+      )}&nonce=test-only-redirect-nonce-1234`,
+    ],
+    [
+      "missing nonce",
+      `https://vercel.com/sso-api?url=${encodeURIComponent(
+        `${baseUrl}/healthz`,
+      )}`,
+    ],
+    [
+      "extra query parameter",
+      `https://vercel.com/sso-api?url=${encodeURIComponent(
+        `${baseUrl}/healthz`,
+      )}&nonce=test-only-redirect-nonce-1234&extra=1`,
+    ],
+  ])("rejects a 302 challenge with %s", (_label, location) => {
+    const response = deploymentProtectionRedirectChallenge(location);
+    const result = assessUaisStagingProtectionDifferential({
+      unprotectedHttpStatus: response.status,
+      unprotectedHeaders: response.headers,
+      targetUrl: `${baseUrl}/healthz`,
+      immutableDeploymentUrl: baseUrl,
+      bypassed: assess(),
+    });
+    expect(result.status).toBe("FAIL");
+    expect(result.failureCodes).toContain("deployment-protection-not-proven");
   });
 
   it.each([200, 302, 400, 404, 409, 429, 500])(
@@ -269,12 +346,14 @@ describe("P2 isolated staging remote attestation", () => {
     const calls: Array<{
       url: string;
       redirect: RequestRedirect | undefined;
+      accept: string | null;
       bypass: string | null;
     }> = [];
     const fetchImpl = vi.fn<typeof fetch>(async (input, options) => {
       calls.push({
         url: String(input),
         redirect: options?.redirect,
+        accept: new Headers(options?.headers).get("accept"),
         bypass:
           new Headers(options?.headers).get("x-vercel-protection-bypass"),
       });
@@ -292,11 +371,13 @@ describe("P2 isolated staging remote attestation", () => {
       {
         url: `${baseUrl}/healthz`,
         redirect: "manual",
+        accept: "text/html",
         bypass: null,
       },
       {
         url: `${baseUrl}/healthz`,
         redirect: "manual",
+        accept: "application/json",
         bypass: "test-only-bypass-secret",
       },
     ]);

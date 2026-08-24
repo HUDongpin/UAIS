@@ -164,7 +164,7 @@ export async function runUaisStagingRemotePreflight({
   try {
     unprotectedResponse = await fetchImpl(target.healthUrl, {
       method: "GET",
-      headers: { accept: "application/json" },
+      headers: { accept: "text/html" },
       cache: "no-store",
       credentials: "omit",
       redirect: "manual",
@@ -259,7 +259,11 @@ function assessVercelAuthenticationChallenge({
   const normalizedHeaders = readHeaders(headers);
   const setCookies = readSetCookies(normalizedHeaders);
   const checks = {
-    exactHttpStatus: httpStatus === 401,
+    exactChallengeTransport: isExactVercelSsoChallengeTransport({
+      httpStatus,
+      location: normalizedHeaders.get("location"),
+      targetUrl,
+    }),
     exactImmutableTarget: Boolean(
       readExactImmutableHealthTarget({
         baseUrl: immutableDeploymentUrl,
@@ -297,6 +301,36 @@ function assessVercelAuthenticationChallenge({
   return {
     status: Object.values(checks).every(Boolean) ? "PASS" : "FAIL",
   };
+}
+
+function isExactVercelSsoChallengeTransport({
+  httpStatus,
+  location,
+  targetUrl,
+}) {
+  if (httpStatus === 401) return location === null;
+  if (httpStatus !== 302 || typeof location !== "string") return false;
+  try {
+    const redirect = new URL(location);
+    const queryEntries = [...redirect.searchParams.entries()];
+    const nonce = redirect.searchParams.get("nonce") ?? "";
+    return (
+      redirect.protocol === "https:" &&
+      redirect.hostname === "vercel.com" &&
+      redirect.port === "" &&
+      redirect.username === "" &&
+      redirect.password === "" &&
+      redirect.pathname === "/sso-api" &&
+      redirect.hash === "" &&
+      queryEntries.length === 2 &&
+      queryEntries.filter(([key]) => key === "url").length === 1 &&
+      queryEntries.filter(([key]) => key === "nonce").length === 1 &&
+      redirect.searchParams.get("url") === targetUrl &&
+      /^[A-Za-z0-9_-]{16,512}$/.test(nonce)
+    );
+  } catch {
+    return false;
+  }
 }
 
 function readExactImmutableHealthTarget({
