@@ -1,7 +1,10 @@
+/* eslint-disable max-lines -- Exact public-versus-canonical PostgreSQL catalog parity is intentionally kept beside the isolated evidence adapter. */
 import postgres, { type TransactionSql } from "postgres";
 import {
   UAIS_STAGING_INP_COHORT_CAP,
+  UAIS_STAGING_INP_COHORT_WINDOW_HOURS,
   UAIS_STAGING_INP_HOURLY_ID_CAP,
+  UAIS_STAGING_INP_OPERATOR_HOURLY_ID_CAP,
   UAIS_STAGING_INP_TTL_HOURS,
   type UaisStagingInpBinding,
   type UaisStagingInpJourney,
@@ -14,6 +17,8 @@ export type UaisStagingInpCohortState = "open" | "closed" | "purged";
 
 export type UaisStagingInpStoredSample = UaisStagingInpBinding & {
   sampleKey: string;
+  metricIdKey: string;
+  operatorKey: string;
   role: UaisStagingInpRole;
   journey: UaisStagingInpJourney;
   viewportClass: UaisStagingInpViewportClass;
@@ -28,6 +33,7 @@ export type UaisStagingInpAggregate = {
   journey: UaisStagingInpJourney;
   viewportClass: UaisStagingInpViewportClass;
   n: number;
+  distinctOperatorCount: number;
   p75Ms: number;
 };
 
@@ -38,14 +44,16 @@ export type UaisStagingInpAggregateReceipt = UaisStagingInpBinding & {
 
 export type UaisStagingInpPurgeReceipt = UaisStagingInpBinding & {
   state: "purged";
-  deletedCount: number;
-  remainingForBinding: number;
-  zeroResidue: boolean;
+  rawSampleRowsDeleted: number;
+  rawSampleRowsRemaining: number;
+  rawSampleRowsZero: boolean;
+  cohortTombstoneRetained: true;
 };
 
 export type UaisStagingInpReadbackReceipt = UaisStagingInpBinding & {
   state: UaisStagingInpCohortState;
-  remainingForBinding: number;
+  rawSampleRowsRemaining: number;
+  cohortTombstoneRetained: true;
 };
 
 export type UaisStagingInpReadinessReceipt = UaisStagingInpBinding & {
@@ -55,6 +63,9 @@ export type UaisStagingInpReadinessReceipt = UaisStagingInpBinding & {
 
 type UaisStagingInpCohortRecord = UaisStagingInpBinding & {
   state: UaisStagingInpCohortState;
+  createdAt: string;
+  deadlineAt: string;
+  closeReason: "manual" | "deadline" | "purge" | null;
   closedAt: string | null;
   purgedAt: string | null;
 };
@@ -63,14 +74,19 @@ export class UaisStagingInpStoreError extends Error {
   readonly status: 409 | 429 | 503;
   readonly reasonCode:
     | "staging-inp-hourly-limit-reached"
+    | "staging-inp-operator-hourly-limit-reached"
+    | "staging-inp-update-rate-limited"
+    | "staging-inp-update-limit-reached"
     | "staging-inp-cohort-cap-reached"
     | "staging-inp-source-guard-required"
     | "staging-inp-cohort-binding-mismatch"
     | "staging-inp-cohort-closed"
+    | "staging-inp-cohort-deadline-reached"
     | "staging-inp-cohort-purged"
     | "staging-inp-cohort-missing"
     | "staging-inp-cohort-state-invalid"
     | "staging-inp-sample-identity-conflict"
+    | "staging-inp-sample-outside-cohort-window"
     | "staging-inp-sample-expiry-invalid"
     | "staging-inp-schema-readback-failed"
     | "staging-inp-database-unavailable";
@@ -90,11 +106,26 @@ export function createInMemoryUaisStagingInpStore(
   input: { now?: () => Date } = {},
 ) {
   const now = input.now ?? (() => new Date());
-  let samples: UaisStagingInpStoredSample[] = [];
+  let samples: Array<
+    UaisStagingInpStoredSample & { updateCount: number; lastUpdatedAt: string }
+  > = [];
   const cohorts = new Map<string, UaisStagingInpCohortRecord>();
 
   function removeExpired() {
     samples = samples.filter((item) => Date.parse(item.expiresAt) > now().getTime());
+  }
+
+  function closeExpiredCohorts() {
+    let closedCount = 0;
+    for (const cohort of cohorts.values()) {
+      if (cohort.state === "open" && Date.parse(cohort.deadlineAt) <= now().getTime()) {
+        cohort.state = "closed";
+        cohort.closedAt = cohort.deadlineAt;
+        cohort.closeReason = "deadline";
+        closedCount += 1;
+      }
+    }
+    return closedCount;
   }
 
   function requireCohort(binding: UaisStagingInpBinding) {
@@ -107,36 +138,75 @@ export function createInMemoryUaisStagingInpStore(
   }
 
   return {
-    async setup() {
+    async setup(binding: UaisStagingInpBinding) {
+      closeExpiredCohorts();
+      const existing = cohorts.get(binding.cohortId);
+      if (existing) {
+        assertBinding(existing, binding);
+        assertOpenCohort(existing);
+      } else {
+        const createdAt = now().toISOString();
+        cohorts.set(binding.cohortId, {
+          ...binding,
+          state: "open",
+          createdAt,
+          deadlineAt: new Date(
+            Date.parse(createdAt) +
+              UAIS_STAGING_INP_COHORT_WINDOW_HOURS * 60 * 60 * 1_000,
+          ).toISOString(),
+          closeReason: null,
+          closedAt: null,
+          purgedAt: null,
+        });
+      }
+      const cohort = cohorts.get(binding.cohortId)!;
       return {
         status: "ready" as const,
         cohortsTable: true,
         samplesTable: true,
+        cohortState: cohort.state,
+        createdAt: cohort.createdAt,
+        deadlineAt: cohort.deadlineAt,
         valuesRedacted: true as const,
       };
     },
     async persist(sample: UaisStagingInpStoredSample) {
       assertSampleExpiry(sample);
       removeExpired();
-      let cohort = cohorts.get(sample.cohortId);
+      closeExpiredCohorts();
+      const cohort = cohorts.get(sample.cohortId);
       if (!cohort) {
-        cohort = {
-          ...bindingFromSample(sample),
-          state: "open",
-          closedAt: null,
-          purgedAt: null,
-        };
-        cohorts.set(sample.cohortId, cohort);
+        throw new UaisStagingInpStoreError(409, "staging-inp-cohort-missing");
       }
       assertBinding(cohort, sample);
       assertOpenCohort(cohort);
+      assertSampleInsideCohortWindow(cohort, sample);
 
       const existing = samples.find(
         (item) => item.cohortId === sample.cohortId && item.sampleKey === sample.sampleKey,
       );
       if (existing) {
         assertSameSampleIdentity(existing, sample);
-        existing.valueMs = Math.max(existing.valueMs, sample.valueMs);
+        if (sample.valueMs <= existing.valueMs) {
+          return { status: "unchanged" as const };
+        }
+        const elapsedMs =
+          Date.parse(sample.receivedAt) - Date.parse(existing.lastUpdatedAt);
+        if (elapsedMs < 1_000) {
+          throw new UaisStagingInpStoreError(
+            429,
+            "staging-inp-update-rate-limited",
+          );
+        }
+        if (existing.updateCount >= 12) {
+          throw new UaisStagingInpStoreError(
+            429,
+            "staging-inp-update-limit-reached",
+          );
+        }
+        existing.valueMs = sample.valueMs;
+        existing.lastUpdatedAt = sample.receivedAt;
+        existing.updateCount += 1;
         return { status: "updated" as const };
       }
 
@@ -154,13 +224,29 @@ export function createInMemoryUaisStagingInpStore(
       if (hourlyCount >= UAIS_STAGING_INP_HOURLY_ID_CAP) {
         throw new UaisStagingInpStoreError(429, "staging-inp-hourly-limit-reached");
       }
-      samples.push({ ...sample });
+      const operatorHourlyCount = cohortSamples.filter(
+        (item) =>
+          item.operatorKey === sample.operatorKey &&
+          utcHour(item.receivedAt) === sampleHour,
+      ).length;
+      if (operatorHourlyCount >= UAIS_STAGING_INP_OPERATOR_HOURLY_ID_CAP) {
+        throw new UaisStagingInpStoreError(
+          429,
+          "staging-inp-operator-hourly-limit-reached",
+        );
+      }
+      samples.push({
+        ...sample,
+        updateCount: 0,
+        lastUpdatedAt: sample.receivedAt,
+      });
       return { status: "stored" as const };
     },
     async aggregate(
       binding: UaisStagingInpBinding,
     ): Promise<UaisStagingInpAggregateReceipt> {
       removeExpired();
+      closeExpiredCohorts();
       const cohort = requireCohort(binding);
       if (cohort.state === "purged") {
         throw new UaisStagingInpStoreError(409, "staging-inp-cohort-purged");
@@ -168,6 +254,7 @@ export function createInMemoryUaisStagingInpStore(
       if (cohort.state === "open") {
         cohort.state = "closed";
         cohort.closedAt = now().toISOString();
+        cohort.closeReason = "manual";
       }
       return {
         ...binding,
@@ -179,6 +266,7 @@ export function createInMemoryUaisStagingInpStore(
       binding: UaisStagingInpBinding,
     ): Promise<UaisStagingInpReadinessReceipt> {
       removeExpired();
+      closeExpiredCohorts();
       const cohort = requireCohort(binding);
       if (cohort.state === "purged") {
         throw new UaisStagingInpStoreError(409, "staging-inp-cohort-purged");
@@ -190,40 +278,47 @@ export function createInMemoryUaisStagingInpStore(
       };
     },
     async purge(binding: UaisStagingInpBinding): Promise<UaisStagingInpPurgeReceipt> {
+      closeExpiredCohorts();
       const cohort = requireCohort(binding);
       const timestamp = now().toISOString();
       if (cohort.state === "open") cohort.closedAt = timestamp;
       if (cohort.state !== "purged") cohort.purgedAt = timestamp;
+      if (cohort.state === "open") cohort.closeReason = "purge";
       cohort.state = "purged";
       const before = samples.length;
       samples = samples.filter((item) => !sameBinding(item, binding));
-      const deletedCount = before - samples.length;
-      const remainingForBinding = samples.filter((item) => sameBinding(item, binding)).length;
+      const rawSampleRowsDeleted = before - samples.length;
+      const rawSampleRowsRemaining = samples.filter((item) => sameBinding(item, binding)).length;
       return {
         ...binding,
         state: "purged",
-        deletedCount,
-        remainingForBinding,
-        zeroResidue: remainingForBinding === 0,
+        rawSampleRowsDeleted,
+        rawSampleRowsRemaining,
+        rawSampleRowsZero: rawSampleRowsRemaining === 0,
+        cohortTombstoneRetained: true as const,
       };
     },
     async readback(
       binding: UaisStagingInpBinding,
     ): Promise<UaisStagingInpReadbackReceipt> {
+      closeExpiredCohorts();
       const cohort = requireCohort(binding);
       return {
         ...binding,
         state: cohort.state,
-        remainingForBinding: samples.filter((item) => sameBinding(item, binding)).length,
+        rawSampleRowsRemaining: samples.filter((item) => sameBinding(item, binding)).length,
+        cohortTombstoneRetained: true as const,
       };
     },
     async purgeExpired() {
       const before = samples.length;
+      const closedCount = closeExpiredCohorts();
       removeExpired();
       return {
-        deletedCount: before - samples.length,
-        remainingExpiredCount: 0,
-        zeroResidue: true,
+        cohortsAutoClosed: closedCount,
+        expiredRawSampleRowsDeleted: before - samples.length,
+        expiredRawSampleRowsRemaining: 0,
+        expiredRawSampleRowsZero: true,
         valuesRedacted: true as const,
       };
     },
@@ -250,8 +345,8 @@ export function createUaisStagingInpPostgresStore(
   const sqlFactory = input.sqlFactory ?? postgres;
 
   return {
-    async setup() {
-      return withGuardedStagingInpClient(databaseUrl, sqlFactory, async (sql) =>
+    async setup(binding: UaisStagingInpBinding) {
+      const result = await withGuardedStagingInpClient(databaseUrl, sqlFactory, async (sql) =>
         sql.begin(async (transaction) => {
           await assertPostgresSourceGuard(transaction);
           await lockPostgresLifecycle(transaction);
@@ -261,8 +356,14 @@ export function createUaisStagingInpPostgresStore(
               candidate_git_sha text NOT NULL,
               candidate_content_sha text NOT NULL,
               deployment_host text NOT NULL,
+              collector_key_version text NOT NULL,
+              operator_allowlist_fingerprint text NOT NULL,
               lifecycle_state text NOT NULL DEFAULT 'open',
               created_at timestamptz NOT NULL DEFAULT now(),
+              deadline_at timestamptz NOT NULL DEFAULT (
+                now() + interval '48 hours'
+              ),
+              close_reason text,
               closed_at timestamptz,
               purged_at timestamptz,
               CONSTRAINT uais_staging_inp_cohorts_pkey PRIMARY KEY (cohort_id),
@@ -278,27 +379,59 @@ export function createUaisStagingInpPostgresStore(
               CONSTRAINT uais_staging_inp_cohort_host_ck CHECK (
                 deployment_host ~ '^uais-staging-[a-z0-9-]+\\.vercel\\.app$'
               ),
+              CONSTRAINT uais_staging_inp_cohort_collector_key_version_ck CHECK (
+                collector_key_version ~ '^[a-z0-9][a-z0-9._-]{0,31}$'
+              ),
+              CONSTRAINT uais_staging_inp_cohort_allowlist_fingerprint_ck CHECK (
+                operator_allowlist_fingerprint ~ '^[0-9a-f]{64}$'
+              ),
               CONSTRAINT uais_staging_inp_cohort_state_ck CHECK (
                 lifecycle_state IN ('open', 'closed', 'purged')
+              ),
+              CONSTRAINT uais_staging_inp_cohort_close_reason_ck CHECK (
+                close_reason IS NULL OR close_reason IN ('manual', 'deadline', 'purge')
+              ),
+              CONSTRAINT uais_staging_inp_cohort_deadline_ck CHECK (
+                deadline_at = created_at + interval '48 hours'
               ),
               CONSTRAINT uais_staging_inp_cohort_binding_unique UNIQUE (
                 cohort_id,
                 candidate_git_sha,
                 candidate_content_sha,
-                deployment_host
+                deployment_host,
+                collector_key_version,
+                operator_allowlist_fingerprint
               ),
               CONSTRAINT uais_staging_inp_cohort_lifecycle_ck CHECK (
-                (lifecycle_state = 'open' AND closed_at IS NULL AND purged_at IS NULL)
+                (
+                  lifecycle_state = 'open'
+                  AND close_reason IS NULL
+                  AND closed_at IS NULL
+                  AND purged_at IS NULL
+                )
                 OR (
                   lifecycle_state = 'closed'
+                  AND close_reason IN ('manual', 'deadline')
                   AND closed_at IS NOT NULL
                   AND purged_at IS NULL
                 )
                 OR (
                   lifecycle_state = 'purged'
+                  AND close_reason IN ('manual', 'deadline', 'purge')
                   AND closed_at IS NOT NULL
                   AND purged_at IS NOT NULL
                 )
+              ),
+              CONSTRAINT uais_staging_inp_cohort_deadline_close_ck CHECK (
+                close_reason IS DISTINCT FROM 'deadline'
+                OR closed_at = deadline_at
+              ),
+              CONSTRAINT uais_staging_inp_cohort_close_time_ck CHECK (
+                closed_at IS NULL OR closed_at <= deadline_at
+              ),
+              CONSTRAINT uais_staging_inp_cohort_purge_time_ck CHECK (
+                purged_at IS NULL
+                OR (closed_at IS NOT NULL AND purged_at >= closed_at)
               )
             )
           `;
@@ -309,6 +442,10 @@ export function createUaisStagingInpPostgresStore(
               candidate_git_sha text NOT NULL,
               candidate_content_sha text NOT NULL,
               deployment_host text NOT NULL,
+              collector_key_version text NOT NULL,
+              operator_allowlist_fingerprint text NOT NULL,
+              operator_key text NOT NULL,
+              metric_id_key text NOT NULL,
               role text NOT NULL,
               journey text NOT NULL,
               viewport_class text NOT NULL,
@@ -316,6 +453,8 @@ export function createUaisStagingInpPostgresStore(
               value_ms integer NOT NULL,
               received_at timestamptz NOT NULL,
               expires_at timestamptz NOT NULL,
+              update_count integer NOT NULL DEFAULT 0,
+              last_updated_at timestamptz NOT NULL,
               CONSTRAINT uais_staging_inp_sample_key_ck CHECK (
                 sample_key ~ '^[0-9a-f]{64}$'
               ),
@@ -327,6 +466,18 @@ export function createUaisStagingInpPostgresStore(
               ),
               CONSTRAINT uais_staging_inp_sample_host_ck CHECK (
                 deployment_host ~ '^uais-staging-[a-z0-9-]+\\.vercel\\.app$'
+              ),
+              CONSTRAINT uais_staging_inp_sample_collector_key_version_ck CHECK (
+                collector_key_version ~ '^[a-z0-9][a-z0-9._-]{0,31}$'
+              ),
+              CONSTRAINT uais_staging_inp_sample_allowlist_fingerprint_ck CHECK (
+                operator_allowlist_fingerprint ~ '^[0-9a-f]{64}$'
+              ),
+              CONSTRAINT uais_staging_inp_sample_operator_key_ck CHECK (
+                operator_key ~ '^[0-9a-f]{64}$'
+              ),
+              CONSTRAINT uais_staging_inp_sample_metric_id_key_ck CHECK (
+                metric_id_key ~ '^[0-9a-f]{64}$'
               ),
               CONSTRAINT uais_staging_inp_sample_role_ck CHECK (
                 role IN ('student', 'teacher')
@@ -351,6 +502,12 @@ export function createUaisStagingInpPostgresStore(
               CONSTRAINT uais_staging_inp_sample_expiry_ck CHECK (
                 expires_at = received_at + interval '48 hours'
               ),
+              CONSTRAINT uais_staging_inp_sample_update_count_ck CHECK (
+                update_count BETWEEN 0 AND 12
+              ),
+              CONSTRAINT uais_staging_inp_sample_update_time_ck CHECK (
+                last_updated_at >= received_at AND last_updated_at < expires_at
+              ),
               CONSTRAINT uais_staging_inp_samples_pkey PRIMARY KEY (
                 cohort_id, sample_key
               ),
@@ -358,12 +515,16 @@ export function createUaisStagingInpPostgresStore(
                 cohort_id,
                 candidate_git_sha,
                 candidate_content_sha,
-                deployment_host
+                deployment_host,
+                collector_key_version,
+                operator_allowlist_fingerprint
               ) REFERENCES public.uais_staging_inp_cohorts (
                 cohort_id,
                 candidate_git_sha,
                 candidate_content_sha,
-                deployment_host
+                deployment_host,
+                collector_key_version,
+                operator_allowlist_fingerprint
               )
             )
           `;
@@ -754,57 +915,97 @@ export function createUaisStagingInpPostgresStore(
               "staging-inp-schema-readback-failed",
             );
           }
-          return {
-            status: "ready" as const,
-            cohortsTable: true,
-            samplesTable: true,
-            valuesRedacted: true as const,
-          };
-        }),
-      );
-    },
-
-    async persist(sample: UaisStagingInpStoredSample) {
-      assertSampleExpiry(sample);
-      return withGuardedStagingInpClient(databaseUrl, sqlFactory, async (sql) =>
-        sql.begin(async (transaction) => {
-          await assertPostgresSourceGuard(transaction);
-          await lockPostgresLifecycle(transaction);
-          await transaction`
-            DELETE FROM public.uais_staging_inp_samples
-            WHERE expires_at <= now()
-          `;
           await transaction`
             INSERT INTO public.uais_staging_inp_cohorts (
               cohort_id,
               candidate_git_sha,
               candidate_content_sha,
-              deployment_host
+              deployment_host,
+              collector_key_version,
+              operator_allowlist_fingerprint
             ) VALUES (
-              ${sample.cohortId},
-              ${sample.candidateGitSha},
-              ${sample.candidateContentSha},
-              ${sample.deploymentHost}
+              ${binding.cohortId},
+              ${binding.candidateGitSha},
+              ${binding.candidateContentSha},
+              ${binding.deploymentHost},
+              ${binding.collectorKeyVersion},
+              ${binding.operatorAllowlistFingerprint}
             )
             ON CONFLICT (cohort_id) DO NOTHING
           `;
+          await autoCloseExpiredPostgresCohorts(transaction);
+          const cohort = await selectPostgresCohortForUpdate(
+            transaction,
+            binding.cohortId,
+          );
+          assertPostgresCohort(cohort, binding);
+          const cohortRecord = toPostgresCohortRecord(cohort);
+          if (
+            cohortRecord.state === "closed" &&
+            cohortRecord.closeReason === "deadline"
+          ) {
+            return { status: "deadline-rejected" as const };
+          }
+          assertOpenCohort(cohortRecord);
+          return {
+            status: "ready" as const,
+            cohortsTable: true,
+            samplesTable: true,
+            cohortState: cohortRecord.state,
+            createdAt: cohortRecord.createdAt,
+            deadlineAt: cohortRecord.deadlineAt,
+            valuesRedacted: true as const,
+          };
+        }),
+      );
+      if (result.status === "deadline-rejected") {
+        throw new UaisStagingInpStoreError(
+          409,
+          "staging-inp-cohort-deadline-reached",
+        );
+      }
+      return result;
+    },
+
+    async persist(sample: UaisStagingInpStoredSample) {
+      assertSampleExpiry(sample);
+      const result = await withGuardedStagingInpClient(databaseUrl, sqlFactory, async (sql) =>
+        sql.begin(async (transaction) => {
+          await assertPostgresSourceGuard(transaction);
+          await lockPostgresLifecycle(transaction);
+          await autoCloseExpiredPostgresCohorts(transaction);
+          await purgeExpiredPostgresSamples(transaction);
           const cohort = await selectPostgresCohortForUpdate(
             transaction,
             sample.cohortId,
           );
           assertPostgresCohort(cohort, sample);
-          assertOpenCohort(toPostgresCohortRecord(cohort));
+          const cohortRecord = toPostgresCohortRecord(cohort);
+          if (
+            cohortRecord.state === "closed" &&
+            cohortRecord.closeReason === "deadline"
+          ) {
+            return { status: "deadline-rejected" as const };
+          }
+          assertOpenCohort(cohortRecord);
+          assertSampleInsideCohortWindow(cohortRecord, sample);
 
           const existing = await transaction`
             SELECT
               candidate_git_sha,
               candidate_content_sha,
               deployment_host,
+              collector_key_version,
+              operator_allowlist_fingerprint,
+              operator_key,
+              metric_id_key,
               role,
               journey,
               viewport_class,
               navigation_type,
-              value_ms
+              value_ms,
+              update_count,
+              last_updated_at
             FROM public.uais_staging_inp_samples
             WHERE cohort_id = ${sample.cohortId}
               AND sample_key = ${sample.sampleKey}
@@ -812,15 +1013,47 @@ export function createUaisStagingInpPostgresStore(
           `;
           if (existing.length > 0) {
             assertPostgresSampleIdentity(existing[0], sample);
-            await transaction`
+            if (Number(existing[0]?.value_ms ?? 0) >= sample.valueMs) {
+              return { status: "unchanged" as const };
+            }
+            if (Number(existing[0]?.update_count ?? 0) >= 12) {
+              throw new UaisStagingInpStoreError(
+                429,
+                "staging-inp-update-limit-reached",
+              );
+            }
+            const lastUpdatedAt = Date.parse(String(existing[0]?.last_updated_at ?? ""));
+            if (
+              !Number.isFinite(lastUpdatedAt) ||
+              Date.parse(sample.receivedAt) - lastUpdatedAt < 1_000
+            ) {
+              throw new UaisStagingInpStoreError(
+                429,
+                "staging-inp-update-rate-limited",
+              );
+            }
+            const updated = await transaction`
               UPDATE public.uais_staging_inp_samples
-              SET value_ms = GREATEST(value_ms, ${sample.valueMs})
+              SET value_ms = ${sample.valueMs},
+                  update_count = update_count + 1,
+                  last_updated_at = ${sample.receivedAt}
               WHERE cohort_id = ${sample.cohortId}
                 AND candidate_git_sha = ${sample.candidateGitSha}
                 AND candidate_content_sha = ${sample.candidateContentSha}
                 AND deployment_host = ${sample.deploymentHost}
+                AND collector_key_version = ${sample.collectorKeyVersion}
+                AND operator_allowlist_fingerprint = ${sample.operatorAllowlistFingerprint}
                 AND sample_key = ${sample.sampleKey}
+                AND update_count < 12
+                AND last_updated_at <= ${sample.receivedAt}::timestamptz - interval '1 second'
+              RETURNING 1 AS updated
             `;
+            if (updated.length !== 1) {
+              throw new UaisStagingInpStoreError(
+                429,
+                "staging-inp-update-rate-limited",
+              );
+            }
             return { status: "updated" as const };
           }
 
@@ -831,6 +1064,8 @@ export function createUaisStagingInpPostgresStore(
               AND candidate_git_sha = ${sample.candidateGitSha}
               AND candidate_content_sha = ${sample.candidateContentSha}
               AND deployment_host = ${sample.deploymentHost}
+              AND collector_key_version = ${sample.collectorKeyVersion}
+              AND operator_allowlist_fingerprint = ${sample.operatorAllowlistFingerprint}
           `;
           if (Number(cohortCount[0]?.count ?? 0) >= UAIS_STAGING_INP_COHORT_CAP) {
             throw new UaisStagingInpStoreError(
@@ -845,6 +1080,8 @@ export function createUaisStagingInpPostgresStore(
               AND candidate_git_sha = ${sample.candidateGitSha}
               AND candidate_content_sha = ${sample.candidateContentSha}
               AND deployment_host = ${sample.deploymentHost}
+              AND collector_key_version = ${sample.collectorKeyVersion}
+              AND operator_allowlist_fingerprint = ${sample.operatorAllowlistFingerprint}
               AND role = ${sample.role}
               AND journey = ${sample.journey}
               AND date_trunc('hour', received_at AT TIME ZONE 'UTC') =
@@ -859,6 +1096,31 @@ export function createUaisStagingInpPostgresStore(
               "staging-inp-hourly-limit-reached",
             );
           }
+          const operatorHourlyCount = await transaction`
+            SELECT count(*)::int AS count
+            FROM public.uais_staging_inp_samples
+            WHERE cohort_id = ${sample.cohortId}
+              AND candidate_git_sha = ${sample.candidateGitSha}
+              AND candidate_content_sha = ${sample.candidateContentSha}
+              AND deployment_host = ${sample.deploymentHost}
+              AND collector_key_version = ${sample.collectorKeyVersion}
+              AND operator_allowlist_fingerprint = ${sample.operatorAllowlistFingerprint}
+              AND operator_key = ${sample.operatorKey}
+              AND date_trunc('hour', received_at AT TIME ZONE 'UTC') =
+                date_trunc(
+                  'hour',
+                  ${sample.receivedAt}::timestamptz AT TIME ZONE 'UTC'
+                )
+          `;
+          if (
+            Number(operatorHourlyCount[0]?.count ?? 0) >=
+            UAIS_STAGING_INP_OPERATOR_HOURLY_ID_CAP
+          ) {
+            throw new UaisStagingInpStoreError(
+              429,
+              "staging-inp-operator-hourly-limit-reached",
+            );
+          }
           await transaction`
             INSERT INTO public.uais_staging_inp_samples (
               cohort_id,
@@ -866,31 +1128,48 @@ export function createUaisStagingInpPostgresStore(
               candidate_git_sha,
               candidate_content_sha,
               deployment_host,
+              collector_key_version,
+              operator_allowlist_fingerprint,
+              operator_key,
+              metric_id_key,
               role,
               journey,
               viewport_class,
               navigation_type,
               value_ms,
               received_at,
-              expires_at
+              expires_at,
+              last_updated_at
             ) VALUES (
               ${sample.cohortId},
               ${sample.sampleKey},
               ${sample.candidateGitSha},
               ${sample.candidateContentSha},
               ${sample.deploymentHost},
+              ${sample.collectorKeyVersion},
+              ${sample.operatorAllowlistFingerprint},
+              ${sample.operatorKey},
+              ${sample.metricIdKey},
               ${sample.role},
               ${sample.journey},
               ${sample.viewportClass},
               ${sample.navigationType},
               ${sample.valueMs},
               ${sample.receivedAt},
-              ${sample.expiresAt}
+              ${sample.expiresAt},
+              ${sample.receivedAt}
             )
           `;
           return { status: "stored" as const };
         }),
       );
+      if (result.status === "deadline-rejected") {
+        throw new UaisStagingInpStoreError(
+          409,
+          "staging-inp-cohort-deadline-reached",
+        );
+      }
+      return result;
     },
 
     async readiness(
@@ -900,6 +1179,8 @@ export function createUaisStagingInpPostgresStore(
         sql.begin(async (transaction) => {
           await assertPostgresSourceGuard(transaction);
           await lockPostgresLifecycle(transaction);
+          await autoCloseExpiredPostgresCohorts(transaction);
+          await purgeExpiredPostgresSamples(transaction);
           const cohort = await selectPostgresCohortForUpdate(
             transaction,
             binding.cohortId,
@@ -925,6 +1206,8 @@ export function createUaisStagingInpPostgresStore(
         sql.begin(async (transaction) => {
           await assertPostgresSourceGuard(transaction);
           await lockPostgresLifecycle(transaction);
+          await autoCloseExpiredPostgresCohorts(transaction);
+          await purgeExpiredPostgresSamples(transaction);
           const cohort = await selectPostgresCohortForUpdate(
             transaction,
             binding.cohortId,
@@ -937,11 +1220,15 @@ export function createUaisStagingInpPostgresStore(
           if (record.state === "open") {
             await transaction`
               UPDATE public.uais_staging_inp_cohorts
-              SET lifecycle_state = 'closed', closed_at = now()
+              SET lifecycle_state = 'closed',
+                  close_reason = 'manual',
+                  closed_at = now()
               WHERE cohort_id = ${binding.cohortId}
                 AND candidate_git_sha = ${binding.candidateGitSha}
                 AND candidate_content_sha = ${binding.candidateContentSha}
                 AND deployment_host = ${binding.deploymentHost}
+                AND collector_key_version = ${binding.collectorKeyVersion}
+                AND operator_allowlist_fingerprint = ${binding.operatorAllowlistFingerprint}
                 AND lifecycle_state = 'open'
             `;
           }
@@ -961,6 +1248,8 @@ export function createUaisStagingInpPostgresStore(
         sql.begin(async (transaction) => {
           await assertPostgresSourceGuard(transaction);
           await lockPostgresLifecycle(transaction);
+          await autoCloseExpiredPostgresCohorts(transaction);
+          await purgeExpiredPostgresSamples(transaction);
           const cohort = await selectPostgresCohortForUpdate(
             transaction,
             binding.cohortId,
@@ -969,12 +1258,15 @@ export function createUaisStagingInpPostgresStore(
           await transaction`
             UPDATE public.uais_staging_inp_cohorts
             SET lifecycle_state = 'purged',
+                close_reason = COALESCE(close_reason, 'purge'),
                 closed_at = COALESCE(closed_at, now()),
                 purged_at = COALESCE(purged_at, now())
             WHERE cohort_id = ${binding.cohortId}
               AND candidate_git_sha = ${binding.candidateGitSha}
               AND candidate_content_sha = ${binding.candidateContentSha}
               AND deployment_host = ${binding.deploymentHost}
+              AND collector_key_version = ${binding.collectorKeyVersion}
+              AND operator_allowlist_fingerprint = ${binding.operatorAllowlistFingerprint}
           `;
           const deleted = await transaction`
             DELETE FROM public.uais_staging_inp_samples
@@ -982,18 +1274,21 @@ export function createUaisStagingInpPostgresStore(
               AND candidate_git_sha = ${binding.candidateGitSha}
               AND candidate_content_sha = ${binding.candidateContentSha}
               AND deployment_host = ${binding.deploymentHost}
+              AND collector_key_version = ${binding.collectorKeyVersion}
+              AND operator_allowlist_fingerprint = ${binding.operatorAllowlistFingerprint}
             RETURNING 1 AS deleted
           `;
-          const remainingForBinding = await countPostgresSamples(
+          const rawSampleRowsRemaining = await countPostgresSamples(
             transaction,
             binding,
           );
           return {
             ...binding,
             state: "purged" as const,
-            deletedCount: deleted.length,
-            remainingForBinding,
-            zeroResidue: remainingForBinding === 0,
+            rawSampleRowsDeleted: deleted.length,
+            rawSampleRowsRemaining,
+            rawSampleRowsZero: rawSampleRowsRemaining === 0,
+            cohortTombstoneRetained: true as const,
           };
         }),
       );
@@ -1006,6 +1301,8 @@ export function createUaisStagingInpPostgresStore(
         sql.begin(async (transaction) => {
           await assertPostgresSourceGuard(transaction);
           await lockPostgresLifecycle(transaction);
+          await autoCloseExpiredPostgresCohorts(transaction);
+          await purgeExpiredPostgresSamples(transaction);
           const cohort = await selectPostgresCohortForUpdate(
             transaction,
             binding.cohortId,
@@ -1014,7 +1311,8 @@ export function createUaisStagingInpPostgresStore(
           return {
             ...binding,
             state: toPostgresCohortRecord(cohort).state,
-            remainingForBinding: await countPostgresSamples(transaction, binding),
+            rawSampleRowsRemaining: await countPostgresSamples(transaction, binding),
+            cohortTombstoneRetained: true as const,
           };
         }),
       );
@@ -1025,6 +1323,7 @@ export function createUaisStagingInpPostgresStore(
         sql.begin(async (transaction) => {
           await assertPostgresSourceGuard(transaction);
           await lockPostgresLifecycle(transaction);
+          const closed = await autoCloseExpiredPostgresCohorts(transaction);
           const deleted = await purgeExpiredPostgresSamples(transaction);
           const remainingExpired = await transaction`
             SELECT count(*)::int AS count
@@ -1033,9 +1332,10 @@ export function createUaisStagingInpPostgresStore(
           `;
           const remainingExpiredCount = Number(remainingExpired[0]?.count ?? 0);
           return {
-            deletedCount: deleted.length,
-            remainingExpiredCount,
-            zeroResidue: remainingExpiredCount === 0,
+            cohortsAutoClosed: closed.length,
+            expiredRawSampleRowsDeleted: deleted.length,
+            expiredRawSampleRowsRemaining: remainingExpiredCount,
+            expiredRawSampleRowsZero: remainingExpiredCount === 0,
             valuesRedacted: true as const,
           };
         }),
@@ -1105,7 +1405,7 @@ async function assertPostgresSourceGuard(sql: TransactionSql) {
 }
 
 async function lockPostgresLifecycle(sql: TransactionSql) {
-  await sql`SELECT pg_advisory_xact_lock(hashtext('uais-staging-inp-v4'))`;
+  await sql`SELECT pg_advisory_xact_lock(hashtext('uais-staging-inp-v5'))`;
 }
 
 function toStagingInpContractDdl(ddl: string) {
@@ -1137,6 +1437,18 @@ async function purgeExpiredPostgresSamples(sql: TransactionSql) {
   `;
 }
 
+async function autoCloseExpiredPostgresCohorts(sql: TransactionSql) {
+  return sql`
+    UPDATE public.uais_staging_inp_cohorts
+    SET lifecycle_state = 'closed',
+        close_reason = 'deadline',
+        closed_at = deadline_at
+    WHERE lifecycle_state = 'open'
+      AND deadline_at <= now()
+    RETURNING cohort_id
+  `;
+}
+
 async function selectPostgresCohortForUpdate(
   sql: TransactionSql,
   cohortId: string,
@@ -1147,7 +1459,12 @@ async function selectPostgresCohortForUpdate(
       candidate_git_sha,
       candidate_content_sha,
       deployment_host,
+      collector_key_version,
+      operator_allowlist_fingerprint,
       lifecycle_state,
+      created_at,
+      deadline_at,
+      close_reason,
       closed_at,
       purged_at
     FROM public.uais_staging_inp_cohorts
@@ -1167,6 +1484,8 @@ async function countPostgresSamples(
       AND candidate_git_sha = ${binding.candidateGitSha}
       AND candidate_content_sha = ${binding.candidateContentSha}
       AND deployment_host = ${binding.deploymentHost}
+      AND collector_key_version = ${binding.collectorKeyVersion}
+      AND operator_allowlist_fingerprint = ${binding.operatorAllowlistFingerprint}
   `;
   return Number(rows[0]?.count ?? 0);
 }
@@ -1181,6 +1500,7 @@ async function aggregatePostgresSamples(
       journey,
       viewport_class,
       count(*)::int AS n,
+      count(DISTINCT operator_key)::int AS distinct_operator_count,
       percentile_cont(0.75)
         WITHIN GROUP (ORDER BY value_ms)::double precision AS p75_ms
     FROM public.uais_staging_inp_samples
@@ -1188,6 +1508,8 @@ async function aggregatePostgresSamples(
       AND candidate_git_sha = ${binding.candidateGitSha}
       AND candidate_content_sha = ${binding.candidateContentSha}
       AND deployment_host = ${binding.deploymentHost}
+      AND collector_key_version = ${binding.collectorKeyVersion}
+      AND operator_allowlist_fingerprint = ${binding.operatorAllowlistFingerprint}
       AND expires_at > now()
     GROUP BY role, journey, viewport_class
     ORDER BY role, journey, viewport_class
@@ -1197,6 +1519,7 @@ async function aggregatePostgresSamples(
     journey: row.journey as UaisStagingInpJourney,
     viewportClass: row.viewport_class as UaisStagingInpViewportClass,
     n: Number(row.n),
+    distinctOperatorCount: Number(row.distinct_operator_count),
     p75Ms: Number(row.p75_ms),
   }));
 }
@@ -1224,7 +1547,19 @@ function toPostgresCohortRecord(
     candidateGitSha: String(row.candidate_git_sha ?? ""),
     candidateContentSha: String(row.candidate_content_sha ?? ""),
     deploymentHost: String(row.deployment_host ?? ""),
+    collectorKeyVersion: String(row.collector_key_version ?? ""),
+    operatorAllowlistFingerprint: String(
+      row.operator_allowlist_fingerprint ?? "",
+    ),
     state,
+    createdAt: String(row.created_at ?? ""),
+    deadlineAt: String(row.deadline_at ?? ""),
+    closeReason:
+      row.close_reason === "manual" ||
+      row.close_reason === "deadline" ||
+      row.close_reason === "purge"
+        ? row.close_reason
+        : null,
     closedAt: row.closed_at ? String(row.closed_at) : null,
     purgedAt: row.purged_at ? String(row.purged_at) : null,
   };
@@ -1238,6 +1573,10 @@ function assertPostgresSampleIdentity(
     row.candidate_git_sha !== sample.candidateGitSha ||
     row.candidate_content_sha !== sample.candidateContentSha ||
     row.deployment_host !== sample.deploymentHost ||
+    row.collector_key_version !== sample.collectorKeyVersion ||
+    row.operator_allowlist_fingerprint !== sample.operatorAllowlistFingerprint ||
+    row.operator_key !== sample.operatorKey ||
+    row.metric_id_key !== sample.metricIdKey ||
     row.role !== sample.role ||
     row.journey !== sample.journey ||
     row.viewport_class !== sample.viewportClass ||
@@ -1266,13 +1605,24 @@ function assertSampleExpiry(sample: UaisStagingInpStoredSample) {
   }
 }
 
-function bindingFromSample(sample: UaisStagingInpStoredSample): UaisStagingInpBinding {
-  return {
-    cohortId: sample.cohortId,
-    candidateGitSha: sample.candidateGitSha,
-    candidateContentSha: sample.candidateContentSha,
-    deploymentHost: sample.deploymentHost,
-  };
+function assertSampleInsideCohortWindow(
+  cohort: UaisStagingInpCohortRecord,
+  sample: UaisStagingInpStoredSample,
+) {
+  const receivedAt = Date.parse(sample.receivedAt);
+  const createdAt = Date.parse(cohort.createdAt);
+  const deadlineAt = Date.parse(cohort.deadlineAt);
+  if (
+    !Number.isFinite(createdAt) ||
+    !Number.isFinite(deadlineAt) ||
+    receivedAt < createdAt ||
+    receivedAt >= deadlineAt
+  ) {
+    throw new UaisStagingInpStoreError(
+      409,
+      "staging-inp-sample-outside-cohort-window",
+    );
+  }
 }
 
 function sameBinding(left: UaisStagingInpBinding, right: UaisStagingInpBinding) {
@@ -1280,7 +1630,9 @@ function sameBinding(left: UaisStagingInpBinding, right: UaisStagingInpBinding) 
     left.cohortId === right.cohortId &&
     left.candidateGitSha === right.candidateGitSha &&
     left.candidateContentSha === right.candidateContentSha &&
-    left.deploymentHost === right.deploymentHost
+    left.deploymentHost === right.deploymentHost &&
+    left.collectorKeyVersion === right.collectorKeyVersion &&
+    left.operatorAllowlistFingerprint === right.operatorAllowlistFingerprint
   );
 }
 
@@ -1292,7 +1644,12 @@ function assertBinding(actual: UaisStagingInpBinding, expected: UaisStagingInpBi
 
 function assertOpenCohort(cohort: UaisStagingInpCohortRecord) {
   if (cohort.state === "closed") {
-    throw new UaisStagingInpStoreError(409, "staging-inp-cohort-closed");
+    throw new UaisStagingInpStoreError(
+      409,
+      cohort.closeReason === "deadline"
+        ? "staging-inp-cohort-deadline-reached"
+        : "staging-inp-cohort-closed",
+    );
   }
   if (cohort.state === "purged") {
     throw new UaisStagingInpStoreError(409, "staging-inp-cohort-purged");
@@ -1309,6 +1666,8 @@ function assertSameSampleIdentity(
     actual.journey !== expected.journey ||
     actual.viewportClass !== expected.viewportClass ||
     actual.navigationType !== expected.navigationType
+    || actual.operatorKey !== expected.operatorKey
+    || actual.metricIdKey !== expected.metricIdKey
   ) {
     throw new UaisStagingInpStoreError(409, "staging-inp-sample-identity-conflict");
   }
@@ -1334,6 +1693,7 @@ function aggregateSamples(
       journey: group[0].journey,
       viewportClass: group[0].viewportClass,
       n: group.length,
+      distinctOperatorCount: new Set(group.map((item) => item.operatorKey)).size,
       p75Ms: percentile(group.map((item) => item.valueMs), 0.75),
     }))
     .sort((left, right) =>

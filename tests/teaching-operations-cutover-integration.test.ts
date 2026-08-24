@@ -16,13 +16,20 @@ import {
   TeachingOperationStoreError,
   type TeachingOperationDatabase,
 } from "@/lib/server/teaching-operations-store";
+import { authorizeLiveDatabaseTestFile } from "../scripts/run-db-tests.mjs";
 
 // Phase 1 full expand -> migrate -> contract cutover for the teaching-operations
-// entity, verified end-to-end against a real Postgres. SKIPS unless
-// UAIS_CORE_DATABASE_URL points at a reachable Postgres (run db:migrate first so
-// 0002_teaching_operations is applied). Run DB integration tests individually or
-// with --no-file-parallelism (they share the "default" snapshot key per table).
-const databaseUrl = process.env.UAIS_CORE_DATABASE_URL?.trim();
+// entity, verified end-to-end against a real Postgres. The dedicated runner
+// supplies the only accepted launch capability and serializes shared fixtures.
+const authorization = await authorizeLiveDatabaseTestFile({
+  env: process.env,
+  lane: "legacy",
+  testFile: "tests/teaching-operations-cutover-integration.test.ts",
+});
+if (authorization.exitCode !== 0) {
+  throw new Error(`UAIS_DB_TEST ${JSON.stringify(authorization.report)}`);
+}
+const databaseUrl = authorization.databaseUrl ?? "";
 
 function buildInviteCode(inviteId: string) {
   return {
@@ -56,7 +63,7 @@ async function seedJsonFile(dataDir: string, database: TeachingOperationDatabase
   );
 }
 
-describe.skipIf(!databaseUrl)(
+describe(
   "teaching-operations durable cutover (integration)",
   () => {
     it("backfills JSON -> Postgres, verifies parity, switches reads, and rolls back safely", async () => {

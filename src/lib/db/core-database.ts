@@ -4,6 +4,10 @@ import {
   UAIS_CORE_DATABASE_MIGRATION_VERSIONS,
   type UaisCoreDatabaseMigrationVersion,
 } from "@/lib/db/migrations";
+import {
+  UAIS_PRODUCTION_NEON_PROJECT_ID,
+  UAIS_STAGING_INP_PROJECT_ID,
+} from "@/lib/observability/uais-staging-inp";
 import * as schema from "@/lib/db/schema";
 
 export const UAIS_CORE_DATABASE_ENV_NAMES = [
@@ -11,8 +15,12 @@ export const UAIS_CORE_DATABASE_ENV_NAMES = [
   "DATABASE_URL",
   "POSTGRES_URL",
 ] as const;
+export const UAIS_ISOLATED_STAGING_CORE_DATABASE_ENV_NAME =
+  "UAIS_P2_STAGING_DATABASE_URL" as const;
 
-export type UaisCoreDatabaseEnvName = (typeof UAIS_CORE_DATABASE_ENV_NAMES)[number];
+export type UaisCoreDatabaseEnvName =
+  | (typeof UAIS_CORE_DATABASE_ENV_NAMES)[number]
+  | typeof UAIS_ISOLATED_STAGING_CORE_DATABASE_ENV_NAME;
 
 export type UaisCoreDatabaseReadiness =
   | {
@@ -44,7 +52,9 @@ export function getUaisCoreDatabaseReadiness(
       target: "uais-core-database",
       status: "blocked",
       blockedReason: "missing-managed-postgres-url",
-      acceptedEnvNames: UAIS_CORE_DATABASE_ENV_NAMES,
+      acceptedEnvNames: isExactIsolatedStagingRuntime(env)
+        ? [UAIS_ISOLATED_STAGING_CORE_DATABASE_ENV_NAME]
+        : UAIS_CORE_DATABASE_ENV_NAMES,
       valueRedacted: true,
     };
   }
@@ -199,7 +209,16 @@ export function readUaisCoreDatabaseUrl(env: Record<string, string | undefined>)
 function readSelectedDatabaseEnvName(
   env: Record<string, string | undefined>,
 ): UaisCoreDatabaseEnvName | undefined {
-  return UAIS_CORE_DATABASE_ENV_NAMES.find((name) => hasValue(env[name]));
+  const genericName = UAIS_CORE_DATABASE_ENV_NAMES.find((name) => hasValue(env[name]));
+  if (!isExactIsolatedStagingRuntime(env)) return genericName;
+  if (genericName || !hasValue(env[UAIS_ISOLATED_STAGING_CORE_DATABASE_ENV_NAME])) {
+    return undefined;
+  }
+  const neonProjectId = env.NEON_PROJECT_ID?.trim() ?? "";
+  if (!neonProjectId || neonProjectId === UAIS_PRODUCTION_NEON_PROJECT_ID) {
+    return undefined;
+  }
+  return UAIS_ISOLATED_STAGING_CORE_DATABASE_ENV_NAME;
 }
 
 function readSelectedDatabaseUrl(env: Record<string, string | undefined>) {
@@ -209,4 +228,15 @@ function readSelectedDatabaseUrl(env: Record<string, string | undefined>) {
 
 function hasValue(value: string | undefined) {
   return typeof value === "string" && value.trim() !== "";
+}
+
+function isExactIsolatedStagingRuntime(
+  env: Record<string, string | undefined>,
+) {
+  return (
+    env.VERCEL_ENV === "production" &&
+    env.VERCEL_PROJECT_ID === UAIS_STAGING_INP_PROJECT_ID &&
+    env.UAIS_DEPLOYMENT_ENV === "staging" &&
+    env.UAIS_LEARNING_CHATROOM_GROUPS_MODE === "on"
+  );
 }

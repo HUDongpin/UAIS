@@ -4,10 +4,19 @@ import {
   resetUaisCoreDatabasePoolForTesting,
 } from "@/lib/db/core-database";
 import { createUaisTeacherAiOwnershipPostgresRepository } from "@/lib/server/teacher-ai-ownership-store";
+import { authorizeLiveDatabaseTestFile } from "../scripts/run-db-tests.mjs";
 
-const databaseUrl = process.env.UAIS_CORE_DATABASE_URL?.trim();
+const authorization = await authorizeLiveDatabaseTestFile({
+  env: process.env,
+  lane: "legacy",
+  testFile: "tests/teacher-ai-ownership-postgres-integration.test.ts",
+});
+if (authorization.exitCode !== 0) {
+  throw new Error(`UAIS_DB_TEST ${JSON.stringify(authorization.report)}`);
+}
+const databaseUrl = authorization.databaseUrl ?? "";
 
-describe.skipIf(!databaseUrl)("teacher AI ownership Postgres adapter (integration)", () => {
+describe("teacher AI ownership Postgres adapter (integration)", () => {
   const env = { UAIS_CORE_DATABASE_URL: databaseUrl };
   const teacherId = "teacher-ownership-pg-integration";
   const courseId = "teacher-ownership-pg-course";

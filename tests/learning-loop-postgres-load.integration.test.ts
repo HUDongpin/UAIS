@@ -6,17 +6,24 @@ import {
   createUaisLearningLoopPostgresStore,
   type LearningLoopPostgresClientFactory,
 } from "@/lib/learning-loop/postgres-store";
+import { authorizeLiveDatabaseTestFile } from "../scripts/run-db-tests.mjs";
 
-const databaseUrl = process.env.UAIS_P1_LOAD_TEST_DATABASE_URL?.trim();
-const loadDatabaseUrl =
-  databaseUrl ?? "postgres://p1-load-test-disabled.invalid/uais";
+const authorization = await authorizeLiveDatabaseTestFile({
+  env: process.env,
+  lane: "p1-load",
+  testFile: "tests/learning-loop-postgres-load.integration.test.ts",
+});
+if (authorization.exitCode !== 0) {
+  throw new Error(`UAIS_DB_TEST ${JSON.stringify(authorization.report)}`);
+}
+const loadDatabaseUrl = authorization.databaseUrl ?? "";
 const STUDENT_COUNT = 200;
 const AUTOSAVE_WINDOW_MS = 300_000;
 const SUBMIT_WINDOW_MS = 30_000;
 const DECISION_COUNT = 20;
 const CORE_WRITE_P95_MS = 1_500;
 
-describe.skipIf(!databaseUrl)("P1 isolated 200-student Postgres load lane", () => {
+describe("P1 isolated 200-student Postgres load lane", () => {
   const suffix = randomUUID().replace(/-/g, "");
   const teacherAccount = `p1.load.teacher.${suffix}`;
   const studentAccounts = Array.from(

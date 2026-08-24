@@ -6,10 +6,22 @@ import {
   type UaisStagingInpStoredSample,
 } from "@/lib/server/uais-staging-inp-store";
 import type { UaisStagingInpBinding } from "@/lib/observability/uais-staging-inp";
+import {
+  authorizeLiveDatabaseTestFile,
+  inspectDatabaseTarget,
+} from "../scripts/run-db-tests.mjs";
 
-const databaseUrl = process.env.UAIS_P2_STAGING_DATABASE_URL?.trim();
+const authorization = await authorizeLiveDatabaseTestFile({
+  env: process.env,
+  lane: "staging-inp",
+  testFile: "tests/staging-inp-rum-postgres-integration.test.ts",
+});
+if (authorization.exitCode !== 0) {
+  throw new Error(`UAIS_DB_TEST ${JSON.stringify(authorization.report)}`);
+}
+const databaseUrl = authorization.databaseUrl ?? "";
 
-describe.skipIf(!databaseUrl)("staging INP lifecycle on guarded Postgres", () => {
+describe("staging INP lifecycle on guarded Postgres", () => {
   const suffix = randomUUID().replace(/-/g, "").slice(0, 16);
   const candidateGitSha = createHash("sha1").update(suffix).digest("hex");
   const candidateContentSha = createHash("sha256").update(suffix).digest("hex");
@@ -19,43 +31,41 @@ describe.skipIf(!databaseUrl)("staging INP lifecycle on guarded Postgres", () =>
     candidateGitSha,
     candidateContentSha,
     deploymentHost,
+    collectorKeyVersion: "v1",
+    operatorAllowlistFingerprint: createHash("sha256")
+      .update(`${suffix}:allowlist`)
+      .digest("hex"),
   };
   const expiryBinding: UaisStagingInpBinding = {
     ...lifecycleBinding,
     cohortId: `p2-inp-${candidateGitSha}-ex${suffix.slice(0, 12)}`,
   };
-  const env = { UAIS_P2_STAGING_DATABASE_URL: databaseUrl };
-  const store = createUaisStagingInpPostgresStore({ env });
+  // The store keeps its staging-adapter key, but the value has only one
+  // external source: the fully guarded UAIS_DB_TEST_DATABASE_URL above.
+  const storeEnv = { UAIS_P2_STAGING_DATABASE_URL: databaseUrl };
+  const store = createUaisStagingInpPostgresStore({ env: storeEnv });
   let guardApproved = false;
 
   beforeAll(async () => {
-    const sql = postgres(databaseUrl!, {
-      max: 1,
-      prepare: false,
-      connect_timeout: 10,
+    const inspection = await inspectDatabaseTarget({
+      databaseUrl: databaseUrl!,
     });
-    try {
-      const rows = await sql`
-        SELECT
-          environment,
-          current_setting('session_replication_role') AS session_replication_role
-        FROM public.uais_environment_guard
-        WHERE environment = 'isolated-p2-staging-source'
-          AND enabled = true
-        LIMIT 1
-      `;
-      if (rows.length !== 1 || rows[0]?.session_replication_role !== "origin") {
-        throw new Error("isolated-p2-staging-source guard row required");
-      }
-      guardApproved = true;
-    } finally {
-      await sql.end({ timeout: 5 });
+    if (inspection.approved !== true) {
+      throw new Error(
+        "isolated-uais-db-test and isolated-p2-staging-source guard rows required",
+      );
     }
-    await store.setup();
+    guardApproved = true;
+    await store.setup(lifecycleBinding);
+    await store.setup(expiryBinding);
   }, 60_000);
 
   afterAll(async () => {
     if (!guardApproved) return;
+    const inspection = await inspectDatabaseTarget({
+      databaseUrl: databaseUrl!,
+    });
+    if (inspection.approved !== true) return;
     const sql = postgres(databaseUrl!, {
       max: 1,
       prepare: false,
@@ -71,7 +81,10 @@ describe.skipIf(!databaseUrl)("staging INP lifecycle on guarded Postgres", () =>
           AND enabled = true
         LIMIT 1
       `;
-      if (guard.length !== 1 || guard[0]?.session_replication_role !== "origin") {
+      if (
+        guard.length !== 1 ||
+        guard[0]?.session_replication_role !== "origin"
+      ) {
         return;
       }
       for (const binding of [lifecycleBinding, expiryBinding]) {
@@ -104,7 +117,17 @@ describe.skipIf(!databaseUrl)("staging INP lifecycle on guarded Postgres", () =>
     });
 
     await expect(store.persist(sample)).resolves.toEqual({ status: "stored" });
-    await expect(store.persist({ ...sample, valueMs: 190 })).resolves.toEqual({
+    const updatedAt = new Date(receivedAt.getTime() + 1_000);
+    await expect(
+      store.persist({
+        ...sample,
+        valueMs: 190,
+        receivedAt: updatedAt.toISOString(),
+        expiresAt: new Date(
+          updatedAt.getTime() + 48 * 60 * 60 * 1_000,
+        ).toISOString(),
+      }),
+    ).resolves.toEqual({
       status: "updated",
     });
     await expect(store.readiness(lifecycleBinding)).resolves.toMatchObject({
@@ -126,42 +149,48 @@ describe.skipIf(!databaseUrl)("staging INP lifecycle on guarded Postgres", () =>
     ).rejects.toMatchObject({ reasonCode: "staging-inp-cohort-closed" });
     await expect(store.purge(lifecycleBinding)).resolves.toMatchObject({
       state: "purged",
-      deletedCount: 1,
-      remainingForBinding: 0,
-      zeroResidue: true,
+      rawSampleRowsDeleted: 1,
+      rawSampleRowsRemaining: 0,
+      rawSampleRowsZero: true,
     });
     await expect(store.readback(lifecycleBinding)).resolves.toMatchObject({
       state: "purged",
-      remainingForBinding: 0,
+      rawSampleRowsRemaining: 0,
     });
   });
 
-  it("removes expired raw samples only through the independent purge action", async () => {
+  it("rejects samples from before cohort setup and keeps expiry cleanup independently callable", async () => {
     const receivedAt = new Date(Date.now() - 72 * 60 * 60 * 1_000);
-    await store.persist(
-      createSample(expiryBinding, {
-        sampleKey: createHash("sha256").update(`${suffix}:expired`).digest("hex"),
-        receivedAt,
-        valueMs: 160,
-      }),
-    );
+    await expect(
+      store.persist(
+        createSample(expiryBinding, {
+          sampleKey: createHash("sha256")
+            .update(`${suffix}:expired`)
+            .digest("hex"),
+          receivedAt,
+          valueMs: 160,
+        }),
+      ),
+    ).rejects.toMatchObject({
+      reasonCode: "staging-inp-sample-outside-cohort-window",
+    });
     await expect(store.readback(expiryBinding)).resolves.toMatchObject({
       state: "open",
-      remainingForBinding: 1,
+      rawSampleRowsRemaining: 0,
     });
     await expect(store.purgeExpired()).resolves.toMatchObject({
-      deletedCount: expect.any(Number),
-      remainingExpiredCount: 0,
-      zeroResidue: true,
+      expiredRawSampleRowsDeleted: expect.any(Number),
+      expiredRawSampleRowsRemaining: 0,
+      expiredRawSampleRowsZero: true,
     });
     await expect(store.readback(expiryBinding)).resolves.toMatchObject({
       state: "open",
-      remainingForBinding: 0,
+      rawSampleRowsRemaining: 0,
     });
     await expect(store.purge(expiryBinding)).resolves.toMatchObject({
       state: "purged",
-      remainingForBinding: 0,
-      zeroResidue: true,
+      rawSampleRowsRemaining: 0,
+      rawSampleRowsZero: true,
     });
   });
 });
@@ -173,6 +202,12 @@ function createSample(
   return {
     ...binding,
     sampleKey: input.sampleKey,
+    metricIdKey: createHash("sha256")
+      .update(`${input.sampleKey}:metric`)
+      .digest("hex"),
+    operatorKey: createHash("sha256")
+      .update(`${binding.cohortId}:operator`)
+      .digest("hex"),
     role: "teacher",
     journey: "teacher-home",
     viewportClass: "wide",

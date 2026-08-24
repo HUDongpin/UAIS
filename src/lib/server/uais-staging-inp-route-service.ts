@@ -1,12 +1,16 @@
 import { createHmac } from "node:crypto";
 import {
   UAIS_STAGING_INP_TTL_HOURS,
+  classifyUaisStagingInpJourney,
   parseUaisStagingInpPayload,
   type UaisStagingInpBinding,
-  type UaisStagingInpJourney,
 } from "@/lib/observability/uais-staging-inp";
 import { getUaisAppSessionClaimsFromCookieString } from "@/lib/server/uais-app-session";
 import { isApprovedUaisStagingInpOperator } from "@/lib/server/uais-staging-inp-access";
+import {
+  getVerifiedUaisStagingInpRouteAttestation,
+  readUaisStagingInpRouteAttestationFromCookieString,
+} from "@/lib/server/uais-staging-inp-route-attestation";
 import {
   getUaisStagingInpBinding,
   getUaisStagingInpGuard,
@@ -23,8 +27,16 @@ type StagingInpHandlerDependencies = {
   now?: () => Date;
   persist?: (
     sample: UaisStagingInpStoredSample,
-  ) => Promise<{ status: "stored" | "updated" }>;
+  ) => Promise<{ status: "stored" | "updated" | "unchanged" }>;
+  consumeIngress?: (input: {
+    cohortId: string;
+    operatorKey: string;
+    observedAt: Date;
+  }) => { allowed: boolean; retryAfterSeconds: number };
 };
+
+const ingressBuckets = new Map<string, { minute: number; count: number }>();
+const maximumIngressRequestsPerOperatorMinute = 60;
 
 export function createStagingInpPostHandler(
   dependencies: StagingInpHandlerDependencies = {},
@@ -65,11 +77,38 @@ export function createStagingInpPostHandler(
     if (!claims || (claims.role !== "student" && claims.role !== "teacher")) {
       return jsonResponse(401, "session-required");
     }
-    if (!roleOwnsJourney(claims.role, payload.journey)) {
-      return jsonResponse(403, "journey-role-mismatch");
-    }
     if (!isApprovedUaisStagingInpOperator(claims.account, env)) {
       return jsonResponse(403, "operator-not-approved");
+    }
+    const documentJourney = getSameOriginDocumentJourney(request, binding);
+    if (!documentJourney) {
+      return jsonResponse(403, "document-context-required");
+    }
+    const routeAttestation = getVerifiedUaisStagingInpRouteAttestation({
+      token: readUaisStagingInpRouteAttestationFromCookieString(
+        request.headers.get("cookie"),
+      ),
+      binding,
+      account: claims.account,
+      sessionId: claims.sessionId,
+      role: claims.role,
+      journey: documentJourney,
+      secret: env.UAIS_STAGING_INP_HMAC_SECRET ?? "",
+      now: observedAt,
+      sessionExpiresAt: claims.expiresAt,
+    });
+    if (!routeAttestation) {
+      return jsonResponse(403, "route-attestation-required");
+    }
+    const ingress = (dependencies.consumeIngress ?? consumeIngress)({
+      cohortId: binding.cohortId,
+      operatorKey: routeAttestation.operatorKey,
+      observedAt,
+    });
+    if (!ingress.allowed) {
+      return jsonResponse(429, "rate-limited", {
+        "retry-after": String(ingress.retryAfterSeconds),
+      });
     }
 
     const sample: UaisStagingInpStoredSample = {
@@ -77,15 +116,16 @@ export function createStagingInpPostHandler(
       sampleKey: createSampleKey({
         secret: env.UAIS_STAGING_INP_HMAC_SECRET ?? "",
         binding,
-        account: claims.account,
-        role: claims.role,
-        journey: payload.journey,
-        viewportClass: payload.viewportClass,
-        navigationType: payload.navigationType,
+        routeAttestationId: routeAttestation.jti,
+      }),
+      operatorKey: routeAttestation.operatorKey,
+      metricIdKey: createMetricIdKey({
+        secret: env.UAIS_STAGING_INP_HMAC_SECRET ?? "",
+        routeAttestationId: routeAttestation.jti,
         metricId: payload.id,
       }),
       role: claims.role,
-      journey: payload.journey,
+      journey: routeAttestation.journey,
       viewportClass: payload.viewportClass,
       navigationType: payload.navigationType,
       valueMs: payload.valueMs,
@@ -107,6 +147,29 @@ export function createStagingInpPostHandler(
       return jsonResponse(503, "temporarily-unavailable");
     }
   };
+}
+
+function getSameOriginDocumentJourney(
+  request: Request,
+  binding: UaisStagingInpBinding,
+) {
+  const referrer = request.headers.get("referer");
+  if (!referrer) return null;
+  try {
+    const url = new URL(referrer);
+    if (
+      url.protocol !== "https:" ||
+      url.hostname !== binding.deploymentHost ||
+      url.port !== "" ||
+      url.username !== "" ||
+      url.password !== ""
+    ) {
+      return null;
+    }
+    return classifyUaisStagingInpJourney(url.pathname);
+  } catch {
+    return null;
+  }
 }
 
 async function readBoundedBody(
@@ -147,38 +210,37 @@ function hasExactImmutableOrigin(request: Request, binding: UaisStagingInpBindin
   );
 }
 
-function roleOwnsJourney(
-  role: "student" | "teacher",
-  journey: UaisStagingInpJourney,
-) {
-  return role === "student"
-    ? journey.startsWith("student-")
-    : journey.startsWith("teacher-");
-}
-
 function createSampleKey(input: {
   secret: string;
   binding: UaisStagingInpBinding;
-  account: string;
-  role: "student" | "teacher";
-  journey: UaisStagingInpJourney;
-  viewportClass: "compact" | "wide";
-  navigationType: string;
+  routeAttestationId: string;
+}) {
+  return createHmac("sha256", input.secret)
+    .update(
+      [
+        "uais-staging-inp-sample:v4",
+        input.binding.cohortId,
+        input.binding.candidateGitSha,
+        input.binding.candidateContentSha,
+        input.binding.deploymentHost,
+        input.binding.collectorKeyVersion,
+        input.binding.operatorAllowlistFingerprint,
+        input.routeAttestationId,
+      ].join("\u0000"),
+    )
+    .digest("hex");
+}
+
+function createMetricIdKey(input: {
+  secret: string;
+  routeAttestationId: string;
   metricId: string;
 }) {
   return createHmac("sha256", input.secret)
     .update(
       [
-        "uais-staging-inp-sample:v3",
-        input.binding.cohortId,
-        input.binding.candidateGitSha,
-        input.binding.candidateContentSha,
-        input.binding.deploymentHost,
-        input.account,
-        input.role,
-        input.journey,
-        input.viewportClass,
-        input.navigationType,
+        "uais-staging-inp-metric-id:v1",
+        input.routeAttestationId,
         input.metricId,
       ].join("\u0000"),
     )
@@ -193,7 +255,33 @@ function parseJson(value: string): unknown {
   }
 }
 
-function jsonResponse(status: number, responseStatus: string) {
+function consumeIngress(input: {
+  cohortId: string;
+  operatorKey: string;
+  observedAt: Date;
+}) {
+  const observedMs = input.observedAt.getTime();
+  const minute = Math.floor(observedMs / 60_000);
+  const key = `${input.cohortId}\u0000${input.operatorKey}`;
+  const bucket = ingressBuckets.get(key);
+  const count = bucket?.minute === minute ? bucket.count + 1 : 1;
+  ingressBuckets.set(key, { minute, count });
+  if (ingressBuckets.size > 2_000) {
+    for (const [candidateKey, candidate] of ingressBuckets) {
+      if (candidate.minute < minute) ingressBuckets.delete(candidateKey);
+    }
+  }
+  return {
+    allowed: count <= maximumIngressRequestsPerOperatorMinute,
+    retryAfterSeconds: Math.max(1, 60 - Math.floor((observedMs % 60_000) / 1_000)),
+  };
+}
+
+function jsonResponse(
+  status: number,
+  responseStatus: string,
+  additionalHeaders: Record<string, string> = {},
+) {
   return Response.json(
     {
       target: "uais-staging-inp",
@@ -205,6 +293,7 @@ function jsonResponse(status: number, responseStatus: string) {
       headers: {
         "cache-control": "no-store",
         "content-type": "application/json; charset=utf-8",
+        ...additionalHeaders,
       },
     },
   );

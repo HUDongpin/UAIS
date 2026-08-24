@@ -14,6 +14,9 @@ describe("P2 restore target migration parity", () => {
     expect(firstTaggedCleanup).toBeGreaterThan(migrationCall);
     expect(source).toContain('currentStage = "restore-target-migrations";');
     expect(source).toContain("UAIS_CORE_DATABASE_URL: restoreDatabaseUrl");
+    expect(source).toContain(
+      'UAIS_CORE_DATABASE_REQUIRED_GUARD:\n          "isolated-p2-staging-restore"',
+    );
     expect(source).toContain('DATABASE_URL: ""');
     expect(source).toContain('POSTGRES_URL: ""');
     expect(source).toContain(

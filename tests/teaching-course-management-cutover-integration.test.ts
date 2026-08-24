@@ -20,18 +20,21 @@ import type {
   TeachingCourseManagementDatabase,
   TeachingCourseRecord,
 } from "@/lib/server/teaching-course-management-types";
+import { authorizeLiveDatabaseTestFile } from "../scripts/run-db-tests.mjs";
 
 // Phase 1 full expand -> migrate -> contract cutover for one entity
 // (teaching-course-management), verified end-to-end against a real Postgres.
-// SKIPS unless UAIS_CORE_DATABASE_URL points at a reachable Postgres. Reproduce:
-//   docker run -d --name uais-local-pg -e POSTGRES_PASSWORD=<local> \
-//     -e POSTGRES_DB=uais_core -p 55432:5432 postgres:16
-//   UAIS_CORE_DATABASE_URL=postgresql://postgres:<local>@127.0.0.1:55432/uais_core npm run db:migrate
-//   UAIS_CORE_DATABASE_URL=postgresql://postgres:<local>@127.0.0.1:55432/uais_core \
-//     npx vitest run tests/teaching-course-management-cutover-integration.test.ts
-// Run DB integration tests individually or with --no-file-parallelism: they
-// share the single "default" snapshot key, so parallel files would collide.
-const databaseUrl = process.env.UAIS_CORE_DATABASE_URL?.trim();
+// The dedicated runner serializes these tests because their corpus parity
+// checks cannot safely share a mutable target with parallel files.
+const authorization = await authorizeLiveDatabaseTestFile({
+  env: process.env,
+  lane: "legacy",
+  testFile: "tests/teaching-course-management-cutover-integration.test.ts",
+});
+if (authorization.exitCode !== 0) {
+  throw new Error(`UAIS_DB_TEST ${JSON.stringify(authorization.report)}`);
+}
+const databaseUrl = authorization.databaseUrl ?? "";
 
 function buildCourse(courseId: string, courseName: string): TeachingCourseRecord {
   return {
@@ -74,7 +77,7 @@ async function seedJsonFile(dataDir: string, database: TeachingCourseManagementD
 
 const cutoverCourseKeys = ["course-a", "course-b"];
 
-describe.skipIf(!databaseUrl)(
+describe(
   "teaching-course-management durable cutover (integration)",
   () => {
     // Parity is a WHOLE-CORPUS property: the gate reads every course row there

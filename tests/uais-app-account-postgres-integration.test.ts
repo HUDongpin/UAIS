@@ -10,6 +10,7 @@ import {
 } from "@/lib/server/uais-app-account-store";
 import { createUaisAppLoginFailureGuard } from "@/lib/server/uais-app-login-failure-store";
 import { hashUaisAccountPassword } from "@/lib/server/uais-app-password-hash";
+import { authorizeLiveDatabaseTestFile } from "../scripts/run-db-tests.mjs";
 
 // Real-Postgres coverage for the first-party account login path.
 //
@@ -25,17 +26,17 @@ import { hashUaisAccountPassword } from "@/lib/server/uais-app-password-hash";
 // so a double can only report that the SQL was sent, never that Postgres agreed
 // with it.
 //
-// DB-backed integration test. It SKIPS unless UAIS_CORE_DATABASE_URL points at a
-// reachable Postgres, so the normal suite and CI stay DB-free. To run it locally
-// against an ephemeral Postgres:
-//
-//   docker run -d --name uais-local-pg -e POSTGRES_PASSWORD=uais_local_dev \
-//     -e POSTGRES_DB=uais_core -p 55432:5432 postgres:16
-//   UAIS_CORE_DATABASE_URL="postgresql://postgres:uais_local_dev@127.0.0.1:55432/uais_core" \
-//     npm run test:db
-const databaseUrl = process.env.UAIS_CORE_DATABASE_URL?.trim();
+const authorization = await authorizeLiveDatabaseTestFile({
+  env: process.env,
+  lane: "legacy",
+  testFile: "tests/uais-app-account-postgres-integration.test.ts",
+});
+if (authorization.exitCode !== 0) {
+  throw new Error(`UAIS_DB_TEST ${JSON.stringify(authorization.report)}`);
+}
+const databaseUrl = authorization.databaseUrl ?? "";
 
-describe.skipIf(!databaseUrl)("UAIS app accounts on Postgres (integration)", () => {
+describe("UAIS app accounts on Postgres (integration)", () => {
   const env = { UAIS_CORE_DATABASE_URL: databaseUrl };
   // Unique per run: this database outlives the suite, and an account that
   // collided with a previous run would make the seed a silent no-op.

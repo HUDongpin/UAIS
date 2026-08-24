@@ -19,8 +19,11 @@ function readyEnv(overrides: Record<string, string | undefined> = {}) {
     P2_CANDIDATE_CONTENT_SHA: "b".repeat(64),
     UAIS_STAGING_INP_COHORT_ID: `p2-inp-${candidateGitSha}-run1`,
     UAIS_STAGING_INP_HMAC_SECRET: "staging-inp-hmac-secret-fixture-strong",
+    UAIS_STAGING_INP_HMAC_KEY_VERSION: "v1",
     UAIS_APP_SESSION_SIGNING_SECRET: "app-session-secret-fixture-at-least-32",
-    UAIS_STAGING_INP_OPERATOR_ACCOUNT_HASHES: "c".repeat(64),
+    UAIS_STAGING_INP_OPERATOR_ACCOUNT_HASHES: ["c", "d", "e"]
+      .map((value) => value.repeat(64))
+      .join(","),
     CRON_SECRET: "staging-inp-expiry-cron-secret-at-least-32",
     ...overrides,
   };
@@ -36,9 +39,10 @@ function request(secret = "staging-inp-expiry-cron-secret-at-least-32") {
 describe("staging INP independent expiry purge", () => {
   it("runs only with the exact staging guard and cron secret", async () => {
     const purgeExpired = vi.fn(async () => ({
-      deletedCount: 8,
-      remainingExpiredCount: 0,
-      zeroResidue: true,
+      cohortsAutoClosed: 2,
+      expiredRawSampleRowsDeleted: 8,
+      expiredRawSampleRowsRemaining: 0,
+      expiredRawSampleRowsZero: true,
       valuesRedacted: true as const,
     }));
     const handler = createStagingInpExpiryPurgeHandler({
@@ -51,9 +55,10 @@ describe("staging INP independent expiry purge", () => {
     await expect(response.json()).resolves.toEqual({
       target: "uais-staging-inp-expiry-purge",
       status: "PASS",
-      deletedCount: 8,
-      remainingExpiredCount: 0,
-      zeroResidue: true,
+      cohortsAutoClosed: 2,
+      expiredRawSampleRowsDeleted: 8,
+      expiredRawSampleRowsRemaining: 0,
+      expiredRawSampleRowsZero: true,
       valuesRedacted: true,
     });
     expect(purgeExpired).toHaveBeenCalledOnce();
@@ -61,9 +66,10 @@ describe("staging INP independent expiry purge", () => {
 
   it("keeps expiry cleanup available after collection and candidate access are disabled", async () => {
     const purgeExpired = vi.fn(async () => ({
-      deletedCount: 3,
-      remainingExpiredCount: 0,
-      zeroResidue: true,
+      cohortsAutoClosed: 1,
+      expiredRawSampleRowsDeleted: 3,
+      expiredRawSampleRowsRemaining: 0,
+      expiredRawSampleRowsZero: true,
       valuesRedacted: true as const,
     }));
     const handler = createStagingInpExpiryPurgeHandler({

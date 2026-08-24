@@ -578,17 +578,26 @@ export const uaisEnvSurfaceCatalog = [
   },
   ...createIsolatedStagingEntries([
     "UAIS_DB_TEST_DATABASE_URL",
+    "UAIS_P1_LOAD_TEST_DATABASE_URL",
+    "UAIS_DB_TEST_NEON_PROJECT_ID",
+    "UAIS_DB_TEST_DSN_FINGERPRINT",
+    "UAIS_DB_TEST_DSN_FINGERPRINT_NONCE",
+    "UAIS_DB_TEST_LIVE_MUTATION_CONFIRMATION",
     "UAIS_P2_STAGING_DATABASE_URL",
     "UAIS_P2_STAGING_RESTORE_DATABASE_URL",
+    "NEON_PROJECT_ID",
+    "RESTORE_NEON_PROJECT_ID",
     "P2_VERCEL_PROTECTION_BYPASS_SECRET",
     "P2_CANDIDATE_GIT_SHA",
     "P2_CANDIDATE_CONTENT_SHA",
     "P2_IMMUTABLE_DEPLOYMENT_URL",
     "UAIS_DEPLOYMENT_ENV",
     "UAIS_DEPLOYMENT_BASE_URL",
+    "UAIS_STAGING_CONFIG_ATTESTATION",
     "UAIS_STAGING_INP_RUM_ENABLED",
     "UAIS_STAGING_INP_COHORT_ID",
     "UAIS_STAGING_INP_HMAC_SECRET",
+    "UAIS_STAGING_INP_HMAC_KEY_VERSION",
     "UAIS_STAGING_INP_OPERATOR_ACCOUNT_HASHES",
     "CRON_SECRET",
   ]),
@@ -698,8 +707,7 @@ function createIsolatedStagingEntries(names: string[]): UaisEnvSurfaceEntry[] {
     valueKind: readIsolatedStagingValueKind(name),
     serverOnly: true,
     productionDefault: "quarantined",
-    purpose:
-      "Used only by an owner-approved isolated staging or disposable database evidence lane; it must remain unset in production.",
+    purpose: readIsolatedStagingPurpose(name),
   }));
 }
 
@@ -725,7 +733,35 @@ function readIsolatedStagingValueKind(
 ): UaisEnvSurfaceEntry["valueKind"] {
   if (name.includes("DATABASE_URL")) return "dsn";
   if (name.endsWith("_URL")) return "base-url";
-  if (/(SECRET|HASHES)/.test(name)) return "secret";
-  if (name.endsWith("_ENABLED")) return "mode";
+  if (/(SECRET|HASHES|FINGERPRINT_NONCE)/.test(name)) return "secret";
+  if (name.endsWith("_HMAC_KEY_VERSION")) return "version";
+  if (name.endsWith("_ENABLED") || name.endsWith("_CONFIRMATION")) return "mode";
   return "identifier";
+}
+
+function readIsolatedStagingPurpose(name: string) {
+  const suffix =
+    " It is confined to owner-approved isolated staging and must remain unset in production.";
+  const purposes: Record<string, string> = {
+    NEON_PROJECT_ID:
+      "Independent source staging database identity; the build guard rejects the known UAIS production database identity.",
+    RESTORE_NEON_PROJECT_ID:
+      "Independent restore staging database identity; the restore workflow requires it to differ from both the source and production identities.",
+    UAIS_DB_TEST_NEON_PROJECT_ID:
+      "Independent DB-test database identity; the mutation-capable integration runner rejects the known production identity.",
+    UAIS_DB_TEST_DSN_FINGERPRINT:
+      "Expected fingerprint of the dedicated DB-test DSN, its database identity, and its nonce; a mismatch blocks every mutation-capable test.",
+    UAIS_DB_TEST_DSN_FINGERPRINT_NONCE:
+      "Secret-like fingerprint nonce used to bind the dedicated DB-test DSN to its approved target without logging the URL.",
+    UAIS_DB_TEST_LIVE_MUTATION_CONFIRMATION:
+      "Exact explicit mutation confirmation required before the guarded DB-test runner may inspect or mutate its isolated target.",
+    UAIS_STAGING_INP_HMAC_KEY_VERSION:
+      "Non-secret collector key version bound into route attestations, cohort identity, and persisted evidence; it must change whenever the collector secret rotates.",
+    UAIS_STAGING_CONFIG_ATTESTATION:
+      "Non-secret build marker injected only by vercel.staging.json to attest that the isolated staging config includes the hourly expiry schedule; it must not be configured as a project-wide environment value.",
+  };
+  return `${
+    purposes[name] ??
+    "Used only by an owner-approved isolated staging or disposable database evidence lane."
+  }${suffix}`;
 }

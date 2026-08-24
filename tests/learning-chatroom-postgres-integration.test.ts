@@ -14,6 +14,7 @@ import {
   type LearningChatroomTranscriptDatabase,
 } from "@/lib/server/learning-chatroom-transcript-store";
 import { createUaisLearningChatroomTranscriptPostgresRepository } from "@/lib/server/learning-chatroom-transcript-postgres-store";
+import { authorizeLiveDatabaseTestFile } from "../scripts/run-db-tests.mjs";
 
 // Real-Postgres coverage for the two chatroom adapters.
 //
@@ -24,17 +25,17 @@ import { createUaisLearningChatroomTranscriptPostgresRepository } from "@/lib/se
 // opening the same room in the same instant really cannot both insert. Those are
 // properties of the database, so they need the database.
 //
-// DB-backed integration test. It SKIPS unless UAIS_CORE_DATABASE_URL points at a
-// reachable Postgres, so the normal suite and CI stay DB-free. To run it locally
-// against an ephemeral Postgres:
-//
-//   docker run -d --name uais-local-pg -e POSTGRES_PASSWORD=uais_local_dev \
-//     -e POSTGRES_DB=uais_core -p 55432:5432 postgres:16
-//   UAIS_CORE_DATABASE_URL="postgresql://postgres:uais_local_dev@127.0.0.1:55432/uais_core" \
-//     npm run test:db
-const databaseUrl = process.env.UAIS_CORE_DATABASE_URL?.trim();
+const authorization = await authorizeLiveDatabaseTestFile({
+  env: process.env,
+  lane: "legacy",
+  testFile: "tests/learning-chatroom-postgres-integration.test.ts",
+});
+if (authorization.exitCode !== 0) {
+  throw new Error(`UAIS_DB_TEST ${JSON.stringify(authorization.report)}`);
+}
+const databaseUrl = authorization.databaseUrl ?? "";
 
-describe.skipIf(!databaseUrl)("learning-chatroom Postgres adapters (integration)", () => {
+describe("learning-chatroom Postgres adapters (integration)", () => {
   const env = { UAIS_CORE_DATABASE_URL: databaseUrl };
 
   // The migration runner itself, not a copy of its SQL. A suite that applied its

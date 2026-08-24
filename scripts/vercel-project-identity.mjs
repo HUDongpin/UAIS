@@ -1,0 +1,4 @@
+export const UAIS_STAGING_VERCEL_PROJECT_ID =
+  "prj_dcWZvGLSYNtSWN3lnTyfZPyWKgQL";
+export const UAIS_PRODUCTION_VERCEL_PROJECT_ID =
+  "prj_MZIjawDPTU4tj4yuTBsd9hyLxHXA";

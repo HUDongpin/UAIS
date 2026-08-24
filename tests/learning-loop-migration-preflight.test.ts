@@ -68,14 +68,22 @@ describe("P1 migration preflight CLI", () => {
       "tests/learning-loop-postgres-integration.test.ts",
       "utf8",
     );
+    const runnerSource = await readFile("scripts/run-db-tests.mjs", "utf8");
 
-    expect(source).toContain("process.env.UAIS_DB_TEST_DATABASE_URL?.trim()");
+    expect(source).toContain("authorizeLiveDatabaseTestFile");
+    expect(source).toContain('lane: "legacy"');
+    expect(source).toContain(
+      'testFile: "tests/learning-loop-postgres-integration.test.ts"',
+    );
     expect(source).not.toContain(
       "const databaseUrl = process.env.UAIS_CORE_DATABASE_URL?.trim();",
     );
-    const guardIndex = source.indexOf("isolated-uais-db-test");
+    const guardIndex = source.indexOf("authorizeLiveDatabaseTestFile({");
     const migrationIndex = source.indexOf('"scripts/apply-core-migrations.mjs"');
     expect(guardIndex).toBeGreaterThan(-1);
     expect(migrationIndex).toBeGreaterThan(guardIndex);
+    expect(runnerSource).toContain("dedicated-runner-capability-required");
+    expect(runnerSource).toContain("isolated-uais-db-test");
+    expect(runnerSource).toContain("isolated-p2-staging-source");
   });
 });

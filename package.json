@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "vercel-build": "npm run db:migrate:deploy && next build",
+    "vercel-build": "node scripts/vercel-build-dispatch.mjs",
     "start": "next start",
     "lint": "eslint",
     "test": "node scripts/run-deterministic-tests.mjs",

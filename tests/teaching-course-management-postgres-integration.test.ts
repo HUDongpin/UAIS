@@ -9,22 +9,27 @@ import type {
   TeachingCourseManagementDatabase,
   TeachingCourseRecord,
 } from "@/lib/server/teaching-course-management-types";
+import { authorizeLiveDatabaseTestFile } from "../scripts/run-db-tests.mjs";
 
 // Phase 1 "migrate"-step verification: a real round-trip against the managed
 // Postgres teaching-course-management adapter, proving durable persistence and
 // optimistic-concurrency behavior end-to-end.
 //
-// This is a DB-backed integration test. It SKIPS unless UAIS_CORE_DATABASE_URL
-// points at a reachable Postgres, so the normal suite and CI stay DB-free. To
-// run it locally against an ephemeral Postgres:
-//
-//   docker run -d --name uais-local-pg -e POSTGRES_PASSWORD=uais_local_dev \
-//     -e POSTGRES_DB=uais_core -p 55432:5432 postgres:16
-//   UAIS_CORE_DATABASE_URL="postgresql://postgres:uais_local_dev@127.0.0.1:55432/uais_core" \
-//     npm run test:db
-const databaseUrl = process.env.UAIS_CORE_DATABASE_URL?.trim();
+// This mutating DB-backed integration test is runnable only through the
+// dedicated guarded lane. A direct Vitest invocation fails closed before its
+// migration or repository setup can start.
+const authorization = await authorizeLiveDatabaseTestFile({
+  env: process.env,
+  lane: "legacy",
+  testFile:
+    "tests/teaching-course-management-postgres-integration.test.ts",
+});
+if (authorization.exitCode !== 0) {
+  throw new Error(`UAIS_DB_TEST ${JSON.stringify(authorization.report)}`);
+}
+const databaseUrl = authorization.databaseUrl ?? "";
 
-describe.skipIf(!databaseUrl)(
+describe(
   "teaching-course-management Postgres adapter (integration)",
   () => {
     const env = { UAIS_CORE_DATABASE_URL: databaseUrl };

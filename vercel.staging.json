@@ -1,7 +1,12 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "nextjs",
-  "buildCommand": "npm run vercel-build",
+  "buildCommand": "node scripts/vercel-staging-build-guard.mjs",
+  "build": {
+    "env": {
+      "UAIS_STAGING_CONFIG_ATTESTATION": "isolated-staging-with-hourly-expiry-v1"
+    }
+  },
   "crons": [
     {
       "path": "/api/observability/staging-inp/purge-expired",

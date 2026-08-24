@@ -33,6 +33,10 @@ import { argv, cwd, env, exit } from "node:process";
 import { PostgresSaver } from "@langchain/langgraph-checkpoint-postgres";
 import { PostgresStore } from "@langchain/langgraph-checkpoint-postgres/store";
 import postgres from "postgres";
+import {
+  assertCoreMigrationDatabaseGuard,
+  resolveCoreMigrationGuardContract,
+} from "./core-migration-guard.mjs";
 
 // Derived from the directory rather than hand-listed here. A hand-listed runner
 // is a second inventory to keep in step with the files, and the cost of it
@@ -61,6 +65,20 @@ function readDatabaseUrl() {
 }
 
 const deployMode = argv.includes("--deploy");
+
+const guardContract = resolveCoreMigrationGuardContract({ env, deployMode });
+if (!guardContract.approved) {
+  console.error(
+    JSON.stringify({
+      target: "uais-core-database-migrations",
+      status: "BLOCKED_ENV",
+      blockedReason: guardContract.blockedReason,
+      valueRedacted: true,
+    }),
+  );
+  exit(2);
+}
+const requiredDatabaseGuard = guardContract.requiredGuard;
 
 function reportSkipped(skippedReason) {
   console.log(
@@ -110,6 +128,10 @@ const store = PostgresStore.fromConnString(databaseUrl.value, {
 
 try {
   await sql.begin(async (tx) => {
+    await assertCoreMigrationDatabaseGuard({
+      client: tx,
+      requiredGuard: requiredDatabaseGuard,
+    });
     await tx`
       CREATE TABLE IF NOT EXISTS uais_schema_migrations (
         version text PRIMARY KEY,
@@ -139,7 +161,15 @@ try {
       `;
     }
   });
+  await assertCoreMigrationDatabaseGuard({
+    client: sql,
+    requiredGuard: requiredDatabaseGuard,
+  });
   await checkpointer.setup();
+  await assertCoreMigrationDatabaseGuard({
+    client: sql,
+    requiredGuard: requiredDatabaseGuard,
+  });
   await store.setup();
 
   console.log(

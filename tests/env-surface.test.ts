@@ -16,6 +16,12 @@ function readExampleEnvNames() {
     .filter((name): name is string => Boolean(name));
 }
 
+function readNormalizedEnvSurfaceDocs() {
+  return readFileSync(join(process.cwd(), "docs/env-surface.md"), "utf8")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 describe("B-21 environment surface", () => {
   it("classifies the production POC env surface separately from legacy/future names", () => {
     const summary = summarizeUaisEnvSurface();
@@ -164,6 +170,7 @@ describe("B-21 environment surface", () => {
   it("quarantines every isolated-staging INP name from production", () => {
     for (const name of [
       "UAIS_DB_TEST_DATABASE_URL",
+      "UAIS_P1_LOAD_TEST_DATABASE_URL",
       "UAIS_P2_STAGING_DATABASE_URL",
       "UAIS_P2_STAGING_RESTORE_DATABASE_URL",
       "P2_VERCEL_PROTECTION_BYPASS_SECRET",
@@ -172,6 +179,7 @@ describe("B-21 environment surface", () => {
       "P2_IMMUTABLE_DEPLOYMENT_URL",
       "UAIS_DEPLOYMENT_ENV",
       "UAIS_DEPLOYMENT_BASE_URL",
+      "UAIS_STAGING_CONFIG_ATTESTATION",
       "UAIS_STAGING_INP_RUM_ENABLED",
       "UAIS_STAGING_INP_COHORT_ID",
       "UAIS_STAGING_INP_HMAC_SECRET",
@@ -187,6 +195,73 @@ describe("B-21 environment surface", () => {
       expect(entry?.purpose, name).toContain("isolated staging");
       expect(entry?.purpose, name).toContain("unset in production");
     }
+  });
+
+  it("catalogs every isolated database target attestation and collector key version", () => {
+    const expectedEntries = [
+      ["NEON_PROJECT_ID", "identifier", "source staging database identity"],
+      ["RESTORE_NEON_PROJECT_ID", "identifier", "restore staging database identity"],
+      ["UAIS_DB_TEST_NEON_PROJECT_ID", "identifier", "DB-test database identity"],
+      ["UAIS_DB_TEST_DSN_FINGERPRINT", "identifier", "dedicated DB-test DSN"],
+      ["UAIS_DB_TEST_DSN_FINGERPRINT_NONCE", "secret", "fingerprint nonce"],
+      ["UAIS_DB_TEST_LIVE_MUTATION_CONFIRMATION", "mode", "explicit mutation confirmation"],
+      ["UAIS_STAGING_INP_HMAC_KEY_VERSION", "version", "collector key version"],
+      ["UAIS_STAGING_CONFIG_ATTESTATION", "identifier", "hourly expiry schedule"],
+    ] as const;
+
+    for (const [name, valueKind, purpose] of expectedEntries) {
+      const entry = classifyUaisEnvName(name);
+      expect(entry, name).toMatchObject({
+        tier: "quarantined-legacy",
+        owner: "S19/S22",
+        valueKind,
+        serverOnly: true,
+        productionDefault: "quarantined",
+      });
+      expect(entry?.purpose, name).toContain(purpose);
+      expect(entry?.purpose, name).toContain("unset in production");
+    }
+  });
+
+  it("documents the fail-closed database-test and staging-build target guards", () => {
+    const docs = readNormalizedEnvSurfaceDocs();
+
+    for (const name of [
+      "UAIS_DB_TEST_NEON_PROJECT_ID",
+      "UAIS_DB_TEST_DSN_FINGERPRINT",
+      "UAIS_DB_TEST_DSN_FINGERPRINT_NONCE",
+      "UAIS_DB_TEST_LIVE_MUTATION_CONFIRMATION",
+      "NEON_PROJECT_ID",
+      "RESTORE_NEON_PROJECT_ID",
+    ]) {
+      expect(docs, name).toContain(`\`${name}\``);
+    }
+    expect(docs).toContain("DB tests remain `BLOCKED_ENV`");
+    expect(docs).toContain(
+      "`UAIS_CORE_DATABASE_URL`, `DATABASE_URL`, and `POSTGRES_URL` must all be unset",
+    );
+    expect(docs).toContain("isolated-uais-db-test");
+    expect(docs).toContain("isolated-p2-staging-source");
+    expect(docs).toContain("isolated-p2-staging-restore");
+    expect(docs).toContain("`session_replication_role=origin`");
+    expect(docs).toContain("`UAIS_LEARNING_CHATROOM_GROUPS_MODE=on`");
+  });
+
+  it("documents the attested four-field INP payload and bounded cohort lifecycle", () => {
+    const docs = readNormalizedEnvSurfaceDocs();
+
+    expect(docs).toContain("`UAIS_STAGING_INP_HMAC_KEY_VERSION`");
+    expect(docs).toContain("server-issued, `HttpOnly` route-attestation cookie");
+    expect(docs).toContain(
+      "`id`, `viewportClass`, `navigationType`, and `valueMs`",
+    );
+    expect(docs).toContain("The client payload cannot supply a journey");
+    expect(docs).toContain("freezes its 48-hour deadline");
+    expect(docs).toContain("`persist` never creates or reopens a cohort");
+    expect(docs).toContain("at least 3 distinct approved operators");
+    expect(docs).toContain("`rawSampleRowsZero=true`");
+    expect(docs).toContain("`cohortTombstoneRetained=true`");
+    expect(docs).toContain("not production field INP evidence");
   });
 
   it("keeps all example env names documented in the B-21 catalog without requiring them for core production", () => {

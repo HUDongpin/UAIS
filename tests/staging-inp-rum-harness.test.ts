@@ -17,14 +17,22 @@ function readyEnv(overrides: Record<string, string | undefined> = {}) {
     P2_IMMUTABLE_DEPLOYMENT_URL: `https://${deploymentHost}`,
     UAIS_DEPLOYMENT_BASE_URL: `https://${deploymentHost}`,
     UAIS_DEPLOYMENT_ENV: "staging",
+    UAIS_LEARNING_CHATROOM_GROUPS_MODE: "on",
     UAIS_STAGING_INP_RUM_ENABLED: "yes",
     UAIS_P2_STAGING_DATABASE_URL: "postgres://redacted.example.test/uais",
+    NEON_PROJECT_ID: "neon-staging-project-fixture",
     P2_CANDIDATE_GIT_SHA: candidateGitSha,
     P2_CANDIDATE_CONTENT_SHA: candidateContentSha,
     UAIS_STAGING_INP_COHORT_ID: cohortId,
     UAIS_STAGING_INP_HMAC_SECRET: "staging-inp-hmac-secret-fixture-strong",
+    UAIS_STAGING_INP_HMAC_KEY_VERSION: "v1",
     UAIS_APP_SESSION_SIGNING_SECRET: "app-session-secret-fixture-at-least-32",
-    UAIS_STAGING_INP_OPERATOR_ACCOUNT_HASHES: "c".repeat(64),
+    CRON_SECRET: "staging-expiry-cron-secret-fixture-at-least-32",
+    P2_VERCEL_PROTECTION_BYPASS_SECRET:
+      "staging-protection-bypass-fixture-at-least-32",
+    UAIS_STAGING_INP_OPERATOR_ACCOUNT_HASHES: ["c", "d", "e"]
+      .map((value) => value.repeat(64))
+      .join(","),
     ...overrides,
   };
 }
@@ -33,7 +41,14 @@ function passingGroups() {
   const groups = [];
   for (const journey of ["student-learning", "student-chatroom"] as const) {
     for (const viewportClass of ["compact", "wide"] as const) {
-      groups.push({ role: "student" as const, journey, viewportClass, n: 30, p75Ms: 190 });
+      groups.push({
+        role: "student" as const,
+        journey,
+        viewportClass,
+        n: 30,
+        distinctOperatorCount: 3,
+        p75Ms: 190,
+      });
     }
   }
   for (const journey of [
@@ -43,7 +58,14 @@ function passingGroups() {
     "teacher-submissions",
   ] as const) {
     for (const viewportClass of ["compact", "wide"] as const) {
-      groups.push({ role: "teacher" as const, journey, viewportClass, n: 30, p75Ms: 195 });
+      groups.push({
+        role: "teacher" as const,
+        journey,
+        viewportClass,
+        n: 30,
+        distinctOperatorCount: 3,
+        p75Ms: 195,
+      });
     }
   }
   return groups;
@@ -109,14 +131,16 @@ describe("staging INP lifecycle harness", () => {
     const purge = vi.fn(async (binding) => ({
       ...binding,
       state: "purged" as const,
-      deletedCount: 360,
-      remainingForBinding: 0,
-      zeroResidue: true,
+      rawSampleRowsDeleted: 360,
+      rawSampleRowsRemaining: 0,
+      rawSampleRowsZero: true,
+      cohortTombstoneRetained: true as const,
     }));
     const readback = vi.fn(async (binding) => ({
       ...binding,
       state: "purged" as const,
-      remainingForBinding: 0,
+      rawSampleRowsRemaining: 0,
+      cohortTombstoneRetained: true as const,
     }));
     const result = await runP2StagingInpLifecycle({
       argv: [
@@ -142,14 +166,20 @@ describe("staging INP lifecycle harness", () => {
         requiredGroups: 12,
         passingGroups: 12,
         minimumSamplesPerGroup: 30,
+        minimumDistinctOperatorsPerGroup: 3,
         maximumP75Ms: 200,
       },
       cleanup: {
         state: "purged",
-        remainingForBinding: 0,
-        zeroResidue: true,
+        rawSampleRowsRemaining: 0,
+        rawSampleRowsZero: true,
+        cohortTombstoneRetained: true,
       },
       productionFieldInpProven: false,
+      operatorAttestedOnly: true,
+      clientSuppliedValues: true,
+      routeServerAttested: true,
+      documentContextCompared: true,
     });
     expect(aggregate).toHaveBeenCalledOnce();
     expect(purge).toHaveBeenCalledOnce();
@@ -162,14 +192,16 @@ describe("staging INP lifecycle harness", () => {
     const purge = vi.fn(async (binding) => ({
       ...binding,
       state: "purged" as const,
-      deletedCount: 359,
-      remainingForBinding: 0,
-      zeroResidue: true,
+      rawSampleRowsDeleted: 359,
+      rawSampleRowsRemaining: 0,
+      rawSampleRowsZero: true,
+      cohortTombstoneRetained: true as const,
     }));
     const readback = vi.fn(async (binding) => ({
       ...binding,
       state: "purged" as const,
-      remainingForBinding: 0,
+      rawSampleRowsRemaining: 0,
+      cohortTombstoneRetained: true as const,
     }));
     const result = await runP2StagingInpLifecycle({
       argv: [
@@ -199,7 +231,7 @@ describe("staging INP lifecycle harness", () => {
     expect(result.report).toMatchObject({
       status: "FAIL",
       threshold: { passingGroups: 11 },
-      cleanup: { zeroResidue: true, remainingForBinding: 0 },
+      cleanup: { rawSampleRowsZero: true, rawSampleRowsRemaining: 0 },
       productionFieldInpProven: false,
     });
     expect(purge).toHaveBeenCalledOnce();
@@ -213,7 +245,8 @@ describe("staging INP lifecycle harness", () => {
     const readback = vi.fn(async (binding) => ({
       ...binding,
       state: "closed" as const,
-      remainingForBinding: 360,
+      rawSampleRowsRemaining: 360,
+      cohortTombstoneRetained: true as const,
     }));
     const result = await runP2StagingInpLifecycle({
       argv: [
@@ -245,8 +278,8 @@ describe("staging INP lifecycle harness", () => {
       failureCode: "staging-inp-finalize-or-cleanup-failed",
       cleanup: {
         state: "closed",
-        remainingForBinding: 360,
-        zeroResidue: false,
+        rawSampleRowsRemaining: 360,
+        rawSampleRowsZero: false,
       },
     });
     expect(purge).toHaveBeenCalledOnce();
@@ -255,9 +288,10 @@ describe("staging INP lifecycle harness", () => {
 
   it("keeps CLI expiry cleanup available after collection credentials are removed", async () => {
     const purgeExpired = vi.fn(async () => ({
-      deletedCount: 7,
-      remainingExpiredCount: 0,
-      zeroResidue: true,
+      cohortsAutoClosed: 2,
+      expiredRawSampleRowsDeleted: 7,
+      expiredRawSampleRowsRemaining: 0,
+      expiredRawSampleRowsZero: true,
       valuesRedacted: true as const,
     }));
     const result = await runP2StagingInpLifecycle({
@@ -283,9 +317,10 @@ describe("staging INP lifecycle harness", () => {
       evidenceClass: "isolated-staging-expiry-cleanup",
       candidateBinding: null,
       expiry: {
-        deletedCount: 7,
-        remainingExpiredCount: 0,
-        zeroResidue: true,
+        cohortsAutoClosed: 2,
+        expiredRawSampleRowsDeleted: 7,
+        expiredRawSampleRowsRemaining: 0,
+        expiredRawSampleRowsZero: true,
       },
     });
     expect(purgeExpired).toHaveBeenCalledOnce();

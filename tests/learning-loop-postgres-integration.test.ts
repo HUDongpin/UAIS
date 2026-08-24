@@ -7,10 +7,19 @@ import {
 } from "@/lib/db/core-database";
 import { createUaisLearningLoopPostgresReadStore } from "@/lib/learning-loop/postgres-read-store";
 import { createUaisLearningLoopPostgresStore } from "@/lib/learning-loop/postgres-store";
+import { authorizeLiveDatabaseTestFile } from "../scripts/run-db-tests.mjs";
 
-const databaseUrl = process.env.UAIS_DB_TEST_DATABASE_URL?.trim();
+const authorization = await authorizeLiveDatabaseTestFile({
+  env: process.env,
+  lane: "legacy",
+  testFile: "tests/learning-loop-postgres-integration.test.ts",
+});
+if (authorization.exitCode !== 0) {
+  throw new Error(`UAIS_DB_TEST ${JSON.stringify(authorization.report)}`);
+}
+const databaseUrl = authorization.databaseUrl ?? "";
 
-describe.skipIf(!databaseUrl)("P1 closed learning loop on real Postgres", () => {
+describe("P1 closed learning loop on real Postgres", () => {
   const env = { UAIS_CORE_DATABASE_URL: databaseUrl };
   const suffix = randomUUID().replace(/-/g, "");
   const teacherAccount = `p1.teacher.${suffix}`;

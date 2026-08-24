@@ -5,14 +5,17 @@ import { pathToFileURL } from "node:url";
 import { computeUaisStagingCandidateContentSha } from "./p2-staging-candidate-content.mjs";
 const runtimeImport = await import("../src/lib/server/uais-staging-inp-runtime.ts");
 const storeImport = await import("../src/lib/server/uais-staging-inp-store.ts");
+const contractImport = await import("../src/lib/observability/uais-staging-inp.ts");
 const runtimeModule = runtimeImport.default ?? runtimeImport;
 const storeModule = storeImport.default ?? storeImport;
+const contractModule = contractImport.default ?? contractImport;
 const {
   getUaisStagingInpBinding,
   getUaisStagingInpCleanupGuard,
   getUaisStagingInpGuard,
 } = runtimeModule;
 const { UaisStagingInpStoreError, createUaisStagingInpPostgresStore } = storeModule;
+const { UAIS_STAGING_INP_MINIMUM_DISTINCT_OPERATORS } = contractModule;
 
 const allowedActions = new Set([
   "setup",
@@ -70,7 +73,7 @@ export async function runP2StagingInpLifecycle(input = {}) {
   const store = createStore(env);
   try {
     if (action === "setup") {
-      const setup = await store.setup();
+      const setup = await store.setup(binding);
       return success(baseReport, { setup });
     }
     if (action === "readiness") {
@@ -95,24 +98,30 @@ export async function runP2StagingInpLifecycle(input = {}) {
       const readback = await store.readback(binding);
       const cleanup = cleanupSummary(purge, readback);
       return {
-        exitCode: cleanup.zeroResidue ? 0 : 1,
+        exitCode: cleanup.rawSampleRowsZero ? 0 : 1,
         report: {
           ...baseReport,
-          status: cleanup.zeroResidue ? "PASS" : "FAIL",
+          status: cleanup.rawSampleRowsZero ? "PASS" : "FAIL",
           cleanup,
         },
       };
     }
     if (action === "readback") {
       const readback = await store.readback(binding);
-      return success(baseReport, { readback });
+      return success(baseReport, {
+        readback: {
+          state: readback.state,
+          rawSampleRowsRemaining: readback.rawSampleRowsRemaining,
+          cohortTombstoneRetained: readback.cohortTombstoneRetained,
+        },
+      });
     }
     const expiry = await store.purgeExpired();
     return {
-      exitCode: expiry.zeroResidue ? 0 : 1,
+      exitCode: expiry.expiredRawSampleRowsZero ? 0 : 1,
       report: {
         ...baseReport,
-        status: expiry.zeroResidue ? "PASS" : "FAIL",
+        status: expiry.expiredRawSampleRowsZero ? "PASS" : "FAIL",
         expiry,
       },
     };
@@ -157,7 +166,7 @@ async function finalizeAndPurge({ baseReport, binding, store }) {
 
   const threshold = evaluateThreshold(aggregate?.groups ?? []);
   const cleanup = cleanupSummary(purge, readback);
-  const passed = !executionFailure && threshold.ready && cleanup.zeroResidue;
+  const passed = !executionFailure && threshold.ready && cleanup.rawSampleRowsZero;
   return {
     exitCode: passed ? 0 : 1,
     report: {
@@ -244,6 +253,8 @@ function evaluateThreshold(groups) {
     return (
       group &&
       Number(group.n) >= minimumSamplesPerGroup &&
+      Number(group.distinctOperatorCount) >=
+        UAIS_STAGING_INP_MINIMUM_DISTINCT_OPERATORS &&
       Number(group.p75Ms) <= maximumP75Ms
     );
   }).length;
@@ -252,25 +263,31 @@ function evaluateThreshold(groups) {
     observedGroups: groups.length,
     passingGroups,
     minimumSamplesPerGroup,
+    minimumDistinctOperatorsPerGroup:
+      UAIS_STAGING_INP_MINIMUM_DISTINCT_OPERATORS,
     maximumP75Ms,
     ready: groups.length === expectedGroups.size && passingGroups === expectedGroups.size,
   };
 }
 
 function cleanupSummary(purge, readback) {
-  const remainingForBinding = Number(
-    readback?.remainingForBinding ?? purge?.remainingForBinding ?? -1,
+  const rawSampleRowsRemaining = Number(
+    readback?.rawSampleRowsRemaining ?? purge?.rawSampleRowsRemaining ?? -1,
   );
-  const zeroResidue =
+  const rawSampleRowsZero =
     purge?.state === "purged" &&
-    purge?.zeroResidue === true &&
+    purge?.rawSampleRowsZero === true &&
     readback?.state === "purged" &&
-    remainingForBinding === 0;
+    readback?.cohortTombstoneRetained === true &&
+    rawSampleRowsRemaining === 0;
   return {
     state: readback?.state ?? purge?.state ?? "unavailable",
-    deletedCount: Number(purge?.deletedCount ?? 0),
-    remainingForBinding,
-    zeroResidue,
+    rawSampleRowsDeleted: Number(purge?.rawSampleRowsDeleted ?? 0),
+    rawSampleRowsRemaining,
+    rawSampleRowsZero,
+    cohortTombstoneRetained:
+      readback?.cohortTombstoneRetained === true &&
+      purge?.cohortTombstoneRetained === true,
   };
 }
 
@@ -288,9 +305,16 @@ function createBaseReport({ action, binding }) {
           candidateGitSha: binding.candidateGitSha,
           candidateContentSha: binding.candidateContentSha,
           deploymentHost: binding.deploymentHost,
+          collectorKeyVersion: binding.collectorKeyVersion,
+          collectorKeyVersionBound: true,
+          operatorAllowlistFingerprintBound: true,
         }
       : null,
     productionFieldInpProven: false,
+    operatorAttestedOnly: true,
+    clientSuppliedValues: true,
+    routeServerAttested: true,
+    documentContextCompared: true,
     valuesRedacted: true,
     databaseUrlOmitted: true,
     secretValuesOmitted: true,

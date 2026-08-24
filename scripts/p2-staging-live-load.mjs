@@ -1714,6 +1714,8 @@ function applyRestoreTargetMigrations() {
       env: {
         ...process.env,
         UAIS_CORE_DATABASE_URL: restoreDatabaseUrl,
+        UAIS_CORE_DATABASE_REQUIRED_GUARD:
+          "isolated-p2-staging-restore",
         DATABASE_URL: "",
         POSTGRES_URL: "",
         VERCEL_ENV: "",
@@ -1769,12 +1771,18 @@ function readMigrationReport(stdout) {
 async function hasDatabaseGuard(sql, environment) {
   try {
     const rows = await sql`
-      SELECT environment
-      FROM uais_environment_guard
+      SELECT
+        environment,
+        current_setting('session_replication_role') AS session_replication_role
+      FROM public.uais_environment_guard
       WHERE environment = ${environment} AND enabled = true
       LIMIT 1
     `;
-    return rows.length === 1;
+    return (
+      rows.length === 1 &&
+      rows[0]?.environment === environment &&
+      rows[0]?.session_replication_role === "origin"
+    );
   } catch {
     return false;
   }

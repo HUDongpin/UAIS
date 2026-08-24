@@ -64,7 +64,7 @@ describe("staging INP client reporter", () => {
     vi.unstubAllGlobals();
   });
 
-  it("sends only the five allowed INP scalars to the same-origin endpoint", () => {
+  it("sends only the four allowed INP scalars to the same-origin endpoint", () => {
     const fetchMock = createFetchMock();
     vi.stubGlobal("fetch", fetchMock);
     render(<UaisStagingInpReporter enabled />);
@@ -82,11 +82,10 @@ describe("staging INP client reporter", () => {
     });
     const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
     expect(Object.keys(body).sort()).toEqual(
-      ["id", "journey", "navigationType", "valueMs", "viewportClass"].sort(),
+      ["id", "navigationType", "valueMs", "viewportClass"].sort(),
     );
     expect(body).toEqual({
       id: "v4-1699999999999-1000000000000",
-      journey: "student-chatroom",
       viewportClass: "wide",
       navigationType: "navigate",
       valueMs: 180,
@@ -150,13 +149,12 @@ describe("staging INP client reporter", () => {
 
     expect(fetchMock).toHaveBeenCalledOnce();
     const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)) as {
-      journey: string;
       viewportClass: string;
     };
     expect(body).toMatchObject({
-      journey: "teacher-activities",
       viewportClass: "compact",
     });
+    expect(body).not.toHaveProperty("journey");
   });
 
   it("does not send non-INP metrics, disabled reports, or unsupported paths", () => {

@@ -62,7 +62,6 @@ export function UaisStagingInpReporter({ enabled }: { enabled: boolean }) {
       // field can cross this boundary.
       const payload = parseUaisStagingInpPayload({
         id: metric.id,
-        journey: hardLoadJourney,
         viewportClass: initialViewportClass.current,
         navigationType: metric.navigationType,
         valueMs: Math.round(metric.value),

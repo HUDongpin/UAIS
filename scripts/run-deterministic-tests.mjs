@@ -2,6 +2,7 @@
 
 import { spawnSync } from "node:child_process";
 import { join } from "node:path";
+import { LIVE_DB_TEST_FILES } from "./live-db-test-contract.mjs";
 
 const DEFAULT_SHARD_COUNT = 5;
 const DEFAULT_TIMEOUT_MS = 300_000;
@@ -79,6 +80,10 @@ function buildCommands(options) {
       "--no-file-parallelism",
       "--shard",
       `${index + 1}/${options.shardCount}`,
+      ...LIVE_DB_TEST_FILES.flatMap((testFile) => [
+        "--exclude",
+        testFile,
+      ]),
     ],
   }));
 }

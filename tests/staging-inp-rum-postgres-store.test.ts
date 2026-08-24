@@ -13,6 +13,8 @@ const binding = {
   candidateGitSha,
   candidateContentSha: "b".repeat(64),
   deploymentHost: "uais-staging-current-team.vercel.app",
+  collectorKeyVersion: "v1",
+  operatorAllowlistFingerprint: "c".repeat(64),
 };
 
 function storedSample(
@@ -21,6 +23,8 @@ function storedSample(
   return {
     ...binding,
     sampleKey: "1".padStart(64, "0"),
+    metricIdKey: "2".repeat(64),
+    operatorKey: "d".repeat(64),
     role: "student",
     journey: "student-learning",
     viewportClass: "wide",
@@ -41,12 +45,16 @@ type QueryCall = {
 function createRecordingSqlDriver(
   input: {
     guardReady?: boolean;
+    cohortReady?: boolean;
+    existingSample?: boolean;
     schemaReady?: boolean;
     sessionReplicationRole?: string;
   } = {},
 ) {
   const calls: QueryCall[] = [];
   const guardReady = input.guardReady ?? true;
+  const cohortReady = input.cohortReady ?? true;
+  const existingSample = input.existingSample ?? false;
   const schemaReady = input.schemaReady ?? true;
   const sessionReplicationRole = input.sessionReplicationRole ?? "origin";
   const execute = async (
@@ -67,6 +75,59 @@ function createRecordingSqlDriver(
         : [];
     }
     if (text.includes("pg_advisory_xact_lock")) return [];
+    if (
+      text.includes("FROM public.uais_staging_inp_cohorts") &&
+      text.includes("FOR UPDATE")
+    ) {
+      return cohortReady ? [
+        {
+          cohort_id: binding.cohortId,
+          candidate_git_sha: binding.candidateGitSha,
+          candidate_content_sha: binding.candidateContentSha,
+          deployment_host: binding.deploymentHost,
+          collector_key_version: binding.collectorKeyVersion,
+          operator_allowlist_fingerprint: binding.operatorAllowlistFingerprint,
+          lifecycle_state: "open",
+          created_at: "2026-08-24T00:00:00.000Z",
+          deadline_at: "2026-08-26T00:00:00.000Z",
+          close_reason: null,
+          closed_at: null,
+          purged_at: null,
+        },
+      ] : [];
+    }
+    if (
+      existingSample &&
+      text.includes("FROM public.uais_staging_inp_samples") &&
+      text.includes("sample_key") &&
+      text.includes("LIMIT 1")
+    ) {
+      return [
+        {
+          candidate_git_sha: binding.candidateGitSha,
+          candidate_content_sha: binding.candidateContentSha,
+          deployment_host: binding.deploymentHost,
+          collector_key_version: binding.collectorKeyVersion,
+          operator_allowlist_fingerprint: binding.operatorAllowlistFingerprint,
+          operator_key: "d".repeat(64),
+          metric_id_key: "2".repeat(64),
+          role: "student",
+          journey: "student-learning",
+          viewport_class: "wide",
+          navigation_type: "navigate",
+          value_ms: 180,
+          update_count: 0,
+          last_updated_at: "2026-08-24T00:10:00.000Z",
+        },
+      ];
+    }
+    if (
+      existingSample &&
+      text.startsWith("UPDATE public.uais_staging_inp_samples") &&
+      text.includes("RETURNING 1 AS updated")
+    ) {
+      return [{ updated: 1 }];
+    }
     if (text.includes("AS schema_ready")) {
       return [{ schema_ready: schemaReady }];
     }
@@ -117,7 +178,7 @@ describe("staging INP guarded Postgres lifecycle", () => {
       sqlFactory: mock.factory,
     });
 
-    await expect(store.setup()).rejects.toEqual(
+    await expect(store.setup(binding)).rejects.toEqual(
       new UaisStagingInpStoreError(503, "staging-inp-source-guard-required"),
     );
     expect(mock.calls.some((call) => call.inTransaction)).toBe(false);
@@ -131,10 +192,13 @@ describe("staging INP guarded Postgres lifecycle", () => {
       sqlFactory: mock.factory,
     });
 
-    await expect(store.setup()).resolves.toEqual({
+    await expect(store.setup(binding)).resolves.toEqual({
       status: "ready",
       cohortsTable: true,
       samplesTable: true,
+      cohortState: "open",
+      createdAt: "2026-08-24T00:00:00.000Z",
+      deadlineAt: "2026-08-26T00:00:00.000Z",
       valuesRedacted: true,
     });
 
@@ -146,10 +210,14 @@ describe("staging INP guarded Postgres lifecycle", () => {
     expect(sql).toContain("candidate_content_sha");
     expect(sql).toContain("deployment_host");
     expect(sql).toMatch(
-      /UNIQUE \(\s*cohort_id, candidate_git_sha, candidate_content_sha, deployment_host\s*\)/,
+      /UNIQUE \(\s*cohort_id, candidate_git_sha, candidate_content_sha, deployment_host, collector_key_version, operator_allowlist_fingerprint\s*\)/,
     );
     expect(sql).toContain("expires_at = received_at + interval '48 hours'");
-    expect(sql).toContain("uais-staging-inp-v4");
+    expect(sql).toContain("deadline_at = created_at + interval '48 hours'");
+    expect(sql).toContain("operator_key");
+    expect(sql).toContain("metric_id_key");
+    expect(sql).toContain("update_count BETWEEN 0 AND 12");
+    expect(sql).toContain("uais-staging-inp-v5");
     expect(sql).toContain("CREATE TEMP TABLE uais_staging_inp_contract_cohorts");
     expect(sql).toContain("CREATE TEMP TABLE uais_staging_inp_contract_samples");
     expect(sql).toContain("REFERENCES pg_temp.uais_staging_inp_contract_cohorts");
@@ -185,7 +253,7 @@ describe("staging INP guarded Postgres lifecycle", () => {
       sqlFactory: mock.factory,
     });
 
-    await expect(store.setup()).rejects.toEqual(
+    await expect(store.setup(binding)).rejects.toEqual(
       new UaisStagingInpStoreError(503, "staging-inp-schema-readback-failed"),
     );
   });
@@ -197,7 +265,7 @@ describe("staging INP guarded Postgres lifecycle", () => {
       sqlFactory: mock.factory,
     });
 
-    await expect(store.setup()).rejects.toEqual(
+    await expect(store.setup(binding)).rejects.toEqual(
       new UaisStagingInpStoreError(503, "staging-inp-source-guard-required"),
     );
     expect(mock.calls.some((call) => call.text.includes("CREATE TABLE"))).toBe(false);
@@ -211,9 +279,10 @@ describe("staging INP guarded Postgres lifecycle", () => {
     });
 
     await expect(store.purgeExpired()).resolves.toEqual({
-      deletedCount: 1,
-      remainingExpiredCount: 0,
-      zeroResidue: true,
+      cohortsAutoClosed: 0,
+      expiredRawSampleRowsDeleted: 1,
+      expiredRawSampleRowsRemaining: 0,
+      expiredRawSampleRowsZero: true,
       valuesRedacted: true,
     });
     expect(
@@ -224,6 +293,46 @@ describe("staging INP guarded Postgres lifecycle", () => {
           call.text.includes("expires_at <= now()"),
       ),
     ).toBe(true);
+  });
+
+  it("never creates a cohort implicitly from the persistence path", async () => {
+    const mock = createRecordingSqlDriver({ cohortReady: false });
+    const store = createUaisStagingInpPostgresStore({
+      env: { UAIS_P2_STAGING_DATABASE_URL: databaseUrl },
+      sqlFactory: mock.factory,
+    });
+
+    await expect(store.persist(storedSample())).rejects.toMatchObject({
+      status: 409,
+      reasonCode: "staging-inp-cohort-missing",
+    });
+    const sql = mock.calls.map((call) => call.text).join("\n");
+    expect(sql).not.toContain("INSERT INTO public.uais_staging_inp_cohorts");
+    expect(sql).not.toContain("INSERT INTO public.uais_staging_inp_samples");
+  });
+
+  it("keeps progressive updates bounded without extending sample expiry", async () => {
+    const mock = createRecordingSqlDriver({ existingSample: true });
+    const store = createUaisStagingInpPostgresStore({
+      env: { UAIS_P2_STAGING_DATABASE_URL: databaseUrl },
+      sqlFactory: mock.factory,
+    });
+
+    await expect(store.persist(storedSample({
+      valueMs: 190,
+      receivedAt: "2026-08-24T00:10:01.000Z",
+      expiresAt: "2026-08-26T00:10:01.000Z",
+    }))).resolves.toEqual({
+      status: "updated",
+    });
+    const sql = mock.calls.map((call) => call.text).join("\n");
+    const sampleUpdate = mock.calls.find((call) =>
+      call.text.startsWith("UPDATE public.uais_staging_inp_samples"),
+    );
+    expect(sql).toContain("update_count < 12");
+    expect(sql).toContain("interval '1 second'");
+    expect(sql).not.toContain("GREATEST(");
+    expect(sampleUpdate?.text).not.toContain("expires_at");
   });
 
   it("rejects a sample whose expiry is not exactly 48 hours after receipt", async () => {

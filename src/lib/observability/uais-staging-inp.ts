@@ -1,8 +1,12 @@
 export const UAIS_STAGING_INP_PROJECT_ID = "prj_dcWZvGLSYNtSWN3lnTyfZPyWKgQL";
 export const UAIS_PRODUCTION_PROJECT_ID = "prj_MZIjawDPTU4tj4yuTBsd9hyLxHXA";
+export const UAIS_PRODUCTION_NEON_PROJECT_ID = "late-sunset-59152574";
 export const UAIS_STAGING_INP_TTL_HOURS = 48;
+export const UAIS_STAGING_INP_COHORT_WINDOW_HOURS = 48;
 export const UAIS_STAGING_INP_COHORT_CAP = 4_000;
 export const UAIS_STAGING_INP_HOURLY_ID_CAP = 120;
+export const UAIS_STAGING_INP_OPERATOR_HOURLY_ID_CAP = 40;
+export const UAIS_STAGING_INP_MINIMUM_DISTINCT_OPERATORS = 3;
 
 export const uaisStagingInpJourneys = [
   "student-learning",
@@ -28,11 +32,12 @@ export type UaisStagingInpBinding = {
   candidateGitSha: string;
   candidateContentSha: string;
   deploymentHost: string;
+  collectorKeyVersion: string;
+  operatorAllowlistFingerprint: string;
 };
 
 export type UaisStagingInpPayload = {
   id: string;
-  journey: UaisStagingInpJourney;
   viewportClass: UaisStagingInpViewportClass;
   navigationType: UaisStagingInpNavigationType;
   valueMs: number;
@@ -42,7 +47,6 @@ const digestPattern = /^[0-9a-f]{64}$/;
 const cohortPattern = /^p2-inp-([0-9a-f]{40})-[a-z0-9][a-z0-9-]{0,15}$/;
 const immutableDeploymentHostPattern = /^uais-staging-[a-z0-9-]+\.vercel\.app$/;
 const metricIdPattern = /^[A-Za-z0-9._:-]{1,128}$/;
-const journeySet = new Set<UaisStagingInpJourney>(uaisStagingInpJourneys);
 const navigationTypes = new Set<UaisStagingInpNavigationType>([
   "navigate",
   "reload",
@@ -51,7 +55,7 @@ const navigationTypes = new Set<UaisStagingInpNavigationType>([
   "prerender",
   "restore",
 ]);
-const payloadKeys = ["id", "journey", "navigationType", "valueMs", "viewportClass"].sort();
+const payloadKeys = ["id", "navigationType", "valueMs", "viewportClass"].sort();
 
 export function isUaisStagingInpImmutableDeploymentHost(value: string) {
   return immutableDeploymentHostPattern.test(value);
@@ -112,11 +116,8 @@ export function parseUaisStagingInpPayload(value: unknown): UaisStagingInpPayloa
   ) {
     return null;
   }
-  const { id, journey, viewportClass, navigationType, valueMs } = value;
+  const { id, viewportClass, navigationType, valueMs } = value;
   if (typeof id !== "string" || !metricIdPattern.test(id)) return null;
-  if (typeof journey !== "string" || !journeySet.has(journey as UaisStagingInpJourney)) {
-    return null;
-  }
   if (viewportClass !== "compact" && viewportClass !== "wide") return null;
   if (
     typeof navigationType !== "string" ||
@@ -134,7 +135,6 @@ export function parseUaisStagingInpPayload(value: unknown): UaisStagingInpPayloa
   }
   return {
     id,
-    journey: journey as UaisStagingInpJourney,
     viewportClass,
     navigationType: navigationType as UaisStagingInpNavigationType,
     valueMs,

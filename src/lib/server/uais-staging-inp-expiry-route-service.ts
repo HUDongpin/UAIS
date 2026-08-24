@@ -5,9 +5,10 @@ import { createUaisStagingInpPostgresStore } from "@/lib/server/uais-staging-inp
 type ExpiryPurgeDependencies = {
   env?: Record<string, string | undefined>;
   purgeExpired?: () => Promise<{
-    deletedCount: number;
-    remainingExpiredCount: number;
-    zeroResidue: boolean;
+    cohortsAutoClosed: number;
+    expiredRawSampleRowsDeleted: number;
+    expiredRawSampleRowsRemaining: number;
+    expiredRawSampleRowsZero: boolean;
     valuesRedacted: true;
   }>;
 };
@@ -32,14 +33,15 @@ export function createStagingInpExpiryPurgeHandler(
       return Response.json(
         {
           target: "uais-staging-inp-expiry-purge",
-          status: receipt.zeroResidue ? "PASS" : "FAIL",
-          deletedCount: receipt.deletedCount,
-          remainingExpiredCount: receipt.remainingExpiredCount,
-          zeroResidue: receipt.zeroResidue,
+          status: receipt.expiredRawSampleRowsZero ? "PASS" : "FAIL",
+          cohortsAutoClosed: receipt.cohortsAutoClosed,
+          expiredRawSampleRowsDeleted: receipt.expiredRawSampleRowsDeleted,
+          expiredRawSampleRowsRemaining: receipt.expiredRawSampleRowsRemaining,
+          expiredRawSampleRowsZero: receipt.expiredRawSampleRowsZero,
           valuesRedacted: true,
         },
         {
-          status: receipt.zeroResidue ? 200 : 503,
+          status: receipt.expiredRawSampleRowsZero ? 200 : 503,
           headers: noStoreHeaders,
         },
       );

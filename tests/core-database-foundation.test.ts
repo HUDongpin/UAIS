@@ -3,7 +3,9 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   UAIS_CORE_DATABASE_ENV_NAMES,
+  UAIS_ISOLATED_STAGING_CORE_DATABASE_ENV_NAME,
   getUaisCoreDatabaseReadiness,
+  readUaisCoreDatabaseUrl,
 } from "@/lib/db/core-database";
 import {
   UAIS_CORE_DATABASE_MIGRATIONS,
@@ -46,6 +48,100 @@ describe("B-11 core database foundation", () => {
     expect(UAIS_CORE_DATABASE_MIGRATION_VERSIONS.length).toBeGreaterThan(1);
     expect(JSON.stringify(readiness)).not.toContain("secret");
     expect(JSON.stringify(readiness)).not.toContain("example.test");
+  });
+
+  it("selects the dedicated database URL only for the exact isolated staging runtime", () => {
+    const databaseUrl =
+      "postgresql://staging-user:staging-secret@staging-db.example.test/uais";
+    const exactStagingEnv = {
+      VERCEL_ENV: "production",
+      VERCEL_PROJECT_ID: "prj_dcWZvGLSYNtSWN3lnTyfZPyWKgQL",
+      UAIS_DEPLOYMENT_ENV: "staging",
+      UAIS_LEARNING_CHATROOM_GROUPS_MODE: "on",
+      UAIS_P2_STAGING_DATABASE_URL: databaseUrl,
+      NEON_PROJECT_ID: "neon-staging-project-fixture",
+    };
+
+    const readiness = getUaisCoreDatabaseReadiness(exactStagingEnv);
+
+    expect(readiness).toMatchObject({
+      status: "ready",
+      selectedEnvName: UAIS_ISOLATED_STAGING_CORE_DATABASE_ENV_NAME,
+      valueRedacted: true,
+    });
+    expect(readUaisCoreDatabaseUrl(exactStagingEnv)).toBe(databaseUrl);
+    expect(JSON.stringify(readiness)).not.toContain("staging-secret");
+    expect(JSON.stringify(readiness)).not.toContain("staging-db.example.test");
+  });
+
+  it.each([
+    ["missing project", { VERCEL_PROJECT_ID: undefined }],
+    ["unknown project", { VERCEL_PROJECT_ID: "prj_unknown" }],
+    [
+      "production project",
+      { VERCEL_PROJECT_ID: "prj_MZIjawDPTU4tj4yuTBsd9hyLxHXA" },
+    ],
+    ["groups disabled", { UAIS_LEARNING_CHATROOM_GROUPS_MODE: "off" }],
+    ["deployment marker missing", { UAIS_DEPLOYMENT_ENV: undefined }],
+    ["Neon identity missing", { NEON_PROJECT_ID: undefined }],
+    ["production Neon identity", { NEON_PROJECT_ID: "late-sunset-59152574" }],
+  ])("rejects the dedicated staging URL when %s", (_label, override) => {
+    const env = {
+      VERCEL_ENV: "production",
+      VERCEL_PROJECT_ID: "prj_dcWZvGLSYNtSWN3lnTyfZPyWKgQL",
+      UAIS_DEPLOYMENT_ENV: "staging",
+      UAIS_LEARNING_CHATROOM_GROUPS_MODE: "on",
+      UAIS_P2_STAGING_DATABASE_URL:
+        "postgresql://staging-user:staging-secret@staging-db.example.test/uais",
+      NEON_PROJECT_ID: "neon-staging-project-fixture",
+      ...override,
+    };
+
+    expect(getUaisCoreDatabaseReadiness(env)).toMatchObject({ status: "blocked" });
+    expect(readUaisCoreDatabaseUrl(env)).toBeUndefined();
+  });
+
+  it.each(UAIS_CORE_DATABASE_ENV_NAMES)(
+    "rejects populated generic alias %s in the exact staging runtime",
+    (genericName) => {
+      const env = {
+        VERCEL_ENV: "production",
+        VERCEL_PROJECT_ID: "prj_dcWZvGLSYNtSWN3lnTyfZPyWKgQL",
+        UAIS_DEPLOYMENT_ENV: "staging",
+        UAIS_LEARNING_CHATROOM_GROUPS_MODE: "on",
+        UAIS_P2_STAGING_DATABASE_URL:
+          "postgresql://staging-user:staging-secret@staging-db.example.test/uais",
+        NEON_PROJECT_ID: "neon-staging-project-fixture",
+        [genericName]: "postgresql://generic-user:generic-secret@db.example.test/uais",
+      };
+
+      expect(getUaisCoreDatabaseReadiness(env)).toEqual({
+        target: "uais-core-database",
+        status: "blocked",
+        blockedReason: "missing-managed-postgres-url",
+        acceptedEnvNames: [UAIS_ISOLATED_STAGING_CORE_DATABASE_ENV_NAME],
+        valueRedacted: true,
+      });
+      expect(readUaisCoreDatabaseUrl(env)).toBeUndefined();
+    },
+  );
+
+  it("preserves generic-only production database selection", () => {
+    const productionUrl = "postgresql://prod-user:prod-secret@db.example.test/uais";
+    const env = {
+      VERCEL_ENV: "production",
+      VERCEL_PROJECT_ID: "prj_MZIjawDPTU4tj4yuTBsd9hyLxHXA",
+      UAIS_DEPLOYMENT_ENV: "production",
+      UAIS_CORE_DATABASE_URL: productionUrl,
+      UAIS_P2_STAGING_DATABASE_URL:
+        "postgresql://staging-user:staging-secret@staging-db.example.test/uais",
+    };
+
+    expect(getUaisCoreDatabaseReadiness(env)).toMatchObject({
+      status: "ready",
+      selectedEnvName: "UAIS_CORE_DATABASE_URL",
+    });
+    expect(readUaisCoreDatabaseUrl(env)).toBe(productionUrl);
   });
 
   it("keeps one migration inventory for the runner, the runtime and the readiness report", () => {
@@ -176,7 +272,7 @@ describe("B-11 core database foundation", () => {
       "node scripts/apply-core-migrations.mjs --deploy",
     );
     expect(packageJson.scripts?.["vercel-build"]).toBe(
-      "npm run db:migrate:deploy && next build",
+      "node scripts/vercel-build-dispatch.mjs",
     );
     expect(vercelConfig.buildCommand).toBe("npm run vercel-build");
     const migrationScript = readProjectFile("scripts/apply-core-migrations.mjs");

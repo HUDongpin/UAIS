@@ -26,14 +26,22 @@ function readyEnv(overrides: Record<string, string | undefined> = {}) {
     VERCEL_GIT_COMMIT_SHA: candidateGitSha,
     VERCEL_URL: deploymentHost,
     UAIS_DEPLOYMENT_ENV: "staging",
+    UAIS_LEARNING_CHATROOM_GROUPS_MODE: "on",
     UAIS_STAGING_INP_RUM_ENABLED: "yes",
     UAIS_P2_STAGING_DATABASE_URL: "postgres://redacted.example.test/uais",
+    NEON_PROJECT_ID: "neon-staging-project-fixture",
     P2_CANDIDATE_GIT_SHA: candidateGitSha,
     P2_CANDIDATE_CONTENT_SHA: candidateContentSha,
     UAIS_STAGING_INP_COHORT_ID: cohortId,
     UAIS_STAGING_INP_HMAC_SECRET: hmacSecret,
+    UAIS_STAGING_INP_HMAC_KEY_VERSION: "v1",
     UAIS_APP_SESSION_SIGNING_SECRET: "app-session-secret-fixture-at-least-32",
-    UAIS_STAGING_INP_OPERATOR_ACCOUNT_HASHES: "c".repeat(64),
+    CRON_SECRET: "staging-expiry-cron-secret-fixture-at-least-32",
+    P2_VERCEL_PROTECTION_BYPASS_SECRET:
+      "staging-protection-bypass-fixture-at-least-32",
+    UAIS_STAGING_INP_OPERATOR_ACCOUNT_HASHES: ["c", "d", "e"]
+      .map((value) => value.repeat(64))
+      .join(","),
     ...overrides,
   };
 }
@@ -51,6 +59,8 @@ describe("isolated staging INP RUM contract", () => {
       candidateGitSha,
       candidateContentSha,
       deploymentHost,
+      collectorKeyVersion: "v1",
+      operatorAllowlistFingerprint: expect.stringMatching(/^[0-9a-f]{64}$/),
     });
 
     for (const [name, value, reason] of [
@@ -95,7 +105,47 @@ describe("isolated staging INP RUM contract", () => {
     );
   });
 
-  it("maps only fixed identifier-free hard-load journeys and accepts exactly five scalars", () => {
+  it.each([
+    [
+      "disabled group mode",
+      { UAIS_LEARNING_CHATROOM_GROUPS_MODE: "off" },
+      "staging-groups-mode-required",
+    ],
+    [
+      "missing staging database identity",
+      { NEON_PROJECT_ID: undefined },
+      "staging-database-identity-missing",
+    ],
+    [
+      "production database identity",
+      { NEON_PROJECT_ID: "late-sunset-59152574" },
+      "production-database-identity-rejected",
+    ],
+    [
+      "missing expiry credential",
+      { CRON_SECRET: undefined },
+      "cron-secret-missing-or-weak",
+    ],
+    [
+      "missing protection credential",
+      { P2_VERCEL_PROTECTION_BYPASS_SECRET: undefined },
+      "protection-bypass-secret-missing-or-weak",
+    ],
+    [
+      "reused expiry credential",
+      { CRON_SECRET: hmacSecret },
+      "staging-secret-reuse-rejected",
+    ],
+  ] as const)("fails closed for %s", (_label, override, reason) => {
+    expect(getUaisStagingInpGuard(readyEnv(override), candidateContentSha)).toEqual(
+      expect.objectContaining({
+        enabled: false,
+        reasons: expect.arrayContaining([reason]),
+      }),
+    );
+  });
+
+  it("maps only fixed identifier-free hard-load journeys and accepts exactly four scalars", () => {
     expect(classifyUaisStagingInpJourney("/learning")).toBe("student-learning");
     expect(classifyUaisStagingInpJourney("/learning/chatroom")).toBe(
       "student-chatroom",
@@ -108,14 +158,12 @@ describe("isolated staging INP RUM contract", () => {
     expect(
       parseUaisStagingInpPayload({
         id: "v4-unique-metric-id",
-        journey: "teacher-home",
         viewportClass: "wide",
         navigationType: "navigate",
         valueMs: 183,
       }),
     ).toEqual({
       id: "v4-unique-metric-id",
-      journey: "teacher-home",
       viewportClass: "wide",
       navigationType: "navigate",
       valueMs: 183,
@@ -123,11 +171,10 @@ describe("isolated staging INP RUM contract", () => {
     expect(
       parseUaisStagingInpPayload({
         id: "v4-unique-metric-id",
-        journey: "teacher-home",
         viewportClass: "wide",
         navigationType: "navigate",
         valueMs: 183,
-        pathname: "/teaching/private",
+        journey: "teacher-home",
       }),
     ).toBeNull();
   });
@@ -141,6 +188,8 @@ describe("isolated staging INP RUM contract", () => {
     const sample: UaisStagingInpStoredSample = {
       ...binding,
       sampleKey: "e".repeat(64),
+      metricIdKey: "d".repeat(64),
+      operatorKey: "1".repeat(64),
       role: "teacher",
       journey: "teacher-home",
       viewportClass: "wide",
@@ -150,8 +199,14 @@ describe("isolated staging INP RUM contract", () => {
       expiresAt: "2026-08-26T12:00:00.000Z",
     };
 
+    await store.setup(binding);
     await expect(store.persist(sample)).resolves.toEqual({ status: "stored" });
-    await expect(store.persist({ ...sample, valueMs: 190 })).resolves.toEqual({
+    await expect(store.persist({
+      ...sample,
+      valueMs: 190,
+      receivedAt: "2026-08-24T12:00:01.000Z",
+      expiresAt: "2026-08-26T12:00:01.000Z",
+    })).resolves.toEqual({
       status: "updated",
     });
     await expect(store.aggregate(binding)).resolves.toEqual(
@@ -174,13 +229,18 @@ describe("isolated staging INP RUM contract", () => {
     await expect(store.purge(binding)).resolves.toEqual(
       expect.objectContaining({
         state: "purged",
-        deletedCount: 1,
-        remainingForBinding: 0,
-        zeroResidue: true,
+        rawSampleRowsDeleted: 1,
+        rawSampleRowsRemaining: 0,
+        rawSampleRowsZero: true,
+        cohortTombstoneRetained: true,
       }),
     );
     await expect(store.readback(binding)).resolves.toEqual(
-      expect.objectContaining({ state: "purged", remainingForBinding: 0 }),
+      expect.objectContaining({
+        state: "purged",
+        rawSampleRowsRemaining: 0,
+        cohortTombstoneRetained: true,
+      }),
     );
   });
 
@@ -210,6 +270,8 @@ describe("isolated staging INP RUM contract", () => {
     const firstSample: UaisStagingInpStoredSample = {
       ...firstBinding,
       sampleKey: "1".repeat(64),
+      metricIdKey: "3".repeat(64),
+      operatorKey: "1".repeat(64),
       role: "teacher",
       journey: "teacher-home",
       viewportClass: "wide",
@@ -218,16 +280,19 @@ describe("isolated staging INP RUM contract", () => {
       receivedAt: clock.toISOString(),
       expiresAt: "2026-08-26T12:00:00.000Z",
     };
+    await store.setup(firstBinding);
     await store.persist(firstSample);
     await store.purge(firstBinding);
 
     const nextGitSha = "d".repeat(40);
     const nextBinding = {
+      ...firstBinding,
       cohortId: `p2-inp-${nextGitSha}-run1`,
       candidateGitSha: nextGitSha,
       candidateContentSha: "e".repeat(64),
       deploymentHost: "uais-staging-next-team.vercel.app",
     };
+    await store.setup(nextBinding);
     await expect(
       store.persist({
         ...firstSample,
