@@ -536,6 +536,7 @@ describe("enterprise LRS/xAPI instrumentation", () => {
         actorId: "admin-lrs-auditor",
         role: "admin",
       },
+      actions: ["lrs-analytics-read"],
     }).headers;
     const analyticsHandler = createLearningRecordAnalyticsGetHandler({
       env: readyLrsEnv,

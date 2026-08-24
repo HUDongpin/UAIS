@@ -109,6 +109,25 @@ const signedAdminAiAccessHeaders = createUaisAiAccessSessionForTrustedActor({
     actorId: "admin-ai-ops",
     role: "admin",
   },
+  actions: [
+    "live-chat",
+    "voice-sample-submit",
+    "voice-clone-preflight",
+    "voice-clone-status",
+    "voice-clone-revoke",
+    "voice-lifecycle-audit-read",
+    "voice-asset-retention-read",
+    "ppt-narration-submit",
+    "ppt-narration-audio-download",
+    "ppt-narration-export-download",
+    "teacher-auth-session-issue",
+    "teacher-ppt-workflow-read",
+    "provider-readiness",
+    "provider-smoke-plan",
+    "lrs-readiness",
+    "lrs-live-smoke",
+    "lrs-analytics-read",
+  ],
 }).headers;
 const signedTeacherAiAccessHeaders = createUaisAiAccessSessionForTrustedActor({
   secret: aiAccessSigningSecret,
@@ -118,6 +137,21 @@ const signedTeacherAiAccessHeaders = createUaisAiAccessSessionForTrustedActor({
     actorId: "teacher-kang",
     role: "teacher",
   },
+  actions: [
+    "live-chat",
+    "voice-sample-submit",
+    "voice-clone-preflight",
+    "voice-clone-status",
+    "voice-clone-revoke",
+    "teacher-ppt-workflow-read",
+    "ppt-narration-submit",
+    "ppt-narration-audio-download",
+    "ppt-narration-export-download",
+    "teacher-auth-session-issue",
+    "provider-smoke-plan",
+    "voice-lifecycle-audit-read",
+    "voice-asset-retention-read",
+  ],
   scopes: {
     teacherIds: ["teacher-kang"],
     courseIds: ["research-methods", "elementary-math-research"],
@@ -1795,6 +1829,29 @@ describe("UAIS AI API route contracts", () => {
       now: stableFutureIssueTime,
     });
     expect(downstreamDecision.reasonCode).toBe("authorized");
+
+    const replayDecision = authorizeUaisAiAccess({
+      request: new Request("http://localhost/api/ai/chat", {
+        headers: body.accessSession.headers,
+      }),
+      action: "live-chat",
+      resource: {
+        teacherId: "teacher-kang",
+        courseId: "research-methods",
+      },
+      env: {
+        NODE_ENV: "production",
+        UAIS_AI_ACCESS_SIGNING_SECRET: aiAccessSigningSecret,
+      },
+      now: stableFutureIssueTime,
+    });
+    expect(replayDecision).toEqual(
+      expect.objectContaining({
+        status: "denied",
+        action: "live-chat",
+        reasonCode: "action-scope-denied",
+      }),
+    );
     expect(JSON.stringify(body)).not.toContain("session-teacher-kang-workflow-read");
     expectNoCredentialValues(body);
   });
@@ -6154,6 +6211,7 @@ describe("UAIS AI API route contracts", () => {
           actorId: "teacher-kang",
           role: "teacher",
         },
+        actions: ["voice-clone-revoke"],
         scopes: {
           teacherIds: ["teacher-kang"],
           sampleAssetIds: ["asset-voice-10s"],
@@ -6425,6 +6483,7 @@ describe("UAIS AI API route contracts", () => {
         actorId: "teacher-kang",
         role: "teacher",
       },
+      actions: ["voice-clone-status"],
       scopes: {
         teacherIds: ["teacher-kang"],
         sampleAssetIds: ["asset-other"],
@@ -8029,6 +8088,7 @@ describe("UAIS AI API route contracts", () => {
             actorId: "teacher-kang",
             role: "teacher",
           },
+          actions: ["ppt-narration-submit"],
           scopes: {
             teacherIds: ["teacher-kang"],
             courseIds: ["research-methods"],

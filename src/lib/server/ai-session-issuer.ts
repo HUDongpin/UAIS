@@ -1,5 +1,6 @@
 import {
   createUaisAiAccessSessionForTrustedActor,
+  type UaisAiAccessAction,
   type UaisAiAccessDecision,
   type UaisAiAccessSessionClaims,
   type UaisAiActorRole,
@@ -22,6 +23,7 @@ export type UaisAuthenticatedTeacherAiAccessSession = UaisAiTrustedActorAccessSe
 
 export function createUaisAiAccessSessionFromAuthenticatedTeacher(input: {
   authenticatedSession: UaisAuthenticatedTeacherSession;
+  action: UaisAiAccessAction;
   requestedScopes: NonNullable<UaisAiAccessSessionClaims["scopes"]>;
   secret: string;
   now?: Date;
@@ -45,6 +47,7 @@ export function createUaisAiAccessSessionFromAuthenticatedTeacher(input: {
       actorId: input.authenticatedSession.actorId,
       role: "teacher",
     },
+    actions: [input.action],
     scopes: requestedScopes,
     secret: input.secret,
     now,

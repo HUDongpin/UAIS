@@ -26,6 +26,7 @@ const signedAdminAiAccessHeaders = createUaisAiAccessSessionForTrustedActor({
     actorId: "admin-ai-ops",
     role: "admin",
   },
+  actions: ["lrs-readiness", "lrs-live-smoke"],
 }).headers;
 
 describe("UAIS Learning Record Store xAPI connection", () => {

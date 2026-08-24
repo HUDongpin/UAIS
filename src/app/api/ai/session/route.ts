@@ -147,6 +147,7 @@ export function createTeacherAiSessionPostHandler(
           ...authenticatedSession,
           grants: accessPlan.grants,
         },
+        action: body.action,
         requestedScopes: accessPlan.requestedScopes,
         secret: signingSecret,
         now: deps.now,

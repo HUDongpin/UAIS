@@ -37,6 +37,7 @@ function signedTeacherHeaders(overrides: Partial<Parameters<typeof createUaisAiA
         actorId: "teacher-kang",
         role: "teacher",
       },
+      actions: ["ppt-narration-submit"],
       scopes: {
         teacherIds: ["teacher-kang"],
         courseIds: ["research-methods"],
@@ -47,7 +48,7 @@ function signedTeacherHeaders(overrides: Partial<Parameters<typeof createUaisAiA
       },
       expiresAt: "2026-06-16T12:10:00.000Z",
       ...overrides,
-    },
+    } as Parameters<typeof createUaisAiAccessSessionHeaders>[0]["claims"],
   });
 }
 
@@ -69,6 +70,7 @@ describe("UAIS AI signed access session claims", () => {
         actorId: "teacher-kang",
         role: "teacher",
       },
+      actions: ["ppt-narration-submit"],
       scopes: {
         teacherIds: ["teacher-kang", " teacher-kang "],
         courseIds: ["research-methods"],
@@ -92,6 +94,7 @@ describe("UAIS AI signed access session claims", () => {
             actorId: "teacher-kang",
             role: "teacher",
           },
+          actions: ["ppt-narration-submit"],
           issuedAt: "2026-06-16T12:00:00.000Z",
           expiresAt: "2026-06-16T12:10:00.000Z",
           scopes: {
@@ -145,8 +148,24 @@ describe("UAIS AI signed access session claims", () => {
           actorId: "teacher-kang",
           role: "teacher",
         },
+        actions: ["ppt-narration-submit"],
       }),
     ).toThrow("UAIS AI access signing secret is required.");
+  });
+
+  it("rejects trusted-session issuance without an explicit action scope", () => {
+    expect(() =>
+      createUaisAiAccessSessionForTrustedActor(
+        {
+          secret: signingSecret,
+          now,
+          actor: {
+            actorId: "teacher-kang",
+            role: "teacher",
+          },
+        } as Parameters<typeof createUaisAiAccessSessionForTrustedActor>[0],
+      ),
+    ).toThrow("UAIS AI access action scope is required.");
   });
 
   it("rejects trusted-session issuance with unsafe actor ids before signing", () => {
@@ -158,6 +177,7 @@ describe("UAIS AI signed access session claims", () => {
           actorId: "/Users/example/teacher-kang",
           role: "teacher",
         },
+        actions: ["ppt-narration-submit"],
       }),
     ).toThrow("UAIS AI trusted actor context is invalid.");
   });
@@ -171,6 +191,7 @@ describe("UAIS AI signed access session claims", () => {
           actorId: "teacher-kang",
           role: "teacher",
         },
+        actions: ["ppt-narration-submit"],
         scopes: {
           courseIds: ["research-methods", "/Users/example/research-methods"],
         },
@@ -208,6 +229,58 @@ describe("UAIS AI signed access session claims", () => {
       }),
     );
     expect(JSON.stringify(decision)).not.toContain(signingSecret);
+  });
+
+  it("fails closed when a signed session claim has no action scope", () => {
+    const decision = authorizeUaisAiAccess({
+      request: new Request("http://localhost/api/ai/ppt-narration", {
+        headers: signedTeacherHeaders({ actions: undefined }),
+      }),
+      action: "ppt-narration-submit",
+      resource: {
+        teacherId: "teacher-kang",
+        courseId: "research-methods",
+      },
+      env: { UAIS_AI_ACCESS_SIGNING_SECRET: signingSecret },
+      now,
+    });
+
+    expect(decision).toEqual(
+      expect.objectContaining({
+        status: "denied",
+        reasonCode: "signed-session-invalid",
+        responsibleSession: "S12",
+        authMode: "signed-session",
+      }),
+    );
+  });
+
+  it("fails closed when a signed session claim contains an unknown action", () => {
+    const decision = authorizeUaisAiAccess({
+      request: new Request("http://localhost/api/ai/ppt-narration", {
+        headers: signedTeacherHeaders({
+          actions: ["unrecognized-ai-action"] as Parameters<
+            typeof createUaisAiAccessSessionHeaders
+          >[0]["claims"]["actions"],
+        }),
+      }),
+      action: "ppt-narration-submit",
+      resource: {
+        teacherId: "teacher-kang",
+        courseId: "research-methods",
+      },
+      env: { UAIS_AI_ACCESS_SIGNING_SECRET: signingSecret },
+      now,
+    });
+
+    expect(decision).toEqual(
+      expect.objectContaining({
+        status: "denied",
+        reasonCode: "signed-session-invalid",
+        responsibleSession: "S12",
+        authMode: "signed-session",
+      }),
+    );
   });
 
   it("rejects tampered signed session claims before trusting scopes", () => {
@@ -248,6 +321,7 @@ describe("UAIS AI signed access session claims", () => {
           actorId: "/Users/example/teacher-kang",
           role: "teacher",
         },
+        actions: ["ppt-narration-submit"],
         expiresAt: "2026-06-16T12:10:00.000Z",
       },
     });
@@ -281,6 +355,7 @@ describe("UAIS AI signed access session claims", () => {
           actorId: "teacher-kang",
           role: "teacher",
         },
+        actions: ["ppt-narration-submit"],
         scopes: {
           courseIds: ["/Users/example/research-methods"],
         },
@@ -576,11 +651,12 @@ describe("UAIS AI signed access session claims", () => {
     }
   });
 
-  it("issues scoped signed AI access from an authenticated teacher session", () => {
+  it("issues action-and-resource-scoped AI access from an authenticated teacher session", () => {
     const issued = createUaisAiAccessSessionFromAuthenticatedTeacher({
       secret: signingSecret,
       now,
       ttlSeconds: 600,
+      action: "ppt-narration-submit",
       authenticatedSession: {
         sessionId: "session-teacher-kang-1",
         actorId: "teacher-kang",
@@ -616,6 +692,7 @@ describe("UAIS AI signed access session claims", () => {
             actorId: "teacher-kang",
             role: "teacher",
           },
+          actions: ["ppt-narration-submit"],
           issuedAt: "2026-06-16T12:00:00.000Z",
           expiresAt: "2026-06-16T12:10:00.000Z",
           scopes: {
@@ -673,7 +750,7 @@ describe("UAIS AI signed access session claims", () => {
       },
       now: new Date("2026-06-16T12:09:59.000Z"),
     });
-    expect(revokeDecision.reasonCode).toBe("authorized");
+    expect(revokeDecision.reasonCode).toBe("action-scope-denied");
   });
 
   it("rejects authenticated teacher session issuing for ungranted resources", () => {
@@ -681,6 +758,7 @@ describe("UAIS AI signed access session claims", () => {
       createUaisAiAccessSessionFromAuthenticatedTeacher({
         secret: signingSecret,
         now,
+        action: "ppt-narration-submit",
         authenticatedSession: {
           sessionId: "session-teacher-kang-1",
           actorId: "teacher-kang",
@@ -709,6 +787,7 @@ describe("UAIS AI signed access session claims", () => {
       secret: signingSecret,
       now,
       ttlSeconds: 600,
+      action: "ppt-narration-submit",
       authenticatedSession: {
         sessionId: "session-teacher-kang-short",
         actorId: "teacher-kang",
@@ -804,6 +883,7 @@ describe("UAIS AI signed access session claims", () => {
     const issued = createUaisAiAccessSessionFromAuthenticatedTeacher({
       secret: signingSecret,
       now,
+      action: plan.action,
       authenticatedSession: {
         sessionId: "session-teacher-kang-resource-plan",
         actorId: "teacher-kang",

@@ -42,6 +42,26 @@ export type UaisAiAccessAction =
   | "lrs-readiness"
   | "lrs-live-smoke"
   | "lrs-analytics-read";
+
+const uaisAiAccessActionSet = new Set<UaisAiAccessAction>([
+  "live-chat",
+  "voice-sample-submit",
+  "voice-clone-preflight",
+  "voice-clone-status",
+  "voice-clone-revoke",
+  "voice-lifecycle-audit-read",
+  "voice-asset-retention-read",
+  "ppt-narration-submit",
+  "ppt-narration-audio-download",
+  "ppt-narration-export-download",
+  "teacher-auth-session-issue",
+  "teacher-ppt-workflow-read",
+  "provider-readiness",
+  "provider-smoke-plan",
+  "lrs-readiness",
+  "lrs-live-smoke",
+  "lrs-analytics-read",
+]);
 export type UaisAiAdminAccessAction = Extract<
   UaisAiAccessAction,
   | "provider-readiness"
@@ -61,6 +81,7 @@ export type UaisAiAccessSessionClaims = {
     actorId: string;
     role: UaisAiActorRole;
   };
+  actions: UaisAiAccessAction[];
   scopes?: {
     teacherIds?: string[];
     courseIds?: string[];
@@ -90,6 +111,7 @@ export type UaisAiAccessDecision = {
     | "actor-context-required"
     | "actor-role-invalid"
     | "admin-role-required"
+    | "action-scope-denied"
     | "teacher-scope-denied"
     | "course-scope-denied"
     | "sample-asset-scope-denied"
@@ -265,6 +287,7 @@ export function createUaisAiAccessSessionForTrustedActor(input: {
     actorId: string;
     role: UaisAiActorRole;
   };
+  actions: UaisAiAccessAction[];
   scopes?: UaisAiAccessSessionClaims["scopes"];
   secret: string;
   now?: Date;
@@ -287,6 +310,7 @@ export function createUaisAiAccessSessionForTrustedActor(input: {
   const issuedAt = input.now ?? new Date();
   const ttlSeconds = clampSessionTtlSeconds(input.ttlSeconds);
   const scopes = compactClaimsScopes(input.scopes);
+  const actions = normalizeActions(input.actions);
   const claims: UaisAiAccessSessionClaims = {
     actor: {
       actorId,
@@ -294,6 +318,7 @@ export function createUaisAiAccessSessionForTrustedActor(input: {
     },
     issuedAt: issuedAt.toISOString(),
     expiresAt: new Date(issuedAt.getTime() + ttlSeconds * 1000).toISOString(),
+    actions,
     ...(scopes ? { scopes } : {}),
   };
 
@@ -341,6 +366,9 @@ function authorizeSignedSession(input: {
   }
   if (expiresAt <= (input.now ?? new Date()).getTime()) {
     return denied(input.action, "signed-session-expired", claims.actor, safeResource, authMode);
+  }
+  if (!claims.actions?.includes(input.action)) {
+    return denied(input.action, "action-scope-denied", claims.actor, safeResource, authMode);
   }
   return authorizeActorScope({
     action: input.action,
@@ -498,6 +526,9 @@ function parseSignedSessionClaims(claimsHeader: string): UaisAiAccessSessionClai
     if (typeof claims.expiresAt !== "string" || !claims.expiresAt.trim()) {
       return undefined;
     }
+    if (!areValidUaisAiAccessActions(claims.actions)) {
+      return undefined;
+    }
     if (!areSafeUaisAiAccessScopes(claims.scopes)) {
       return undefined;
     }
@@ -585,6 +616,25 @@ function normalizeScopeList(values: string[] | undefined) {
     throw new Error("UAIS AI trusted actor scopes are invalid.");
   }
   return normalized;
+}
+
+function normalizeActions(actions: UaisAiAccessAction[] | undefined) {
+  if (!areValidUaisAiAccessActions(actions)) {
+    throw new Error("UAIS AI access action scope is required.");
+  }
+  return [...actions];
+}
+
+function areValidUaisAiAccessActions(
+  actions: unknown,
+): actions is UaisAiAccessAction[] {
+  return (
+    Array.isArray(actions) &&
+    actions.length > 0 &&
+    actions.length <= uaisAiAccessActionSet.size &&
+    actions.every((action) => uaisAiAccessActionSet.has(action)) &&
+    new Set(actions).size === actions.length
+  );
 }
 
 function arrayToSet(values: string[] | undefined) {
