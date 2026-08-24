@@ -42,13 +42,71 @@ export function computeUaisStagingCandidateContentSha(
   root = process.cwd(),
   entries = uaisStagingCandidateContentEntries,
 ) {
+  const { absoluteRoot, files } = collectCandidateContent(root, entries);
+  return hashCandidateFiles(
+    absoluteRoot,
+    files,
+    "uais-staging-candidate-content:v1\0",
+  );
+}
+
+/**
+ * Returns only path names, file counts and hashes. This is safe to emit when a
+ * remote builder reports a content mismatch: it identifies which allowlisted
+ * entry the platform changed without exposing source bytes or environment
+ * values.
+ * @param {string} root
+ * @param {readonly string[]} entries
+ */
+export function computeUaisStagingCandidateContentManifest(
+  root = process.cwd(),
+  entries = uaisStagingCandidateContentEntries,
+) {
+  const { absoluteRoot, filesByEntry, files } = collectCandidateContent(
+    root,
+    entries,
+  );
+  return {
+    sha256: hashCandidateFiles(
+      absoluteRoot,
+      files,
+      "uais-staging-candidate-content:v1\0",
+    ),
+    entries: filesByEntry.map(({ entry, files: entryFiles }) => ({
+      path: entry,
+      fileCount: entryFiles.length,
+      sha256: hashCandidateFiles(
+        absoluteRoot,
+        entryFiles,
+        `uais-staging-candidate-content-entry:v1\0${entry}\0`,
+      ),
+    })),
+    valuesRedacted: true,
+  };
+}
+
+/** @param {string} root @param {readonly string[]} entries */
+function collectCandidateContent(root, entries) {
   const absoluteRoot = resolve(root);
-  const files = entries.flatMap((entry) => collectFiles(absoluteRoot, entry)).sort();
+  const filesByEntry = entries.map((entry) => ({
+    entry,
+    files: collectFiles(absoluteRoot, entry).sort(),
+  }));
+  const files = filesByEntry.flatMap(({ files: entryFiles }) => entryFiles).sort();
   if (files.length === 0) {
     throw new Error("UAIS staging candidate content allowlist is empty");
   }
+  return { absoluteRoot, filesByEntry, files };
+}
+
+/**
+ * @param {string} absoluteRoot
+ * @param {readonly string[]} files
+ * @param {string} domain
+ */
+function hashCandidateFiles(absoluteRoot, files, domain) {
   const hash = createHash("sha256");
-  hash.update("uais-staging-candidate-content:v1\0");
+  hash.update(domain);
   for (const relativePath of files) {
     const absolutePath = resolve(absoluteRoot, relativePath);
     const contents = readFileSync(absolutePath);

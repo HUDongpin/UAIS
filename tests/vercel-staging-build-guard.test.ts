@@ -1,12 +1,24 @@
 import { execFile } from "node:child_process";
-import { readFileSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { promisify } from "node:util";
 import { describe, expect, it, vi } from "vitest";
 import {
   UAIS_ISOLATED_STAGING_CORE_DATABASE_ENV_NAME,
   getUaisCoreDatabaseReadiness,
 } from "@/lib/db/core-database";
-import { computeUaisStagingCandidateContentSha } from "../scripts/p2-staging-candidate-content.mjs";
+import {
+  computeUaisStagingCandidateContentManifest,
+  computeUaisStagingCandidateContentSha,
+  uaisStagingCandidateContentEntries,
+} from "../scripts/p2-staging-candidate-content.mjs";
 import {
   UAIS_STAGING_CONFIG_ATTESTATION,
   inspectStagingDatabaseTarget,
@@ -58,6 +70,37 @@ const safeBaseStagingEnv = {
 };
 
 describe("guarded Vercel staging build", () => {
+  it("produces a redacted per-entry manifest without changing the aggregate digest", () => {
+    const manifest = computeUaisStagingCandidateContentManifest(process.cwd());
+
+    expect(manifest.sha256).toBe(candidateContentSha);
+    expect(manifest.entries.map((entry) => entry.path)).toEqual(
+      uaisStagingCandidateContentEntries,
+    );
+    expect(manifest.entries.every((entry) => entry.fileCount > 0)).toBe(true);
+    expect(
+      manifest.entries.every((entry) => /^[0-9a-f]{64}$/.test(entry.sha256)),
+    ).toBe(true);
+    expect(manifest.valuesRedacted).toBe(true);
+  });
+
+  it("keeps the legacy aggregate framing stable for a fixed byte fixture", () => {
+    const root = mkdtempSync(join(tmpdir(), "uais-content-known-answer-"));
+    try {
+      mkdirSync(join(root, "nested"));
+      writeFileSync(join(root, "alpha.txt"), "alpha\n");
+      writeFileSync(join(root, "nested", "beta.bin"), Buffer.from([0, 1, 2, 3]));
+
+      expect(
+        computeUaisStagingCandidateContentSha(root, ["alpha.txt", "nested"]),
+      ).toBe(
+        "785b08014ac2e2ba5b05fd44b42f6d7a3f9cde9f31dedf9d9ca9439762016462",
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it("fails closed before any command outside the exact Vercel production scope", async () => {
     const commandRunner = vi.fn(() => ({ status: 0 }));
 
@@ -177,6 +220,97 @@ describe("guarded Vercel staging build", () => {
     expect(result.report.blockedReasons).toContain(reason);
     expect(inspectTarget).not.toHaveBeenCalled();
     expect(commandRunner).not.toHaveBeenCalled();
+  });
+
+  it("reports only aggregate and per-entry hashes when Vercel changes build inputs", async () => {
+    const wrongContentSha = "f".repeat(64);
+    const result = await runGuardedVercelStagingBuild({
+      env: { ...safeStagingEnv, P2_CANDIDATE_CONTENT_SHA: wrongContentSha },
+      commandRunner: vi.fn(() => ({ status: 0 })),
+      inspectTarget: vi.fn(async () => ({ approved: true })),
+    });
+
+    expect(result).toMatchObject({
+      exitCode: 2,
+      report: {
+        status: "BLOCKED_ENV",
+        blockedReasons: expect.arrayContaining(["candidate-content-sha-mismatch"]),
+        contentShaDiagnostic: {
+          expectedSha256: wrongContentSha,
+          computedSha256: candidateContentSha,
+          entries: expect.arrayContaining([
+            expect.objectContaining({
+              path: "package-lock.json",
+              fileCount: 1,
+              sha256: expect.stringMatching(/^[0-9a-f]{64}$/),
+            }),
+            expect.objectContaining({
+              path: "src",
+              fileCount: expect.any(Number),
+              sha256: expect.stringMatching(/^[0-9a-f]{64}$/),
+            }),
+          ]),
+          valuesRedacted: true,
+        },
+        valuesRedacted: true,
+      },
+    });
+    const serialized = JSON.stringify(result);
+    expect(serialized).not.toContain(dedicatedDatabaseUrl);
+    expect(serialized).not.toContain("staging-secret");
+  });
+
+  it("stays blocked when mismatch diagnostics throw or disagree with the aggregate", async () => {
+    const computedSha = "e".repeat(64);
+    const wrongExpectedSha = "f".repeat(64);
+    const variants = [
+      {
+        computeContentManifest: () => {
+          throw new Error("diagnostic-private-message");
+        },
+        expectedReasons: [
+          "candidate-content-sha-mismatch",
+          "candidate-content-sha-unverifiable",
+        ],
+      },
+      {
+        computeContentManifest: () => ({
+          sha256: "d".repeat(64),
+          entries: [
+            {
+              path: "private-path-must-not-be-used",
+              fileCount: 1,
+              sha256: "c".repeat(64),
+            },
+          ],
+          valuesRedacted: true,
+        }),
+        expectedReasons: ["candidate-content-sha-mismatch"],
+      },
+    ];
+
+    for (const variant of variants) {
+      const inspectTarget = vi.fn(async () => ({ approved: true }));
+      const commandRunner = vi.fn(() => ({ status: 0 }));
+      const result = await runGuardedVercelStagingBuild({
+        env: {
+          ...safeStagingEnv,
+          P2_CANDIDATE_CONTENT_SHA: wrongExpectedSha,
+        },
+        computeContentSha: () => computedSha,
+        computeContentManifest: variant.computeContentManifest,
+        inspectTarget,
+        commandRunner,
+        cwd: "/private-fixture-root",
+      });
+
+      expect(result.exitCode).toBe(2);
+      expect(result.report.blockedReasons).toEqual(variant.expectedReasons);
+      expect(inspectTarget).not.toHaveBeenCalled();
+      expect(commandRunner).not.toHaveBeenCalled();
+      expect(JSON.stringify(result)).not.toContain("diagnostic-private-message");
+      expect(JSON.stringify(result)).not.toContain("private-path-must-not-be-used");
+    }
   });
 
   it.each([

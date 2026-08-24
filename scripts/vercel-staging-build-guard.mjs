@@ -4,7 +4,10 @@ import { spawnSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 import postgres from "postgres";
 import { CORE_MIGRATION_STAGING_SOURCE_GUARD } from "./core-migration-guard.mjs";
-import { computeUaisStagingCandidateContentSha } from "./p2-staging-candidate-content.mjs";
+import {
+  computeUaisStagingCandidateContentManifest,
+  computeUaisStagingCandidateContentSha,
+} from "./p2-staging-candidate-content.mjs";
 import {
   UAIS_PRODUCTION_VERCEL_PROJECT_ID,
   UAIS_STAGING_VERCEL_PROJECT_ID,
@@ -33,6 +36,7 @@ export async function runGuardedVercelStagingBuild({
   commandRunner = runCommand,
   inspectTarget = inspectStagingDatabaseTarget,
   computeContentSha = computeUaisStagingCandidateContentSha,
+  computeContentManifest = computeUaisStagingCandidateContentManifest,
   cwd = process.cwd(),
   nodeExecutable = process.execPath,
 } = {}) {
@@ -98,12 +102,22 @@ export async function runGuardedVercelStagingBuild({
   }
 
   const candidateContentSha = readValue(env.P2_CANDIDATE_CONTENT_SHA);
+  let contentShaDiagnostic;
   if (!digestPattern.test(candidateContentSha)) {
     blockedReasons.push("candidate-content-sha-invalid");
   } else {
     try {
-      if (computeContentSha(cwd) !== candidateContentSha) {
+      const computedContentSha = computeContentSha(cwd);
+      if (computedContentSha !== candidateContentSha) {
         blockedReasons.push("candidate-content-sha-mismatch");
+        const manifest = computeContentManifest(cwd);
+        contentShaDiagnostic = {
+          expectedSha256: candidateContentSha,
+          computedSha256: computedContentSha,
+          entries:
+            manifest.sha256 === computedContentSha ? manifest.entries : [],
+          valuesRedacted: true,
+        };
       }
     } catch {
       blockedReasons.push("candidate-content-sha-unverifiable");
@@ -144,6 +158,7 @@ export async function runGuardedVercelStagingBuild({
         target: "uais-isolated-staging-build",
         status: "BLOCKED_ENV",
         blockedReasons,
+        ...(contentShaDiagnostic ? { contentShaDiagnostic } : {}),
         valuesRedacted: true,
       },
     };
