@@ -19,6 +19,19 @@
 import { createHash, randomBytes } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import postgres from "postgres";
+import {
+  p2LogicalRequestMetricsPass,
+  summarizeP2LogicalRequestMetrics as summarizeMetrics,
+} from "./lib/p2-load-metrics.mjs";
+import { runP2LoadRamp } from "./lib/p2-load-ramp.mjs";
+import {
+  assessP2RestoreIntegrity,
+  assessP2RestoreRecordIntegrity,
+} from "./lib/p2-restore-integrity.mjs";
+import {
+  assessUaisStagingRemoteHealth,
+  runUaisStagingRemotePreflight,
+} from "./lib/p2-staging-remote-attestation.mjs";
 import { hashAccountPassword } from "./lib/uais-account-provisioning.mjs";
 import coreDatabaseModule from "../src/lib/db/core-database.ts";
 import migrationsModule from "../src/lib/db/migrations.ts";
@@ -50,6 +63,13 @@ const expectedUserCount = expectedUserRamp.at(-1);
 const expectedGroupCount = 40;
 const expectedGroupSize = 5;
 const expectedLoadDurationSeconds = 600;
+const expectedRampMessageCount = expectedUserRamp.reduce(
+  (total, target) => total + target,
+  0,
+);
+const expectedTranscriptMessageCount =
+  expectedRampMessageCount +
+  expectedUserCount * (expectedLoadDurationSeconds / 60);
 const expectedHealthSamples = 15;
 const healthIntervalMs = 60_000;
 const chatRoundIntervalMs = 60_000;
@@ -97,11 +117,19 @@ const restoreNeonProjectId = process.env.RESTORE_NEON_PROJECT_ID?.trim() ?? "";
 const candidateGitSha = process.env.P2_CANDIDATE_GIT_SHA?.trim() ?? "";
 const candidateContentSha =
   process.env.P2_CANDIDATE_CONTENT_SHA?.trim() ?? "";
+const dryRunCleanCommitContent =
+  dryRun && candidateContentSha === "clean-commit";
 const deploymentId = process.env.P2_DEPLOYMENT_ID?.trim() ?? "";
 const immutableDeploymentUrl =
   process.env.P2_IMMUTABLE_DEPLOYMENT_URL?.trim() ?? "";
 const vercelProtectionBypassSecret =
   process.env.P2_VERCEL_PROTECTION_BYPASS_SECRET?.trim() ?? "";
+const stagingInpRum =
+  process.env.UAIS_STAGING_INP_RUM_ENABLED === "yes"
+    ? "enabled"
+    : process.env.UAIS_STAGING_INP_RUM_ENABLED === "no"
+      ? "disabled"
+      : "unknown";
 const evidenceBindingReasons = validateEvidenceBinding();
 const executionBoundaryReasons = healthOnly
   ? validateHealthExecutionBoundary()
@@ -141,6 +169,23 @@ if (dryRun || blockedReasons.length > 0) {
 }
 
 const baseUrl = new URL(baseUrlValue).origin;
+let deploymentProtectionBypassAuthorized = false;
+const remoteDeploymentPreflight = await verifyRemoteDeploymentPreflight();
+if (remoteDeploymentPreflight.status !== "PASS") {
+  emit({
+    target: "p2-isolated-staging-live-executor",
+    status: "FAIL",
+    failureCode: "REMOTE_STAGING_ATTESTATION_FAILED",
+    mode: "execute",
+    phase: "remote-preflight",
+    remoteDeploymentPreflight,
+    blockedReasons: [],
+    evidenceBinding: createEvidenceBindingRecord("FAIL"),
+    safety: createSafetyRecord(true),
+  });
+  process.exit(1);
+}
+deploymentProtectionBypassAuthorized = true;
 
 if (healthOnly) {
   const healthStartedAt = Date.now();
@@ -155,7 +200,8 @@ if (healthOnly) {
     phase: "health-only",
     health,
     blockedReasons: [],
-    evidenceBinding: createEvidenceBindingRecord(),
+    evidenceBinding: createEvidenceBindingRecord("PASS"),
+    remoteDeploymentPreflight,
     elapsedSeconds: Math.round((Date.now() - healthStartedAt) / 1_000),
     safety: createSafetyRecord(true),
   });
@@ -171,7 +217,7 @@ if (databaseGuardReasons.length > 0) {
     status: "BLOCKED_ENV",
     mode: "execute",
     blockedReasons: databaseGuardReasons,
-    evidenceBinding: createEvidenceBindingRecord(),
+    evidenceBinding: createEvidenceBindingRecord("PASS"),
     requiredDatabaseGuards: [
       "isolated-p2-staging-source",
       "isolated-p2-staging-restore",
@@ -227,10 +273,12 @@ const report = {
   target: "p2-isolated-staging-live-executor",
   status: "FAIL",
   mode: "execute",
-  runId,
-  evidenceBinding: createEvidenceBindingRecord(),
+  runFingerprint: sha256Fingerprint(`p2-staging-run:${runId}`),
+  evidenceBinding: createEvidenceBindingRecord("PASS"),
   candidate: {
-    baseUrl,
+    baseUrlFingerprint: sha256Fingerprint(baseUrl.toLowerCase()),
+    deploymentReferenceFingerprint: sha256Fingerprint(deploymentId),
+    deploymentReferenceAttestation: "operator-reference-only",
     vercelProjectFingerprint: fingerprint(process.env.VERCEL_PROJECT_ID ?? ""),
     sourceNeonFingerprint: fingerprint(sourceNeonProjectId),
     restoreNeonFingerprint: fingerprint(restoreNeonProjectId),
@@ -243,6 +291,7 @@ const report = {
   cleanup: undefined,
   failureCode: undefined,
   safety: createSafetyRecord(true),
+  remoteDeploymentPreflight,
 };
 
 let loadClassId = "";
@@ -263,18 +312,20 @@ try {
   );
 
   currentStage = "initial-tagged-cleanup";
-  await cleanupTaggedData(sourceSql, {
+  const initialSourceCleanup = await cleanupTaggedData(sourceSql, {
     accountPrefixes: [loadPrefix, manualPrefix],
     courseIds: [loadCourseId, manualCourseId],
     coreCourseSlugs: [`${runId}-core`],
     textMarkers: [runId, manualPrefix],
   });
-  await cleanupTaggedData(restoreSql, {
+  const initialRestoreCleanup = await cleanupTaggedData(restoreSql, {
     accountPrefixes: [loadPrefix],
     courseIds: [loadCourseId],
     coreCourseSlugs: [`${runId}-core`],
     textMarkers: [runId],
   });
+  assertZeroResidual(initialSourceCleanup, "initial-source-cleanup-nonzero");
+  assertZeroResidual(initialRestoreCleanup, "initial-restore-cleanup-nonzero");
 
   currentStage = "course-fixture-seed";
   const repository = createUaisTeachingCourseManagementPostgresRepository({
@@ -320,11 +371,8 @@ try {
 
   emitProgress("fixtures-ready", {
     loadUsers: expectedUserCount,
-    manualAccounts: {
-      student: manualStudentAccount,
-      teacher: manualTeacherAccount,
-    },
-    manualCourseId,
+    manualAccountCount: 2,
+    manualCourseReference: "omitted",
     valueRedacted: true,
   });
 
@@ -462,10 +510,157 @@ try {
     throw new P2ExecutionError("group-auto-split-shape-failed");
   }
 
+  const expectedMessageIdsByGroup = new Map();
+  const groupByStudentAccount = new Map(
+    groups.flatMap((group) =>
+      group.members.map((member) => [member.studentId, group]),
+    ),
+  );
+  const rampActors = studentLogins.map((login) => ({
+    actorId: login.account,
+    cookie: login.cookie,
+    group: groupByStudentAccount.get(login.account),
+  }));
+  if (rampActors.some((actor) => !actor.group)) {
+    throw new P2ExecutionError("load-ramp-group-assignment-missing");
+  }
+
+  currentStage = "group-chat-active-user-ramp";
+  const scenarioBStartedAt = Date.now();
+  const loadRamp = await runP2LoadRamp({
+    actors: rampActors,
+    rampTargets: expectedUserRamp,
+    maximumP95Milliseconds,
+    stageTimeoutMilliseconds: 240_000,
+    runActor: async ({
+      actor,
+      actorId,
+      stageIndex,
+      targetActiveUsers,
+      trackOperation,
+      trackTransport,
+      signal: stageSignal,
+    }) => {
+      const group = actor.group;
+      const historyUrl = new URL("/api/learning/chatroom", baseUrl);
+      historyUrl.searchParams.set("courseId", loadCourseId);
+      historyUrl.searchParams.set("classId", loadClassId);
+      historyUrl.searchParams.set("groupId", group.groupId);
+      const actorIndex = studentLogins.findIndex(
+        (login) => login.account === actorId,
+      );
+      const messageId = `${runId}-ramp-${String(stageIndex + 1).padStart(
+        2,
+        "0",
+      )}-${String(actorIndex + 1).padStart(3, "0")}`;
+      const expectedIds =
+        expectedMessageIdsByGroup.get(group.groupId) ?? new Set();
+      expectedMessageIdsByGroup.set(group.groupId, expectedIds);
+      expectedIds.add(messageId);
+
+      await trackOperation("read", () =>
+        requestWithRetries({
+          id: `${messageId}-read-before`,
+          expectedStatus: 200,
+          signal: stageSignal,
+          validateBody: (body) => Array.isArray(body?.messages),
+          run: () =>
+            trackTransport("read", () =>
+              stagingFetch(historyUrl.href, {
+                headers: {
+                  accept: "application/json",
+                  cookie: actor.cookie,
+                  "x-uais-trace-id": `${runId}-ramp-read-${targetActiveUsers}-${actorIndex + 1}`,
+                },
+                signal: AbortSignal.any([
+                  stageSignal,
+                  AbortSignal.timeout(20_000),
+                ]),
+              }),
+            ),
+        }),
+      );
+      await trackOperation("group-chat-write", () =>
+        requestWithRetries({
+          id: messageId,
+          expectedStatus: 200,
+          signal: stageSignal,
+          validateBody: (body) => body?.transcript?.status === "persisted",
+          run: () =>
+            trackTransport("group-chat-write", () =>
+              stagingFetch(`${baseUrl}/api/learning/chatroom`, {
+                method: "POST",
+                headers: {
+                  accept: "application/json",
+                  "content-type": "application/json",
+                  cookie: actor.cookie,
+                  "x-uais-trace-id": `${runId}-ramp-write-${targetActiveUsers}-${actorIndex + 1}`,
+                },
+                body: JSON.stringify({
+                  locale: "zh-CN",
+                  courseId: loadCourseId,
+                  classId: loadClassId,
+                  groupId: group.groupId,
+                  messages: [
+                    {
+                      id: messageId,
+                      role: "student",
+                      content: `P2 staged ramp ${targetActiveUsers}`,
+                    },
+                  ],
+                }),
+                signal: AbortSignal.any([
+                  stageSignal,
+                  AbortSignal.timeout(20_000),
+                ]),
+              }),
+            ),
+        }),
+      );
+      await trackOperation("group-chat-readback", () =>
+        requestWithRetries({
+          id: `${messageId}-readback`,
+          expectedStatus: 200,
+          signal: stageSignal,
+          validateBody: (body) =>
+            Array.isArray(body?.messages) &&
+            body.messages.some((message) => message?.id === messageId),
+          run: () =>
+            trackTransport("group-chat-readback", () =>
+              stagingFetch(historyUrl.href, {
+                headers: {
+                  accept: "application/json",
+                  cookie: actor.cookie,
+                  "x-uais-trace-id": `${runId}-ramp-readback-${targetActiveUsers}-${actorIndex + 1}`,
+                },
+                signal: AbortSignal.any([
+                  stageSignal,
+                  AbortSignal.timeout(20_000),
+                ]),
+              }),
+            ),
+        }),
+      );
+    },
+  });
+  for (const stage of loadRamp.stages) {
+    emitProgress("group-chat-active-user-ramp-stage-complete", stage);
+  }
+  report.scenarioB = {
+    status: loadRamp.status === "PASS" ? "IN_PROGRESS" : "FAIL",
+    users: expectedUserCount,
+    groups: groups.length,
+    usersPerGroup: expectedGroupSize,
+    userRamp: expectedUserRamp,
+    loadRamp,
+  };
+  if (loadRamp.status !== "PASS") {
+    throw new P2ExecutionError("group-chat-active-user-ramp-failed");
+  }
+
   currentStage = "ten-minute-group-chat";
   const chatStartedAt = Date.now();
   const chatResults = [];
-  const expectedMessageIdsByGroup = new Map();
   for (let round = 0; round < expectedLoadDurationSeconds / 60; round += 1) {
     await waitUntil(chatStartedAt + round * chatRoundIntervalMs);
     const roundResults = await mapLimit(groups, groupConcurrency, async (group, groupIndex) => {
@@ -569,16 +764,20 @@ try {
       attempts: 1,
     })),
   );
-  const chatPass = metricsPass(chatMetrics) && isolationMetrics.successCount === groups.length;
+  const chatPass =
+    loadRamp.status === "PASS" &&
+    metricsPass(chatMetrics) &&
+    isolationMetrics.successCount === groups.length;
   report.scenarioB = {
     status: chatPass ? "PASS" : "FAIL",
     users: expectedUserCount,
     groups: groups.length,
     usersPerGroup: expectedGroupSize,
-    durationSeconds: Math.round((Date.now() - chatStartedAt) / 1_000),
+    durationSeconds: Math.round((Date.now() - scenarioBStartedAt) / 1_000),
     providerMode: "deterministic-no-agent-fast-path",
     rounds: expectedLoadDurationSeconds / 60,
-    expectedMessages: expectedUserCount * (expectedLoadDurationSeconds / 60),
+    expectedMessages: expectedTranscriptMessageCount,
+    loadRamp,
     ...chatMetrics,
     isolation: isolationMetrics,
     duplicateWrites: isolationMetrics.successCount === groups.length ? 0 : "unverified",
@@ -595,7 +794,7 @@ try {
     sourceSnapshot.approvedMemberships !== expectedUserCount ||
     sourceSnapshot.groups !== expectedGroupCount ||
     sourceSnapshot.groupMembers !== expectedUserCount ||
-    sourceSnapshot.transcriptMessages !== expectedUserCount * (expectedLoadDurationSeconds / 60)
+    sourceSnapshot.transcriptMessages !== expectedTranscriptMessageCount
   ) {
     throw new P2ExecutionError("source-post-load-relationship-verification-failed");
   }
@@ -630,6 +829,8 @@ try {
     verificationChecks: restored.checks,
     mismatchReasons: restored.mismatchReasons,
     fieldChecksums: restored.checksums,
+    recordIntegrity: restored.recordIntegrity,
+    topologyIntegrity: restored.restoreIntegrity,
     operator: "S22",
   };
   if (!restored.ok) {
@@ -645,8 +846,17 @@ try {
     rpoSeconds: 0,
     lostRecordCount: 0,
     loginHashVerification: "PASS",
-    relationships: "PASS",
-    groupIsolation: "PASS",
+    relationships:
+      restored.restoreIntegrity.checks.groupMembershipsExact &&
+      restored.restoreIntegrity.checks.sourceMessageOwnershipValid &&
+      restored.restoreIntegrity.checks.restoredMessageOwnershipValid
+        ? "PASS"
+        : "FAIL",
+    groupIsolation:
+      restored.restoreIntegrity.checks.transcriptOwnershipExact &&
+      restored.restoreIntegrity.checks.restoredMessageOwnershipValid
+        ? "PASS"
+        : "FAIL",
     migrations: "PASS",
   };
 
@@ -930,10 +1140,29 @@ async function loginAccount(account, password) {
   };
 }
 
-async function requestWithRetries({ id, expectedStatus, run, validateBody }) {
+async function requestWithRetries({
+  id,
+  expectedStatus,
+  run,
+  validateBody,
+  signal,
+}) {
   const logicalStarted = performance.now();
   let lastStatus = 0;
+  let lastErrorType;
+  const attemptErrors = [];
   for (let attempt = 1; attempt <= maximumLogicalAttempts; attempt += 1) {
+    if (signal?.aborted) {
+      return {
+        id,
+        ok: false,
+        status: 0,
+        errorType: "timeout",
+        attempts: attempt - 1,
+        attemptErrors: [...attemptErrors, "timeout"],
+        latencyMs: performance.now() - logicalStarted,
+      };
+    }
     try {
       const response = await run();
       lastStatus = response.status;
@@ -945,39 +1174,74 @@ async function requestWithRetries({ id, expectedStatus, run, validateBody }) {
           ok: true,
           status: response.status,
           attempts: attempt,
+          attemptErrors,
           latencyMs: performance.now() - logicalStarted,
         };
       }
+      attemptErrors.push(classifyAttemptFailure(response.status, validBody));
       if (!isRetryableStatus(response.status) || attempt === maximumLogicalAttempts) {
         return {
           id,
           ok: false,
           status: response.status,
           attempts: attempt,
+          attemptErrors,
           latencyMs: performance.now() - logicalStarted,
         };
       }
-    } catch {
+    } catch (error) {
       lastStatus = 0;
-      if (attempt === maximumLogicalAttempts) {
+      lastErrorType =
+        signal?.aborted ||
+        error?.name === "AbortError" ||
+        error?.name === "TimeoutError" ||
+        error?.code === "ETIMEDOUT"
+          ? "timeout"
+          : "network-error";
+      attemptErrors.push(lastErrorType);
+      if (signal?.aborted || attempt === maximumLogicalAttempts) {
         return {
           id,
           ok: false,
           status: 0,
+          errorType: lastErrorType,
           attempts: attempt,
+          attemptErrors,
           latencyMs: performance.now() - logicalStarted,
         };
       }
     }
-    await delay(100 * attempt);
+    try {
+      await delay(100 * attempt, signal);
+    } catch {
+      return {
+        id,
+        ok: false,
+        status: 0,
+        errorType: "timeout",
+        attempts: attempt,
+        attemptErrors: [...attemptErrors, "timeout"],
+        latencyMs: performance.now() - logicalStarted,
+      };
+    }
   }
   return {
     id,
     ok: false,
     status: lastStatus,
+    errorType: lastErrorType,
     attempts: maximumLogicalAttempts,
+    attemptErrors,
     latencyMs: performance.now() - logicalStarted,
   };
+}
+
+function classifyAttemptFailure(status, validBody) {
+  if (status === 429) return "http-429";
+  if (status >= 500 && status <= 599) return "http-5xx";
+  if (status >= 400 && status <= 499) return "http-4xx";
+  if (!validBody) return "invalid-operation-result";
+  return "invalid-operation-result";
 }
 
 async function inspectSourceLoadState() {
@@ -1024,7 +1288,8 @@ async function captureTaggedBackup() {
   const courseIds = courses.map((row) => row.id);
   const classes = courseIds.length
     ? await sourceSql`
-        SELECT id, course_id, teacher_id, name, status, created_at, updated_at
+        SELECT id, course_id, teacher_id, external_key, name, status,
+          created_at, updated_at
         FROM uais_classes
         WHERE course_id = ANY(${courseIds}::uuid[])
       `
@@ -1111,11 +1376,12 @@ async function restoreTaggedBackup(backup) {
     for (const row of backup.classes) {
       await sql`
         INSERT INTO uais_classes (
-          id, course_id, teacher_id, name, status, created_at, updated_at
+          id, course_id, teacher_id, external_key, name, status, created_at,
+          updated_at
         )
         VALUES (
-          ${row.id}, ${row.course_id}, ${row.teacher_id}, ${row.name},
-          ${row.status}, ${row.created_at}, ${row.updated_at}
+          ${row.id}, ${row.course_id}, ${row.teacher_id}, ${row.external_key},
+          ${row.name}, ${row.status}, ${row.created_at}, ${row.updated_at}
         )
       `;
     }
@@ -1204,6 +1470,7 @@ async function verifyRestoredBackup(backup, plaintextPassword) {
     schemaRows,
     userRows,
     courseRows,
+    classRows,
     enrollmentRows,
     eventRows,
     profileRows,
@@ -1214,48 +1481,68 @@ async function verifyRestoredBackup(backup, plaintextPassword) {
     restoreSql`SELECT version FROM uais_schema_migrations ORDER BY version`,
     restoreSql`SELECT schema_name FROM information_schema.schemata WHERE schema_name = 'uais_langgraph'`,
     restoreSql`
-      SELECT account, password_hash
+      SELECT id, account, password_hash, role, display_name, department, status,
+        created_at, updated_at
       FROM uais_users
       WHERE account LIKE ${`${loadPrefix}%`}
       ORDER BY account
     `,
-    restoreSql`SELECT id FROM uais_courses WHERE slug = ${loadCoreCourseSlug}`,
     restoreSql`
-      SELECT count(*)::int AS count
+      SELECT id, slug, title, description, teacher_id, status, created_at, updated_at
+      FROM uais_courses
+      WHERE slug = ${loadCoreCourseSlug}
+      ORDER BY id
+    `,
+    restoreSql`
+      SELECT cl.id, cl.course_id, cl.teacher_id, cl.external_key, cl.name,
+        cl.status, cl.created_at, cl.updated_at
+      FROM uais_classes cl
+      JOIN uais_courses c ON c.id = cl.course_id
+      WHERE c.slug = ${loadCoreCourseSlug}
+      ORDER BY cl.id
+    `,
+    restoreSql`
+      SELECT e.id, e.user_id, e.course_id, e.class_id, e.state, e.progress,
+        e.created_at, e.updated_at
       FROM uais_enrollments e
       JOIN uais_courses c ON c.id = e.course_id
       WHERE c.slug = ${loadCoreCourseSlug}
+      ORDER BY e.id
     `,
     restoreSql`
-      SELECT e.id, e.assessment_id, e.submission_id, e.idempotency_key,
-        e.schema_version, e.source, e.projection_version
+      SELECT e.id, e.user_id, e.course_id, e.class_id, e.assessment_id,
+        e.submission_id, e.verb, e.object_id, e.idempotency_key,
+        e.schema_version, e.source, e.projection_version, e.context,
+        e.occurred_at, e.created_at
       FROM uais_learning_events e
       JOIN uais_courses c ON c.id = e.course_id
       WHERE c.slug = ${loadCoreCourseSlug}
       ORDER BY e.id
     `,
     restoreSql`
-      SELECT p.user_id, p.course_id, p.progress, p.projection_version,
-        p.last_event_at
+      SELECT p.user_id, p.course_id, p.mastery, p.preferences, p.progress,
+        p.projection_version, p.last_event_at, p.updated_at
       FROM uais_learner_profiles p
       JOIN uais_courses c ON c.id = p.course_id
       WHERE c.slug = ${loadCoreCourseSlug}
       ORDER BY p.user_id, p.course_id
     `,
     restoreSql`
-      SELECT database
+      SELECT snapshot_key, database, revision, updated_at
       FROM uais_teaching_course_management_snapshots
       WHERE snapshot_key = ${loadCourseId}
     `,
     restoreSql`
-      SELECT count(*)::int AS count
+      SELECT invite_code, course_id, class_id, claimed_at
       FROM uais_teaching_class_invite_code_claims
       WHERE course_id = ${loadCourseId}
+      ORDER BY invite_code, class_id
     `,
     restoreSql`
-      SELECT database
+      SELECT snapshot_key, database, revision, updated_at
       FROM uais_learning_chatroom_transcript_snapshots
       WHERE database::text LIKE ${`%${runId}%`}
+      ORDER BY snapshot_key
     `,
   ]);
   const expectedMigrationVersions = [...UAIS_CORE_DATABASE_MIGRATION_VERSIONS];
@@ -1277,43 +1564,47 @@ async function verifyRestoredBackup(backup, plaintextPassword) {
       encoded: lastUser.password_hash,
     }));
   const transcriptMessages = countTranscriptMessages(transcriptRows);
-  const eventChecksumFields = (row) => ({
-    id: row.id,
-    assessment_id: row.assessment_id,
-    submission_id: row.submission_id,
-    idempotency_key: row.idempotency_key,
-    schema_version: row.schema_version,
-    source: row.source,
-    projection_version: row.projection_version,
-  });
-  const profileChecksumFields = (row) => ({
-    user_id: row.user_id,
-    course_id: row.course_id,
-    progress: row.progress,
-    projection_version: row.projection_version,
-    last_event_at: row.last_event_at,
-  });
-  const checksums = {
-    learningEvents: {
-      source: createDeterministicChecksum(backup.events, eventChecksumFields),
-      restored: createDeterministicChecksum(eventRows, eventChecksumFields),
+  const recordIntegrity = createDeterministicChecksum({
+    sourceRecordSets: {
+      users: backup.users,
+      courses: backup.courses,
+      classes: backup.classes,
+      enrollments: backup.enrollments,
+      learningEvents: backup.events,
+      learnerProfiles: backup.profiles,
+      courseSnapshots: backup.courseSnapshots,
+      inviteClaims: backup.inviteClaims,
+      transcriptSnapshots: backup.transcripts,
     },
-    learnerProfiles: {
-      source: createDeterministicChecksum(backup.profiles, profileChecksumFields),
-      restored: createDeterministicChecksum(profileRows, profileChecksumFields),
+    restoredRecordSets: {
+      users: userRows,
+      courses: courseRows,
+      classes: classRows,
+      enrollments: enrollmentRows,
+      learningEvents: eventRows,
+      learnerProfiles: profileRows,
+      courseSnapshots: snapshotRows,
+      inviteClaims: claimRows,
+      transcriptSnapshots: transcriptRows,
     },
-  };
-  const checksumsMatch =
-    checksums.learningEvents.source === checksums.learningEvents.restored &&
-    checksums.learnerProfiles.source === checksums.learnerProfiles.restored;
+  });
+  const checksums = recordIntegrity.checksums;
+  const checksumsMatch = recordIntegrity.status === "PASS";
+  const restoreIntegrity = assessP2RestoreIntegrity({
+    sourceCourseSnapshots: backup.courseSnapshots,
+    restoredCourseSnapshots: snapshotRows,
+    sourceTranscriptSnapshots: backup.transcripts,
+    restoredTranscriptSnapshots: transcriptRows,
+  });
   const counts = {
     users: userRows.length,
     coreCourses: courseRows.length,
-    enrollments: enrollmentRows[0]?.count ?? 0,
+    classes: classRows.length,
+    enrollments: enrollmentRows.length,
     learningEvents: eventRows.length,
     learnerProfiles: profileRows.length,
     courseSnapshots: snapshotRows.length,
-    inviteClaims: claimRows[0]?.count ?? 0,
+    inviteClaims: claimRows.length,
     memberships: memberships.length,
     groups: groups.length,
     groupMembers: groups.reduce(
@@ -1326,6 +1617,7 @@ async function verifyRestoredBackup(backup, plaintextPassword) {
   const expectedCounts = {
     users: backup.users.length,
     coreCourses: backup.courses.length,
+    classes: backup.classes.length,
     enrollments: backup.enrollments.length,
     learningEvents: backup.events.length,
     learnerProfiles: backup.profiles.length,
@@ -1335,7 +1627,7 @@ async function verifyRestoredBackup(backup, plaintextPassword) {
     groups: expectedGroupCount,
     groupMembers: expectedUserCount,
     transcriptRows: backup.transcripts.length,
-    transcriptMessages: expectedUserCount * (expectedLoadDurationSeconds / 60),
+    transcriptMessages: expectedTranscriptMessageCount,
   };
   const checks = {
     migrationVersions:
@@ -1345,6 +1637,7 @@ async function verifyRestoredBackup(backup, plaintextPassword) {
     passwordHashes: Boolean(hashesVerify),
     fieldChecksums: checksumsMatch,
     recordCounts: JSON.stringify(counts) === JSON.stringify(expectedCounts),
+    restoreTopology: restoreIntegrity.status === "PASS",
   };
   return {
     ok: Object.values(checks).every(Boolean),
@@ -1355,10 +1648,19 @@ async function verifyRestoredBackup(backup, plaintextPassword) {
       .filter(([, passed]) => !passed)
       .map(([name]) => name),
     checksums,
+    recordIntegrity,
+    restoreIntegrity,
   };
 }
 
 async function cleanupTaggedData(sql, targets) {
+  // Resolve opaque relational IDs before deleting their tagged parent rows so
+  // the post-cleanup receipt can independently prove cascade cleanup instead
+  // of assuming it from the parent count.
+  const relationshipTargets = await resolveTaggedRelationshipTargets(
+    sql,
+    targets,
+  );
   for (const courseId of targets.courseIds) {
     if (!courseId) continue;
     await sql`DELETE FROM uais_teaching_class_invite_code_claims WHERE course_id = ${courseId}`;
@@ -1382,15 +1684,19 @@ async function cleanupTaggedData(sql, targets) {
     await sql`DELETE FROM uais_app_login_failures WHERE account_key LIKE ${`${prefix}%`}`;
     await sql`DELETE FROM uais_users WHERE account LIKE ${`${prefix}%`}`;
   }
-  return inspectResidualData(sql, targets);
+  return inspectResidualData(sql, targets, relationshipTargets);
 }
 
-async function inspectResidualData(sql, targets) {
+async function inspectResidualData(sql, targets, relationshipTargets) {
   let residualTaggedRows = 0;
   const counts = {
     users: 0,
     loginFailures: 0,
     coreCourses: 0,
+    classes: 0,
+    enrollments: 0,
+    learningEvents: 0,
+    learnerProfiles: 0,
     courseSnapshots: 0,
     inviteClaims: 0,
     transcriptSnapshots: 0,
@@ -1459,8 +1765,76 @@ async function inspectResidualData(sql, targets) {
     counts.shareSnapshots += shares[0]?.count ?? 0;
     counts.operationSnapshots += operations[0]?.count ?? 0;
   }
+  if (
+    relationshipTargets.userIds.length > 0 ||
+    relationshipTargets.courseIds.length > 0
+  ) {
+    const userIds = relationshipTargets.userIds;
+    const courseIds = relationshipTargets.courseIds;
+    const [classes, enrollments, events, profiles] = await Promise.all([
+      courseIds.length > 0
+        ? sql`
+            SELECT count(*)::int AS count
+            FROM uais_classes
+            WHERE course_id = ANY(${courseIds}::uuid[])
+          `
+        : Promise.resolve([{ count: 0 }]),
+      sql`
+        SELECT count(*)::int AS count
+        FROM uais_enrollments
+        WHERE
+          (${courseIds.length > 0} AND course_id = ANY(${courseIds}::uuid[]))
+          OR (${userIds.length > 0} AND user_id = ANY(${userIds}::uuid[]))
+      `,
+      sql`
+        SELECT count(*)::int AS count
+        FROM uais_learning_events
+        WHERE
+          (${courseIds.length > 0} AND course_id = ANY(${courseIds}::uuid[]))
+          OR (${userIds.length > 0} AND user_id = ANY(${userIds}::uuid[]))
+      `,
+      sql`
+        SELECT count(*)::int AS count
+        FROM uais_learner_profiles
+        WHERE
+          (${courseIds.length > 0} AND course_id = ANY(${courseIds}::uuid[]))
+          OR (${userIds.length > 0} AND user_id = ANY(${userIds}::uuid[]))
+      `,
+    ]);
+    counts.classes += classes[0]?.count ?? 0;
+    counts.enrollments += enrollments[0]?.count ?? 0;
+    counts.learningEvents += events[0]?.count ?? 0;
+    counts.learnerProfiles += profiles[0]?.count ?? 0;
+  }
   residualTaggedRows = Object.values(counts).reduce((total, count) => total + count, 0);
   return { ...counts, residualTaggedRows };
+}
+
+async function resolveTaggedRelationshipTargets(sql, targets) {
+  const userIds = [];
+  const courseIds = [];
+  for (const prefix of targets.accountPrefixes) {
+    if (!prefix) continue;
+    const rows = await sql`
+      SELECT id
+      FROM uais_users
+      WHERE account LIKE ${`${prefix}%`}
+    `;
+    userIds.push(...rows.map((row) => row.id).filter(Boolean));
+  }
+  for (const slug of targets.coreCourseSlugs) {
+    if (!slug) continue;
+    const rows = await sql`
+      SELECT id
+      FROM uais_courses
+      WHERE slug = ${slug}
+    `;
+    courseIds.push(...rows.map((row) => row.id).filter(Boolean));
+  }
+  return {
+    userIds: [...new Set(userIds)],
+    courseIds: [...new Set(courseIds)],
+  };
 }
 
 async function observeHealth(signal) {
@@ -1476,28 +1850,45 @@ async function observeHealth(signal) {
         signal: AbortSignal.any([signal, AbortSignal.timeout(20_000)]),
       });
       const body = await response.json().catch(() => undefined);
+      const remoteHealth = assessUaisStagingRemoteHealth({
+        httpStatus: response.status,
+        body,
+        baseUrl,
+        candidateGitSha,
+        candidateContentSha,
+        stagingInpRum,
+      });
       samples.push({
         sample: index,
         status: response.status,
         latencyMs: Math.round(performance.now() - started),
-        requestId: response.headers.get("x-vercel-id") ?? "missing",
-        checksOk:
-          body?.status === "ok" &&
-          body?.checks?.app === "ok" &&
-          body?.checks?.database === "ok" &&
-          body?.checks?.migrations === "ok",
+        requestIdPresent: Boolean(response.headers.get("x-vercel-id")),
+        checksOk: remoteHealth.status === "PASS",
+        deploymentBinding: remoteHealth.checks.deploymentBinding,
       });
     } catch {
       samples.push({
         sample: index,
         status: 0,
         latencyMs: Math.round(performance.now() - started),
-        requestId: "missing",
+        requestIdPresent: false,
         checksOk: false,
       });
     }
   }
   return samples;
+}
+
+async function verifyRemoteDeploymentPreflight() {
+  return runUaisStagingRemotePreflight({
+    baseUrl,
+    immutableDeploymentUrl,
+    bypassSecret: vercelProtectionBypassSecret,
+    candidateGitSha,
+    candidateContentSha,
+    stagingInpRum,
+    signal: AbortSignal.timeout(40_000),
+  });
 }
 
 function summarizeHealth(samples) {
@@ -1541,14 +1932,14 @@ function validateEvidenceBinding() {
   const reasons = [];
   if (!candidateGitSha) {
     reasons.push("missing-P2_CANDIDATE_GIT_SHA");
-  } else if (!/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/i.test(candidateGitSha)) {
+  } else if (!/^[0-9a-f]{40}$/.test(candidateGitSha)) {
     reasons.push("invalid-P2_CANDIDATE_GIT_SHA");
   }
   if (!candidateContentSha) {
     reasons.push("missing-P2_CANDIDATE_CONTENT_SHA");
   } else if (
-    candidateContentSha !== "clean-commit" &&
-    !/^[0-9a-f]{64}$/i.test(candidateContentSha)
+    !dryRunCleanCommitContent &&
+    !/^[0-9a-f]{64}$/.test(candidateContentSha)
   ) {
     reasons.push("invalid-P2_CANDIDATE_CONTENT_SHA");
   }
@@ -1582,21 +1973,30 @@ function validateEvidenceBinding() {
   return [...new Set(reasons)];
 }
 
-function createEvidenceBindingRecord() {
+function createEvidenceBindingRecord(remoteHealthzStatus = "NOT_RUN") {
   return {
+    status: remoteHealthzStatus === "PASS" ? "BOUND" : "UNVERIFIED",
     candidateGitSha: candidateGitSha.toLowerCase(),
-    candidateContent: {
-      kind:
-        candidateContentSha === "clean-commit"
-          ? "clean-commit-sentinel"
-          : "sha256",
-      value: candidateContentSha.toLowerCase(),
-    },
-    deploymentIdFingerprint: sha256Fingerprint(deploymentId),
+    candidateContent: dryRunCleanCommitContent
+      ? {
+          kind: "clean-commit-sentinel",
+          value: "clean-commit",
+        }
+      : {
+          kind: "sha256",
+          value: candidateContentSha.toLowerCase(),
+        },
     immutableDeploymentUrlFingerprint: sha256Fingerprint(
       new URL(immutableDeploymentUrl).origin.toLowerCase(),
     ),
-    attestation: "operator-input-only-not-remote-verification",
+    // Operator-supplied reference only. Remote binding is established solely
+    // by the healthz Git/content/host attestation below.
+    deploymentIdFingerprint: sha256Fingerprint(deploymentId),
+    remoteHealthzStatus,
+    attestation:
+      remoteHealthzStatus === "PASS"
+        ? "remote-healthz-same-sha-content-host"
+        : "operator-input-only-not-remote-verification",
   };
 }
 
@@ -1673,6 +2073,13 @@ function validateHealthExecutionBoundary() {
   }
   if (!dryRun && !vercelProtectionBypassSecret) {
     reasons.push("missing-P2_VERCEL_PROTECTION_BYPASS_SECRET");
+  }
+  if (
+    stagingInpRum === "unknown" &&
+    !dryRun &&
+    Boolean(vercelProtectionBypassSecret)
+  ) {
+    reasons.push("invalid-UAIS_STAGING_INP_RUM_ENABLED");
   }
   if (
     productionHostnames.has(hostname) ||
@@ -1788,32 +2195,12 @@ async function hasDatabaseGuard(sql, environment) {
   }
 }
 
-function summarizeMetrics(results) {
-  const total = results.length;
-  const successCount = results.filter((result) => result.ok).length;
-  const serverErrorCount = results.filter(
-    (result) => result.status >= 500 && result.status <= 599,
-  ).length;
-  const latencies = results.map((result) => result.latencyMs);
-  return {
-    requestCount: total,
-    successCount,
-    failureCount: total - successCount,
-    successRate: total ? roundRate(successCount / total) : 0,
-    serverErrorCount,
-    serverErrorRate: total ? roundRate(serverErrorCount / total) : 0,
-    retryCount: results.reduce((totalRetries, result) => totalRetries + result.attempts - 1, 0),
-    p95Milliseconds: percentile(latencies, 0.95),
-    maximumMilliseconds: latencies.length ? Math.round(Math.max(...latencies)) : 0,
-  };
-}
-
 function metricsPass(metrics) {
-  return (
-    metrics.successRate >= minimumSuccessRate &&
-    metrics.serverErrorRate <= maximumServerErrorRate &&
-    metrics.p95Milliseconds <= maximumP95Milliseconds
-  );
+  return p2LogicalRequestMetricsPass(metrics, {
+    minimumSuccessRate,
+    maximumServerErrorRate,
+    maximumP95Milliseconds,
+  });
 }
 
 async function fetchJson(url, options) {
@@ -1823,14 +2210,24 @@ async function fetchJson(url, options) {
 }
 
 function stagingFetch(url, options = {}) {
-  const headers = new Headers(options.headers);
-  if (vercelProtectionBypassSecret) {
-    headers.set(
-      "x-vercel-protection-bypass",
-      vercelProtectionBypassSecret,
-    );
+  if (!deploymentProtectionBypassAuthorized) {
+    throw new P2ExecutionError("deployment-protection-bypass-not-authorized");
   }
-  return fetch(url, { ...options, headers });
+  const target = new URL(url);
+  if (
+    target.protocol !== "https:" ||
+    target.origin !== baseUrl ||
+    target.username ||
+    target.password
+  ) {
+    throw new P2ExecutionError("staging-fetch-target-origin-mismatch");
+  }
+  const headers = new Headers(options.headers);
+  headers.set(
+    "x-vercel-protection-bypass",
+    vercelProtectionBypassSecret,
+  );
+  return fetch(url, { ...options, headers, redirect: "manual" });
 }
 
 function readCookieHeader(response) {
@@ -1914,29 +2311,8 @@ function percentile(values, quantile) {
   return Math.round(sorted[index]);
 }
 
-function roundRate(value) {
-  return Number(value.toFixed(6));
-}
-
-function createDeterministicChecksum(rows, selectFields) {
-  const records = rows
-    .map((row) => JSON.stringify(normalizeChecksumValue(selectFields(row))))
-    .sort();
-  return sha256Fingerprint(JSON.stringify(records));
-}
-
-function normalizeChecksumValue(value) {
-  if (value instanceof Date) return value.toISOString();
-  if (typeof value === "bigint") return value.toString();
-  if (Array.isArray(value)) return value.map(normalizeChecksumValue);
-  if (value && typeof value === "object") {
-    return Object.fromEntries(
-      Object.keys(value)
-        .sort()
-        .map((key) => [key, normalizeChecksumValue(value[key])]),
-    );
-  }
-  return value ?? null;
+function createDeterministicChecksum(recordSets) {
+  return assessP2RestoreRecordIntegrity(recordSets);
 }
 
 function sha256Fingerprint(value) {

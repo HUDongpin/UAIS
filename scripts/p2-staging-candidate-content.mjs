@@ -71,15 +71,12 @@ export function resolveUaisStagingBuildContentSha({
   root = process.cwd(),
   entries = uaisStagingCandidateContentEntries,
 } = {}) {
-  if (
-    env.UAIS_DEPLOYMENT_ENV !== "staging" ||
-    env.UAIS_STAGING_INP_RUM_ENABLED !== "yes"
-  ) {
+  if (env.UAIS_DEPLOYMENT_ENV !== "staging") {
     return "";
   }
   const expected = env.P2_CANDIDATE_CONTENT_SHA ?? "";
   if (!digestPattern.test(expected)) {
-    throw new Error("P2_CANDIDATE_CONTENT_SHA is required for staging RUM builds");
+    throw new Error("P2_CANDIDATE_CONTENT_SHA is required for staging builds");
   }
   const computed = computeUaisStagingCandidateContentSha(root, entries);
   if (computed !== expected) {

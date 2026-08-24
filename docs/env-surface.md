@@ -226,7 +226,14 @@ production:
   checksum-mismatched rows are `BLOCKED_ENV`, never `PASS`. Even an exact match
   is labeled `preflightOnly`; it does not prove that a restore ran, that restored
   data was read back, or that PITR is available.
-- `UAIS_STAGING_INP_RUM_ENABLED=yes` is the exact opt-in.
+- `UAIS_STAGING_INP_RUM_ENABLED` is an explicit two-mode staging selector.
+  Set it to `no` for a base same-SHA staging deployment: the build still requires
+  the isolated project, dedicated guarded database, exact Git/content binding,
+  immutable host, strong app-session/protection credentials, and a distinct
+  `CRON_SECRET`, but the reporter and collection route remain disabled. Set it
+  to `yes` only for a bounded field-INP cohort; any missing or unknown value
+  blocks the staging build. The base mode keeps the hourly expiry endpoint so
+  any earlier cohort data continues to receive its 48-hour purge lifecycle.
   `UAIS_STAGING_INP_COHORT_ID` identifies one bounded run and must have the form
   `p2-inp-<full 40-character candidate Git SHA>-<unique 1..16 character suffix>`.
   Cohort IDs are one-use identifiers and are never reused after purge.

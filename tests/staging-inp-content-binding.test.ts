@@ -59,6 +59,27 @@ describe("staging candidate build content binding", () => {
     ).toThrow(/does not match deployable source/);
   });
 
+  it("also binds a base staging build when RUM is explicitly disabled", () => {
+    const root = mkdtempSync(join(tmpdir(), "uais-staging-content-"));
+    temporaryRoots.push(root);
+    mkdirSync(join(root, "src"));
+    writeFileSync(join(root, "src", "route.ts"), "export const value = 1;\n");
+    writeFileSync(join(root, "package.json"), "{\"name\":\"fixture\"}\n");
+    const digest = computeUaisStagingCandidateContentSha(root, ["package.json", "src"]);
+
+    expect(
+      resolveUaisStagingBuildContentSha({
+        root,
+        env: {
+          UAIS_DEPLOYMENT_ENV: "staging",
+          UAIS_STAGING_INP_RUM_ENABLED: "no",
+          P2_CANDIDATE_CONTENT_SHA: digest,
+        },
+        entries: ["package.json", "src"],
+      }),
+    ).toBe(digest);
+  });
+
   it("rejects symlinks instead of hashing only a target pathname", () => {
     const root = mkdtempSync(join(tmpdir(), "uais-staging-content-"));
     temporaryRoots.push(root);

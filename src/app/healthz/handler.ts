@@ -4,6 +4,7 @@ import {
   type UaisCoreDatabaseMigrationVersion,
 } from "@/lib/db/migrations";
 import { isUaisProductionRuntime } from "@/lib/server/production-database-adapter-evidence";
+import { getUaisStagingDeploymentBinding } from "@/lib/server/uais-staging-deployment-binding";
 
 // Liveness AND the two dependency facts the product cannot work without: that
 // the database answers, and that it carries the schema this build was written
@@ -59,6 +60,7 @@ type UaisHealthProbeResult = {
 type UaisHealthGetHandlerDeps = {
   now?: () => Date;
   env?: Record<string, string | undefined>;
+  compiledStagingContentSha?: string;
   probeDatabase?: (input: {
     env: Record<string, string | undefined>;
   }) => Promise<UaisHealthProbeResult>;
@@ -83,6 +85,10 @@ export function createUaisHealthGetHandler(deps: UaisHealthGetHandlerDeps = {}) 
         (probe.database === "not-configured" && configurationOptional)) &&
       (probe.migrations === "ok" ||
         (probe.migrations === "not-configured" && configurationOptional));
+    const deploymentBinding = getUaisStagingDeploymentBinding(
+      env,
+      deps.compiledStagingContentSha,
+    );
 
     return Response.json(
       {
@@ -112,6 +118,7 @@ export function createUaisHealthGetHandler(deps: UaisHealthGetHandlerDeps = {}) 
           localFiles: "omitted",
           databaseUrl: "omitted",
         },
+        ...(deploymentBinding ? { deploymentBinding } : {}),
       },
       {
         status: healthy ? 200 : 503,

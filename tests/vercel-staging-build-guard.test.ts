@@ -48,6 +48,15 @@ const safeStagingEnv = {
     "staging-protection-bypass-fixture-at-least-32",
 };
 
+const safeBaseStagingEnv = {
+  ...safeStagingEnv,
+  UAIS_STAGING_INP_RUM_ENABLED: "no",
+  UAIS_STAGING_INP_COHORT_ID: undefined,
+  UAIS_STAGING_INP_HMAC_SECRET: undefined,
+  UAIS_STAGING_INP_HMAC_KEY_VERSION: undefined,
+  UAIS_STAGING_INP_OPERATOR_ACCOUNT_HASHES: undefined,
+};
+
 describe("guarded Vercel staging build", () => {
   it("fails closed before any command outside the exact Vercel production scope", async () => {
     const commandRunner = vi.fn(() => ({ status: 0 }));
@@ -112,9 +121,14 @@ describe("guarded Vercel staging build", () => {
       reason: "staging-config-with-hourly-expiry-required",
     },
     {
-      label: "the RUM opt-in",
-      env: { ...safeStagingEnv, UAIS_STAGING_INP_RUM_ENABLED: "no" },
-      reason: "staging-inp-rum-opt-in-required",
+      label: "a missing explicit RUM mode",
+      env: { ...safeStagingEnv, UAIS_STAGING_INP_RUM_ENABLED: undefined },
+      reason: "staging-inp-rum-mode-required",
+    },
+    {
+      label: "an unknown RUM mode",
+      env: { ...safeStagingEnv, UAIS_STAGING_INP_RUM_ENABLED: "maybe" },
+      reason: "staging-inp-rum-mode-required",
     },
     {
       label: "the exact candidate SHA binding",
@@ -150,6 +164,107 @@ describe("guarded Vercel staging build", () => {
       reason: "staging-secret-reuse-rejected",
     },
   ])("rejects a build missing $label before database inspection", async ({ env, reason }) => {
+    const commandRunner = vi.fn(() => ({ status: 0 }));
+    const inspectTarget = vi.fn(async () => ({ approved: true }));
+
+    const result = await runGuardedVercelStagingBuild({
+      env,
+      commandRunner,
+      inspectTarget,
+    });
+
+    expect(result.exitCode).toBe(2);
+    expect(result.report.blockedReasons).toContain(reason);
+    expect(inspectTarget).not.toHaveBeenCalled();
+    expect(commandRunner).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    {
+      label: "the candidate-bound cohort",
+      env: { ...safeStagingEnv, UAIS_STAGING_INP_COHORT_ID: undefined },
+      reason: "cohort-id-not-candidate-bound",
+    },
+    {
+      label: "the HMAC secret",
+      env: { ...safeStagingEnv, UAIS_STAGING_INP_HMAC_SECRET: undefined },
+      reason: "hmac-secret-missing-or-weak",
+    },
+    {
+      label: "the HMAC key version",
+      env: { ...safeStagingEnv, UAIS_STAGING_INP_HMAC_KEY_VERSION: undefined },
+      reason: "hmac-key-version-missing-or-invalid",
+    },
+    {
+      label: "the approved operator allowlist",
+      env: {
+        ...safeStagingEnv,
+        UAIS_STAGING_INP_OPERATOR_ACCOUNT_HASHES: undefined,
+      },
+      reason: "approved-operator-allowlist-missing",
+    },
+  ])("keeps RUM mode fail closed without $label", async ({ env, reason }) => {
+    const commandRunner = vi.fn(() => ({ status: 0 }));
+    const inspectTarget = vi.fn(async () => ({ approved: true }));
+
+    const result = await runGuardedVercelStagingBuild({
+      env,
+      commandRunner,
+      inspectTarget,
+    });
+
+    expect(result.exitCode).toBe(2);
+    expect(result.report.blockedReasons).toContain(reason);
+    expect(inspectTarget).not.toHaveBeenCalled();
+    expect(commandRunner).not.toHaveBeenCalled();
+  });
+
+  it("permits an exact-candidate base staging build with RUM explicitly disabled", async () => {
+    const commandRunner = vi.fn(() => ({ status: 0 }));
+    const inspectTarget = vi.fn(async () => ({ approved: true }));
+
+    const result = await runGuardedVercelStagingBuild({
+      env: safeBaseStagingEnv,
+      commandRunner,
+      inspectTarget,
+    });
+
+    expect(result).toEqual({
+      exitCode: 0,
+      report: {
+        target: "uais-isolated-staging-build",
+        status: "PASS",
+        blockedReasons: [],
+        migrations: "applied",
+        build: "completed",
+        stagingInpRum: "disabled",
+        valuesRedacted: true,
+      },
+    });
+    expect(inspectTarget).toHaveBeenCalledWith({ databaseUrl: dedicatedDatabaseUrl });
+    expect(commandRunner).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([
+    {
+      label: "the app-session secret",
+      env: { ...safeBaseStagingEnv, UAIS_APP_SESSION_SIGNING_SECRET: undefined },
+      reason: "session-secret-missing-or-weak",
+    },
+    {
+      label: "the expiry cron secret",
+      env: { ...safeBaseStagingEnv, CRON_SECRET: undefined },
+      reason: "cron-secret-missing-or-weak",
+    },
+    {
+      label: "the protection bypass secret",
+      env: {
+        ...safeBaseStagingEnv,
+        P2_VERCEL_PROTECTION_BYPASS_SECRET: undefined,
+      },
+      reason: "protection-bypass-secret-missing-or-weak",
+    },
+  ])("keeps base staging fail closed without $label", async ({ env, reason }) => {
     const commandRunner = vi.fn(() => ({ status: 0 }));
     const inspectTarget = vi.fn(async () => ({ approved: true }));
 
@@ -321,6 +436,7 @@ describe("guarded Vercel staging build", () => {
         blockedReasons: [],
         migrations: "applied",
         build: "completed",
+        stagingInpRum: "enabled",
         valuesRedacted: true,
       },
     });

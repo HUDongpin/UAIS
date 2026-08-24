@@ -37,6 +37,8 @@ export async function runGuardedVercelStagingBuild({
   nodeExecutable = process.execPath,
 } = {}) {
   const blockedReasons = [];
+  const stagingInpRumMode = readValue(env.UAIS_STAGING_INP_RUM_ENABLED);
+  const stagingInpRumEnabled = stagingInpRumMode === "yes";
 
   if (env.VERCEL_ENV !== "production") {
     blockedReasons.push("vercel-production-scope-required");
@@ -55,8 +57,8 @@ export async function runGuardedVercelStagingBuild({
   if (env.UAIS_STAGING_CONFIG_ATTESTATION !== UAIS_STAGING_CONFIG_ATTESTATION) {
     blockedReasons.push("staging-config-with-hourly-expiry-required");
   }
-  if (env.UAIS_STAGING_INP_RUM_ENABLED !== "yes") {
-    blockedReasons.push("staging-inp-rum-opt-in-required");
+  if (stagingInpRumMode !== "yes" && stagingInpRumMode !== "no") {
+    blockedReasons.push("staging-inp-rum-mode-required");
   }
 
   const dedicatedDatabaseUrl = readValue(env.UAIS_P2_STAGING_DATABASE_URL);
@@ -108,20 +110,22 @@ export async function runGuardedVercelStagingBuild({
     }
   }
 
-  if (!isCandidateBoundCohort(readValue(env.UAIS_STAGING_INP_COHORT_ID), candidateGitSha)) {
-    blockedReasons.push("cohort-id-not-candidate-bound");
-  }
-  if (!isStrongSecret(env.UAIS_STAGING_INP_HMAC_SECRET)) {
-    blockedReasons.push("hmac-secret-missing-or-weak");
-  }
-  if (!keyVersionPattern.test(readValue(env.UAIS_STAGING_INP_HMAC_KEY_VERSION))) {
-    blockedReasons.push("hmac-key-version-missing-or-invalid");
+  if (stagingInpRumEnabled) {
+    if (!isCandidateBoundCohort(readValue(env.UAIS_STAGING_INP_COHORT_ID), candidateGitSha)) {
+      blockedReasons.push("cohort-id-not-candidate-bound");
+    }
+    if (!isStrongSecret(env.UAIS_STAGING_INP_HMAC_SECRET)) {
+      blockedReasons.push("hmac-secret-missing-or-weak");
+    }
+    if (!keyVersionPattern.test(readValue(env.UAIS_STAGING_INP_HMAC_KEY_VERSION))) {
+      blockedReasons.push("hmac-key-version-missing-or-invalid");
+    }
+    if (!hasStrictOperatorAccountHashList(env.UAIS_STAGING_INP_OPERATOR_ACCOUNT_HASHES)) {
+      blockedReasons.push("approved-operator-allowlist-missing");
+    }
   }
   if (!isStrongSecret(env.UAIS_APP_SESSION_SIGNING_SECRET)) {
     blockedReasons.push("session-secret-missing-or-weak");
-  }
-  if (!hasStrictOperatorAccountHashList(env.UAIS_STAGING_INP_OPERATOR_ACCOUNT_HASHES)) {
-    blockedReasons.push("approved-operator-allowlist-missing");
   }
   if (!isStrongSecret(env.CRON_SECRET)) {
     blockedReasons.push("cron-secret-missing-or-weak");
@@ -212,6 +216,7 @@ export async function runGuardedVercelStagingBuild({
       blockedReasons: [],
       migrations: "applied",
       build: "completed",
+      stagingInpRum: stagingInpRumEnabled ? "enabled" : "disabled",
       valuesRedacted: true,
     },
   };

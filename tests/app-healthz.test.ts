@@ -10,6 +10,9 @@ import { UAIS_CORE_DATABASE_MIGRATION_VERSIONS } from "@/lib/db/migrations";
 
 const checkedAt = () => new Date("2026-09-01T12:00:00.000Z");
 const coreDatabase = { UAIS_CORE_DATABASE_URL: "postgres://user:pass@db.example.test/uais" };
+const candidateGitSha = "a".repeat(40);
+const candidateContentSha = "b".repeat(64);
+const immutableStagingHost = "uais-staging-current-team.vercel.app";
 
 const currentDatabase = async () =>
   ({ database: "ok", migrations: "ok", missingMigrations: [] }) as const;
@@ -43,6 +46,44 @@ describe("UAIS app health endpoint", () => {
       },
     });
     expect(JSON.stringify(body)).not.toContain("/Users/");
+  });
+
+  it("attests an exact base staging deployment without exposing its host or requiring RUM secrets", async () => {
+    const getHealth = createUaisHealthGetHandler({
+      now: checkedAt,
+      env: {
+        ...coreDatabase,
+        VERCEL_ENV: "production",
+        VERCEL_PROJECT_ID: "prj_dcWZvGLSYNtSWN3lnTyfZPyWKgQL",
+        VERCEL_GIT_COMMIT_SHA: candidateGitSha,
+        VERCEL_URL: immutableStagingHost,
+        UAIS_DEPLOYMENT_ENV: "staging",
+        UAIS_LEARNING_CHATROOM_GROUPS_MODE: "on",
+        UAIS_STAGING_INP_RUM_ENABLED: "no",
+        P2_CANDIDATE_GIT_SHA: candidateGitSha,
+        P2_CANDIDATE_CONTENT_SHA: candidateContentSha,
+      },
+      compiledStagingContentSha: candidateContentSha,
+      probeDatabase: currentDatabase,
+    });
+
+    const response = await getHealth();
+    const body = await response.json();
+    const serialized = JSON.stringify(body);
+
+    expect(response.status).toBe(200);
+    expect(body.deploymentBinding).toEqual({
+      status: "bound",
+      lane: "isolated-staging",
+      project: "uais-staging",
+      stagingInpRum: "disabled",
+      candidateGitSha,
+      candidateContentSha,
+      deploymentHostFingerprint: expect.stringMatching(/^[0-9a-f]{64}$/),
+      valuesRedacted: true,
+    });
+    expect(serialized).not.toContain(immutableStagingHost);
+    expect(serialized).not.toContain(coreDatabase.UAIS_CORE_DATABASE_URL);
   });
 
   it("fails the check when the database is unreachable", async () => {
