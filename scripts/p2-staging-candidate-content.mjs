@@ -9,6 +9,7 @@ import {
 } from "node:fs";
 import { relative, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
+import { UAIS_STAGING_VERCEL_PROJECT_ID } from "./vercel-project-identity.mjs";
 
 const digestPattern = /^[0-9a-f]{64}$/;
 
@@ -37,16 +38,19 @@ export const uaisStagingCandidateContentEntries = [
 /**
  * @param {string} root
  * @param {readonly string[]} entries
+ * @param {{env?: Record<string, string | undefined>, materializationMode?: string}} options
  */
 export function computeUaisStagingCandidateContentSha(
   root = process.cwd(),
   entries = uaisStagingCandidateContentEntries,
+  options = {},
 ) {
   const { absoluteRoot, files } = collectCandidateContent(root, entries);
   return hashCandidateFiles(
     absoluteRoot,
     files,
     "uais-staging-candidate-content:v1\0",
+    options,
   );
 }
 
@@ -57,10 +61,12 @@ export function computeUaisStagingCandidateContentSha(
  * values.
  * @param {string} root
  * @param {readonly string[]} entries
+ * @param {{env?: Record<string, string | undefined>, materializationMode?: string}} options
  */
 export function computeUaisStagingCandidateContentManifest(
   root = process.cwd(),
   entries = uaisStagingCandidateContentEntries,
+  options = {},
 ) {
   const { absoluteRoot, filesByEntry, files } = collectCandidateContent(
     root,
@@ -71,6 +77,7 @@ export function computeUaisStagingCandidateContentManifest(
       absoluteRoot,
       files,
       "uais-staging-candidate-content:v1\0",
+      options,
     ),
     entries: filesByEntry.map(({ entry, files: entryFiles }) => {
       const contents = entryFiles.map((relativePath) =>
@@ -87,6 +94,7 @@ export function computeUaisStagingCandidateContentManifest(
           absoluteRoot,
           entryFiles,
           `uais-staging-candidate-content-entry:v1\0${entry}\0`,
+          options,
         ),
         ...readJsonDiagnostic(entry, contents),
       };
@@ -159,13 +167,17 @@ function collectCandidateContent(root, entries) {
  * @param {string} absoluteRoot
  * @param {readonly string[]} files
  * @param {string} domain
+ * @param {{env?: Record<string, string | undefined>, materializationMode?: string}} options
  */
-function hashCandidateFiles(absoluteRoot, files, domain) {
+function hashCandidateFiles(absoluteRoot, files, domain, options) {
   const hash = createHash("sha256");
   hash.update(domain);
   for (const relativePath of files) {
-    const absolutePath = resolve(absoluteRoot, relativePath);
-    const contents = readFileSync(absolutePath);
+    const contents = readCandidateFileContents(
+      absoluteRoot,
+      relativePath,
+      options,
+    );
     hash.update(relativePath);
     hash.update("\0");
     hash.update(String(contents.byteLength));
@@ -174,6 +186,90 @@ function hashCandidateFiles(absoluteRoot, files, domain) {
     hash.update("\0");
   }
   return hash.digest("hex");
+}
+
+/**
+ * Vercel's managed source build rewrites root vercel.json before the build
+ * command by appending the linked project name and legacy config version, then
+ * serializing the object as compact JSON. Reverse only that exact, observed
+ * representation so the candidate digest stays bound to the Git-authored
+ * effective config. Every other change remains in the digest and fails closed.
+ * @param {string} absoluteRoot
+ * @param {string} relativePath
+ * @param {{env?: Record<string, string | undefined>, materializationMode?: string}} options
+ */
+function readCandidateFileContents(absoluteRoot, relativePath, options) {
+  const contents = readFileSync(resolve(absoluteRoot, relativePath));
+  if (relativePath !== "vercel.json") return contents;
+  const text = contents.toString("utf8");
+  let value;
+  try {
+    value = JSON.parse(text);
+  } catch {
+    throw new Error("UAIS candidate vercel.json must be valid JSON");
+  }
+  const hasManagedMetadata =
+    value &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    (Object.hasOwn(value, "name") || Object.hasOwn(value, "version"));
+  if (!isExactRemoteStagingMaterialization(options)) {
+    if (hasManagedMetadata) {
+      throw new Error(
+        "UAIS candidate source rejects Vercel-managed config metadata",
+      );
+    }
+    if (`${JSON.stringify(value, null, 2)}\n` !== text) {
+      throw new Error(
+        "UAIS candidate vercel.json must use canonical source encoding",
+      );
+    }
+    return contents;
+  }
+  if (
+    !value ||
+    typeof value !== "object" ||
+    Array.isArray(value) ||
+    `${JSON.stringify(value)}\n` !== text ||
+    value.name !== "uais-staging" ||
+    value.version !== 2
+  ) {
+    return contents;
+  }
+  const keys = Object.keys(value);
+  const expectedKeys = [
+    "$schema",
+    "framework",
+    "buildCommand",
+    "git",
+    "name",
+    "version",
+  ];
+  if (
+    keys.length !== expectedKeys.length ||
+    !keys.every((key, index) => key === expectedKeys[index])
+  ) {
+    return contents;
+  }
+  const authoredConfig = Object.create(null);
+  for (const key of keys.slice(0, -2)) authoredConfig[key] = value[key];
+  return Buffer.from(`${JSON.stringify(authoredConfig, null, 2)}\n`);
+}
+
+/** @param {{env?: Record<string, string | undefined>, materializationMode?: string}} options */
+function isExactRemoteStagingMaterialization(options) {
+  const env = options.env ?? process.env;
+  const candidateGitSha = env.P2_CANDIDATE_GIT_SHA ?? "";
+  return (
+    options.materializationMode === "vercel-isolated-staging-remote" &&
+    env.VERCEL === "1" &&
+    env.VERCEL_ENV === "production" &&
+    env.VERCEL_PROJECT_ID === UAIS_STAGING_VERCEL_PROJECT_ID &&
+    env.UAIS_DEPLOYMENT_ENV === "staging" &&
+    env.UAIS_LEARNING_CHATROOM_GROUPS_MODE === "on" &&
+    /^[0-9a-f]{40}$/.test(candidateGitSha) &&
+    env.VERCEL_GIT_COMMIT_SHA === candidateGitSha
+  );
 }
 
 /**
@@ -192,7 +288,10 @@ export function resolveUaisStagingBuildContentSha({
   if (!digestPattern.test(expected)) {
     throw new Error("P2_CANDIDATE_CONTENT_SHA is required for staging builds");
   }
-  const computed = computeUaisStagingCandidateContentSha(root, entries);
+  const computed = computeUaisStagingCandidateContentSha(root, entries, {
+    env,
+    materializationMode: "vercel-isolated-staging-remote",
+  });
   if (computed !== expected) {
     throw new Error("P2_CANDIDATE_CONTENT_SHA does not match deployable source");
   }

@@ -107,10 +107,22 @@ export async function runGuardedVercelStagingBuild({
     blockedReasons.push("candidate-content-sha-invalid");
   } else {
     try {
-      const computedContentSha = computeContentSha(cwd);
+      const contentHashOptions = {
+        env,
+        materializationMode: "vercel-isolated-staging-remote",
+      };
+      const computedContentSha = computeContentSha(
+        cwd,
+        undefined,
+        contentHashOptions,
+      );
       if (computedContentSha !== candidateContentSha) {
         blockedReasons.push("candidate-content-sha-mismatch");
-        const manifest = computeContentManifest(cwd);
+        const manifest = computeContentManifest(
+          cwd,
+          undefined,
+          contentHashOptions,
+        );
         contentShaDiagnostic = {
           expectedSha256: candidateContentSha,
           computedSha256: computedContentSha,

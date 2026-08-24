@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
   mkdirSync,
   mkdtempSync,
@@ -99,16 +100,16 @@ describe("guarded Vercel staging build", () => {
     const privateValue = "private-json-value-must-not-escape";
     try {
       writeFileSync(
-        join(root, "vercel.json"),
+        join(root, "vercel.staging.json"),
         JSON.stringify({ build: { env: { PRIVATE_VALUE: privateValue } } }),
       );
 
       const manifest = computeUaisStagingCandidateContentManifest(root, [
-        "vercel.json",
+        "vercel.staging.json",
       ]);
 
       expect(manifest.entries[0]).toMatchObject({
-        path: "vercel.json",
+        path: "vercel.staging.json",
         fileCount: 1,
         byteCount: expect.any(Number),
         jsonDiagnostic: {
@@ -120,7 +121,7 @@ describe("guarded Vercel staging build", () => {
       expect(JSON.stringify(manifest)).not.toContain(privateValue);
 
       writeFileSync(
-        join(root, "vercel.json"),
+        join(root, "vercel.staging.json"),
         `${JSON.stringify(
           { build: { env: { PRIVATE_VALUE: privateValue } } },
           null,
@@ -128,15 +129,219 @@ describe("guarded Vercel staging build", () => {
         )}\n`,
       );
       const reformatted = computeUaisStagingCandidateContentManifest(root, [
-        "vercel.json",
+        "vercel.staging.json",
       ]);
       expect(reformatted.entries[0].sha256).not.toBe(
         manifest.entries[0].sha256,
       );
+      expect(reformatted.sha256).not.toBe(manifest.sha256);
       expect(reformatted.entries[0].jsonDiagnostic?.canonicalSha256).toBe(
         manifest.entries[0].jsonDiagnostic?.canonicalSha256,
       );
       expect(JSON.stringify(reformatted)).not.toContain(privateValue);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("reverses only Vercel's exact isolated-project metadata rewrite", () => {
+    const root = mkdtempSync(join(tmpdir(), "uais-content-vercel-rewrite-"));
+    const sourceConfig = {
+      $schema: "https://openapi.vercel.sh/vercel.json",
+      framework: "nextjs",
+      buildCommand: "npm run vercel-build",
+      git: {
+        deploymentEnabled: { "*": false, "**": false, main: true },
+      },
+    };
+    const remoteMaterializationEnv = {
+      VERCEL: "1",
+      VERCEL_ENV: "production",
+      VERCEL_PROJECT_ID: "prj_dcWZvGLSYNtSWN3lnTyfZPyWKgQL",
+      VERCEL_GIT_COMMIT_SHA: candidateGitSha,
+      P2_CANDIDATE_GIT_SHA: candidateGitSha,
+      UAIS_DEPLOYMENT_ENV: "staging",
+      UAIS_LEARNING_CHATROOM_GROUPS_MODE: "on",
+    };
+    const remoteContentHashOptions = {
+      env: remoteMaterializationEnv,
+      materializationMode: "vercel-isolated-staging-remote",
+    };
+    const sourceBytes = `${JSON.stringify(sourceConfig, null, 2)}\n`;
+    const framedEntrySha = (contents: string) => {
+      const bytes = Buffer.from(contents);
+      return createHash("sha256")
+        .update("uais-staging-candidate-content-entry:v1\0vercel.json\0")
+        .update("vercel.json\0")
+        .update(String(bytes.byteLength))
+        .update("\0")
+        .update(bytes)
+        .update("\0")
+        .digest("hex");
+    };
+    try {
+      writeFileSync(join(root, "vercel.json"), sourceBytes);
+      const sourceSha = computeUaisStagingCandidateContentSha(root, [
+        "vercel.json",
+      ]);
+      expect(Buffer.byteLength(sourceBytes)).toBe(229);
+      expect(createHash("sha256").update(sourceBytes).digest("hex")).toBe(
+        "1a94fe786384f6bcfedcf871176caa83faa41d812d64e8bd13da5a7b618c1f50",
+      );
+      expect(framedEntrySha(sourceBytes)).toBe(
+        "e1e08b14faecd086bcea991a3b553e6dd5bc16121ceb8c65eec4d109b72806ff",
+      );
+      expect(sourceSha).toBe(
+        "8a7dfe5dd427996fb37cf312c8e5b89265933b8ecd2e911577a7bd9fcbeeb83e",
+      );
+
+      writeFileSync(
+        join(root, "vercel.json"),
+        `${JSON.stringify(sourceConfig)}\n`,
+      );
+      expect(() =>
+        computeUaisStagingCandidateContentSha(root, ["vercel.json"]),
+      ).toThrow("must use canonical source encoding");
+
+      const remoteBytes = `${JSON.stringify({
+          ...sourceConfig,
+          name: "uais-staging",
+          version: 2,
+        })}\n`;
+      expect(Buffer.byteLength(remoteBytes)).toBe(208);
+      expect(createHash("sha256").update(remoteBytes).digest("hex")).toBe(
+        "19836f00f61a3309d75c7fe7e6795d41cbb36a00ebcce80b2bb505a638057025",
+      );
+      expect(framedEntrySha(remoteBytes)).toBe(
+        "75d948f4f8036e8c88ede4528879f0ca2b16bdb3d6b4b3d8eaae6a6bfa06a439",
+      );
+      writeFileSync(join(root, "vercel.json"), remoteBytes);
+      expect(
+        computeUaisStagingCandidateContentSha(
+          root,
+          ["vercel.json"],
+          remoteContentHashOptions,
+        ),
+      ).toBe(sourceSha);
+      expect(() =>
+        computeUaisStagingCandidateContentSha(root, ["vercel.json"]),
+      ).toThrow("rejects Vercel-managed config metadata");
+
+      for (const changed of [
+        { ...sourceConfig, name: "uais", version: 2 },
+        { ...sourceConfig, name: "uais-staging", version: 3 },
+        { ...sourceConfig, name: "uais-staging", version: "2" },
+        {
+          ...sourceConfig,
+          buildCommand: "npm run build",
+          name: "uais-staging",
+          version: 2,
+        },
+        {
+          ...sourceConfig,
+          git: {
+            deploymentEnabled: { "*": false, "**": false, main: false },
+          },
+          name: "uais-staging",
+          version: 2,
+        },
+      ]) {
+        writeFileSync(
+          join(root, "vercel.json"),
+          `${JSON.stringify(changed)}\n`,
+        );
+        expect(
+          computeUaisStagingCandidateContentSha(
+            root,
+            ["vercel.json"],
+            remoteContentHashOptions,
+          ),
+        ).not.toBe(sourceSha);
+      }
+
+      writeFileSync(
+        join(root, "vercel.json"),
+        `${JSON.stringify(
+          { ...sourceConfig, name: "uais-staging", version: 2 },
+          null,
+          2,
+        )}\n`,
+      );
+      expect(
+        computeUaisStagingCandidateContentSha(
+          root,
+          ["vercel.json"],
+          remoteContentHashOptions,
+        ),
+      ).not.toBe(sourceSha);
+
+      for (const text of [
+        `${JSON.stringify({
+          name: "uais-staging",
+          version: 2,
+          ...sourceConfig,
+        })}\n`,
+        `${JSON.stringify({
+          ...sourceConfig,
+          extra: true,
+          name: "uais-staging",
+          version: 2,
+        })}\n`,
+        `${JSON.stringify({
+          ...sourceConfig,
+          name: "uais-staging",
+          version: 2,
+        })}`,
+        `${JSON.stringify({
+          ...sourceConfig,
+          name: "uais-staging",
+          version: 2,
+        })}\n\n`,
+        `${JSON.stringify({
+          ...sourceConfig,
+          name: "uais-staging",
+          version: 2,
+        })}\r\n`,
+        `\uFEFF${JSON.stringify({
+          ...sourceConfig,
+          name: "uais-staging",
+          version: 2,
+        })}\n`,
+      ]) {
+        writeFileSync(join(root, "vercel.json"), text);
+        let blocked = false;
+        try {
+          blocked =
+            computeUaisStagingCandidateContentSha(
+              root,
+              ["vercel.json"],
+              remoteContentHashOptions,
+            ) !== sourceSha;
+        } catch {
+          blocked = true;
+        }
+        expect(blocked).toBe(true);
+      }
+
+      writeFileSync(
+        join(root, "vercel.json"),
+        '{"framework":"nextjs","framework":"other"}\n',
+      );
+      expect(
+        computeUaisStagingCandidateContentSha(
+          root,
+          ["vercel.json"],
+          remoteContentHashOptions,
+        ),
+      ).not.toBe(sourceSha);
+      writeFileSync(join(root, "vercel.json"), "{invalid-json\n");
+      expect(() =>
+        computeUaisStagingCandidateContentSha(
+          root,
+          ["vercel.json"],
+          remoteContentHashOptions,
+        ),
+      ).toThrow("must be valid JSON");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -371,6 +576,33 @@ describe("guarded Vercel staging build", () => {
     }
   });
 
+  it("fails closed before target inspection when remote content normalization rejects", async () => {
+    const inspectTarget = vi.fn(async () => ({ approved: true }));
+    const commandRunner = vi.fn(() => ({ status: 0 }));
+
+    const result = await runGuardedVercelStagingBuild({
+      env: safeStagingEnv,
+      computeContentSha: () => {
+        throw new Error("private-normalizer-detail");
+      },
+      inspectTarget,
+      commandRunner,
+    });
+
+    expect(result).toEqual({
+      exitCode: 2,
+      report: {
+        target: "uais-isolated-staging-build",
+        status: "BLOCKED_ENV",
+        blockedReasons: ["candidate-content-sha-unverifiable"],
+        valuesRedacted: true,
+      },
+    });
+    expect(inspectTarget).not.toHaveBeenCalled();
+    expect(commandRunner).not.toHaveBeenCalled();
+    expect(JSON.stringify(result)).not.toContain("private-normalizer-detail");
+  });
+
   it.each([
     {
       label: "the candidate-bound cohort",
@@ -595,6 +827,7 @@ describe("guarded Vercel staging build", () => {
   it("runs strict core migrations against only the dedicated URL before the Next build", async () => {
     const commandRunner = vi.fn(() => ({ status: 0 }));
     const inspectTarget = vi.fn(async () => ({ approved: true }));
+    const computeContentSha = vi.fn(() => candidateContentSha);
 
     const result = await runGuardedVercelStagingBuild({
       env: {
@@ -615,7 +848,7 @@ describe("guarded Vercel staging build", () => {
       },
       commandRunner,
       inspectTarget,
-      computeContentSha: () => candidateContentSha,
+      computeContentSha,
       cwd: "/repo-fixture",
       nodeExecutable: "/node-fixture",
     });
@@ -634,6 +867,17 @@ describe("guarded Vercel staging build", () => {
     });
     expect(commandRunner).toHaveBeenCalledTimes(2);
     expect(inspectTarget).toHaveBeenCalledWith({ databaseUrl: dedicatedDatabaseUrl });
+    expect(computeContentSha).toHaveBeenCalledWith(
+      "/repo-fixture",
+      undefined,
+      expect.objectContaining({
+        env: expect.objectContaining({
+          VERCEL_PROJECT_ID: safeStagingEnv.VERCEL_PROJECT_ID,
+          P2_CANDIDATE_GIT_SHA: candidateGitSha,
+        }),
+        materializationMode: "vercel-isolated-staging-remote",
+      }),
+    );
 
     const migrationInvocation = commandRunner.mock.calls[0]?.[0];
     const buildInvocation = commandRunner.mock.calls[1]?.[0];

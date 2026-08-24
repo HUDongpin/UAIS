@@ -80,6 +80,68 @@ describe("staging candidate build content binding", () => {
     ).toBe(digest);
   });
 
+  it("keeps the Next config check bound across the exact Vercel materialization", () => {
+    const root = mkdtempSync(join(tmpdir(), "uais-staging-vercel-config-"));
+    temporaryRoots.push(root);
+    const candidateGitSha = "a".repeat(40);
+    const sourceConfig = {
+      $schema: "https://openapi.vercel.sh/vercel.json",
+      framework: "nextjs",
+      buildCommand: "npm run vercel-build",
+      git: { deploymentEnabled: { "*": false, "**": false, main: true } },
+    };
+    writeFileSync(
+      join(root, "vercel.json"),
+      `${JSON.stringify(sourceConfig, null, 2)}\n`,
+    );
+    const digest = computeUaisStagingCandidateContentSha(root, [
+      "vercel.json",
+    ]);
+    writeFileSync(
+      join(root, "vercel.json"),
+      `${JSON.stringify({
+        ...sourceConfig,
+        name: "uais-staging",
+        version: 2,
+      })}\n`,
+    );
+    const env = {
+      VERCEL: "1",
+      VERCEL_ENV: "production",
+      VERCEL_PROJECT_ID: "prj_dcWZvGLSYNtSWN3lnTyfZPyWKgQL",
+      VERCEL_GIT_COMMIT_SHA: candidateGitSha,
+      P2_CANDIDATE_GIT_SHA: candidateGitSha,
+      P2_CANDIDATE_CONTENT_SHA: digest,
+      UAIS_DEPLOYMENT_ENV: "staging",
+      UAIS_LEARNING_CHATROOM_GROUPS_MODE: "on",
+      UAIS_STAGING_INP_RUM_ENABLED: "no",
+    };
+
+    expect(
+      resolveUaisStagingBuildContentSha({
+        root,
+        env,
+        entries: ["vercel.json"],
+      }),
+    ).toBe(digest);
+
+    writeFileSync(
+      join(root, "vercel.json"),
+      `${JSON.stringify({
+        ...sourceConfig,
+        name: "uais-staging",
+        version: 3,
+      })}\n`,
+    );
+    expect(() =>
+      resolveUaisStagingBuildContentSha({
+        root,
+        env,
+        entries: ["vercel.json"],
+      }),
+    ).toThrow(/does not match deployable source/);
+  });
+
   it("rejects symlinks instead of hashing only a target pathname", () => {
     const root = mkdtempSync(join(tmpdir(), "uais-staging-content-"));
     temporaryRoots.push(root);
