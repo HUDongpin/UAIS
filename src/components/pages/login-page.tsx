@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from "react";
-import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { BookOpen } from "@phosphor-icons/react/dist/ssr/BookOpen";
 import { Brain } from "@phosphor-icons/react/dist/ssr/Brain";
@@ -127,8 +126,17 @@ type LoginDeckCard = {
   assetAlt: string;
 };
 
-export function LoginPage() {
-  const router = useRouter();
+type LoginPageProps = {
+  navigateAfterLogin?: (target: string) => void;
+};
+
+function replaceDocumentAfterLogin(target: string) {
+  window.location.replace(target);
+}
+
+export function LoginPage({
+  navigateAfterLogin = replaceDocumentAfterLogin,
+}: LoginPageProps = {}) {
   const { locale, toggleLocale } = useAppPreferences();
   const t = loginCopy[locale];
   const [account, setAccount] = useState("");
@@ -245,14 +253,22 @@ export function LoginPage() {
           (!role || isUaisRouteAllowedForRole(result.redirectTarget, role))
             ? result.redirectTarget
             : fallback;
-        router.replace(target);
+        navigateAfterLogin(target);
       } catch {
         setFailure({ message: t.serverError, supportChannel: true });
       } finally {
         setSubmitting(false);
       }
     },
-    [account, locale, password, router, t.emptyError, t.invalidError, t.serverError],
+    [
+      account,
+      locale,
+      navigateAfterLogin,
+      password,
+      t.emptyError,
+      t.invalidError,
+      t.serverError,
+    ],
   );
 
   return (

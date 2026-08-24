@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { LoginPage } from "@/components/pages/login-page";
 
-const replace = vi.fn();
+const navigateAfterLogin = vi.fn();
 
 const mockPreferences = vi.hoisted(() => ({ locale: "zh-CN" as "zh-CN" | "en-US" }));
 
@@ -16,12 +16,6 @@ function resolveImageAsset(element: Element | null | undefined) {
   return new URL(source, "http://localhost").searchParams.get("url") ?? "";
 }
 
-vi.mock("next/navigation", () => ({
-  useRouter: () => ({
-    replace,
-  }),
-}));
-
 vi.mock("@/components/providers/app-preferences", () => ({
   useAppPreferences: () => ({
     locale: mockPreferences.locale,
@@ -32,6 +26,7 @@ vi.mock("@/components/providers/app-preferences", () => ({
 describe("LoginPage", () => {
   afterEach(() => {
     mockPreferences.locale = "zh-CN";
+    navigateAfterLogin.mockReset();
     vi.unstubAllGlobals();
   });
 
@@ -334,7 +329,7 @@ describe("LoginPage", () => {
     );
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<LoginPage />);
+    render(<LoginPage navigateAfterLogin={navigateAfterLogin} />);
 
     fireEvent.change(screen.getByLabelText("账号或邮箱"), {
       target: { value: "Phoebe" },
@@ -344,7 +339,7 @@ describe("LoginPage", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "立即登录" }));
 
-    await waitFor(() => expect(replace).toHaveBeenCalledWith("/teaching"));
+    await waitFor(() => expect(navigateAfterLogin).toHaveBeenCalledWith("/teaching"));
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/auth/app-session",
       expect.objectContaining({
@@ -367,7 +362,7 @@ describe("LoginPage", () => {
     );
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<LoginPage />);
+    render(<LoginPage navigateAfterLogin={navigateAfterLogin} />);
 
     fireEvent.change(screen.getByLabelText("账号或邮箱"), {
       target: { value: "Peter" },
@@ -377,7 +372,9 @@ describe("LoginPage", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "立即登录" }));
 
-    await waitFor(() => expect(replace).toHaveBeenCalledWith("/student-dashboard"));
+    await waitFor(() =>
+      expect(navigateAfterLogin).toHaveBeenCalledWith("/student-dashboard"),
+    );
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/auth/app-session",
       expect.objectContaining({
@@ -528,7 +525,7 @@ describe("LoginPage", () => {
         }),
     );
     vi.stubGlobal("fetch", fetchMock);
-    render(<LoginPage />);
+    render(<LoginPage navigateAfterLogin={navigateAfterLogin} />);
 
     fireEvent.change(screen.getByLabelText("账号或邮箱"), {
       target: { value: "Peter" },
@@ -546,7 +543,9 @@ describe("LoginPage", () => {
     resolveLogin?.(
       Response.json({ status: "ok", redirectTarget: "/student-dashboard" }),
     );
-    await waitFor(() => expect(replace).toHaveBeenCalledWith("/student-dashboard"));
+    await waitFor(() =>
+      expect(navigateAfterLogin).toHaveBeenCalledWith("/student-dashboard"),
+    );
   });
 
   it("falls back to a bilingual sentence and collapses an unmapped server string", async () => {
