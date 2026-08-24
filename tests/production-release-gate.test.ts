@@ -688,7 +688,7 @@ const acceptedTeachingOperationDetailBrowserResults = {
   mainInlineDashboardRefreshSubmitted: "passed",
   mainInlineStudentPreviewSubmitted: "passed",
   mainInlineAgentPermissionPreflightSubmitted: "passed",
-  mainInlineResourcePlaceholderSubmitted: "passed",
+  mainKnowledgeSourceRegistrationSubmitted: "passed",
   mainInlineUnitDraftSubmitted: "passed",
   mainInlineCollaborationInviteSubmitted: "passed",
   mainInlineStudentGroupSuggestionSubmitted: "passed",
@@ -6640,7 +6640,7 @@ describe("UAIS production E2E release gate", () => {
     const missingSecondaryResultKeys = [
       "mainInlineStudentPreviewSubmitted",
       "mainInlineAgentPermissionPreflightSubmitted",
-      "mainInlineResourcePlaceholderSubmitted",
+      "mainKnowledgeSourceRegistrationSubmitted",
       "mainInlineUnitDraftSubmitted",
       "mainInlineCollaborationInviteSubmitted",
       "mainInlineStudentGroupSuggestionSubmitted",

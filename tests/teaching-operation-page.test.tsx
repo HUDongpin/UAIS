@@ -1300,7 +1300,7 @@ describe("TeachingOperationPage", () => {
     }
   });
 
-  it("requires resource review item business readback before operation page claims placeholder success", async () => {
+  it("submits a complete knowledge-source registration and rejects incomplete review evidence", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
       if (String(input) === "/api/teaching/operations") {
         expect(init?.method).toBe("POST");
@@ -1309,6 +1309,12 @@ describe("TeachingOperationPage", () => {
           actionSlot?: "primary" | "secondary";
           courseId?: string;
           sourceAction?: string;
+          knowledgeResource?: {
+            title?: string;
+            sourceUrl?: string;
+            rightsBasis?: string;
+            visibility?: string;
+          };
         };
         expect(body).toEqual(
           expect.objectContaining({
@@ -1316,6 +1322,12 @@ describe("TeachingOperationPage", () => {
             actionSlot: "secondary",
             courseId: "teacher-research-methods",
             sourceAction: "manage",
+            knowledgeResource: {
+              title: "Unit 3 research design guide",
+              sourceUrl: "https://library.example.edu/research-methods/unit-3",
+              rightsBasis: "open-access",
+              visibility: "course-only",
+            },
           }),
         );
         return Response.json({
@@ -1326,8 +1338,8 @@ describe("TeachingOperationPage", () => {
             courseId: "teacher-research-methods",
             status: "persisted",
             displayMessage: {
-              "zh-CN": "资料占位已加入待审核队列。",
-              "en-US": "Resource placeholder added to review queue.",
+              "zh-CN": "知识来源已登记并写入教师审核队列。",
+              "en-US": "Knowledge source registered in the teacher review queue.",
             },
           },
           domainPersistenceSummary: createPersistedDomainSummary({
@@ -1384,17 +1396,144 @@ describe("TeachingOperationPage", () => {
         />,
       );
 
-      fireEvent.click(screen.getByRole("button", { name: "添加资料占位" }));
+      const registerButton = screen.getByRole("button", { name: "登记知识来源" });
+      expect((registerButton as HTMLButtonElement).disabled).toBe(true);
+      fireEvent.change(screen.getByLabelText("资料标题"), {
+        target: { value: "Unit 3 research design guide" },
+      });
+      fireEvent.change(screen.getByLabelText("公开 HTTPS 来源"), {
+        target: { value: "https://library.example.edu/research-methods/unit-3" },
+      });
+      fireEvent.change(screen.getByLabelText("权利依据"), {
+        target: { value: "open-access" },
+      });
+      expect((registerButton as HTMLButtonElement).disabled).toBe(false);
+      fireEvent.click(registerButton);
 
       await waitFor(() => {
         expect(screen.getAllByText("审计读回未完成，请稍后刷新。").length).toBeGreaterThan(0);
       });
-      expect(screen.queryByText("资料占位已加入待审核队列。")).toBeNull();
+      expect(screen.queryByText("知识来源已登记并写入教师审核队列。")).toBeNull();
       expect(
         screen.queryByText(
           "领域对象已验证：resource-review-item / resource-review-item-teacher-research-methods",
         ),
       ).toBeNull();
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
+
+  it("verifies registered knowledge-source evidence and clears the submitted URL", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      if (String(input) === "/api/teaching/operations") {
+        const body = JSON.parse(String(init?.body)) as {
+          knowledgeResource?: Record<string, unknown>;
+        };
+        expect(body.knowledgeResource).toEqual({
+          title: "Unit 3 research design guide",
+          sourceUrl: "https://library.example.edu/research-methods/unit-3",
+          rightsBasis: "open-access",
+          visibility: "course-only",
+        });
+        return Response.json({
+          receipt: {
+            receiptId: "operation-page-resource-registration-complete",
+            operationId: "knowledge-base",
+            actionSlot: "secondary",
+            courseId: "teacher-research-methods",
+            status: "persisted",
+            displayMessage: {
+              "zh-CN": "知识来源已登记并写入教师审核队列。",
+              "en-US": "Knowledge source registered in the teacher review queue.",
+            },
+          },
+          domainPersistenceSummary: createPersistedDomainSummary({
+            operationId: "knowledge-base",
+            actionSlot: "secondary",
+            receiptId: "operation-page-resource-registration-complete",
+            objectType: "resource-review-item",
+          }),
+          traceId: "trace-operation-page-resource-registration-complete",
+        });
+      }
+
+      expect(String(input)).toBe("/api/teaching/operations/audit");
+      return Response.json({
+        actorId: "teacher-kang",
+        auditEventCount: 1,
+        records: [
+          {
+            recordId: "operation-page-resource-registration-complete",
+            courseId: "teacher-research-methods",
+            operationId: "knowledge-base",
+            actionSlot: "secondary",
+            status: "persisted",
+          },
+        ],
+        auditEvents: [
+          {
+            traceId: "trace-operation-page-resource-registration-complete",
+            actorId: "teacher-kang",
+            courseId: "teacher-research-methods",
+            authSession: createOperationAuditAuthSession(),
+          },
+        ],
+        domainProjections: [
+          {
+            objectId: "resource-review-item-0123456789abcdef0123456789abcdef",
+            objectType: "resource-review-item",
+            courseId: "teacher-research-methods",
+            operationRecordId: "operation-page-resource-registration-complete",
+            queuedBy: "teacher-kang",
+            reviewStatus: "pending-teacher-review",
+            resourceSource: "teacher-submitted-url",
+            title: "Unit 3 research design guide",
+            sourceFingerprint: `sha256:${"a".repeat(64)}`,
+            rightsBasis: "open-access",
+            visibility: "course-only",
+            reviewPolicy: "teacher-review-before-knowledge-index",
+            queuedAt: "2026-06-22T09:46:00.000Z",
+          },
+        ],
+      });
+    });
+
+    try {
+      render(
+        <TeachingOperationPage
+          action="manage"
+          operationId="knowledge-base"
+          selectedCourseId="teacher-research-methods"
+        />,
+      );
+
+      const titleInput = screen.getByLabelText("资料标题") as HTMLInputElement;
+      const urlInput = screen.getByLabelText("公开 HTTPS 来源") as HTMLInputElement;
+      const rightsSelect = screen.getByLabelText("权利依据") as HTMLSelectElement;
+      fireEvent.change(titleInput, {
+        target: { value: "Unit 3 research design guide" },
+      });
+      fireEvent.change(urlInput, {
+        target: { value: "https://library.example.edu/research-methods/unit-3" },
+      });
+      fireEvent.change(rightsSelect, { target: { value: "open-access" } });
+
+      const registerButton = screen.getByRole("button", { name: "登记知识来源" });
+      fireEvent.click(registerButton);
+
+      await waitFor(() => {
+        expect(screen.getByText("知识来源已登记并写入教师审核队列。")).toBeTruthy();
+      });
+      expect(
+        screen.getByText(
+          "领域对象已验证：resource-review-item / resource-review-item-0123456789abcdef0123456789abcdef",
+        ),
+      ).toBeTruthy();
+      expect(titleInput.value).toBe("");
+      expect(urlInput.value).toBe("");
+      expect(rightsSelect.value).toBe("");
+      expect((registerButton as HTMLButtonElement).disabled).toBe(true);
     } finally {
       fetchSpy.mockRestore();
     }
@@ -3696,7 +3835,25 @@ describe("TeachingOperationPage", () => {
 
     try {
     for (const [operationId] of operations) {
-      const { container, unmount } = render(<TeachingOperationPage operationId={operationId} />);
+      const { container, unmount } = render(
+        <TeachingOperationPage
+          operationId={operationId}
+          selectedCourseId={
+            operationId === "knowledge-base" ? "teacher-research-methods" : undefined
+          }
+        />,
+      );
+      if (operationId === "knowledge-base") {
+        fireEvent.change(screen.getByLabelText("资料标题"), {
+          target: { value: "Knowledge resource matrix source" },
+        });
+        fireEvent.change(screen.getByLabelText("公开 HTTPS 来源"), {
+          target: { value: "https://library.example.edu/research-methods/matrix-source" },
+        });
+        fireEvent.change(screen.getByLabelText("权利依据"), {
+          target: { value: "open-access" },
+        });
+      }
       const liveStatus = container.querySelector('[aria-live="polite"]');
       const initialStatus = liveStatus?.textContent;
       const actionButtons = screen.getAllByRole("button");

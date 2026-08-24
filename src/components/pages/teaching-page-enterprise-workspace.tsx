@@ -147,6 +147,7 @@ export function EnterpriseWorkspace({
                 locale={locale}
                 inlineWorkspaceStatuses={inlineWorkspaceStatuses}
                 isCourseChosen={Boolean(selectedCourseAction?.courseId)}
+                selectedCourseId={selectedCourseAction?.courseId}
                 runInlineWorkspaceAction={runInlineWorkspaceAction}
               />
             )}

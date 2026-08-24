@@ -48,6 +48,7 @@ import type {
   TeachingStudentPreviewSessionRecord,
   TeachingStudentRosterSyncRecord,
 } from "@/lib/server/teaching-course-management-types";
+import { readTeachingKnowledgeResourceRegistration } from "./teaching-knowledge-resource";
 
 // Record and audit normalizers for the teaching-course-management store (Phase 3
 // decomposition). Cycle-free: runtime deps are the extracted guards + error
@@ -547,23 +548,55 @@ export function normalizeResourceReviewItemRecord(value: unknown): TeachingResou
       "Teaching resource review item record is invalid.",
     );
   }
-  return {
+  const common = {
     resourceReviewItemId: requireSafeId(value.resourceReviewItemId, "resource review item id"),
     courseId: requireSafeId(value.courseId, "course id"),
     ownerTeacherId: requireSafeId(value.ownerTeacherId, "owner teacher id"),
     queuedBy: requireSafeId(value.queuedBy, "queued by teacher id"),
-    reviewStatus: "pending-teacher-review",
+    reviewStatus: "pending-teacher-review" as const,
     operationRecordId: requireSafeId(value.operationRecordId, "operation record id"),
     ...(value.sourceAction
       ? { sourceAction: requireSafeId(value.sourceAction, "source action") }
       : {}),
-    resourceSource: "teacher-placeholder",
-    reviewPolicy: "teacher-review-before-knowledge-index",
+    reviewPolicy: "teacher-review-before-knowledge-index" as const,
     queuedAt: requireIsoDate(value.queuedAt, "queuedAt"),
     storagePolicy: normalizeRecordStoragePolicy(value.storagePolicy),
     storageWritePolicy: normalizeStorageWritePolicy(value.storageWritePolicy),
-    responsibleSession: "S12",
+    responsibleSession: "S12" as const,
     redaction: createRedaction(),
+  };
+  if (value.resourceSource === "teacher-placeholder") {
+    return {
+      ...common,
+      resourceSource: "teacher-placeholder",
+    };
+  }
+  if (value.resourceSource !== "teacher-submitted-url") {
+    throw new TeachingCourseManagementStoreError(
+      500,
+      "Teaching resource review item record is invalid.",
+    );
+  }
+
+  let knowledgeResource;
+  try {
+    knowledgeResource = readTeachingKnowledgeResourceRegistration(value);
+  } catch {
+    throw new TeachingCourseManagementStoreError(
+      500,
+      "Teaching resource review item record is invalid.",
+    );
+  }
+  if (value.sourceFingerprint !== knowledgeResource.sourceFingerprint) {
+    throw new TeachingCourseManagementStoreError(
+      500,
+      "Teaching resource review item record is invalid.",
+    );
+  }
+  return {
+    ...common,
+    resourceSource: "teacher-submitted-url",
+    ...knowledgeResource,
   };
 }
 

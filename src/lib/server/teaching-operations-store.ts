@@ -50,6 +50,10 @@ import { drawUnusedInviteCode } from "./invite-code-allocator";
 import { resolveTeachingOperationDataDir } from "./teaching-operation-data-dir";
 import { actionDefinitions } from "./teaching-operations-action-catalog";
 import {
+  readTeachingKnowledgeResourceRegistration,
+  type TeachingKnowledgeResourceRegistration,
+} from "./teaching-knowledge-resource";
+import {
   createAuditEvent,
   createBackupRestoreAuditEvent,
   createGradebookReleaseAuditEvent,
@@ -151,6 +155,10 @@ export async function executeTeachingOperationAction(
   }
 
   const operationId = input.operationId;
+  const knowledgeResource =
+    operationId === "knowledge-base" && input.actionSlot === "secondary"
+      ? readTeachingKnowledgeResourceRegistration(input.knowledgeResource)
+      : undefined;
   const dataDir = resolveTeachingOperationDataDir(input.dataDir);
   const env = input.env ?? process.env;
   const usingExternalPersistence = Boolean(input.appendExternalTeachingOperation);
@@ -174,9 +182,13 @@ export async function executeTeachingOperationAction(
       "Production teaching operation persistence requires a durable backend, not local JSON storage.",
     );
   }
+  const { knowledgeResource: unvalidatedKnowledgeResource, ...inputWithoutKnowledgeResource } =
+    input;
+  void unvalidatedKnowledgeResource;
   const validatedInput: ValidatedExecuteTeachingOperationActionInput = {
-    ...input,
+    ...inputWithoutKnowledgeResource,
     operationId,
+    ...(knowledgeResource ? { knowledgeResource } : {}),
   };
 
   if (!usingExternalPersistence) {
@@ -262,6 +274,7 @@ async function executeValidatedTeachingOperationAction(input: {
           actionSlot: input.input.actionSlot,
           courseId,
           sourceAction,
+          knowledgeResource: input.input.knowledgeResource,
         })
       ) {
         throw new TeachingOperationStoreError(
@@ -317,6 +330,7 @@ async function executeValidatedTeachingOperationAction(input: {
     courseId,
     sourceAction,
     courseSettingsPatch: input.input.courseSettingsPatch,
+    knowledgeResource: input.input.knowledgeResource,
     recordId,
     createdAt,
     artifacts,
@@ -449,13 +463,32 @@ function isMatchingIdempotentTeachingOperationRecord(
     actionSlot: TeachingOperationActionSlot;
     courseId?: string;
     sourceAction?: string;
+    knowledgeResource?: TeachingKnowledgeResourceRegistration;
   },
 ) {
-  return (
+  const baseMatches =
     record.operationId === input.operationId &&
     record.actionSlot === input.actionSlot &&
     (record.courseId ?? "") === (input.courseId ?? "") &&
-    (record.sourceAction ?? "") === (input.sourceAction ?? "")
+    (record.sourceAction ?? "") === (input.sourceAction ?? "");
+  if (!baseMatches) {
+    return false;
+  }
+  if (input.operationId !== "knowledge-base" || input.actionSlot !== "secondary") {
+    return true;
+  }
+
+  const projection = record.domainProjections?.find(
+    (candidate) => candidate.objectType === "resource-review-item",
+  );
+  return Boolean(
+    projection?.objectType === "resource-review-item" &&
+      projection.resourceSource === "teacher-submitted-url" &&
+      input.knowledgeResource &&
+      projection.title === input.knowledgeResource.title &&
+      projection.sourceFingerprint === input.knowledgeResource.sourceFingerprint &&
+      projection.rightsBasis === input.knowledgeResource.rightsBasis &&
+      projection.visibility === input.knowledgeResource.visibility,
   );
 }
 

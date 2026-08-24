@@ -782,7 +782,7 @@ describe("production E2E release orchestration plan", () => {
             "main-inline-dashboard-refresh-submitted",
             "main-inline-student-preview-submitted",
             "main-inline-agent-permission-preflight-submitted",
-            "main-inline-resource-placeholder-submitted",
+            "main-linked-knowledge-source-registration-submitted",
             "main-inline-unit-draft-submitted",
             "main-inline-collaboration-invite-submitted",
             "main-inline-student-group-suggestion-submitted",

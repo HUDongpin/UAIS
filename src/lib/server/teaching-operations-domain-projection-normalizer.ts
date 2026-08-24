@@ -96,21 +96,59 @@ export function normalizeDomainProjection(value: unknown): TeachingOperationDoma
     };
   }
   if (value.objectType === "resource-review-item") {
-    return {
+    const common = {
       objectId: requireSafeId(value.objectId, "domain object id"),
-      objectType: "resource-review-item",
+      objectType: "resource-review-item" as const,
       courseId: requireSafeId(value.courseId, "course id"),
       queuedBy: requireSafeId(value.queuedBy, "queued by"),
-      reviewStatus: "pending-teacher-review",
+      reviewStatus: "pending-teacher-review" as const,
       operationRecordId: requireSafeId(value.operationRecordId, "operation record id"),
       ...(value.sourceAction
         ? { sourceAction: requireSafeId(value.sourceAction, "source action") }
         : {}),
-      resourceSource: "teacher-placeholder",
-      reviewPolicy: "teacher-review-before-knowledge-index",
+      reviewPolicy: "teacher-review-before-knowledge-index" as const,
       queuedAt: requireIsoDate(value.queuedAt, "queuedAt"),
-      storagePolicy: "domain-projection-teaching-resource-review-item",
+      storagePolicy: "domain-projection-teaching-resource-review-item" as const,
       redaction: createRedaction(),
+    };
+    if (value.resourceSource === "teacher-placeholder") {
+      return {
+        ...common,
+        resourceSource: "teacher-placeholder" as const,
+      };
+    }
+    if (value.resourceSource !== "teacher-submitted-url") {
+      throw new TeachingOperationStoreError(
+        500,
+        "Teaching resource review item projection is invalid.",
+      );
+    }
+    if (
+      typeof value.title !== "string" ||
+      !value.title.trim() ||
+      value.title.length > 160 ||
+      typeof value.sourceFingerprint !== "string" ||
+      !/^sha256:[a-f0-9]{64}$/.test(value.sourceFingerprint) ||
+      !(
+        value.rightsBasis === "owner-created" ||
+        value.rightsBasis === "licensed" ||
+        value.rightsBasis === "open-access" ||
+        value.rightsBasis === "permission-granted"
+      ) ||
+      value.visibility !== "course-only"
+    ) {
+      throw new TeachingOperationStoreError(
+        500,
+        "Teaching resource review item projection is invalid.",
+      );
+    }
+    return {
+      ...common,
+      resourceSource: "teacher-submitted-url" as const,
+      title: value.title.trim(),
+      sourceFingerprint: value.sourceFingerprint,
+      rightsBasis: value.rightsBasis,
+      visibility: "course-only" as const,
     };
   }
   if (value.objectType === "unit-draft") {

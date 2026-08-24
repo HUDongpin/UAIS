@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { AnchorHTMLAttributes, ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { TeachingPage } from "@/components/pages/teaching-page";
+import { isVerifiedResourceReviewItemProjection } from "@/components/pages/teaching-page-projection-verifiers";
 
 const mockPreferences = vi.hoisted(() => ({
   locale: "zh-CN" as "zh-CN" | "en-US",
@@ -418,7 +419,11 @@ function createVerifiedInlineOperationAuditReadbackResponse(input: {
         ? {
             queuedBy: "teacher-kang",
             reviewStatus: "pending-teacher-review",
-            resourceSource: "teacher-placeholder",
+            resourceSource: "teacher-submitted-url",
+            title: "Fixture knowledge source",
+            sourceFingerprint: `sha256:${"a".repeat(64)}`,
+            rightsBasis: "open-access",
+            visibility: "course-only",
             reviewPolicy: "teacher-review-before-knowledge-index",
             queuedAt: "2026-06-22T10:40:00.000Z",
           }
@@ -862,6 +867,30 @@ function createPersistedCourseCoverGenerationBody(input: {
     },
   };
 }
+
+describe("knowledge resource projection verification", () => {
+  it("accepts current registered-source evidence and rejects legacy placeholders", () => {
+    const currentProjection = {
+      objectType: "resource-review-item",
+      queuedBy: "teacher-kang",
+      reviewStatus: "pending-teacher-review",
+      resourceSource: "teacher-submitted-url",
+      title: "Unit 3 research design guide",
+      sourceFingerprint: `sha256:${"a".repeat(64)}`,
+      rightsBasis: "open-access",
+      visibility: "course-only",
+      reviewPolicy: "teacher-review-before-knowledge-index",
+      queuedAt: "2026-06-22T10:40:00.000Z",
+    };
+    const legacyProjection = {
+      ...currentProjection,
+      resourceSource: "teacher-placeholder",
+    };
+
+    expect(isVerifiedResourceReviewItemProjection(currentProjection)).toBe(true);
+    expect(isVerifiedResourceReviewItemProjection(legacyProjection)).toBe(false);
+  });
+});
 
 describe("TeachingPage", () => {
   it("renders one focused enterprise workspace for the selected left menu entry", () => {
@@ -3894,105 +3923,16 @@ describe("TeachingPage", () => {
     ).toBeNull();
   });
 
-  it("requires resource review item business readback before claiming resource placeholder success", async () => {
-    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      if (String(input) === "/api/teaching/operations") {
-        expect(init?.method).toBe("POST");
-        const body = JSON.parse(String(init?.body)) as {
-          operationId: string;
-          actionSlot: "primary" | "secondary";
-        };
-        expect(body).toEqual(
-          expect.objectContaining({
-            operationId: "knowledge-base",
-            actionSlot: "secondary",
-            courseId: "teacher-research-methods",
-            sourceAction: "inline-teaching-workspace",
-          }),
-        );
-        return Response.json({
-          receipt: {
-            receiptId: "operation-record-resource-review-semantic-missing",
-            operationId: "knowledge-base",
-            actionSlot: "secondary",
-            courseId: "teacher-research-methods",
-            status: "persisted",
-            audit: createSignedInlineOperationReceiptAudit(),
-            displayMessage: {
-              "zh-CN": "资料占位已加入待审核队列。",
-              "en-US": "Resource placeholder was added to the review queue.",
-            },
-          },
-          domainPersistenceSummary: createPersistedInlineOperationDomainPersistenceSummary(
-            "operation-record-resource-review-semantic-missing",
-            "knowledge-base",
-            "secondary",
-          ),
-          traceId: "trace-inline-resource-review-semantic-missing",
-        });
-      }
-
-      if (String(input) === "/api/teaching/operations/audit") {
-        expect(init?.method).toBe("GET");
-        return Response.json({
-          traceId: "trace-audit-resource-review-semantic-missing",
-          actorId: "teacher-kang",
-          courseIds: ["teacher-research-methods"],
-          recordCount: 1,
-          auditEventCount: 1,
-          domainProjectionCount: 1,
-          records: [
-            {
-              recordId: "operation-record-resource-review-semantic-missing",
-              courseId: "teacher-research-methods",
-              operationId: "knowledge-base",
-              actionSlot: "secondary",
-              status: "persisted",
-            },
-          ],
-          auditEvents: [
-            {
-              eventId: "audit-resource-review-semantic-missing",
-              traceId: "trace-inline-resource-review-semantic-missing",
-              eventType: "teaching-operation.persisted",
-              actorId: "teacher-kang",
-              authSession: createInlineAuditAuthSession(),
-              courseId: "teacher-research-methods",
-            },
-          ],
-          domainProjections: [
-            {
-              objectId: "resource-review-item-teacher-research-methods",
-              objectType: "resource-review-item",
-              courseId: "teacher-research-methods",
-              operationRecordId: "operation-record-resource-review-semantic-missing",
-            },
-          ],
-        });
-      }
-
-      expect(String(input)).toBe("/api/teaching/operations/audit/alerts");
-      return createClearInlineOperationAuditAlertsResponse(
-        "trace-inline-resource-review-semantic-missing",
-      );
-    });
-    vi.stubGlobal("fetch", fetchMock);
-
+  it("routes inline knowledge-source registration to the dedicated form without posting a placeholder", async () => {
     render(<TeachingPage />);
     await chooseWorkspaceCourse("teacher-research-methods");
 
     fireEvent.click(screen.getByRole("link", { name: "课程知识库" }));
-    fireEvent.click(screen.getByRole("button", { name: "添加资料占位" }));
-
-    await waitFor(() => {
-      expect(screen.getByText("资源复核项读回未匹配入队结果，请稍后刷新。")).toBeTruthy();
-    });
-    expect(screen.queryByText("资料占位已加入待审核队列。")).toBeNull();
-    expect(
-      screen.queryByText(
-        "领域对象已验证：resource-review-item / resource-review-item-teacher-research-methods",
-      ),
-    ).toBeNull();
+    const registrationLink = screen.getByRole("link", { name: "登记知识来源" });
+    expect(registrationLink.getAttribute("href")).toBe(
+      "/teaching/knowledge-base?course=teacher-research-methods&action=inline-teaching-workspace",
+    );
+    expect(screen.queryByRole("button", { name: "添加资料占位" })).toBeNull();
   });
 
   it("requires dashboard state business readback before claiming dashboard refresh success", async () => {
@@ -6790,7 +6730,7 @@ describe("TeachingPage", () => {
       [
         "课程知识库",
         "同步知识库索引",
-        "添加资料占位",
+        "登记知识来源",
         "知识库索引同步已保存到服务端。",
         "knowledge-base",
       ],
@@ -6905,7 +6845,11 @@ describe("TeachingPage", () => {
       expect(container.querySelector("[data-uais-teaching-workspace-panel]")).toBeTruthy();
       expect(screen.queryByRole("link", { name: /进入操作页|进入管理|打开完整配置/ })).toBeNull();
       expect(screen.getByRole("button", { name: primaryAction })).toBeTruthy();
-      expect(screen.getByRole("button", { name: secondaryAction })).toBeTruthy();
+      if (label === "课程知识库") {
+        expect(screen.getByRole("link", { name: secondaryAction })).toBeTruthy();
+      } else {
+        expect(screen.getByRole("button", { name: secondaryAction })).toBeTruthy();
+      }
 
       fireEvent.click(screen.getByRole("button", { name: primaryAction }));
 

@@ -17,6 +17,12 @@ const operationRouteWithContext =
   "/teaching/course-settings?course=research-methods&action=course-settings";
 const inviteOperationRouteWithContext =
   "/teaching/invite-code?course=research-methods&action=invite-code";
+const browserSmokeKnowledgeResource = {
+  title: "Browser smoke knowledge source",
+  sourceUrl: "https://library.example.edu/research-methods/browser-smoke",
+  rightsBasis: "open-access",
+  visibility: "course-only",
+};
 const inviteOperationDetailHydrationTextPatterns = [
   /班级加入/,
   /Class joining/,
@@ -46,9 +52,9 @@ const detailOperationCoveragePlan = [
     operationId: "knowledge-base",
     route: "/teaching/knowledge-base",
     primaryAction: "Sync Knowledge Index",
-    secondaryAction: "Add Resource Placeholder",
+    secondaryAction: "Register Knowledge Source",
     primaryButtonName: /同步知识库索引|Sync Knowledge Index/,
-    secondaryButtonName: /添加资料占位|Add Resource Placeholder/,
+    secondaryButtonName: /登记知识来源|Register Knowledge Source/,
   },
   {
     operationId: "content",
@@ -160,8 +166,9 @@ const browserInteractions = [
   "open-main-inline-knowledge-base-workspace",
   "click-main-inline-knowledge-index-sync",
   "verify-main-inline-knowledge-index-sync-submitted",
-  "click-main-inline-resource-placeholder",
-  "verify-main-inline-resource-placeholder-submitted",
+  "open-main-linked-knowledge-source-registration",
+  "submit-main-linked-knowledge-source-registration",
+  "verify-main-linked-knowledge-source-registration",
   "open-main-inline-students-workspace",
   "click-main-inline-student-roster-sync",
   "verify-main-inline-student-roster-sync-submitted",
@@ -265,7 +272,7 @@ const requiredResultKeys = [
   "mainInlineDashboardRefreshSubmitted",
   "mainInlineStudentPreviewSubmitted",
   "mainInlineAgentPermissionPreflightSubmitted",
-  "mainInlineResourcePlaceholderSubmitted",
+  "mainKnowledgeSourceRegistrationSubmitted",
   "mainInlineUnitDraftSubmitted",
   "mainInlineCollaborationInviteSubmitted",
   "mainInlineStudentGroupSuggestionSubmitted",
@@ -615,7 +622,7 @@ async function executeLiveBrowserSmoke({ baseUrl, env, apiMode }) {
   let mainInlineDashboardRefreshSubmitted = false;
   let mainInlineStudentPreviewSubmitted = false;
   let mainInlineAgentPermissionPreflightSubmitted = false;
-  let mainInlineResourcePlaceholderSubmitted = false;
+  let mainKnowledgeSourceRegistrationSubmitted = false;
   let mainInlineUnitDraftSubmitted = false;
   let mainInlineCollaborationInviteSubmitted = false;
   let mainInlineStudentGroupSuggestionSubmitted = false;
@@ -790,8 +797,8 @@ async function executeLiveBrowserSmoke({ baseUrl, env, apiMode }) {
       markMainInlineAgentPermissionPreflightSubmitted: () => {
         mainInlineAgentPermissionPreflightSubmitted = true;
       },
-      markMainInlineResourcePlaceholderSubmitted: () => {
-        mainInlineResourcePlaceholderSubmitted = true;
+      markMainKnowledgeSourceRegistrationSubmitted: () => {
+        mainKnowledgeSourceRegistrationSubmitted = true;
       },
       markMainInlineUnitDraftSubmitted: () => {
         mainInlineUnitDraftSubmitted = true;
@@ -1264,12 +1271,31 @@ async function executeLiveBrowserSmoke({ baseUrl, env, apiMode }) {
       resultKey: "mainInlineKnowledgeIndexSyncSubmitted",
       isSubmitted: () => mainInlineKnowledgeIndexSyncSubmitted,
     });
-    await clickMainInlineActionButton({
-      buttonName: /添加资料占位|Add Resource Placeholder/,
-      postCount: 6,
-      resultKey: "mainInlineResourcePlaceholderSubmitted",
-      isSubmitted: () => mainInlineResourcePlaceholderSubmitted,
+    const mainKnowledgeSourceRegistrationLink = page.getByRole("link", {
+      name: /登记知识来源|Register Knowledge Source/,
     });
+    lastInteraction = "open-main-linked-knowledge-source-registration";
+    await mainKnowledgeSourceRegistrationLink.click({ timeout: 15_000 });
+    lastInteraction = "wait-for-main-linked-knowledge-source-registration";
+    await waitForAnyText(page, [/登记公开知识来源/, /Register a public knowledge source/]);
+    lastInteraction = "fill-main-linked-knowledge-source-registration";
+    await fillKnowledgeResourceRegistration(page);
+    lastInteraction = "submit-main-linked-knowledge-source-registration";
+    await clickMainInlineActionButton({
+      buttonName: /登记知识来源|Register Knowledge Source/,
+      postCount: 6,
+      resultKey: "mainKnowledgeSourceRegistrationSubmitted",
+      isSubmitted: () => mainKnowledgeSourceRegistrationSubmitted,
+    });
+    lastInteraction = "return-to-main-teaching-after-knowledge-source-registration";
+    await page.goto(`${stripTrailingSlashes(baseUrl)}/teaching`, {
+      waitUntil: "networkidle",
+      timeout: 30_000,
+    });
+    await waitForAnyText(page, [/教师工作台/, /Teacher Workspace/]);
+    await page
+      .getByLabel(/工作台操作课程|Course for workspace actions/)
+      .selectOption(courseId);
 
     const mainInlineStudentsLink = page.getByRole("link", {
       name: /学生管理(?:工作台)?|Student Management(?: Workspace)?/,
@@ -1789,6 +1815,9 @@ async function verifyRemainingDetailOperationCoverage({
     );
     const expectedPostCount = getOperationPostCount() + 1;
     const expectedAuditReadCount = getAuditReadCount() + 1;
+    if (step.operation.operationId === "knowledge-base" && step.actionSlot === "secondary") {
+      await fillKnowledgeResourceRegistration(page);
+    }
     const button = page.getByRole("button", { name: step.buttonName });
     const click = button.click({ timeout: 15_000 });
     await waitUntil(() => getOperationPostCount() === expectedPostCount, 5_000);
@@ -1806,6 +1835,18 @@ async function verifyRemainingDetailOperationCoverage({
         : "failed",
     });
   }
+}
+
+async function fillKnowledgeResourceRegistration(page) {
+  await page
+    .getByLabel(/资料标题|Resource title/)
+    .fill(browserSmokeKnowledgeResource.title);
+  await page
+    .getByLabel(/公开 HTTPS 来源|Public HTTPS source/)
+    .fill(browserSmokeKnowledgeResource.sourceUrl);
+  await page
+    .getByLabel(/权利依据|Rights basis/)
+    .selectOption(browserSmokeKnowledgeResource.rightsBasis);
 }
 
 async function installTeachingOperationApiHandler(
@@ -1833,7 +1874,7 @@ async function installTeachingOperationApiHandler(
     markMainInlineDashboardRefreshSubmitted,
     markMainInlineStudentPreviewSubmitted,
     markMainInlineAgentPermissionPreflightSubmitted,
-    markMainInlineResourcePlaceholderSubmitted,
+    markMainKnowledgeSourceRegistrationSubmitted,
     markMainInlineUnitDraftSubmitted,
     markMainInlineCollaborationInviteSubmitted,
     markMainInlineStudentGroupSuggestionSubmitted,
@@ -2272,8 +2313,12 @@ async function installTeachingOperationApiHandler(
       if (postCount === 5 && hasTeachingOperationBody(body, "knowledge-base", "primary")) {
         markMainInlineKnowledgeIndexSyncSubmitted();
       }
-      if (postCount === 6 && hasTeachingOperationBody(body, "knowledge-base", "secondary")) {
-        markMainInlineResourcePlaceholderSubmitted();
+      if (
+        postCount === 6 &&
+        hasTeachingOperationBody(body, "knowledge-base", "secondary") &&
+        hasKnowledgeResourceRegistration(body)
+      ) {
+        markMainKnowledgeSourceRegistrationSubmitted();
       }
       if (postCount === 7 && hasTeachingOperationBody(body, "students", "primary")) {
         markMainInlineStudentRosterSyncSubmitted();
@@ -2508,6 +2553,19 @@ function hasTeachingOperationBody(value, expectedOperationId, expectedActionSlot
   );
 }
 
+function hasKnowledgeResourceRegistration(value) {
+  if (!isRecord(value) || !isRecord(value.knowledgeResource)) {
+    return false;
+  }
+  const resource = value.knowledgeResource;
+  return (
+    resource.title === browserSmokeKnowledgeResource.title &&
+    resource.sourceUrl === browserSmokeKnowledgeResource.sourceUrl &&
+    resource.rightsBasis === browserSmokeKnowledgeResource.rightsBasis &&
+    resource.visibility === browserSmokeKnowledgeResource.visibility
+  );
+}
+
 function isTeachingOperationDetailCoverageBody(value) {
   return (
     isRecord(value) &&
@@ -2611,6 +2669,28 @@ function createBrowserSmokeDomainProjection({
       previewId: `preview-${courseId}`,
       previewUrl: `/learning?course=${courseId}&preview=teacher`,
       generatedAt: createdAt,
+    };
+  }
+  if (operationId === "knowledge-base" && actionSlot === "secondary") {
+    return {
+      operationRecordId: recordId,
+      courseId,
+      objectType: "resource-review-item",
+      objectId: `resource-review-item-${createHash("sha256")
+        .update(`${courseId}\0${browserSmokeKnowledgeResource.sourceUrl}`, "utf8")
+        .digest("hex")
+        .slice(0, 32)}`,
+      reviewStatus: "pending-teacher-review",
+      resourceSource: "teacher-submitted-url",
+      title: browserSmokeKnowledgeResource.title,
+      sourceFingerprint: `sha256:${createHash("sha256")
+        .update(browserSmokeKnowledgeResource.sourceUrl, "utf8")
+        .digest("hex")}`,
+      rightsBasis: browserSmokeKnowledgeResource.rightsBasis,
+      visibility: browserSmokeKnowledgeResource.visibility,
+      reviewPolicy: "teacher-review-before-knowledge-index",
+      queuedBy: actorId,
+      queuedAt: createdAt,
     };
   }
   if (operationId === "invite-code" && actionSlot === "primary" && inviteCode) {

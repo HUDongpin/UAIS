@@ -317,8 +317,8 @@ export const operationConfigs: Record<TeachingOperationId, OperationConfig> = {
       "en-US": "Organize slides, readings, cases, activity records, and citable agent material.",
     },
     readyMessage: {
-      "zh-CN": "知识库索引保持只读预览状态。",
-      "en-US": "Knowledge base index is in read-only preview.",
+      "zh-CN": "可登记公开知识来源；教师审核后才能进入索引流程。",
+      "en-US": "Public knowledge sources can be registered and must be teacher-reviewed before indexing.",
     },
     primaryAction: {
       "zh-CN": "同步知识库索引",
@@ -329,12 +329,12 @@ export const operationConfigs: Record<TeachingOperationId, OperationConfig> = {
       "en-US": "Knowledge index synced to local preview.",
     },
     secondaryAction: {
-      "zh-CN": "添加资料占位",
-      "en-US": "Add Resource Placeholder",
+      "zh-CN": "登记知识来源",
+      "en-US": "Register Knowledge Source",
     },
     secondaryMessage: {
-      "zh-CN": "资料占位已加入待审核队列。",
-      "en-US": "Resource placeholder added to review queue.",
+      "zh-CN": "知识来源已登记并写入教师审核队列。",
+      "en-US": "Knowledge source registered in the teacher review queue.",
     },
     metrics: [
       metric("资料", "Resources", "42"),

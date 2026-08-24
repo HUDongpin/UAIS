@@ -27,6 +27,24 @@ describe("deployed teaching operation detail browser smoke", () => {
     expect(source).toContain('screenshots: "omitted"');
   });
 
+  it("exercises reviewed knowledge-source registration instead of a placeholder mutation", () => {
+    const source = readFileSync("scripts/teaching-operation-detail-browser-smoke.mjs", "utf8");
+
+    expect(source).toContain('secondaryAction: "Register Knowledge Source"');
+    expect(source).toContain("open-main-linked-knowledge-source-registration");
+    expect(source).toContain("submit-main-linked-knowledge-source-registration");
+    expect(source).toContain("mainKnowledgeSourceRegistrationSubmitted");
+    expect(source).toContain("hasKnowledgeResourceRegistration(body)");
+    expect(source).toContain('title: "Browser smoke knowledge source"');
+    expect(source).toContain(
+      'sourceUrl: "https://library.example.edu/research-methods/browser-smoke"',
+    );
+    expect(source).toContain('rightsBasis: "open-access"');
+    expect(source).toContain('visibility: "course-only"');
+    expect(source).not.toContain("Add Resource Placeholder");
+    expect(source).not.toContain("mainInlineResourcePlaceholderSubmitted");
+  });
+
   it("prints Node v24-safe help usage for env-file arguments", () => {
     const output = execFileSync("node", [
       "scripts/teaching-operation-detail-browser-smoke.mjs",
@@ -181,8 +199,9 @@ describe("deployed teaching operation detail browser smoke", () => {
           "open-main-inline-knowledge-base-workspace",
           "click-main-inline-knowledge-index-sync",
           "verify-main-inline-knowledge-index-sync-submitted",
-          "click-main-inline-resource-placeholder",
-          "verify-main-inline-resource-placeholder-submitted",
+          "open-main-linked-knowledge-source-registration",
+          "submit-main-linked-knowledge-source-registration",
+          "verify-main-linked-knowledge-source-registration",
           "open-main-inline-students-workspace",
           "click-main-inline-student-roster-sync",
           "verify-main-inline-student-roster-sync-submitted",
@@ -267,7 +286,7 @@ describe("deployed teaching operation detail browser smoke", () => {
             operationId: "knowledge-base",
             route: "/teaching/knowledge-base",
             primaryAction: "Sync Knowledge Index",
-            secondaryAction: "Add Resource Placeholder",
+            secondaryAction: "Register Knowledge Source",
           },
           {
             operationId: "content",
@@ -677,7 +696,7 @@ describe("deployed teaching operation detail browser smoke", () => {
           mainInlineDashboardRefreshSubmitted: true,
           mainInlineStudentPreviewSubmitted: true,
           mainInlineAgentPermissionPreflightSubmitted: true,
-          mainInlineResourcePlaceholderSubmitted: true,
+          mainKnowledgeSourceRegistrationSubmitted: true,
           mainInlineUnitDraftSubmitted: true,
           mainInlineCollaborationInviteSubmitted: true,
           mainInlineStudentGroupSuggestionSubmitted: true,
@@ -699,7 +718,7 @@ describe("deployed teaching operation detail browser smoke", () => {
           operationApiContinueCount: 0,
           operationApiFetchCount: 44,
           auditReadbackContinueCount: 44,
-          auditAlertReadbackContinueCount: 20,
+          auditAlertReadbackContinueCount: 19,
           alertNotificationPostContinueCount: 1,
           alertNotificationReadbackContinueCount: 1,
           rollbackApiContinueCount: 1,
@@ -774,7 +793,7 @@ describe("deployed teaching operation detail browser smoke", () => {
             "mainInlineDashboardRefreshSubmitted",
             "mainInlineStudentPreviewSubmitted",
             "mainInlineAgentPermissionPreflightSubmitted",
-            "mainInlineResourcePlaceholderSubmitted",
+            "mainKnowledgeSourceRegistrationSubmitted",
             "mainInlineUnitDraftSubmitted",
             "mainInlineCollaborationInviteSubmitted",
             "mainInlineStudentGroupSuggestionSubmitted",
@@ -1073,7 +1092,7 @@ const marker = {
   mainInlineDashboardRefreshSubmitted: false,
   mainInlineStudentPreviewSubmitted: false,
   mainInlineAgentPermissionPreflightSubmitted: false,
-  mainInlineResourcePlaceholderSubmitted: false,
+  mainKnowledgeSourceRegistrationSubmitted: false,
   mainInlineUnitDraftSubmitted: false,
   mainInlineCollaborationInviteSubmitted: false,
   mainInlineStudentGroupSuggestionSubmitted: false,
@@ -1149,7 +1168,13 @@ function createRouteRequest(pathname, method, body) {
           marker.mainInlineAgentPermissionPreflightSubmitted = true;
         }
         if (body && body.operationId === "knowledge-base" && body.actionSlot === "secondary") {
-          marker.mainInlineResourcePlaceholderSubmitted = true;
+          marker.mainKnowledgeSourceRegistrationSubmitted = Boolean(
+            body.knowledgeResource &&
+            body.knowledgeResource.title === "Browser smoke knowledge source" &&
+            body.knowledgeResource.sourceUrl === "https://library.example.edu/research-methods/browser-smoke" &&
+            body.knowledgeResource.rightsBasis === "open-access" &&
+            body.knowledgeResource.visibility === "course-only"
+          );
         }
         if (body && body.operationId === "content" && body.actionSlot === "secondary") {
           marker.mainInlineUnitDraftSubmitted = true;
@@ -1325,7 +1350,13 @@ function createRouteRequest(pathname, method, body) {
           marker.mainInlineAgentPermissionPreflightSubmitted = true;
         }
         if (body && body.operationId === "knowledge-base" && body.actionSlot === "secondary") {
-          marker.mainInlineResourcePlaceholderSubmitted = true;
+          marker.mainKnowledgeSourceRegistrationSubmitted = Boolean(
+            body.knowledgeResource &&
+            body.knowledgeResource.title === "Browser smoke knowledge source" &&
+            body.knowledgeResource.sourceUrl === "https://library.example.edu/research-methods/browser-smoke" &&
+            body.knowledgeResource.rightsBasis === "open-access" &&
+            body.knowledgeResource.visibility === "course-only"
+          );
         }
         if (body && body.operationId === "content" && body.actionSlot === "secondary") {
           marker.mainInlineUnitDraftSubmitted = true;
@@ -1556,6 +1587,9 @@ let currentDialog = "";
 let currentSourceAction = "";
 let currentCourseSettingsName = "大学研究方法";
 let pendingCourseSettingsName = "";
+let pendingKnowledgeResourceTitle = "";
+let pendingKnowledgeResourceUrl = "";
+let pendingKnowledgeResourceRightsBasis = "";
 let mainCourseCardPatched = false;
 const pendingResponseWaiters = [];
 
@@ -1716,6 +1750,14 @@ const page = {
   getByLabel: (label) => ({
     fill: async (value) => {
       const labelText = String(label);
+      if (labelText.includes("资料标题") || labelText.includes("Resource title")) {
+        pendingKnowledgeResourceTitle = String(value);
+        return;
+      }
+      if (labelText.includes("公开 HTTPS 来源") || labelText.includes("Public HTTPS source")) {
+        pendingKnowledgeResourceUrl = String(value);
+        return;
+      }
       if (
         labelText.includes("课程名称") ||
         labelText.includes("Course Name") ||
@@ -1723,6 +1765,12 @@ const page = {
         labelText.includes("Name")
       ) {
         pendingCourseSettingsName = String(value);
+      }
+    },
+    selectOption: async (value) => {
+      const labelText = String(label);
+      if (labelText.includes("权利依据") || labelText.includes("Rights basis")) {
+        pendingKnowledgeResourceRightsBasis = String(value);
       }
     },
     inputValue: async () => currentCourseSettingsName,
@@ -1754,6 +1802,11 @@ const page = {
           const name = String(options && options.name);
           if (name.includes("Knowledge Base") || name.includes("课程知识库")) {
             currentWorkspace = "knowledge-base";
+          }
+          if (name.includes("Register Knowledge Source") || name.includes("登记知识来源")) {
+            currentSurface = "operation-detail";
+            currentWorkspace = "knowledge-base";
+            currentSourceAction = "inline-teaching-workspace";
           }
           if (name.includes("Student Management") || name.includes("学生管理")) {
             currentWorkspace = "students";
@@ -1852,8 +1905,8 @@ const page = {
             buttonName.includes("预览学生端") ||
             buttonName.includes("Run Permission Preflight") ||
             buttonName.includes("运行权限预检") ||
-            buttonName.includes("Add Resource Placeholder") ||
-            buttonName.includes("添加资料占位") ||
+            buttonName.includes("Register Knowledge Source") ||
+            buttonName.includes("登记知识来源") ||
             buttonName.includes("Generate Unit Draft") ||
             buttonName.includes("生成单元草稿") ||
             buttonName.includes("Send Collaboration Invite") ||
@@ -1894,6 +1947,18 @@ const page = {
               ? { targetClassId: "teacher-course-main-browser-smoke-class-1" }
               : {}),
             ...(currentSourceAction ? { sourceAction: currentSourceAction } : {}),
+            ...(
+              currentWorkspace === "knowledge-base" && isSecondaryAction
+                ? {
+                    knowledgeResource: {
+                      title: pendingKnowledgeResourceTitle,
+                      sourceUrl: pendingKnowledgeResourceUrl,
+                      rightsBasis: pendingKnowledgeResourceRightsBasis,
+                      visibility: "course-only",
+                    },
+                  }
+                : {}
+            ),
             ...(
               currentSurface === "main-teaching" &&
               currentWorkspace === "course-settings" &&
@@ -2003,7 +2068,7 @@ module.exports = {
         mainInlineDashboardRefreshSubmitted: false,
         mainInlineStudentPreviewSubmitted: false,
         mainInlineAgentPermissionPreflightSubmitted: false,
-        mainInlineResourcePlaceholderSubmitted: false,
+        mainKnowledgeSourceRegistrationSubmitted: false,
         mainInlineUnitDraftSubmitted: false,
         mainInlineCollaborationInviteSubmitted: false,
         mainInlineStudentGroupSuggestionSubmitted: false,

@@ -529,7 +529,7 @@ The enterprise live evidence audit now rejects target-specific production-live f
 - `mainInlineDashboardRefreshSubmitted`
 - `mainInlineStudentPreviewSubmitted`
 - `mainInlineAgentPermissionPreflightSubmitted`
-- `mainInlineResourcePlaceholderSubmitted`
+- `mainKnowledgeSourceRegistrationSubmitted`
 - `mainInlineUnitDraftSubmitted`
 - `mainInlineCollaborationInviteSubmitted`
 - `mainInlineStudentGroupSuggestionSubmitted`

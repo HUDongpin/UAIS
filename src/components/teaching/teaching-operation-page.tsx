@@ -36,6 +36,19 @@ type TeachingOperationPageProps = {
   action?: string;
 };
 
+type KnowledgeResourceRightsBasis =
+  | ""
+  | "owner-created"
+  | "licensed"
+  | "open-access"
+  | "permission-granted";
+
+type KnowledgeResourceAuditExpectation = {
+  title: string;
+  rightsBasis: Exclude<KnowledgeResourceRightsBasis, "">;
+  visibility: "course-only";
+};
+
 type TeachingOperationBackendArtifact =
   | {
       kind: "export-file";
@@ -122,6 +135,10 @@ type TeachingOperationAuditReadbackResponse = {
     queuedBy?: string;
     reviewStatus?: string;
     resourceSource?: string;
+    title?: string;
+    sourceFingerprint?: string;
+    rightsBasis?: string;
+    visibility?: string;
     reviewPolicy?: string;
     queuedAt?: string;
     publishedBy?: string;
@@ -287,11 +304,21 @@ export function TeachingOperationPage({
     useState<ExportManifestState>(defaultExportManifest);
   const [inviteCode, setInviteCode] = useState(defaultInviteCode);
   const [auditStatus, setAuditStatus] = useState<OperationAuditStatus>();
+  const [knowledgeResourceTitle, setKnowledgeResourceTitle] = useState("");
+  const [knowledgeResourceUrl, setKnowledgeResourceUrl] = useState("");
+  const [knowledgeResourceRightsBasis, setKnowledgeResourceRightsBasis] =
+    useState<KnowledgeResourceRightsBasis>("");
   const [isActionPending, setIsActionPending] = useState(false);
   const actionPendingRef = useRef(false);
   const isStatusFailure = isTeachingOperationFailureStatus(statusMessage, locale);
   const isAuditPending = auditStatus?.status === "pending";
   const areActionButtonsDisabled = isActionPending || isAuditPending;
+  const isKnowledgeResourceRegistrationReady = Boolean(
+    selectedCourseId &&
+      knowledgeResourceTitle.trim() &&
+      knowledgeResourceUrl.trim() &&
+      knowledgeResourceRightsBasis,
+  );
 
   function runPrimaryAction() {
     if (actionPendingRef.current || isAuditPending) {
@@ -302,6 +329,9 @@ export function TeachingOperationPage({
 
   function runSecondaryAction() {
     if (actionPendingRef.current || isAuditPending) {
+      return;
+    }
+    if (safeOperationId === "knowledge-base" && !isKnowledgeResourceRegistrationReady) {
       return;
     }
     void persistTeachingOperationAction("secondary");
@@ -331,6 +361,17 @@ export function TeachingOperationPage({
 
     try {
       const sourceAction = action;
+      const knowledgeResource =
+        safeOperationId === "knowledge-base" &&
+        actionSlot === "secondary" &&
+        knowledgeResourceRightsBasis
+          ? {
+              title: knowledgeResourceTitle.trim(),
+              sourceUrl: knowledgeResourceUrl.trim(),
+              rightsBasis: knowledgeResourceRightsBasis,
+              visibility: "course-only" as const,
+            }
+          : undefined;
       const targetClassId = resolveTeachingOperationTargetClassId({
         operationId: safeOperationId,
         selectedCourseId,
@@ -344,6 +385,7 @@ export function TeachingOperationPage({
           courseId: selectedCourseId,
           ...(targetClassId ? { targetClassId } : {}),
           sourceAction,
+          ...(knowledgeResource ? { knowledgeResource } : {}),
           idempotencyKey: createTeachingOperationIdempotencyKey({
             operationId: safeOperationId,
             actionSlot,
@@ -429,6 +471,15 @@ export function TeachingOperationPage({
           actionSlot,
           verifiedStatusMessage,
           artifacts: verifiedArtifacts,
+          ...(knowledgeResource
+            ? {
+                knowledgeResource: {
+                  title: knowledgeResource.title,
+                  rightsBasis: knowledgeResource.rightsBasis,
+                  visibility: knowledgeResource.visibility,
+                },
+              }
+            : {}),
         });
       } else {
         applyTeachingOperationArtifacts(verifiedArtifacts);
@@ -449,6 +500,7 @@ export function TeachingOperationPage({
     actionSlot: "primary" | "secondary";
     verifiedStatusMessage?: string;
     artifacts?: VerifiedOperationArtifacts;
+    knowledgeResource?: KnowledgeResourceAuditExpectation;
   }) {
     setAuditStatus({
       status: "pending",
@@ -491,6 +543,7 @@ export function TeachingOperationPage({
         !doesOperationPageDomainProjectionMatchBusinessSemantics(matchingDomainProjection, {
           operationId: safeOperationId,
           actionSlot: input.actionSlot,
+          knowledgeResource: input.knowledgeResource,
         })
       ) {
         throw new Error("Teaching operation audit readback did not include the saved operation.");
@@ -511,6 +564,11 @@ export function TeachingOperationPage({
           objectType: matchingDomainProjection.objectType,
         },
       });
+      if (input.knowledgeResource) {
+        setKnowledgeResourceTitle("");
+        setKnowledgeResourceUrl("");
+        setKnowledgeResourceRightsBasis("");
+      }
       applyTeachingOperationArtifacts(input.artifacts);
       if (input.verifiedStatusMessage) {
         setStatusMessage(input.verifiedStatusMessage);
@@ -548,6 +606,7 @@ export function TeachingOperationPage({
     input: {
       operationId: TeachingOperationId;
       actionSlot: "primary" | "secondary";
+      knowledgeResource?: KnowledgeResourceAuditExpectation;
     },
   ) {
     if (input.operationId === "course-settings" && input.actionSlot === "primary") {
@@ -637,7 +696,13 @@ export function TeachingOperationPage({
       return (
         projection.objectType === "resource-review-item" &&
         projection.reviewStatus === "pending-teacher-review" &&
-        projection.resourceSource === "teacher-placeholder" &&
+        projection.resourceSource === "teacher-submitted-url" &&
+        typeof projection.title === "string" &&
+        projection.title === input.knowledgeResource?.title &&
+        typeof projection.sourceFingerprint === "string" &&
+        /^sha256:[a-f0-9]{64}$/.test(projection.sourceFingerprint) &&
+        projection.rightsBasis === input.knowledgeResource?.rightsBasis &&
+        projection.visibility === "course-only" &&
         projection.reviewPolicy === "teacher-review-before-knowledge-index" &&
         typeof projection.queuedBy === "string" &&
         projection.queuedBy.trim().length > 0 &&
@@ -1091,6 +1156,67 @@ export function TeachingOperationPage({
               </p>
             </div>
 
+            {safeOperationId === "knowledge-base" ? (
+              <fieldset className="mt-5 rounded-2xl border border-[var(--border)] bg-[var(--surface-soft)] p-4">
+                <legend className="px-1 text-sm font-semibold text-[var(--foreground)]">
+                  {locale === "zh-CN" ? "登记公开知识来源" : "Register a public knowledge source"}
+                </legend>
+                <div className="mt-2 grid gap-4 lg:grid-cols-2">
+                  <label className="grid gap-2 text-sm font-semibold text-[var(--foreground)]">
+                    {locale === "zh-CN" ? "资料标题" : "Resource title"}
+                    <input
+                      type="text"
+                      value={knowledgeResourceTitle}
+                      maxLength={160}
+                      onChange={(event) => setKnowledgeResourceTitle(event.target.value)}
+                      className="h-11 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 text-sm font-normal text-[var(--foreground)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+                    />
+                  </label>
+                  <label className="grid gap-2 text-sm font-semibold text-[var(--foreground)]">
+                    {locale === "zh-CN" ? "公开 HTTPS 来源" : "Public HTTPS source"}
+                    <input
+                      type="url"
+                      inputMode="url"
+                      autoComplete="off"
+                      value={knowledgeResourceUrl}
+                      maxLength={2048}
+                      aria-describedby="knowledge-resource-url-help"
+                      onChange={(event) => setKnowledgeResourceUrl(event.target.value)}
+                      className="h-11 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 text-sm font-normal text-[var(--foreground)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+                    />
+                  </label>
+                  <label className="grid gap-2 text-sm font-semibold text-[var(--foreground)]">
+                    {locale === "zh-CN" ? "权利依据" : "Rights basis"}
+                    <select
+                      value={knowledgeResourceRightsBasis}
+                      onChange={(event) =>
+                        setKnowledgeResourceRightsBasis(
+                          event.target.value as KnowledgeResourceRightsBasis,
+                        )
+                      }
+                      className="h-11 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 text-sm font-normal text-[var(--foreground)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+                    >
+                      <option value="">{locale === "zh-CN" ? "请选择" : "Select one"}</option>
+                      <option value="owner-created">{locale === "zh-CN" ? "教师原创" : "Owner-created"}</option>
+                      <option value="licensed">{locale === "zh-CN" ? "已获许可" : "Licensed"}</option>
+                      <option value="open-access">{locale === "zh-CN" ? "开放获取" : "Open access"}</option>
+                      <option value="permission-granted">{locale === "zh-CN" ? "已获授权" : "Permission granted"}</option>
+                    </select>
+                  </label>
+                  <div className="rounded-xl border border-[var(--accent-border)] bg-[var(--accent-soft)] px-3 py-3 text-sm text-[var(--foreground)]">
+                    <p className="font-semibold">
+                      {locale === "zh-CN" ? "可见范围：仅当前课程" : "Visibility: current course only"}
+                    </p>
+                    <p id="knowledge-resource-url-help" className="mt-1 leading-6 text-[var(--muted)]">
+                      {locale === "zh-CN"
+                        ? "本步骤只登记来源并排队审核，不会立即抓取内容或同步索引。"
+                        : "This step only registers the source for review; it does not fetch content or sync the index."}
+                    </p>
+                  </div>
+                </div>
+              </fieldset>
+            ) : undefined}
+
             <div className="mt-5 flex flex-wrap gap-3">
               <button
                 type="button"
@@ -1104,7 +1230,11 @@ export function TeachingOperationPage({
               <button
                 type="button"
                 className="inline-flex h-11 items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface)] px-5 text-sm font-semibold text-[var(--foreground)] outline-none transition hover:bg-[var(--surface-soft)] active:translate-y-px focus-visible:ring-2 focus-visible:ring-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[var(--surface)] disabled:active:translate-y-0"
-                disabled={areActionButtonsDisabled}
+                disabled={
+                  areActionButtonsDisabled ||
+                  (safeOperationId === "knowledge-base" &&
+                    !isKnowledgeResourceRegistrationReady)
+                }
                 onClick={runSecondaryAction}
               >
                 <CheckCircle size={18} weight="duotone" />

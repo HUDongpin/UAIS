@@ -114,6 +114,7 @@ export function AgentWorkspace({
               locale={locale}
               inlineWorkspaceStatuses={inlineWorkspaceStatuses}
               isCourseChosen={Boolean(selectedCourseAction?.courseId)}
+              selectedCourseId={selectedCourseAction?.courseId}
               runInlineWorkspaceAction={runInlineWorkspaceAction}
             />}
           </div>

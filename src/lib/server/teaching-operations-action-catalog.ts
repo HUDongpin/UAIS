@@ -66,10 +66,10 @@ export const actionDefinitions: Record<
       "knowledge_indexes",
     ),
     secondary: action(
-      "add-resource-placeholder",
-      "资料占位已写入审核队列。",
-      "Resource placeholder written to the review queue.",
-      "resource_placeholders",
+      "register-knowledge-source",
+      "知识来源已登记并写入教师审核队列。",
+      "Knowledge source registered in the teacher review queue.",
+      "knowledge_resource_reviews",
     ),
   },
   content: {

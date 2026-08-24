@@ -317,7 +317,16 @@ export function findMatchingInlineDomainProjection(
     return (
       projection.objectType === "resource-review-item" &&
       projection.reviewStatus === "pending-teacher-review" &&
-      projection.resourceSource === "teacher-placeholder" &&
+      projection.resourceSource === "teacher-submitted-url" &&
+      typeof projection.title === "string" &&
+      projection.title.trim().length > 0 &&
+      typeof projection.sourceFingerprint === "string" &&
+      /^sha256:[a-f0-9]{64}$/.test(projection.sourceFingerprint) &&
+      (projection.rightsBasis === "owner-created" ||
+        projection.rightsBasis === "licensed" ||
+        projection.rightsBasis === "open-access" ||
+        projection.rightsBasis === "permission-granted") &&
+      projection.visibility === "course-only" &&
       projection.reviewPolicy === "teacher-review-before-knowledge-index" &&
       typeof projection.queuedBy === "string" &&
       projection.queuedBy.trim().length > 0 &&
@@ -734,4 +743,3 @@ export function findMatchingInlineDomainProjection(
     }
     return localizedText(TEACHING_OPERATION_AUDIT_FAILED_MESSAGE, locale);
   }
-

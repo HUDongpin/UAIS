@@ -691,7 +691,14 @@ describe("UAIS external durable storage reference service", () => {
                 reviewStatus: "pending-teacher-review",
                 operationRecordId: "resource-review-item-operation-external-storage-snapshot",
                 sourceAction: "external-storage-service-test",
-                resourceSource: "teacher-placeholder",
+                resourceSource: "teacher-submitted-url",
+                title: "External storage research methods guide",
+                sourceUrl:
+                  "https://library.example.edu/research-methods/external-storage",
+                sourceFingerprint:
+                  "sha256:dc81f7a91d1fdeca617e6bf8dacc884575930756184d173c4e2f422903957953",
+                rightsBasis: "open-access",
+                visibility: "course-only",
                 reviewPolicy: "teacher-review-before-knowledge-index",
                 queuedAt: "2026-06-22T11:20:00.000Z",
                 storagePolicy: "external-redacted-teaching-course-management-snapshot",
@@ -1108,6 +1115,15 @@ describe("UAIS external durable storage reference service", () => {
       expect(persistedSnapshot).toContain(
         "resource-review-item-operation-external-storage-snapshot",
       );
+      expect(persistedSnapshot).toContain("teacher-submitted-url");
+      expect(persistedSnapshot).toContain("External storage research methods guide");
+      expect(persistedSnapshot).toContain(
+        "https://library.example.edu/research-methods/external-storage",
+      );
+      expect(persistedSnapshot).toContain(
+        "sha256:dc81f7a91d1fdeca617e6bf8dacc884575930756184d173c4e2f422903957953",
+      );
+      expect(persistedSnapshot).toContain("open-access");
       expect(persistedSnapshot).toContain("course-content-operation-external-storage-snapshot");
       expect(persistedSnapshot).toContain("course-unit-draft-operation-external-storage-snapshot");
       expect(persistedSnapshot).toContain("dashboard-state-operation-external-storage-snapshot");
@@ -1138,6 +1154,85 @@ describe("UAIS external durable storage reference service", () => {
       expect(JSON.stringify(initial)).not.toContain(accessToken);
       expect(JSON.stringify(replaceReceipt)).not.toContain(accessToken);
       expect(JSON.stringify(stale)).not.toContain(accessToken);
+    } finally {
+      await rm(dataDir, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects forged knowledge-source fingerprints before snapshot persistence", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "uais-external-storage-resource-review-"));
+    const accessToken = "test-external-storage-token";
+    const server = spawn("node", [
+      "scripts/external-storage-service.mjs",
+      "--host",
+      "127.0.0.1",
+      "--port",
+      "0",
+      "--data-dir",
+      dataDir,
+    ], {
+      cwd: process.cwd(),
+      env: {
+        ...process.env,
+        UAIS_EXTERNAL_STORAGE_ACCESS_TOKEN: accessToken,
+      },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    spawnedServers.push(server);
+
+    try {
+      const ready = await waitForServiceReady(server);
+      const response = await fetch(
+        `http://${ready.host}:${ready.port}/teaching-course-management/database`,
+        {
+          method: "PUT",
+          headers: {
+            authorization: `Bearer ${accessToken}`,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            action: "replace-teaching-course-management-database",
+            expectedRevision: "rev-empty",
+            database: {
+              schemaVersion: "uais-teaching-course-management-v1",
+              updatedAt: "2026-06-22T11:20:00.000Z",
+              courses: [],
+              classes: [],
+              memberships: [],
+              resourceReviewItems: [
+                {
+                  resourceReviewItemId: "resource-review-item-forged-fingerprint",
+                  courseId: "teacher-course-forged-fingerprint",
+                  ownerTeacherId: "teacher-kang",
+                  queuedBy: "teacher-kang",
+                  reviewStatus: "pending-teacher-review",
+                  operationRecordId: "resource-review-operation-forged-fingerprint",
+                  sourceAction: "external-storage-service-test",
+                  resourceSource: "teacher-submitted-url",
+                  title: "Forged fingerprint probe",
+                  sourceUrl: "https://library.example.edu/research-methods/forged",
+                  sourceFingerprint: `sha256:${"0".repeat(64)}`,
+                  rightsBasis: "open-access",
+                  visibility: "course-only",
+                  reviewPolicy: "teacher-review-before-knowledge-index",
+                  queuedAt: "2026-06-22T11:20:00.000Z",
+                  storagePolicy: "external-redacted-teaching-course-management-snapshot",
+                  storageWritePolicy: "external-optimistic-snapshot-replace",
+                },
+              ],
+              auditEvents: [],
+            },
+          }),
+        },
+      );
+      const body = await response.json();
+
+      expect(response.status).toBe(400);
+      expect(body.error).toBe("Invalid teaching knowledge resource metadata.");
+      expect(JSON.stringify(body)).not.toContain("library.example.edu");
+      await expect(
+        readFile(join(dataDir, "teaching-course-management", "database.json"), "utf8"),
+      ).rejects.toMatchObject({ code: "ENOENT" });
     } finally {
       await rm(dataDir, { recursive: true, force: true });
     }

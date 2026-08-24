@@ -3,6 +3,7 @@ import type { LocalizedText } from "@/i18n/copy";
 // Type-only, so the pure-type module stays free of runtime imports and no cycle
 // is created with the postgres store (which imports this store's normalizer).
 import type { TeachingOperationRepository } from "./teaching-operations-postgres-store";
+import type { TeachingKnowledgeResourceRegistration } from "./teaching-knowledge-resource";
 
 // All shared domain types for the teaching-operations store (Phase 3
 // decomposition). Extracted as a pure type module (no runtime code); the store
@@ -19,6 +20,9 @@ export type TeachingOperationActionId =
   | "save-agent-plan"
   | "run-permission-preflight"
   | "sync-knowledge-index"
+  | "register-knowledge-source"
+  // Read compatibility for operation records created before source registration
+  // replaced the placeholder action. The current catalog never emits this id.
   | "add-resource-placeholder"
   | "publish-course-content"
   | "generate-unit-draft"
@@ -260,7 +264,7 @@ export type TeachingOperationQuizBoardStateProjection = {
   redaction: TeachingOperationRedaction;
 };
 
-export type TeachingOperationResourceReviewItemProjection = {
+type TeachingOperationResourceReviewItemProjectionBase = {
   objectId: string;
   objectType: "resource-review-item";
   courseId: string;
@@ -268,12 +272,30 @@ export type TeachingOperationResourceReviewItemProjection = {
   reviewStatus: "pending-teacher-review";
   operationRecordId: string;
   sourceAction?: string;
-  resourceSource: "teacher-placeholder";
   reviewPolicy: "teacher-review-before-knowledge-index";
   queuedAt: string;
   storagePolicy: "domain-projection-teaching-resource-review-item";
   redaction: TeachingOperationRedaction;
 };
+
+export type TeachingOperationResourceReviewItemProjection =
+  TeachingOperationResourceReviewItemProjectionBase &
+    (
+      | {
+          resourceSource: "teacher-placeholder";
+        }
+      | {
+          resourceSource: "teacher-submitted-url";
+          title: string;
+          sourceFingerprint: string;
+          rightsBasis:
+            | "owner-created"
+            | "licensed"
+            | "open-access"
+            | "permission-granted";
+          visibility: "course-only";
+        }
+    );
 
 export type TeachingOperationUnitDraftProjection = {
   objectId: string;
@@ -944,6 +966,7 @@ export type ExecuteTeachingOperationActionInput = {
   sourceAction?: string;
   idempotencyKey?: string;
   courseSettingsPatch?: unknown;
+  knowledgeResource?: unknown;
   audit?: {
     traceId: string;
     actorRole: "teacher";
@@ -973,9 +996,10 @@ export type TeachingOperationInviteCodeAllocator = (input: {
 
 export type ValidatedExecuteTeachingOperationActionInput = Omit<
   ExecuteTeachingOperationActionInput,
-  "operationId"
+  "operationId" | "knowledgeResource"
 > & {
   operationId: TeachingOperationId;
+  knowledgeResource?: TeachingKnowledgeResourceRegistration;
 };
 
 export type TeachingGradebookReleaseAuditInput = {

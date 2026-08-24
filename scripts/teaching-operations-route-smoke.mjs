@@ -34,6 +34,12 @@ const routes = [
 const unsafeExportManifestId = "../unsafe-export-manifest-id";
 const unsafeGradebookUpdateId = "../unsafe-gradebook-object-id";
 const unsafeBackupId = "../unsafe-backup-id";
+const smokeKnowledgeResource = {
+  title: "Route smoke knowledge source",
+  sourceUrl: "https://library.example.edu/research-methods/route-smoke",
+  rightsBasis: "open-access",
+  visibility: "course-only",
+};
 const teachingOperationsSchema = {
   schemaVersion: "uais-teaching-operations-v1",
   backupSchemaVersion: "uais-teaching-operations-backup-v1",
@@ -1122,6 +1128,7 @@ async function executeLiveSmoke({
       actionSlot: "secondary",
       courseId,
       sourceAction: "route-smoke-resource-review",
+      knowledgeResource: smokeKnowledgeResource,
       idempotencyKey: createSmokeResourceReviewItemIdempotencyKey({
         courseId,
         environment: plan.environment,
@@ -4747,18 +4754,36 @@ function hasResourceReviewItemDomainObject({ body, courseId, recordId }) {
   return body.database.resourceReviewItems.some(
     (item) =>
       isRecord(item) &&
-      item.resourceReviewItemId === `resource-review-item-${courseId}` &&
+      item.resourceReviewItemId === createSmokeResourceReviewItemId(courseId) &&
       item.courseId === courseId &&
       item.ownerTeacherId === getExpectedSmokeTeacherId() &&
       item.queuedBy === getExpectedSmokeTeacherId() &&
       item.reviewStatus === "pending-teacher-review" &&
       item.operationRecordId === recordId &&
       item.sourceAction === "route-smoke-resource-review" &&
-      item.resourceSource === "teacher-placeholder" &&
+      item.resourceSource === "teacher-submitted-url" &&
+      item.title === smokeKnowledgeResource.title &&
+      item.sourceUrl === smokeKnowledgeResource.sourceUrl &&
+      item.sourceFingerprint === createSmokeKnowledgeResourceFingerprint() &&
+      item.rightsBasis === smokeKnowledgeResource.rightsBasis &&
+      item.visibility === smokeKnowledgeResource.visibility &&
       item.reviewPolicy === "teacher-review-before-knowledge-index" &&
       item.storagePolicy === "external-redacted-teaching-course-management-snapshot" &&
       item.storageWritePolicy === "external-optimistic-snapshot-replace",
   );
+}
+
+function createSmokeResourceReviewItemId(courseId) {
+  return `resource-review-item-${createHash("sha256")
+    .update(`${courseId}\0${smokeKnowledgeResource.sourceUrl}`, "utf8")
+    .digest("hex")
+    .slice(0, 32)}`;
+}
+
+function createSmokeKnowledgeResourceFingerprint() {
+  return `sha256:${createHash("sha256")
+    .update(smokeKnowledgeResource.sourceUrl, "utf8")
+    .digest("hex")}`;
 }
 
 function hasCourseContentPublishDomainObject({ body, courseId, recordId }) {

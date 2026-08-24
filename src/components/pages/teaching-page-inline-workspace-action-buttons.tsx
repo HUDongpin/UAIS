@@ -11,6 +11,7 @@
 
 import { ArrowRight } from "@phosphor-icons/react/dist/ssr/ArrowRight";
 import { ClipboardText } from "@phosphor-icons/react/dist/ssr/ClipboardText";
+import Link from "next/link";
 import { localizedText } from "@/components/ui/localized-text";
 import type { TeachingOperationId } from "@/components/teaching/teaching-operation-data";
 import type { Locale } from "@/i18n/copy";
@@ -22,6 +23,7 @@ type InlineWorkspaceActionButtonsProps = {
   locale: Locale;
   inlineWorkspaceStatuses: Partial<Record<TeachingOperationId, string>>;
   isCourseChosen: boolean;
+  selectedCourseId?: string;
   runInlineWorkspaceAction: (
     operationId: TeachingOperationId,
     actionSlot: "primary" | "secondary",
@@ -33,6 +35,7 @@ export function InlineWorkspaceActionButtons({
   locale,
   inlineWorkspaceStatuses,
   isCourseChosen,
+  selectedCourseId,
   runInlineWorkspaceAction,
 }: InlineWorkspaceActionButtonsProps) {
     const actionConfig = createInlineWorkspaceActionConfig(operationId, locale);
@@ -56,15 +59,28 @@ export function InlineWorkspaceActionButtons({
           <ClipboardText size={17} weight="bold" />
           {actionConfig.primaryAction}
         </button>
-        <button
-          type="button"
-          className="inline-flex h-11 items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface)] px-4 text-sm font-semibold text-[var(--foreground)] outline-none transition hover:bg-[var(--surface-soft)] active:translate-y-px focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[var(--surface)] disabled:active:translate-y-0"
-          disabled={isDisabled}
-          onClick={() => runInlineWorkspaceAction(operationId, "secondary")}
-        >
-          <ArrowRight size={16} weight="bold" />
-          {actionConfig.secondaryAction}
-        </button>
+        {operationId === "knowledge-base" && selectedCourseId && !isSaving ? (
+          <Link
+            href={`/teaching/knowledge-base?${new URLSearchParams({
+              course: selectedCourseId,
+              action: "inline-teaching-workspace",
+            }).toString()}`}
+            className="inline-flex h-11 items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface)] px-4 text-sm font-semibold text-[var(--foreground)] outline-none transition hover:bg-[var(--surface-soft)] active:translate-y-px focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]"
+          >
+            <ArrowRight size={16} weight="bold" />
+            {actionConfig.secondaryAction}
+          </Link>
+        ) : (
+          <button
+            type="button"
+            className="inline-flex h-11 items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface)] px-4 text-sm font-semibold text-[var(--foreground)] outline-none transition hover:bg-[var(--surface-soft)] active:translate-y-px focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[var(--surface)] disabled:active:translate-y-0"
+            disabled={isDisabled}
+            onClick={() => runInlineWorkspaceAction(operationId, "secondary")}
+          >
+            <ArrowRight size={16} weight="bold" />
+            {actionConfig.secondaryAction}
+          </button>
+        )}
       </div>
     );
   }

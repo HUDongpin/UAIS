@@ -14,6 +14,20 @@ describe("teaching operations route smoke evidence", () => {
     openServers = [];
   });
 
+  it("binds the knowledge-base secondary smoke to registered source metadata", () => {
+    const source = readFileSync("scripts/teaching-operations-route-smoke.mjs", "utf8");
+
+    expect(source).toContain('title: "Route smoke knowledge source"');
+    expect(source).toContain(
+      'sourceUrl: "https://library.example.edu/research-methods/route-smoke"',
+    );
+    expect(source).toContain('rightsBasis: "open-access"');
+    expect(source).toContain('visibility: "course-only"');
+    expect(source).toContain("knowledgeResource: smokeKnowledgeResource");
+    expect(source).toContain('item.resourceSource === "teacher-submitted-url"');
+    expect(source).not.toContain('item.resourceSource === "teacher-placeholder"');
+  });
+
   it("routes provider-backed operation failures into diagnostics", () => {
     const source = readFileSync("scripts/teaching-operations-route-smoke.mjs", "utf8");
     const diagnosticsCall = source.match(
@@ -1937,14 +1951,22 @@ describe("teaching operations route smoke evidence", () => {
                   ],
                   resourceReviewItems: [
                     {
-                      resourceReviewItemId: "resource-review-item-teacher-research-methods",
+                      resourceReviewItemId:
+                        "resource-review-item-750af61ee5c99b5c69ce4871d92a5705",
                       courseId: "teacher-research-methods",
                       ownerTeacherId: "teacher-kang",
                       queuedBy: "teacher-kang",
                       reviewStatus: "pending-teacher-review",
                       operationRecordId: "resource-review-item-record-route-smoke",
                       sourceAction: "route-smoke-resource-review",
-                      resourceSource: "teacher-placeholder",
+                      resourceSource: "teacher-submitted-url",
+                      title: "Route smoke knowledge source",
+                      sourceUrl:
+                        "https://library.example.edu/research-methods/route-smoke",
+                      sourceFingerprint:
+                        "sha256:4c5628cd2f57d4b5520ba555cae455b4fe2ad39bc268d4aa54cbd0b89b950429",
+                      rightsBasis: "open-access",
+                      visibility: "course-only",
                       reviewPolicy: "teacher-review-before-knowledge-index",
                       queuedAt: "2026-06-23T00:02:30.000Z",
                       storagePolicy: "external-redacted-teaching-course-management-snapshot",
@@ -5446,6 +5468,12 @@ describe("teaching operations route smoke evidence", () => {
           actionSlot: "secondary",
           courseId: "teacher-research-methods",
           sourceAction: "route-smoke-resource-review",
+          knowledgeResource: {
+            title: "Route smoke knowledge source",
+            sourceUrl: "https://library.example.edu/research-methods/route-smoke",
+            rightsBasis: "open-access",
+            visibility: "course-only",
+          },
           idempotencyKey:
             "route-smoke-resource-review-teacher-research-methods-local-production",
         },

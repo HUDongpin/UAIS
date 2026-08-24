@@ -3,6 +3,7 @@
 import { createServer } from "node:http";
 import { createHash, timingSafeEqual, randomUUID } from "node:crypto";
 import { appendFile, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { isIP } from "node:net";
 import { resolve } from "node:path";
 
 const QWEN_VOICE_LIFECYCLE_AUDIT_FILENAME = "qwen-voice-lifecycle-audit.jsonl";
@@ -2676,7 +2677,7 @@ function normalizeTeachingKnowledgeIndexSyncRecord(value) {
 
 function normalizeTeachingResourceReviewItemRecord(value) {
   requireRecord(value, "teaching resource review item record");
-  return {
+  const commonRecord = {
     resourceReviewItemId: requireSafeId(value.resourceReviewItemId, "resource review item id"),
     courseId: requireSafeId(value.courseId, "course id"),
     ownerTeacherId: requireSafeId(value.ownerTeacherId, "owner teacher id"),
@@ -2684,13 +2685,95 @@ function normalizeTeachingResourceReviewItemRecord(value) {
     reviewStatus: "pending-teacher-review",
     operationRecordId: requireSafeId(value.operationRecordId, "operation record id"),
     ...(value.sourceAction ? { sourceAction: requireSafeId(value.sourceAction, "source action") } : {}),
-    resourceSource: "teacher-placeholder",
     reviewPolicy: "teacher-review-before-knowledge-index",
     queuedAt: requireIsoDate(value.queuedAt, "queuedAt"),
     storagePolicy: normalizeTeachingCourseRecordStoragePolicy(value.storagePolicy),
     storageWritePolicy: normalizeTeachingCourseStorageWritePolicy(value.storageWritePolicy),
     responsibleSession: "S12",
     redaction: createRedaction(),
+  };
+
+  if (value.resourceSource === "teacher-placeholder") {
+    return {
+      ...commonRecord,
+      resourceSource: "teacher-placeholder",
+    };
+  }
+
+  if (value.resourceSource !== "teacher-submitted-url") {
+    throw new HttpError(400, "Invalid teaching knowledge resource source.");
+  }
+
+  const resource = normalizeTeachingKnowledgeResourceMetadata(value);
+  return {
+    ...commonRecord,
+    resourceSource: "teacher-submitted-url",
+    ...resource,
+  };
+}
+
+function normalizeTeachingKnowledgeResourceMetadata(value) {
+  const title = typeof value.title === "string" ? value.title.trim().replace(/\s+/g, " ") : "";
+  if (
+    !title ||
+    title.length > 160 ||
+    /\/Users\/|[A-Za-z]:\\Users\\|(?:api[_ -]?key|secret|token)\s*[:=]|bearer\s+[A-Za-z0-9._-]{8,}/i.test(
+      title,
+    )
+  ) {
+    throw new HttpError(400, "Invalid teaching knowledge resource metadata.");
+  }
+
+  if (typeof value.sourceUrl !== "string" || value.sourceUrl.length > 2_048) {
+    throw new HttpError(400, "Invalid teaching knowledge resource metadata.");
+  }
+
+  let source;
+  try {
+    source = new URL(value.sourceUrl.trim());
+  } catch {
+    throw new HttpError(400, "Invalid teaching knowledge resource metadata.");
+  }
+  const hostname = source.hostname.toLowerCase().replace(/\.$/, "");
+  if (
+    source.protocol !== "https:" ||
+    source.username ||
+    source.password ||
+    source.search ||
+    source.hash ||
+    !hostname ||
+    hostname === "localhost" ||
+    hostname.endsWith(".localhost") ||
+    isIP(hostname) !== 0 ||
+    !hostname.includes(".")
+  ) {
+    throw new HttpError(400, "Invalid teaching knowledge resource metadata.");
+  }
+
+  const sourceUrl = source.toString();
+  const expectedFingerprint = `sha256:${createHash("sha256")
+    .update(sourceUrl, "utf8")
+    .digest("hex")}`;
+  if (value.sourceFingerprint !== expectedFingerprint) {
+    throw new HttpError(400, "Invalid teaching knowledge resource metadata.");
+  }
+
+  const allowedRightsBases = new Set([
+    "owner-created",
+    "licensed",
+    "open-access",
+    "permission-granted",
+  ]);
+  if (!allowedRightsBases.has(value.rightsBasis) || value.visibility !== "course-only") {
+    throw new HttpError(400, "Invalid teaching knowledge resource metadata.");
+  }
+
+  return {
+    title,
+    sourceUrl,
+    sourceFingerprint: expectedFingerprint,
+    rightsBasis: value.rightsBasis,
+    visibility: "course-only",
   };
 }
 

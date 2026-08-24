@@ -27,6 +27,10 @@ import type {
   TeachingCourseUnitDraftRecord,
   TeachingResourceReviewItemRecord,
 } from "@/lib/server/teaching-course-management-types";
+import {
+  createTeachingResourceReviewItemId,
+  type TeachingKnowledgeResourceRegistration,
+} from "./teaching-knowledge-resource";
 
 // Course-record handler family for the teaching-course-management store (Phase 3
 // decomposition): resource review, content publish, unit draft, dashboard refresh/
@@ -40,6 +44,7 @@ export async function saveTeachingResourceReviewItemRecord(input: {
   actorId: string;
   courseId: string;
   operationRecordId: string;
+  knowledgeResource: TeachingKnowledgeResourceRegistration;
   sourceAction?: string;
   traceId?: string;
   audit?: {
@@ -60,7 +65,10 @@ export async function saveTeachingResourceReviewItemRecord(input: {
     : undefined;
   const now = input.now ?? new Date();
   const queuedAt = now.toISOString();
-  const resourceReviewItemId = `resource-review-item-${courseId}`;
+  const resourceReviewItemId = createTeachingResourceReviewItemId({
+    courseId,
+    sourceUrl: input.knowledgeResource.sourceUrl,
+  });
 
   const writeRetry = createTeachingCourseManagementWriteRetry();
   for (let attempt = 0; attempt < teachingCourseManagementMaxWriteAttempts; attempt += 1) {
@@ -119,7 +127,12 @@ export async function saveTeachingResourceReviewItemRecord(input: {
       reviewStatus: "pending-teacher-review",
       operationRecordId,
       ...(sourceAction ? { sourceAction } : {}),
-      resourceSource: "teacher-placeholder",
+      resourceSource: "teacher-submitted-url",
+      title: input.knowledgeResource.title,
+      sourceUrl: input.knowledgeResource.sourceUrl,
+      sourceFingerprint: input.knowledgeResource.sourceFingerprint,
+      rightsBasis: input.knowledgeResource.rightsBasis,
+      visibility: input.knowledgeResource.visibility,
       reviewPolicy: "teacher-review-before-knowledge-index",
       queuedAt,
       storagePolicy: storage.recordStoragePolicy,

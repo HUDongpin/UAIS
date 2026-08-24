@@ -47,6 +47,8 @@ import {
 } from "@/lib/server/teaching-course-management-store";
 import { storeUaisTeacherAiOwnershipRecord } from "@/lib/server/teacher-ai-ownership-store";
 import { createUaisTeacherAuthSessionCookieHeader } from "@/lib/server/teacher-auth-session";
+import { normalizeResourceReviewItemRecord } from "@/lib/server/teaching-course-management-record-normalizers";
+import { normalizeDomainProjection } from "@/lib/server/teaching-operations-domain-projection-normalizer";
 
 const productionTeacherAuthIssuerSecret =
   "test-teacher-auth-issuer-secret-strong-fixture";
@@ -122,6 +124,36 @@ function expectNoLocalOrSecretValues(value: unknown, dataDir: string) {
 }
 
 describe("teaching operation backend persistence", () => {
+  it("rejects unknown knowledge-resource source types instead of downgrading them to legacy placeholders", () => {
+    const common = {
+      courseId: "teacher-research-methods",
+      queuedBy: "teacher-kang",
+      reviewStatus: "pending-teacher-review",
+      operationRecordId: "resource-review-record-invalid-source",
+      sourceAction: "invalid-source-probe",
+      resourceSource: "unrecognized-provider-source",
+      reviewPolicy: "teacher-review-before-knowledge-index",
+      queuedAt: "2026-08-24T00:00:00.000Z",
+    };
+
+    expect(() =>
+      normalizeResourceReviewItemRecord({
+        ...common,
+        resourceReviewItemId: "resource-review-item-invalid-source",
+        ownerTeacherId: "teacher-kang",
+        storagePolicy: "external-redacted-teaching-course-management-snapshot",
+        storageWritePolicy: "external-optimistic-snapshot-replace",
+      }),
+    ).toThrow("Teaching resource review item record is invalid.");
+    expect(() =>
+      normalizeDomainProjection({
+        ...common,
+        objectId: "resource-review-item-invalid-source",
+        objectType: "resource-review-item",
+      }),
+    ).toThrow("Teaching resource review item projection is invalid.");
+  });
+
   it("persists all 22 teaching operation button actions into the server database", async () => {
     const dataDir = await mkdtemp(join(tmpdir(), "uais-teaching-operations-db-"));
 
@@ -135,6 +167,16 @@ describe("teaching operation backend persistence", () => {
             courseId: "teacher-research-methods",
             sourceAction: "manage",
             actorId: "teacher-kang",
+            ...(operationId === "knowledge-base" && actionSlot === "secondary"
+              ? {
+                  knowledgeResource: {
+                    title: "Knowledge resource matrix source",
+                    sourceUrl: "https://library.example.edu/research-methods/matrix-source",
+                    rightsBasis: "open-access",
+                    visibility: "course-only",
+                  },
+                }
+              : {}),
             now: new Date("2026-06-22T08:00:00.000Z"),
           });
 
@@ -4262,7 +4304,7 @@ describe("teaching operation backend persistence", () => {
     }
   });
 
-  it("projects resource placeholders into a resource review item domain object", async () => {
+  it("projects registered knowledge sources into redacted review-item evidence", async () => {
     const dataDir = await mkdtemp(join(tmpdir(), "uais-teaching-domain-resource-review-"));
 
     try {
@@ -4273,6 +4315,12 @@ describe("teaching operation backend persistence", () => {
         courseId: "teacher-research-methods",
         actorId: "teacher-kang",
         sourceAction: "manage",
+        knowledgeResource: {
+          title: "Unit 3 research design guide",
+          sourceUrl: "https://library.example.edu/research-methods/unit-3",
+          rightsBasis: "open-access",
+          visibility: "course-only",
+        },
         now: new Date("2026-06-22T09:46:00.000Z"),
       });
       const database = await readTeachingOperationDatabase({ dataDir });
@@ -4286,25 +4334,162 @@ describe("teaching operation backend persistence", () => {
         expect.objectContaining({
           kind: "domain-object",
           objectType: "resource-review-item",
-          objectId: "resource-review-item-teacher-research-methods",
+          objectId: expect.stringMatching(/^resource-review-item-[a-f0-9]{32}$/),
         }),
       );
+      expect(receipt.actionId).toBe("register-knowledge-source");
       expect(domainProjections).toEqual([
         expect.objectContaining({
-          objectId: "resource-review-item-teacher-research-methods",
+          objectId: expect.stringMatching(/^resource-review-item-[a-f0-9]{32}$/),
           objectType: "resource-review-item",
           courseId: "teacher-research-methods",
           queuedBy: "teacher-kang",
           reviewStatus: "pending-teacher-review",
           operationRecordId: receipt.receiptId,
           sourceAction: "manage",
-          resourceSource: "teacher-placeholder",
+          resourceSource: "teacher-submitted-url",
+          title: "Unit 3 research design guide",
+          sourceFingerprint: expect.stringMatching(/^sha256:[a-f0-9]{64}$/),
+          rightsBasis: "open-access",
+          visibility: "course-only",
           reviewPolicy: "teacher-review-before-knowledge-index",
           queuedAt: "2026-06-22T09:46:00.000Z",
           storagePolicy: "domain-projection-teaching-resource-review-item",
         }),
       ]);
+      expect(JSON.stringify(domainProjections)).not.toContain(
+        "https://library.example.edu/research-methods/unit-3",
+      );
       expectNoLocalOrSecretValues(domainProjections, dataDir);
+    } finally {
+      await rm(dataDir, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects knowledge-source registration before persistence when resource metadata is absent", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "uais-teaching-resource-preflight-"));
+
+    try {
+      await expect(
+        executeTeachingOperationAction({
+          dataDir,
+          operationId: "knowledge-base",
+          actionSlot: "secondary",
+          courseId: "teacher-research-methods",
+          actorId: "teacher-kang",
+          sourceAction: "manage",
+          now: new Date("2026-06-22T09:46:00.000Z"),
+        }),
+      ).rejects.toMatchObject({
+        status: 400,
+      });
+
+      const database = await readTeachingOperationDatabase({ dataDir });
+      expect(database.records).toHaveLength(0);
+      expect(database.auditEvents).toHaveLength(0);
+      expect(database.domainProjections).toHaveLength(0);
+    } finally {
+      await rm(dataDir, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects reuse of a knowledge-source idempotency key for a different URL", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "uais-teaching-resource-idempotency-scope-"));
+    const baseInput = {
+      dataDir,
+      operationId: "knowledge-base" as const,
+      actionSlot: "secondary" as const,
+      courseId: "teacher-research-methods",
+      actorId: "teacher-kang",
+      sourceAction: "manage",
+      idempotencyKey: "knowledge-source-fixed-key",
+      now: new Date("2026-06-22T09:46:00.000Z"),
+    };
+
+    try {
+      await executeTeachingOperationAction({
+        ...baseInput,
+        knowledgeResource: {
+          title: "First source",
+          sourceUrl: "https://library.example.edu/research-methods/first",
+          rightsBasis: "open-access",
+          visibility: "course-only",
+        },
+      });
+
+      await expect(
+        executeTeachingOperationAction({
+          ...baseInput,
+          knowledgeResource: {
+            title: "Second source",
+            sourceUrl: "https://library.example.edu/research-methods/second",
+            rightsBasis: "open-access",
+            visibility: "course-only",
+          },
+        }),
+      ).rejects.toMatchObject({ status: 409 });
+
+      const database = await readTeachingOperationDatabase({ dataDir });
+      expect(database.records).toHaveLength(1);
+      expect(database.auditEvents).toHaveLength(0);
+      expect(database.domainProjections).toHaveLength(1);
+    } finally {
+      await rm(dataDir, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects IP-literal knowledge sources before persistence", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "uais-teaching-resource-ip-source-"));
+
+    try {
+      await expect(
+        executeTeachingOperationAction({
+          dataDir,
+          operationId: "knowledge-base",
+          actionSlot: "secondary",
+          courseId: "teacher-research-methods",
+          actorId: "teacher-kang",
+          knowledgeResource: {
+            title: "Public IP source",
+            sourceUrl: "https://8.8.8.8/research-methods/source",
+            rightsBasis: "open-access",
+            visibility: "course-only",
+          },
+        }),
+      ).rejects.toMatchObject({ status: 400 });
+
+      const database = await readTeachingOperationDatabase({ dataDir });
+      expect(database.records).toHaveLength(0);
+    } finally {
+      await rm(dataDir, { recursive: true, force: true });
+    }
+  });
+
+  it("accepts an ordinary resource title containing the word token", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "uais-teaching-resource-title-"));
+
+    try {
+      const receipt = await executeTeachingOperationAction({
+        dataDir,
+        operationId: "knowledge-base",
+        actionSlot: "secondary",
+        courseId: "teacher-research-methods",
+        actorId: "teacher-kang",
+        knowledgeResource: {
+          title: "Token economics reading",
+          sourceUrl: "https://library.example.edu/economics/token-reading",
+          rightsBasis: "licensed",
+          visibility: "course-only",
+        },
+      });
+
+      expect(receipt.status).toBe("persisted");
+      expect(receipt.artifacts).toContainEqual(
+        expect.objectContaining({
+          kind: "domain-object",
+          objectType: "resource-review-item",
+        }),
+      );
     } finally {
       await rm(dataDir, { recursive: true, force: true });
     }
@@ -15255,7 +15440,7 @@ describe("teaching operation backend persistence", () => {
     }
   });
 
-  it("writes resource placeholders into the course management resource review object", async () => {
+  it("registers a teacher-declared public knowledge source for review without leaking its URL into operation evidence", async () => {
     const dataDir = await mkdtemp(join(tmpdir(), "uais-teaching-route-resource-review-domain-"));
     const operationsDataDir = join(dataDir, "operations");
     const coursesDataDir = join(dataDir, "courses");
@@ -15319,6 +15504,12 @@ describe("teaching operation backend persistence", () => {
             courseId: course.courseId,
             sourceAction: "inline-teaching-workspace",
             idempotencyKey: "resource-review-domain-object-20260622",
+            knowledgeResource: {
+              title: "Unit 3 research design guide",
+              sourceUrl: "https://library.example.edu/research-methods/unit-3",
+              rightsBasis: "open-access",
+              visibility: "course-only",
+            },
           }),
         }),
       );
@@ -15344,14 +15535,19 @@ describe("teaching operation backend persistence", () => {
       );
       expect(resourceReviewItems).toEqual([
         expect.objectContaining({
-          resourceReviewItemId: `resource-review-item-${course.courseId}`,
+          resourceReviewItemId: expect.stringMatching(/^resource-review-item-[a-f0-9]{32}$/),
           courseId: course.courseId,
           ownerTeacherId: "teacher-kang",
           queuedBy: "teacher-kang",
           reviewStatus: "pending-teacher-review",
           operationRecordId: body.receipt.receiptId,
           sourceAction: "inline-teaching-workspace",
-          resourceSource: "teacher-placeholder",
+          resourceSource: "teacher-submitted-url",
+          title: "Unit 3 research design guide",
+          sourceUrl: "https://library.example.edu/research-methods/unit-3",
+          sourceFingerprint: expect.stringMatching(/^sha256:[a-f0-9]{64}$/),
+          rightsBasis: "open-access",
+          visibility: "course-only",
           reviewPolicy: "teacher-review-before-knowledge-index",
           queuedAt: "2026-06-22T12:35:00.000Z",
           storagePolicy: "local-json-teaching-course-management",
@@ -15379,6 +15575,15 @@ describe("teaching operation backend persistence", () => {
       expectNoLocalOrSecretValues(resourceReviewItems, dataDir);
       expectNoLocalOrSecretValues(courseDatabase, dataDir);
       expectNoLocalOrSecretValues(body, dataDir);
+      const operationDatabase = await readTeachingOperationDatabase({
+        dataDir: operationsDataDir,
+      });
+      expect(JSON.stringify(operationDatabase)).not.toContain(
+        "https://library.example.edu/research-methods/unit-3",
+      );
+      expect(JSON.stringify(body)).not.toContain(
+        "https://library.example.edu/research-methods/unit-3",
+      );
     } finally {
       await rm(dataDir, { recursive: true, force: true });
     }
@@ -15438,6 +15643,12 @@ describe("teaching operation backend persistence", () => {
         courseId: course.courseId,
         sourceAction: "inline-teaching-workspace",
         idempotencyKey: "resource-review-idempotent-20260622",
+        knowledgeResource: {
+          title: "Reusable research methods guide",
+          sourceUrl: "https://library.example.edu/research-methods/reusable-guide",
+          rightsBasis: "licensed",
+          visibility: "course-only",
+        },
       };
       const firstPostOperation = createTeachingOperationActionPostHandler({
         env,
@@ -15511,10 +15722,15 @@ describe("teaching operation backend persistence", () => {
       );
       expect(resourceReviewItems).toEqual([
         expect.objectContaining({
-          resourceReviewItemId: `resource-review-item-${course.courseId}`,
+          resourceReviewItemId: expect.stringMatching(/^resource-review-item-[a-f0-9]{32}$/),
           operationRecordId: firstBody.receipt.receiptId,
           reviewStatus: "pending-teacher-review",
-          resourceSource: "teacher-placeholder",
+          resourceSource: "teacher-submitted-url",
+          title: "Reusable research methods guide",
+          sourceUrl: "https://library.example.edu/research-methods/reusable-guide",
+          sourceFingerprint: expect.stringMatching(/^sha256:[a-f0-9]{64}$/),
+          rightsBasis: "licensed",
+          visibility: "course-only",
           reviewPolicy: "teacher-review-before-knowledge-index",
           queuedAt: "2026-06-22T12:35:00.000Z",
         }),

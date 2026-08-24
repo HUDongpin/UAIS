@@ -303,6 +303,9 @@ export function createTeachingOperationActionPostHandler(
         ...(isRecord(body.courseSettingsPatch)
           ? { courseSettingsPatch: body.courseSettingsPatch }
           : {}),
+        ...(operationId === "knowledge-base" && actionSlot === "secondary"
+          ? { knowledgeResource: body.knowledgeResource }
+          : {}),
         audit: createTeachingOperationAuditInput({
           traceId,
           request,
@@ -1545,4 +1548,3 @@ function createDeniedAccess(
     redaction: createRedaction(),
   };
 }
-

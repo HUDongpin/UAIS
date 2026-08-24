@@ -56,10 +56,10 @@ export function createInlineWorkspaceActionConfig(
       primaryMessage: zh
         ? "知识库索引同步已保存到服务端。"
         : "Knowledge index sync saved on the server.",
-      secondaryAction: zh ? "添加资料占位" : "Add Resource Placeholder",
+      secondaryAction: zh ? "登记知识来源" : "Register Knowledge Source",
       secondaryMessage: zh
-        ? "资料占位已加入待审核队列。"
-        : "Resource placeholder added to review queue.",
+        ? "知识来源已登记并写入教师审核队列。"
+        : "Knowledge source registered in the teacher review queue.",
     },
     content: {
       readyMessage: zh
@@ -237,7 +237,7 @@ export function createEnterpriseWorkspaceConfig(
       metrics: [
         { label: zh ? "资料包" : "Resource Packs", value: "18", note: zh ? "课件、案例和阅读材料已登记" : "Slides, cases, and readings are registered" },
         { label: zh ? "索引状态" : "Index Status", value: "92%", note: zh ? "可检索片段完成同步" : "Searchable chunks are synchronized" },
-        { label: zh ? "占位资料" : "Placeholders", value: "5", note: zh ? "等待教师上传原文或链接" : "Awaiting teacher uploads or links" },
+        { label: zh ? "来源登记" : "Source Intake", value: "HTTPS", note: zh ? "登记标题、公开来源与权利依据" : "Registers title, public source, and rights basis" },
       ],
       lanes: [
         {
@@ -247,15 +247,15 @@ export function createEnterpriseWorkspaceConfig(
             : ["Scan new slides and readings", "Create searchable chunks and source tags"],
         },
         {
-          title: zh ? "资料占位" : "Resource Placeholders",
+          title: zh ? "来源审核" : "Source Review",
           items: zh
             ? ["登记待补充案例、视频和实验数据", "为每项资料标注版权和可见范围"]
             : ["Register pending cases, videos, and lab data", "Tag rights and visibility for every item"],
         },
       ],
       records: zh
-        ? ["研究方法第三单元索引已同步", "初等数学案例库新增 2 个占位", "下一轮需补齐视频材料来源"]
-        : ["Research Methods unit 3 index synced", "Elementary math case library added 2 placeholders", "Next pass should complete video provenance"],
+        ? ["研究方法第三单元索引已同步", "公开知识来源可登记后进入教师审核", "下一轮需补齐视频材料来源"]
+        : ["Research Methods unit 3 index synced", "Public knowledge sources can enter teacher review after registration", "Next pass should complete video provenance"],
     },
     content: {
       id: "content",
@@ -501,4 +501,3 @@ export function createEnterpriseWorkspaceConfig(
 
   return configs[id];
 }
-

@@ -542,7 +542,7 @@ const LOCAL_PRODUCTION_TEACHING_OPERATION_DETAIL_BROWSER_PROOF_SUMMARY = [
   "mainInlineDashboardRefreshSubmitted",
   "mainInlineStudentPreviewSubmitted",
   "mainInlineAgentPermissionPreflightSubmitted",
-  "mainInlineResourcePlaceholderSubmitted",
+  "mainKnowledgeSourceRegistrationSubmitted",
   "mainInlineUnitDraftSubmitted",
   "mainInlineCollaborationInviteSubmitted",
   "mainInlineStudentGroupSuggestionSubmitted",

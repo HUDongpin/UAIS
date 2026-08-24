@@ -917,7 +917,7 @@ const requiredTeachingOperationDetailBrowserResults = [
   "mainInlineDashboardRefreshSubmitted",
   "mainInlineStudentPreviewSubmitted",
   "mainInlineAgentPermissionPreflightSubmitted",
-  "mainInlineResourcePlaceholderSubmitted",
+  "mainKnowledgeSourceRegistrationSubmitted",
   "mainInlineUnitDraftSubmitted",
   "mainInlineCollaborationInviteSubmitted",
   "mainInlineStudentGroupSuggestionSubmitted",

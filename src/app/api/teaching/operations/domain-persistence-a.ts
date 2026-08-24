@@ -35,6 +35,7 @@ import {
   readProviderSyncId,
   readStudentRosterSyncProviderConfig,
 } from "./provider-config";
+import { readTeachingKnowledgeResourceRegistration } from "@/lib/server/teaching-knowledge-resource";
 import {
   createRedaction,
   isRecord,
@@ -531,6 +532,7 @@ export async function maybeSyncKnowledgeIndexWithProvider(input: {
 export async function maybePersistResourceReviewItemDomainObject(input: {
   env: Record<string, string | undefined>;
   fetch?: typeof fetch;
+  body: Record<string, unknown>;
   receipt: TeachingOperationReceipt;
   authenticatedTeacher: TeachingOperationAuthenticatedTeacher;
   courseId?: string;
@@ -566,6 +568,7 @@ export async function maybePersistResourceReviewItemDomainObject(input: {
     actorId: input.authenticatedTeacher.actorId,
     courseId: input.courseId,
     operationRecordId: input.receipt.receiptId,
+    knowledgeResource: readTeachingKnowledgeResourceRegistration(input.body.knowledgeResource),
     ...(input.receipt.sourceAction ? { sourceAction: input.receipt.sourceAction } : {}),
     traceId: input.traceId,
     audit: {

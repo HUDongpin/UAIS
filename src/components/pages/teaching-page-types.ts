@@ -250,6 +250,10 @@ export type InlineTeachingOperationDomainProjection = {
   deliveryPolicy?: string;
   reviewStatus?: string;
   resourceSource?: string;
+  title?: string;
+  sourceFingerprint?: string;
+  rightsBasis?: string;
+  visibility?: string;
   reviewPolicy?: string;
   queuedAt?: string;
   updateStatus?: string;
@@ -388,4 +392,3 @@ export type InlineWorkspaceRollbackStatus = {
   targetRecordId: string;
   message?: string;
 };
-

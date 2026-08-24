@@ -1,6 +1,10 @@
 import type { TeachingOperationId } from "@/components/teaching/teaching-operation-data";
 import { createRedaction } from "./teaching-operations-guards";
 import { normalizeCourseSettingsPatchProjectionSnapshot } from "./teaching-operations-input-normalizers";
+import {
+  createTeachingResourceReviewItemId,
+  type TeachingKnowledgeResourceRegistration,
+} from "./teaching-knowledge-resource";
 import type {
   TeachingOperationActionId,
   TeachingOperationActionSlot,
@@ -22,6 +26,7 @@ export function createDomainProjections(input: {
   courseId?: string;
   sourceAction?: string;
   courseSettingsPatch?: unknown;
+  knowledgeResource?: TeachingKnowledgeResourceRegistration;
   recordId: string;
   createdAt: string;
   artifacts: TeachingOperationArtifact[];
@@ -394,19 +399,27 @@ export function createDomainProjections(input: {
   if (
     input.operationId === "knowledge-base" &&
     input.actionSlot === "secondary" &&
-    input.actionId === "add-resource-placeholder" &&
-    input.courseId
+    input.actionId === "register-knowledge-source" &&
+    input.courseId &&
+    input.knowledgeResource
   ) {
     return [
       {
-        objectId: `resource-review-item-${input.courseId}`,
+        objectId: createTeachingResourceReviewItemId({
+          courseId: input.courseId,
+          sourceUrl: input.knowledgeResource.sourceUrl,
+        }),
         objectType: "resource-review-item",
         courseId: input.courseId,
         queuedBy: input.actorId,
         reviewStatus: "pending-teacher-review",
         operationRecordId: input.recordId,
         ...(input.sourceAction ? { sourceAction: input.sourceAction } : {}),
-        resourceSource: "teacher-placeholder",
+        resourceSource: "teacher-submitted-url",
+        title: input.knowledgeResource.title,
+        sourceFingerprint: input.knowledgeResource.sourceFingerprint,
+        rightsBasis: input.knowledgeResource.rightsBasis,
+        visibility: input.knowledgeResource.visibility,
         reviewPolicy: "teacher-review-before-knowledge-index",
         queuedAt: input.createdAt,
         storagePolicy: "domain-projection-teaching-resource-review-item",

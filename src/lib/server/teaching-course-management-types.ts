@@ -366,7 +366,7 @@ export type TeachingKnowledgeIndexSyncRecord = {
   redaction: TeachingCourseManagementRedaction;
 };
 
-export type TeachingResourceReviewItemRecord = {
+type TeachingResourceReviewItemRecordBase = {
   resourceReviewItemId: string;
   courseId: string;
   ownerTeacherId: string;
@@ -374,7 +374,6 @@ export type TeachingResourceReviewItemRecord = {
   reviewStatus: "pending-teacher-review";
   operationRecordId: string;
   sourceAction?: string;
-  resourceSource: "teacher-placeholder";
   reviewPolicy: "teacher-review-before-knowledge-index";
   queuedAt: string;
   storagePolicy: TeachingCourseManagementRecordStoragePolicy;
@@ -382,6 +381,25 @@ export type TeachingResourceReviewItemRecord = {
   responsibleSession: "S12";
   redaction: TeachingCourseManagementRedaction;
 };
+
+export type TeachingResourceReviewItemRecord = TeachingResourceReviewItemRecordBase &
+  (
+    | {
+        resourceSource: "teacher-placeholder";
+      }
+    | {
+        resourceSource: "teacher-submitted-url";
+        title: string;
+        sourceUrl: string;
+        sourceFingerprint: string;
+        rightsBasis:
+          | "owner-created"
+          | "licensed"
+          | "open-access"
+          | "permission-granted";
+        visibility: "course-only";
+      }
+  );
 
 export type TeachingCourseContentPublishRecord = {
   contentId: string;
