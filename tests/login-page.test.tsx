@@ -254,6 +254,67 @@ describe("LoginPage", () => {
     expect(screen.queryByText("自动化备课与班级邀请")).toBeNull();
   });
 
+  it("keeps illustration-card accessible names synchronized after locale round trips", () => {
+    const { rerender } = render(<LoginPage />);
+
+    expect(
+      screen.getAllByRole("article", {
+        name: "学生全自主学习 个性化学习",
+      }),
+    ).toHaveLength(2);
+    expect(
+      screen.getAllByRole("article", {
+        name: "教师全智能辅助 个性化教学",
+      }),
+    ).toHaveLength(2);
+
+    mockPreferences.locale = "en-US";
+    rerender(<LoginPage />);
+
+    expect(
+      screen.getAllByRole("article", {
+        name: "Self-paced student learning Personalized learning",
+      }),
+    ).toHaveLength(2);
+    expect(
+      screen.getAllByRole("article", {
+        name: "Intelligent teacher support Personalized teaching",
+      }),
+    ).toHaveLength(2);
+
+    mockPreferences.locale = "zh-CN";
+    rerender(<LoginPage />);
+
+    expect(
+      screen.getAllByRole("article", {
+        name: "学生全自主学习 个性化学习",
+      }),
+    ).toHaveLength(2);
+    expect(
+      screen.queryByRole("article", {
+        name: "Self-paced student learning Personalized learning",
+      }),
+    ).toBeNull();
+  });
+
+  it("keeps the mobile illustration region name in the active locale", () => {
+    const { rerender } = render(<LoginPage />);
+
+    expect(
+      screen.getByRole("region", { name: "优爱思登录插图卡片" }),
+    ).toBeTruthy();
+
+    mockPreferences.locale = "en-US";
+    rerender(<LoginPage />);
+
+    expect(
+      screen.getByRole("region", { name: "UAIS login illustration cards" }),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("region", { name: "优爱思登录插图卡片" }),
+    ).toBeNull();
+  });
+
   it("does not use the old CSS-built cartoon people in the asset deck", () => {
     const { container } = render(<LoginPage />);
 

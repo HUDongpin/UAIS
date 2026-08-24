@@ -56,6 +56,7 @@ const loginCopy = {
     // 否则学生点开「服务条款」看到的却是标题为「用户协议」的页面。
     terms: "《用户协议》",
     privacy: "《隐私政策》",
+    illustrationCardsLabel: "优爱思登录插图卡片",
     emptyError: "请输入账号和密码。",
     invalidError: "账号或密码不匹配，请使用已授权的 UAIS 账号登录。",
     serverError: "登录服务暂时不可用，请稍后再试。",
@@ -92,6 +93,7 @@ const loginCopy = {
     consentSeparator: "and",
     terms: "Terms of Use",
     privacy: "Privacy Policy",
+    illustrationCardsLabel: "UAIS login illustration cards",
     emptyError: "Enter an account and password.",
     invalidError: "The account or password does not match an authorized UAIS account.",
     serverError: "The login service is temporarily unavailable. Please try again.",
@@ -451,7 +453,10 @@ export function LoginPage() {
               </p>
             </form>
 
-            <LoginMobileDesignCarousel cards={cards} />
+            <LoginMobileDesignCarousel
+              cards={cards}
+              label={t.illustrationCardsLabel}
+            />
           </div>
         </main>
       </div>
@@ -463,13 +468,19 @@ function isSafeLocalRedirectTarget(value: string) {
   return value.startsWith("/") && !value.startsWith("//");
 }
 
-function LoginMobileDesignCarousel({ cards }: { cards: LoginDeckCard[] }) {
+function LoginMobileDesignCarousel({
+  cards,
+  label,
+}: {
+  cards: LoginDeckCard[];
+  label: string;
+}) {
   return (
     <div
       className="relative left-1/2 mt-10 w-[calc(100vw-2.5rem)] max-w-[656px] -translate-x-1/2 pb-8 lg:hidden"
       data-uais-login-mobile-carousel
       role="region"
-      aria-label="UAIS login illustration cards"
+      aria-label={label}
     >
       <div
         className="grid grid-cols-1 gap-4 min-[680px]:grid-cols-2"
@@ -524,6 +535,7 @@ function LoginDesignCard({
     <article
       className={`relative flex ${mobile ? "h-auto" : "h-full"} flex-col overflow-hidden rounded-[14px] border border-[#d8e6fb] bg-gradient-to-b from-white via-[#fbfdff] to-[#f2f7ff] px-[18px] pb-[16px] pt-[18px] shadow-[0_14px_42px_rgba(42,82,148,0.12)] 2xl:px-[20px] 2xl:pb-[18px] 2xl:pt-[20px]`}
       data-uais-login-card={cardKind}
+      aria-label={`${card.title} ${card.accent}`}
     >
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_42%,rgba(31,111,235,0.08),transparent_42%)]" />
       <div className="relative z-20 text-center">
