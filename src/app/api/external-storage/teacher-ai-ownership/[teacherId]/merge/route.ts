@@ -5,4 +5,11 @@ import {
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-export const POST = createExternalStorageTeacherOwnershipMergePostHandler();
+const mergeTeacherOwnership = createExternalStorageTeacherOwnershipMergePostHandler();
+
+export function POST(
+  request: Request,
+  context: { params: Promise<{ teacherId: string }> },
+) {
+  return mergeTeacherOwnership(request, context);
+}

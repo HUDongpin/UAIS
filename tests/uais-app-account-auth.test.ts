@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createUaisAppSessionPostHandler } from "@/app/api/auth/app-session/route";
+import { createUaisAppSessionPostHandler } from "@/app/api/auth/app-session/handler";
 import { UAIS_CORE_DATABASE_MIGRATION_VERSIONS } from "@/lib/db/migrations";
 import {
   createUaisAppAccountAuthenticator,

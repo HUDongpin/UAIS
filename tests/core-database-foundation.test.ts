@@ -176,7 +176,7 @@ describe("B-11 core database foundation", () => {
     expect(runner).toContain(
       `CREATE TABLE IF NOT EXISTS ${UAIS_CORE_DATABASE_MIGRATIONS_TABLE}`,
     );
-    expect(readProjectFile("src/app/healthz/route.ts")).toContain(
+    expect(readProjectFile("src/app/healthz/handler.ts")).toContain(
       `FROM ${UAIS_CORE_DATABASE_MIGRATIONS_TABLE}`,
     );
   });

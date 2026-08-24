@@ -14,7 +14,7 @@ import {
 import {
   createLrsSmokeGetHandler,
   createLrsSmokePostHandler,
-} from "@/app/api/learning-records/lrs/smoke/route";
+} from "@/app/api/learning-records/lrs/smoke/handler";
 import { createUaisAiAccessSessionForTrustedActor } from "@/lib/server/ai-access-control";
 
 const aiAccessSigningSecret = "test-ai-access-signing-secret";

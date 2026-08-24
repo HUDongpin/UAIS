@@ -12,7 +12,7 @@ export default async function Page({
   searchParams,
 }: {
   searchParams?: CoursesRouteSearchParams;
-} = {}) {
+}) {
   const query = searchParams ? await searchParams : {};
 
   return <CoursePlazaPage inviteParam={getFirstQueryValue(query.invite)} />;

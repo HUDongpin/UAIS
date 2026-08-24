@@ -15,7 +15,7 @@ import {
 } from "@/lib/learning-records/lrs-analytics";
 import {
   createLearningRecordAnalyticsGetHandler,
-} from "@/app/api/learning-records/analytics/route";
+} from "@/app/api/learning-records/analytics/handler";
 import { POST as learningRecordEventPost } from "@/app/api/learning-records/events/route";
 import { createUaisAiAccessSessionForTrustedActor } from "@/lib/server/ai-access-control";
 import { createUaisAppSessionCookie } from "@/lib/server/uais-app-session";

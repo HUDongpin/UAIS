@@ -2,7 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { createCourseCoverPostHandler } from "@/app/api/teaching/course-cover/route";
+import { createCourseCoverPostHandler } from "@/app/api/teaching/course-cover/handler";
 import type {
   QwenCourseCoverGenerateInput,
   QwenCourseCoverGenerateResult,

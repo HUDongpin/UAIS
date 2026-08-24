@@ -15,7 +15,7 @@ import { readUaisAuthenticatedTeacherSessionFromSignedCookies } from "@/lib/serv
 import {
   createUaisAppSessionDeleteHandler,
   createUaisAppSessionPostHandler,
-} from "@/app/api/auth/app-session/route";
+} from "@/app/api/auth/app-session/handler";
 
 describe("UAIS enterprise app sessions", () => {
   afterEach(() => {

@@ -2,15 +2,15 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { createLearningChatroomHistoryGetHandler } from "@/app/api/learning/chatroom/route";
-import { createTeachingCourseGetHandler } from "@/app/api/teaching/courses/route";
-import { createTeachingClassMembershipPatchHandler } from "@/app/api/teaching/classes/[classId]/memberships/[membershipId]/route";
-import { createTeachingLearningGroupPostHandler } from "@/app/api/teaching/courses/[courseId]/groups/route";
-import { createTeachingLearningGroupAutoSplitPostHandler } from "@/app/api/teaching/courses/[courseId]/groups/auto-split/route";
+import { createLearningChatroomHistoryGetHandler } from "@/app/api/learning/chatroom/handler";
+import { createTeachingCourseGetHandler } from "@/app/api/teaching/courses/handler";
+import { createTeachingClassMembershipPatchHandler } from "@/app/api/teaching/classes/[classId]/memberships/[membershipId]/handler";
+import { createTeachingLearningGroupPostHandler } from "@/app/api/teaching/courses/[courseId]/groups/handler";
+import { createTeachingLearningGroupAutoSplitPostHandler } from "@/app/api/teaching/courses/[courseId]/groups/auto-split/handler";
 import {
   createTeachingLearningGroupDeleteHandler,
   createTeachingLearningGroupPatchHandler,
-} from "@/app/api/teaching/courses/[courseId]/groups/[groupId]/route";
+} from "@/app/api/teaching/courses/[courseId]/groups/[groupId]/handler";
 import { type UaisAppSessionUser } from "@/lib/auth/uais-app-session";
 import { isLearningChatroomGroupsEnabled } from "@/lib/server/learning-chatroom-groups-flag";
 import { createUaisAppSessionCookie } from "@/lib/server/uais-app-session";

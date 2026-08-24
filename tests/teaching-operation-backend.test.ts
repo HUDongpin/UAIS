@@ -5,31 +5,31 @@ import { describe, expect, it } from "vitest";
 import { TEACHING_OPERATION_IDS } from "@/components/teaching/teaching-operation-data";
 import {
   createTeachingOperationActionPostHandler,
-} from "@/app/api/teaching/operations/route";
+} from "@/app/api/teaching/operations/handler";
 import {
   createTeachingOperationAuditGetHandler,
-} from "@/app/api/teaching/operations/audit/route";
+} from "@/app/api/teaching/operations/audit/handler";
 import {
   createTeachingOperationExportGetHandler,
-} from "@/app/api/teaching/operations/export/[manifestId]/route";
+} from "@/app/api/teaching/operations/export/[manifestId]/handler";
 import {
   createTeachingOperationBackupRestorePostHandler,
-} from "@/app/api/teaching/operations/backups/[backupId]/restore/route";
+} from "@/app/api/teaching/operations/backups/[backupId]/restore/handler";
 import {
   createTeachingOperationRecordRollbackPostHandler,
-} from "@/app/api/teaching/operations/records/[recordId]/rollback/route";
+} from "@/app/api/teaching/operations/records/[recordId]/rollback/handler";
 import {
   createTeachingGradebookReleasePostHandler,
-} from "@/app/api/teaching/gradebook-updates/[objectId]/release/route";
+} from "@/app/api/teaching/gradebook-updates/[objectId]/release/handler";
 import {
   createTeachingGradebookReleaseRollbackPostHandler,
-} from "@/app/api/teaching/gradebook-updates/[objectId]/rollback/route";
+} from "@/app/api/teaching/gradebook-updates/[objectId]/rollback/handler";
 import {
   createTeachingInviteCodeJoinPostHandler,
-} from "@/app/api/teaching/invite-codes/[code]/join/route";
+} from "@/app/api/teaching/invite-codes/[code]/join/handler";
 import {
   createTeachingCourseClassPostHandler,
-} from "@/app/api/teaching/courses/[courseId]/classes/route";
+} from "@/app/api/teaching/courses/[courseId]/classes/handler";
 import { createUaisAppSessionCookie } from "@/lib/server/uais-app-session";
 import {
   executeTeachingOperationAction,
@@ -18909,7 +18909,7 @@ describe("teaching operation backend persistence", () => {
     });
     const { createTeachingCollaborationInviteEmailDeliveryCallbackPostHandler } =
       await import(
-        "@/app/api/teaching/operations/collaboration-invite-deliveries/route"
+        "@/app/api/teaching/operations/collaboration-invite-deliveries/handler"
       );
     const postCallback = createTeachingCollaborationInviteEmailDeliveryCallbackPostHandler({
       env: {
@@ -24050,7 +24050,7 @@ describe("teaching operation backend persistence", () => {
   });
 
   it("reads external teaching operation audit alerts through signed teacher access without leaking storage credentials", async () => {
-    const alertsRouteModulePath = "@/app/api/teaching/operations/audit/alerts/route";
+    const alertsRouteModulePath = "@/app/api/teaching/operations/audit/alerts/handler";
     const routeModule = await import(/* @vite-ignore */ alertsRouteModulePath).catch(
       () => undefined,
     );
@@ -24200,7 +24200,7 @@ describe("teaching operation backend persistence", () => {
   });
 
   it("filters cross-teacher external teaching operation audit alerts before returning them", async () => {
-    const alertsRouteModulePath = "@/app/api/teaching/operations/audit/alerts/route";
+    const alertsRouteModulePath = "@/app/api/teaching/operations/audit/alerts/handler";
     const routeModule = await import(/* @vite-ignore */ alertsRouteModulePath).catch(
       () => undefined,
     );
@@ -24314,7 +24314,7 @@ describe("teaching operation backend persistence", () => {
   });
 
   it("blocks production teaching operation audit alert readback before ownership or external alerts when teacher auth provider is not production-ready", async () => {
-    const alertsRouteModulePath = "@/app/api/teaching/operations/audit/alerts/route";
+    const alertsRouteModulePath = "@/app/api/teaching/operations/audit/alerts/handler";
     const routeModule = await import(/* @vite-ignore */ alertsRouteModulePath).catch(
       () => undefined,
     );
@@ -24425,7 +24425,7 @@ describe("teaching operation backend persistence", () => {
   });
 
   it("requires production database adapter evidence on production audit alert readback", async () => {
-    const alertsRouteModulePath = "@/app/api/teaching/operations/audit/alerts/route";
+    const alertsRouteModulePath = "@/app/api/teaching/operations/audit/alerts/handler";
     const routeModule = await import(/* @vite-ignore */ alertsRouteModulePath).catch(
       () => undefined,
     );
@@ -24515,7 +24515,7 @@ describe("teaching operation backend persistence", () => {
   });
 
   it("returns production database adapter evidence from production audit alert readback", async () => {
-    const alertsRouteModulePath = "@/app/api/teaching/operations/audit/alerts/route";
+    const alertsRouteModulePath = "@/app/api/teaching/operations/audit/alerts/handler";
     const routeModule = await import(/* @vite-ignore */ alertsRouteModulePath).catch(
       () => undefined,
     );
@@ -24605,7 +24605,7 @@ describe("teaching operation backend persistence", () => {
   });
 
   it("rejects unsafe signed audit alert actor ids before ownership or external alerts", async () => {
-    const alertsRouteModulePath = "@/app/api/teaching/operations/audit/alerts/route";
+    const alertsRouteModulePath = "@/app/api/teaching/operations/audit/alerts/handler";
     const routeModule = await import(/* @vite-ignore */ alertsRouteModulePath).catch(
       () => undefined,
     );
@@ -24703,7 +24703,7 @@ describe("teaching operation backend persistence", () => {
   });
 
   it("rejects unsafe signed audit alert session ids before ownership or external alerts", async () => {
-    const alertsRouteModulePath = "@/app/api/teaching/operations/audit/alerts/route";
+    const alertsRouteModulePath = "@/app/api/teaching/operations/audit/alerts/handler";
     const routeModule = await import(/* @vite-ignore */ alertsRouteModulePath).catch(
       () => undefined,
     );
@@ -24801,7 +24801,7 @@ describe("teaching operation backend persistence", () => {
   });
 
   it("rejects signed-student audit alert reads before touching external audit storage", async () => {
-    const alertsRouteModulePath = "@/app/api/teaching/operations/audit/alerts/route";
+    const alertsRouteModulePath = "@/app/api/teaching/operations/audit/alerts/handler";
     const routeModule = await import(/* @vite-ignore */ alertsRouteModulePath).catch(
       () => undefined,
     );
@@ -24888,7 +24888,7 @@ describe("teaching operation backend persistence", () => {
   });
 
   it("rejects unsafe signed student account ids before audit alert reads", async () => {
-    const alertsRouteModulePath = "@/app/api/teaching/operations/audit/alerts/route";
+    const alertsRouteModulePath = "@/app/api/teaching/operations/audit/alerts/handler";
     const routeModule = await import(/* @vite-ignore */ alertsRouteModulePath).catch(
       () => undefined,
     );
@@ -24968,7 +24968,7 @@ describe("teaching operation backend persistence", () => {
 
   it("rejects signed-student audit alert notification access before touching external storage", async () => {
     const notificationsRouteModulePath =
-      "@/app/api/teaching/operations/audit/alerts/notifications/route";
+      "@/app/api/teaching/operations/audit/alerts/notifications/handler";
     const routeModule = await import(/* @vite-ignore */ notificationsRouteModulePath).catch(
       () => undefined,
     );
@@ -25092,7 +25092,7 @@ describe("teaching operation backend persistence", () => {
 
   it("rejects unsafe signed student account ids before audit alert notification access", async () => {
     const notificationsRouteModulePath =
-      "@/app/api/teaching/operations/audit/alerts/notifications/route";
+      "@/app/api/teaching/operations/audit/alerts/notifications/handler";
     const routeModule = await import(/* @vite-ignore */ notificationsRouteModulePath).catch(
       () => undefined,
     );
@@ -25189,7 +25189,7 @@ describe("teaching operation backend persistence", () => {
 
   it("rejects unsafe signed audit alert notification actor ids before ownership or external notifications", async () => {
     const notificationsRouteModulePath =
-      "@/app/api/teaching/operations/audit/alerts/notifications/route";
+      "@/app/api/teaching/operations/audit/alerts/notifications/handler";
     const routeModule = await import(/* @vite-ignore */ notificationsRouteModulePath).catch(
       () => undefined,
     );
@@ -25319,7 +25319,7 @@ describe("teaching operation backend persistence", () => {
 
   it("rejects unsafe signed audit alert notification session ids before ownership or external notifications", async () => {
     const notificationsRouteModulePath =
-      "@/app/api/teaching/operations/audit/alerts/notifications/route";
+      "@/app/api/teaching/operations/audit/alerts/notifications/handler";
     const routeModule = await import(/* @vite-ignore */ notificationsRouteModulePath).catch(
       () => undefined,
     );
@@ -25449,7 +25449,7 @@ describe("teaching operation backend persistence", () => {
 
   it("blocks production teaching operation audit alert notification access before ownership or external notification storage when teacher auth provider is not production-ready", async () => {
     const notificationsRouteModulePath =
-      "@/app/api/teaching/operations/audit/alerts/notifications/route";
+      "@/app/api/teaching/operations/audit/alerts/notifications/handler";
     const routeModule = await import(/* @vite-ignore */ notificationsRouteModulePath).catch(
       () => undefined,
     );
@@ -25600,7 +25600,7 @@ describe("teaching operation backend persistence", () => {
 
   it("requires production database adapter evidence on production audit alert notification dispatch and readback", async () => {
     const notificationsRouteModulePath =
-      "@/app/api/teaching/operations/audit/alerts/notifications/route";
+      "@/app/api/teaching/operations/audit/alerts/notifications/handler";
     const routeModule = await import(/* @vite-ignore */ notificationsRouteModulePath).catch(
       () => undefined,
     );
@@ -25731,7 +25731,7 @@ describe("teaching operation backend persistence", () => {
 
   it("returns production database adapter evidence from production audit alert notification dispatch and outbox", async () => {
     const notificationsRouteModulePath =
-      "@/app/api/teaching/operations/audit/alerts/notifications/route";
+      "@/app/api/teaching/operations/audit/alerts/notifications/handler";
     const routeModule = await import(/* @vite-ignore */ notificationsRouteModulePath).catch(
       () => undefined,
     );
@@ -25863,7 +25863,7 @@ describe("teaching operation backend persistence", () => {
 
   it("queues external teaching operation audit alert notifications through signed teacher access", async () => {
     const notificationsRouteModulePath =
-      "@/app/api/teaching/operations/audit/alerts/notifications/route";
+      "@/app/api/teaching/operations/audit/alerts/notifications/handler";
     const routeModule = await import(/* @vite-ignore */ notificationsRouteModulePath).catch(
       () => undefined,
     );
@@ -26034,7 +26034,7 @@ describe("teaching operation backend persistence", () => {
 
   it("reads external teaching operation audit alert notification outbox through signed teacher access", async () => {
     const notificationsRouteModulePath =
-      "@/app/api/teaching/operations/audit/alerts/notifications/route";
+      "@/app/api/teaching/operations/audit/alerts/notifications/handler";
     const routeModule = await import(/* @vite-ignore */ notificationsRouteModulePath).catch(
       () => undefined,
     );
@@ -26193,7 +26193,7 @@ describe("teaching operation backend persistence", () => {
 
   it("filters cross-teacher external teaching operation audit alert notifications before returning them", async () => {
     const notificationsRouteModulePath =
-      "@/app/api/teaching/operations/audit/alerts/notifications/route";
+      "@/app/api/teaching/operations/audit/alerts/notifications/handler";
     const routeModule = await import(/* @vite-ignore */ notificationsRouteModulePath).catch(
       () => undefined,
     );

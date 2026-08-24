@@ -5,7 +5,7 @@ import { join } from "node:path";
 import {
   createLearningChatroomHistoryGetHandler,
   createLearningChatroomPostHandler,
-} from "@/app/api/learning/chatroom/route";
+} from "@/app/api/learning/chatroom/handler";
 import { hasMentionedAgent } from "@/lib/ai/orchestration/director";
 import type { UaisAppSessionUser } from "@/lib/auth/uais-app-session";
 import { createUaisAppSessionCookie } from "@/lib/server/uais-app-session";

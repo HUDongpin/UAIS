@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createLearningRecordAnalyticsGetHandler } from "@/app/api/learning-records/analytics/route";
+import { createLearningRecordAnalyticsGetHandler } from "@/app/api/learning-records/analytics/handler";
 import {
   createAdaptiveEvidenceFromXapiStatements,
   recommendNextLesson,

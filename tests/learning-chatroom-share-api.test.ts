@@ -4,8 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { createLearningChatroomShareMintPostHandler } from "@/app/api/learning/chatroom/share/route";
-import { createLearningChatroomShareRevokeDeleteHandler } from "@/app/api/learning/chatroom/share/[shareId]/route";
+import { createLearningChatroomShareMintPostHandler } from "@/app/api/learning/chatroom/share/handler";
+import { createLearningChatroomShareRevokeDeleteHandler } from "@/app/api/learning/chatroom/share/[shareId]/handler";
 import { ChatroomTranscriptDocument } from "@/app/learning/chatroom/export/chatroom-transcript-document";
 import {
   createLearningChatroomExportUrl,

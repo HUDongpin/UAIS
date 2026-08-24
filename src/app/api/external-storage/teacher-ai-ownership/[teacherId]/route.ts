@@ -5,4 +5,11 @@ import {
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-export const GET = createExternalStorageTeacherOwnershipGetHandler();
+const getTeacherOwnership = createExternalStorageTeacherOwnershipGetHandler();
+
+export function GET(
+  request: Request,
+  context: { params: Promise<{ teacherId: string }> },
+) {
+  return getTeacherOwnership(request, context);
+}

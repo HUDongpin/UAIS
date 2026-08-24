@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   createLearningPptPlaybackAudioGetHandler,
-} from "@/app/api/learning/ppt-playback/audio/[manifestId]/[audioId]/route";
+} from "@/app/api/learning/ppt-playback/audio/[manifestId]/[audioId]/handler";
 import { GET as learningPptPlaybackGet } from "@/app/api/learning/ppt-playback/[courseId]/route";
 import {
   createLearningPptPlaybackManifestForCourse,

@@ -5,4 +5,11 @@ import {
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-export const POST = createExternalStorageTeachingOperationAppendPostHandler();
+const appendTeachingOperation = createExternalStorageTeachingOperationAppendPostHandler();
+
+export function POST(
+  request: Request,
+  context: { params: Promise<{ teacherId: string }> },
+) {
+  return appendTeachingOperation(request, context);
+}

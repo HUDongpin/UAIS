@@ -5,7 +5,7 @@ import { join } from "node:path";
 import {
   createLearningChatroomHistoryGetHandler,
   createLearningChatroomPostHandler,
-} from "@/app/api/learning/chatroom/route";
+} from "@/app/api/learning/chatroom/handler";
 import {
   createExternalStorageLearningChatroomTranscriptsDatabaseGetHandler,
   createExternalStorageLearningChatroomTranscriptsDatabasePutHandler,

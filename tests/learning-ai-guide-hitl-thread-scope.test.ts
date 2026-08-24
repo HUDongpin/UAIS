@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createScopedHitlThreadId } from "@/app/api/learning/ai-guide/hitl/route";
+import { createScopedHitlThreadId } from "@/app/api/learning/ai-guide/hitl/handler";
 
 // The LangGraph runtime only accepts thread ids matching this shape.
 const safeThreadIdPattern = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;

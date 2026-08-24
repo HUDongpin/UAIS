@@ -843,7 +843,7 @@ describe("courses route", () => {
     const pageWithoutInvite = await CoursesRoutePage({
       searchParams: Promise.resolve({}),
     });
-    const pageWithoutSearchParams = await CoursesRoutePage();
+    const pageWithoutSearchParams = await CoursesRoutePage({});
 
     expect(pageWithoutInvite.props.inviteParam).toBeUndefined();
     expect(pageWithoutSearchParams.props.inviteParam).toBeUndefined();

@@ -5,4 +5,12 @@ import {
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-export const GET = createExternalStorageTeachingOperationAuditAlertsGetHandler();
+const getTeachingOperationAuditAlerts =
+  createExternalStorageTeachingOperationAuditAlertsGetHandler();
+
+export function GET(
+  request: Request,
+  context: { params: Promise<{ teacherId: string }> },
+) {
+  return getTeachingOperationAuditAlerts(request, context);
+}

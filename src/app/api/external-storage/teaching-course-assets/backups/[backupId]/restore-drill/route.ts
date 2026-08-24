@@ -5,5 +5,12 @@ import {
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-export const POST =
+const restoreTeachingCourseAssetsBackup =
   createExternalStorageTeachingCourseAssetsBackupRestoreDrillPostHandler();
+
+export function POST(
+  request: Request,
+  context: { params: Promise<{ backupId: string }> },
+) {
+  return restoreTeachingCourseAssetsBackup(request, context);
+}

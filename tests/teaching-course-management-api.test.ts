@@ -2,20 +2,20 @@ import { mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import * as teachingCoursesRoute from "@/app/api/teaching/courses/route";
+import * as teachingCoursesRoute from "@/app/api/teaching/courses/handler";
 import {
   createTeachingCourseGetHandler,
   createTeachingCoursePostHandler,
-} from "@/app/api/teaching/courses/route";
+} from "@/app/api/teaching/courses/handler";
 import {
   createTeachingCourseClassPostHandler,
-} from "@/app/api/teaching/courses/[courseId]/classes/route";
+} from "@/app/api/teaching/courses/[courseId]/classes/handler";
 import {
   createTeachingClassMembershipApprovePostHandler,
-} from "@/app/api/teaching/classes/[classId]/memberships/[membershipId]/approve/route";
+} from "@/app/api/teaching/classes/[classId]/memberships/[membershipId]/approve/handler";
 import {
   createTeachingInviteCodeJoinPostHandler,
-} from "@/app/api/teaching/invite-codes/[code]/join/route";
+} from "@/app/api/teaching/invite-codes/[code]/join/handler";
 import {
   type UaisAppSessionUser,
 } from "@/lib/auth/uais-app-session";

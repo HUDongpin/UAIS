@@ -1,9 +1,16 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 function source(path: string) {
-  return readFileSync(join(process.cwd(), path), "utf8");
+  const absolutePath = join(process.cwd(), path);
+  if (path.endsWith("/route.ts")) {
+    const handlerPath = absolutePath.slice(0, -"route.ts".length) + "handler.ts";
+    if (existsSync(handlerPath)) {
+      return readFileSync(handlerPath, "utf8");
+    }
+  }
+  return readFileSync(absolutePath, "utf8");
 }
 
 function sliceRequiredSection(sourceText: string, startNeedle: string, endNeedle: string) {

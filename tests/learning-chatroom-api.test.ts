@@ -5,9 +5,9 @@ import { join } from "node:path";
 import {
   createLearningChatroomHistoryGetHandler,
   createLearningChatroomPostHandler,
-  maxDuration,
-} from "@/app/api/learning/chatroom/route";
-import { createLearningChatroomModerationPostHandler } from "@/app/api/learning/chatroom/moderation/route";
+} from "@/app/api/learning/chatroom/handler";
+import { maxDuration } from "@/app/api/learning/chatroom/route";
+import { createLearningChatroomModerationPostHandler } from "@/app/api/learning/chatroom/moderation/handler";
 import type { UaisAppSessionUser } from "@/lib/auth/uais-app-session";
 import { createUaisAppSessionCookie } from "@/lib/server/uais-app-session";
 import { createEmptyLearningChatroomTranscriptDatabase } from "@/lib/server/learning-chatroom-transcript-store";

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createUaisHealthGetHandler } from "@/app/healthz/route";
+import { createUaisHealthGetHandler } from "@/app/healthz/handler";
 import { UAIS_CORE_DATABASE_MIGRATION_VERSIONS } from "@/lib/db/migrations";
 
 // /healthz reported `{ app: "ok" }` unconditionally, so a Neon outage - with the

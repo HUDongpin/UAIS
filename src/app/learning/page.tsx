@@ -31,7 +31,7 @@ export default async function Page({
   searchParams,
 }: {
   searchParams?: LearningRouteSearchParams;
-} = {}) {
+}) {
   const query = searchParams ? await searchParams : {};
 
   return (

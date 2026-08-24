@@ -1,5 +1,5 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
-import type { UaisAuthenticatedTeacherPrincipal } from "@/app/api/ai/session/route";
+import type { UaisAuthenticatedTeacherPrincipal } from "@/app/api/ai/session/handler";
 
 export const UAIS_TEACHER_AUTH_CLAIMS_COOKIE = "uais_teacher_auth_claims";
 export const UAIS_TEACHER_AUTH_SIGNATURE_COOKIE = "uais_teacher_auth_signature";

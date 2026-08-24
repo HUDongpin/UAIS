@@ -1,56 +1,57 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { createHmac, createSign, generateKeyPairSync, type KeyObject } from "node:crypto";
-import { POST as postChat, createChatPostHandler } from "@/app/api/ai/chat/route";
+import { POST as postChat } from "@/app/api/ai/chat/route";
+import { createChatPostHandler } from "@/app/api/ai/chat/handler";
+import { POST as postPptNarration } from "@/app/api/ai/ppt-narration/route";
 import {
-  POST as postPptNarration,
   createPptNarrationPostHandler,
-} from "@/app/api/ai/ppt-narration/route";
+} from "@/app/api/ai/ppt-narration/handler";
 import {
   createPptNarrationAudioGetHandler,
-} from "@/app/api/ai/ppt-narration/audio/[manifestId]/[audioId]/route";
+} from "@/app/api/ai/ppt-narration/audio/[manifestId]/[audioId]/handler";
 import {
   createPptNarrationExportGetHandler,
-} from "@/app/api/ai/ppt-narration/export/[manifestId]/route";
-import { createReadinessGetHandler } from "@/app/api/ai/readiness/route";
-import { createSmokePlanGetHandler } from "@/app/api/ai/smoke-plan/route";
+} from "@/app/api/ai/ppt-narration/export/[manifestId]/handler";
+import { createReadinessGetHandler } from "@/app/api/ai/readiness/handler";
+import { createSmokePlanGetHandler } from "@/app/api/ai/smoke-plan/handler";
 import {
   createTeacherAiSessionPostHandler,
-} from "@/app/api/ai/session/route";
+} from "@/app/api/ai/session/handler";
 import {
   createTeacherAuthSessionIssuePostHandler,
-} from "@/app/api/ai/teacher-auth/issue/route";
+} from "@/app/api/ai/teacher-auth/issue/handler";
 import {
   createTeacherAiOwnershipGetHandler,
-} from "@/app/api/ai/teacher-ownership/route";
+} from "@/app/api/ai/teacher-ownership/handler";
 import {
   createTeacherPptWorkflowGetHandler,
-} from "@/app/api/ai/teacher-ppt-workflow/route";
+} from "@/app/api/ai/teacher-ppt-workflow/handler";
+import { POST as postVoiceCloneStatus } from "@/app/api/ai/voice-clone/status/route";
 import {
-  POST as postVoiceCloneStatus,
   createVoiceCloneStatusPostHandler,
-} from "@/app/api/ai/voice-clone/status/route";
+} from "@/app/api/ai/voice-clone/status/handler";
 import {
   createVoiceCloneRevokePostHandler,
-} from "@/app/api/ai/voice-clone/revoke/route";
+} from "@/app/api/ai/voice-clone/revoke/handler";
 import {
   createVoiceLifecycleAuditGetHandler,
-} from "@/app/api/ai/voice-clone/lifecycle-audit/route";
+} from "@/app/api/ai/voice-clone/lifecycle-audit/handler";
 import {
   createVoiceAssetRetentionReadinessGetHandler,
-} from "@/app/api/ai/voice-assets/retention-readiness/route";
+} from "@/app/api/ai/voice-assets/retention-readiness/handler";
 import {
   createVoiceClonePreflightPostHandler,
-} from "@/app/api/ai/voice-clone/preflight/route";
+} from "@/app/api/ai/voice-clone/preflight/handler";
+import { POST as postVoiceSample } from "@/app/api/ai/voice-sample/route";
 import {
-  POST as postVoiceSample,
   createVoiceSamplePostHandler,
-} from "@/app/api/ai/voice-sample/route";
+} from "@/app/api/ai/voice-sample/handler";
 import {
   createLearningAiGuidePostHandler,
-} from "@/app/api/learning/ai-guide/route";
+} from "@/app/api/learning/ai-guide/handler";
 import {
   createLearningAiGuideHitlPostHandler,
-} from "@/app/api/learning/ai-guide/hitl/route";
+} from "@/app/api/learning/ai-guide/hitl/handler";
 import { storeTeacherVoiceSampleAsset } from "@/lib/ai/voice/sample-assets";
 import type { UaisAppSessionUser } from "@/lib/auth/uais-app-session";
 import { createUaisAppSessionCookie } from "@/lib/server/uais-app-session";
@@ -8265,10 +8266,10 @@ describe("UAIS AI API route contracts", () => {
         { headers: signedTeacherAiAccessHeaders },
       ),
       {
-        params: {
+        params: Promise.resolve({
           manifestId: "audio-manifest-research-methods-unit-3",
           audioId: "tts_research-methods-unit-3_s1",
-        },
+        }),
       },
     );
 
@@ -8300,10 +8301,10 @@ describe("UAIS AI API route contracts", () => {
         { headers: teacherAiAccessHeaders },
       ),
       {
-        params: {
+        params: Promise.resolve({
           manifestId: "audio-manifest-research-methods-unit-3",
           audioId: "tts_research-methods-unit-3_s1",
-        },
+        }),
       },
     );
 
@@ -8341,10 +8342,10 @@ describe("UAIS AI API route contracts", () => {
         { headers: teacherAiAccessHeaders },
       ),
       {
-        params: {
+        params: Promise.resolve({
           manifestId: "audio-manifest-research-methods-unit-3",
           audioId: "tts_research-methods-unit-3_s1",
-        },
+        }),
       },
     );
 
@@ -8377,10 +8378,10 @@ describe("UAIS AI API route contracts", () => {
         "http://localhost/api/ai/ppt-narration/audio/audio-manifest-research-methods-unit-3/tts_research-methods-unit-3_s1",
       ),
       {
-        params: {
+        params: Promise.resolve({
           manifestId: "audio-manifest-research-methods-unit-3",
           audioId: "tts_research-methods-unit-3_s1",
-        },
+        }),
       },
     );
 
@@ -8423,7 +8424,7 @@ describe("UAIS AI API route contracts", () => {
         "http://localhost/api/ai/ppt-narration/export/audio-manifest-research-methods-unit-3",
         { headers: signedTeacherAiAccessHeaders },
       ),
-      { params: { manifestId: "audio-manifest-research-methods-unit-3" } },
+      { params: Promise.resolve({ manifestId: "audio-manifest-research-methods-unit-3" }) },
     );
 
     expect(response.status).toBe(200);
@@ -8463,7 +8464,7 @@ describe("UAIS AI API route contracts", () => {
         "http://localhost/api/ai/ppt-narration/export/audio-manifest-research-methods-unit-3",
         { headers: teacherAiAccessHeaders },
       ),
-      { params: { manifestId: "audio-manifest-research-methods-unit-3" } },
+      { params: Promise.resolve({ manifestId: "audio-manifest-research-methods-unit-3" }) },
     );
 
     expect(response.status).toBe(403);
@@ -8507,7 +8508,7 @@ describe("UAIS AI API route contracts", () => {
         "https://www.uais.top/api/ai/ppt-narration/export/audio-manifest-research-methods-unit-3",
         { headers: teacherAiAccessHeaders },
       ),
-      { params: { manifestId: "audio-manifest-research-methods-unit-3" } },
+      { params: Promise.resolve({ manifestId: "audio-manifest-research-methods-unit-3" }) },
     );
 
     await expectSignedSessionRequired(response, {
@@ -8545,7 +8546,7 @@ describe("UAIS AI API route contracts", () => {
       new Request(
         "http://localhost/api/ai/ppt-narration/export/audio-manifest-research-methods-unit-3",
       ),
-      { params: { manifestId: "audio-manifest-research-methods-unit-3" } },
+      { params: Promise.resolve({ manifestId: "audio-manifest-research-methods-unit-3" }) },
     );
     const body = await response.json();
 

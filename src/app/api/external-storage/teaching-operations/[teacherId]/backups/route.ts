@@ -4,4 +4,12 @@ import {
 
 export const dynamic = "force-dynamic";
 
-export const POST = createExternalStorageTeachingOperationBackupPostHandler();
+const createTeachingOperationBackup =
+  createExternalStorageTeachingOperationBackupPostHandler();
+
+export function POST(
+  request: Request,
+  context: { params: Promise<{ teacherId: string }> },
+) {
+  return createTeachingOperationBackup(request, context);
+}
