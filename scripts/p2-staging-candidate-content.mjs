@@ -72,17 +72,73 @@ export function computeUaisStagingCandidateContentManifest(
       files,
       "uais-staging-candidate-content:v1\0",
     ),
-    entries: filesByEntry.map(({ entry, files: entryFiles }) => ({
-      path: entry,
-      fileCount: entryFiles.length,
-      sha256: hashCandidateFiles(
-        absoluteRoot,
-        entryFiles,
-        `uais-staging-candidate-content-entry:v1\0${entry}\0`,
-      ),
-    })),
+    entries: filesByEntry.map(({ entry, files: entryFiles }) => {
+      const contents = entryFiles.map((relativePath) =>
+        readFileSync(resolve(absoluteRoot, relativePath)),
+      );
+      return {
+        path: entry,
+        fileCount: entryFiles.length,
+        byteCount: contents.reduce(
+          (total, entryContents) => total + entryContents.byteLength,
+          0,
+        ),
+        sha256: hashCandidateFiles(
+          absoluteRoot,
+          entryFiles,
+          `uais-staging-candidate-content-entry:v1\0${entry}\0`,
+        ),
+        ...readJsonDiagnostic(entry, contents),
+      };
+    }),
     valuesRedacted: true,
   };
+}
+
+/** @param {string} entry @param {readonly Buffer[]} contents */
+function readJsonDiagnostic(entry, contents) {
+  if (
+    (entry !== "vercel.json" && entry !== "vercel.staging.json") ||
+    contents.length !== 1
+  ) {
+    return {};
+  }
+  try {
+    const value = JSON.parse(contents[0].toString("utf8"));
+    const canonical = JSON.stringify(canonicalizeJson(value));
+    return {
+      jsonDiagnostic: {
+        canonicalSha256: createHash("sha256")
+          .update("uais-staging-candidate-json:v1\0")
+          .update(canonical)
+          .digest("hex"),
+        topLevelKeys:
+          value && typeof value === "object" && !Array.isArray(value)
+            ? Object.keys(value).sort()
+            : [],
+        valuesRedacted: true,
+      },
+    };
+  } catch {
+    return {
+      jsonDiagnostic: {
+        parseStatus: "invalid",
+        topLevelKeys: [],
+        valuesRedacted: true,
+      },
+    };
+  }
+}
+
+/** @param {unknown} value @returns {unknown} */
+function canonicalizeJson(value) {
+  if (Array.isArray(value)) return value.map(canonicalizeJson);
+  if (!value || typeof value !== "object") return value;
+  const result = Object.create(null);
+  for (const key of Object.keys(value).sort()) {
+    result[key] = canonicalizeJson(value[key]);
+  }
+  return result;
 }
 
 /** @param {string} root @param {readonly string[]} entries */

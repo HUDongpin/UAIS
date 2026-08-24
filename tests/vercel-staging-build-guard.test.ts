@@ -78,10 +78,68 @@ describe("guarded Vercel staging build", () => {
       uaisStagingCandidateContentEntries,
     );
     expect(manifest.entries.every((entry) => entry.fileCount > 0)).toBe(true);
+    expect(manifest.entries.every((entry) => entry.byteCount > 0)).toBe(true);
     expect(
       manifest.entries.every((entry) => /^[0-9a-f]{64}$/.test(entry.sha256)),
     ).toBe(true);
+    expect(
+      manifest.entries.find((entry) => entry.path === "vercel.json"),
+    ).toMatchObject({
+      jsonDiagnostic: {
+        canonicalSha256: expect.stringMatching(/^[0-9a-f]{64}$/),
+        topLevelKeys: ["$schema", "buildCommand", "framework", "git"],
+        valuesRedacted: true,
+      },
+    });
     expect(manifest.valuesRedacted).toBe(true);
+  });
+
+  it("never includes JSON values in the content manifest diagnostic", () => {
+    const root = mkdtempSync(join(tmpdir(), "uais-content-json-redaction-"));
+    const privateValue = "private-json-value-must-not-escape";
+    try {
+      writeFileSync(
+        join(root, "vercel.json"),
+        JSON.stringify({ build: { env: { PRIVATE_VALUE: privateValue } } }),
+      );
+
+      const manifest = computeUaisStagingCandidateContentManifest(root, [
+        "vercel.json",
+      ]);
+
+      expect(manifest.entries[0]).toMatchObject({
+        path: "vercel.json",
+        fileCount: 1,
+        byteCount: expect.any(Number),
+        jsonDiagnostic: {
+          canonicalSha256: expect.stringMatching(/^[0-9a-f]{64}$/),
+          topLevelKeys: ["build"],
+          valuesRedacted: true,
+        },
+      });
+      expect(JSON.stringify(manifest)).not.toContain(privateValue);
+
+      writeFileSync(
+        join(root, "vercel.json"),
+        `${JSON.stringify(
+          { build: { env: { PRIVATE_VALUE: privateValue } } },
+          null,
+          2,
+        )}\n`,
+      );
+      const reformatted = computeUaisStagingCandidateContentManifest(root, [
+        "vercel.json",
+      ]);
+      expect(reformatted.entries[0].sha256).not.toBe(
+        manifest.entries[0].sha256,
+      );
+      expect(reformatted.entries[0].jsonDiagnostic?.canonicalSha256).toBe(
+        manifest.entries[0].jsonDiagnostic?.canonicalSha256,
+      );
+      expect(JSON.stringify(reformatted)).not.toContain(privateValue);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 
   it("keeps the legacy aggregate framing stable for a fixed byte fixture", () => {
