@@ -292,7 +292,15 @@ export function HumanAiChatroom({ summary }: HumanAiChatroomProps) {
                 {room.windowNotice}
               </p>
             ) : null}
-            {room.displayMessages.length === 0 ? (
+            {room.fallbackNotice ? (
+              <div
+                role="status"
+                data-uais-chatroom-unavailable="true"
+                className="rounded-2xl border border-dashed border-[var(--border)] bg-[var(--surface)] p-5 text-sm text-[var(--muted)]"
+              >
+                {room.fallbackNotice}
+              </div>
+            ) : room.displayMessages.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-[var(--border)] bg-[var(--surface)] p-5 text-sm text-[var(--muted)]">
                 {t.learning.emptyChat}
               </div>
@@ -439,11 +447,6 @@ function RoomHeader({
             ) : (
               <span className={courseChipClassName}>{courseChipContent}</span>
             )}
-          </p>
-        ) : null}
-        {room.fallbackNotice ? (
-          <p className="mt-2 text-xs leading-5 text-[var(--muted)]">
-            {room.fallbackNotice}
           </p>
         ) : null}
       </div>

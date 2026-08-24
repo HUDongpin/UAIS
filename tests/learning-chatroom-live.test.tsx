@@ -60,7 +60,7 @@ const demoCourseLabel = "示例课程：初等数学研究";
 const courseALabel = "当前课程：课程A · A班 · 2026春";
 const courseBLabel = "当前课程：课程B · B班 · 2026春";
 const joinCoursePrompt =
-  "暂无可用的真实课程，下方仅为示例回放。加入或创建一门课程后即可与智能体对话。";
+  "暂无可用的真实课程。加入或创建课程后，才能在这里与同学和智能体协作。";
 const courseLoadFailedCopy = "暂时无法加载你的课程列表，请稍后再试。";
 const accessDeniedCopy =
   "你还没有这门课程的智能体使用权限，请先加入或创建这门课程后再试。";
@@ -242,10 +242,6 @@ function renderSignedInChatroom(user: UaisAppSessionUser = studentUser) {
   );
 }
 
-async function waitForDemoCourse() {
-  await screen.findByText(demoCourseLabel);
-}
-
 // The everyday learner path: one approved course auto-resolves, so the
 // composer is live against a real courseId.
 function stubSingleCourseStudent(chatroom?: StubOptions["chatroom"]) {
@@ -342,52 +338,33 @@ describe("learner chatroom live multi-agent endpoint", () => {
     expect(screen.getAllByText("方法顾问")).toHaveLength(1);
   });
 
-  it("keeps demo seeds display-only and lets a teacher chat in the demo fallback", async () => {
+  it("fails closed without a fabricated demo room for a signed-in teacher with no owned course", async () => {
     const { calls } = stubFetch({
       teachingCourses: () => Response.json({ courses: [] }),
-      chatroom: () =>
-        Response.json({
-          status: "cue-user",
-          turns: [{ agentId: "methods-consultant", content: "示例课程的回复。" }],
-          progress: [],
-          orchestration: {},
-        }),
     });
 
     const { container } = renderSignedInChatroom(teacherUser);
-    await waitForDemoCourse();
     await screen.findByText(joinCoursePrompt);
-    // Demo context renders the seed transcript (one seeded 方法顾问 author).
-    expect(screen.getAllByText("方法顾问")).toHaveLength(1);
-    // The demo carve-out authorizes demo teacher accounts, so the composer
-    // stays live for a teacher even without an owned course.
-    expect(composerInput(container).disabled).toBe(false);
+    expect(screen.queryByText(demoCourseLabel)).toBeNull();
+    expect(screen.queryByText("林若晨")).toBeNull();
+    expect(composerInput(container).disabled).toBe(true);
 
-    sendMessage(container, "@方法顾问 变量怎么定？");
-    await screen.findByText("示例课程的回复。");
+    sendMessage(container, "老师不能向伪造课程发消息");
 
-    const posts = chatroomCalls(calls);
-    expect(posts).toHaveLength(1);
-    const body = posts[0].body as unknown as ChatroomRequestBody;
-    expect(body.courseId).toBe("elementary-math-research");
-    // Seeds never enter the live history: only the fresh student message posts.
-    expect(body.messages).toHaveLength(1);
-    expectNoSeedMessages(body);
-    // Seeded 方法顾问 message plus the freshly rendered live turn.
-    expect(screen.getAllByText("方法顾问")).toHaveLength(2);
+    expect(chatroomCalls(calls)).toHaveLength(0);
+    expectNoBubbleWithText("老师不能向伪造课程发消息");
   });
 
-  it("keeps the demo fallback read-only for a student with no usable courses", async () => {
+  it("fails closed without a fabricated demo room for a student with no usable courses", async () => {
     const { calls } = stubFetch({
       teachingCourses: () =>
         Response.json({ courses: [], classes: [], memberships: [] }),
     });
 
     const { container } = renderSignedInChatroom();
-    await waitForDemoCourse();
     await screen.findByText(joinCoursePrompt);
-    // The demo transcript stays visible as a preview (seeded student author).
-    expect(screen.getByText("林若晨")).toBeTruthy();
+    expect(screen.queryByText(demoCourseLabel)).toBeNull();
+    expect(screen.queryByText("林若晨")).toBeNull();
 
     const input = composerInput(container);
     expect(input.disabled).toBe(true);
@@ -990,14 +967,13 @@ describe("learner chatroom live multi-agent endpoint", () => {
     expect(secondBody.messages[0].id).not.toBe(secondBody.messages[2].id);
   });
 
-  it("skips the transcript read for the read-only demo preview", async () => {
+  it("skips the transcript read for an authenticated empty-course state", async () => {
     const { calls } = stubFetch({
       teachingCourses: () =>
         Response.json({ courses: [], classes: [], memberships: [] }),
     });
 
     renderSignedInChatroom();
-    await waitForDemoCourse();
     await screen.findByText(joinCoursePrompt);
     await settleInFlightRound();
 

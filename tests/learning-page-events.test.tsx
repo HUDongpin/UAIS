@@ -122,7 +122,7 @@ type FetchCall = { url: string; body: Record<string, unknown> };
 function stubFetch(options: {
   playback: "ready" | "pending";
   // Body served by GET /api/teaching/courses; defaults to an empty roster so
-  // the chatroom settles on the demo-course fallback.
+  // the authenticated chatroom settles on its fail-closed no-course state.
   teachingCourses?: unknown;
 }) {
   const learningEventCalls: FetchCall[] = [];
@@ -207,16 +207,19 @@ describe("learning page learning-record emission", () => {
   });
 
   it("does not emit learning records for non-student sessions", async () => {
-    const { learningEventCalls } = stubFetch({ playback: "pending" });
+    const { learningEventCalls } = stubFetch({
+      playback: "pending",
+      teachingCourses: { courses: [studentChatroomCourse] },
+    });
     const { container } = render(
       <SessionUserProvider initialSessionUser={teacherUser}>
         <LearningChatroomPage />
       </SessionUserProvider>,
     );
 
-    // A teacher with no owned courses lands on the demo fallback, which keeps a
-    // live composer once resolution settles.
-    await screen.findByText("示例课程：初等数学研究");
+    // Exercise the real-course send path: the absence of a learning record must
+    // come from the teacher role, not from the no-course composer being closed.
+    await screen.findByText(/研究方法与论文写作/);
     const input = container.querySelector<HTMLInputElement>("#group-message");
     expect(input).toBeTruthy();
     expect((input as HTMLInputElement).disabled).toBe(false);

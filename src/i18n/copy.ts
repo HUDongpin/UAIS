@@ -130,7 +130,7 @@ export const copy = {
       chatroomDemoCourseLabel: "示例课程：初等数学研究",
       chatroomNoCourses: "暂无可用的真实课程，聊天室已切换到示例课程。",
       chatroomJoinCoursePrompt:
-        "暂无可用的真实课程，下方仅为示例回放。加入或创建一门课程后即可与智能体对话。",
+        "暂无可用的真实课程。加入或创建课程后，才能在这里与同学和智能体协作。",
       chatroomCourseLoadFailed: "暂时无法加载你的课程列表，请稍后再试。",
       groupMembers: "小组成员",
       groupAgents: "智能体",
@@ -402,7 +402,7 @@ export const copy = {
       chatroomNoCourses:
         "No real course is available yet, so the chatroom is using the demo course.",
       chatroomJoinCoursePrompt:
-        "No real course is available yet, so the transcript below is a demo preview. Join or create a course to chat with the AI agents.",
+        "No real course is available yet. Join or create a course before collaborating with classmates and AI agents here.",
       chatroomCourseLoadFailed:
         "We could not load your courses. Please try again later.",
       groupMembers: "Members",

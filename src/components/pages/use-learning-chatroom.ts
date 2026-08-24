@@ -439,14 +439,13 @@ export function useLearningChatroom(): LearningChatroomController {
   const isInstructor = Boolean(activeGroup) && sessionUser?.role === "teacher";
 
   const fallbackReason = activeCourse?.fallbackReason;
-  // The demo fallback is a read-only preview for a learner: without an approved
-  // membership the route can only answer 403. A teacher keeps a live composer
-  // because the route's demo carve-out authorizes demo teacher accounts.
-  // On "load-failed" the demo course is standing in for a course the teacher may
-  // not own, so the composer closes for every role.
-  const demoPreviewOnly =
-    fallbackReason !== undefined &&
-    !(fallbackReason === "no-courses" && sessionUser?.role === "teacher");
+  // A signed-in workspace is never a demo surface. The fallback object keeps
+  // course-resolution types stable while an empty/load-failed state is shown,
+  // but every action stays closed for every role: otherwise a database-backed
+  // teacher with no owned course can post against the published demo course id
+  // and make a fabricated room look real. The signed-out offline demo has no
+  // fallbackReason and remains available below.
+  const demoPreviewOnly = fallbackReason !== undefined;
   // A room the server has refused to read (membership revoked, group deleted,
   // agent access denied) must not accept a send either: polling has already
   // halted and `roomAccessNotice` is on screen, so gate the composer on it too
@@ -470,9 +469,9 @@ export function useLearningChatroom(): LearningChatroomController {
         ? t.learning.chatroomJoinCoursePrompt
         : null;
 
-  // Contract: the mock seed transcript renders only in confirmed demo-course
-  // context; a real course starts from the empty-chat placeholder.
-  const showSeedTranscript = activeCourse?.isDemo === true;
+  // Mock seed rows are public, signed-out presentation only. Authenticated
+  // accounts must see only records backed by their resolved real course.
+  const showSeedTranscript = activeCourse?.isDemo === true && !sessionUser;
   const displayMessages = useMemo(
     () => (showSeedTranscript ? [...chatMessages, ...messages] : messages),
     [showSeedTranscript, messages],
@@ -689,7 +688,7 @@ export function useLearningChatroom(): LearningChatroomController {
   ]);
 
   const activeCourseLabel =
-    activeCourse === null
+    activeCourse === null || (sessionUser !== null && fallbackReason !== undefined)
       ? null
       : activeCourse.isDemo
         ? t.learning.chatroomDemoCourseLabel
