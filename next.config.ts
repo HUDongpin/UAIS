@@ -1,8 +1,17 @@
 import type { NextConfig } from "next";
 import { withSentryConfig } from "@sentry/nextjs";
 import path from "node:path";
+import { resolveUaisStagingBuildContentSha } from "./scripts/p2-staging-candidate-content.mjs";
+
+const uaisStagingBuildContentSha = resolveUaisStagingBuildContentSha({
+  env: process.env,
+  root: process.cwd(),
+});
 
 const nextConfig: NextConfig = {
+  env: {
+    UAIS_STAGING_BUILD_CONTENT_SHA: uaisStagingBuildContentSha,
+  },
   turbopack: {
     root: path.resolve(process.cwd()),
   },

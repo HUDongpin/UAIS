@@ -130,6 +130,60 @@ server-only `DEEPSEEK_API_KEY`; neither value is exposed to the browser or
 recorded in evidence. When disabled or unavailable, teachers retain the full
 manual feedback and decision path.
 
+## Isolated Staging INP Evidence
+
+The current-candidate INP lane is deliberately quarantined from the `uais`
+production project. It can run only in the separate `uais-staging` Vercel
+project, against a database carrying the enabled
+`isolated-p2-staging-source` guard row. Every name below must remain unset in
+production:
+
+- `UAIS_DB_TEST_DATABASE_URL`, `UAIS_P2_STAGING_DATABASE_URL`, and
+  `UAIS_P2_STAGING_RESTORE_DATABASE_URL` select disposable or isolated staging
+  databases. Their values never enter logs or evidence.
+- `P2_CANDIDATE_GIT_SHA`, `P2_CANDIDATE_CONTENT_SHA`,
+  `P2_IMMUTABLE_DEPLOYMENT_URL`, `UAIS_DEPLOYMENT_BASE_URL`, and
+  `UAIS_DEPLOYMENT_ENV=staging` bind evidence to one immutable deployment. The
+  Git SHA must equal Vercel's deployed commit SHA; mutable aliases are refused.
+  Generate the content digest from the clean deployment source with
+  `node scripts/p2-staging-candidate-content.mjs`. `next.config.ts` recomputes
+  the same allowlisted-source digest during the staging build, fails on a
+  mismatch, and compiles the verified value into the server artifact. A
+  syntactically valid but self-asserted digest therefore cannot enable capture.
+- `UAIS_STAGING_INP_RUM_ENABLED=yes` is the exact opt-in.
+  `UAIS_STAGING_INP_COHORT_ID` identifies one bounded run and must have the form
+  `p2-inp-<full 40-character candidate Git SHA>-<unique 1..16 character suffix>`.
+  Cohort IDs are one-use identifiers and are never reused after purge.
+- `UAIS_STAGING_INP_HMAC_SECRET` and
+  `UAIS_STAGING_INP_OPERATOR_ACCOUNT_HASHES` restrict sampling to explicitly
+  approved adult staging operators without placing raw account identifiers in
+  deployment configuration.
+- `CRON_SECRET` protects the hourly expiry purge endpoint.
+  `P2_VERCEL_PROTECTION_BYPASS_SECRET` remains a separate deployment-access
+  credential and is never reused as the purge secret.
+
+The app route never creates the TTL-bound staging evidence tables. Run the
+guarded lifecycle tool with `node --import tsx scripts/p2-staging-inp-rum.mjs`:
+`setup` performs explicit schema creation and exact catalog-contract readback;
+`readiness` is non-closing; `finalize` requires the exact cohort confirmation
+and always attempts exact purge plus a separate zero-residue readback. The
+purge deletes raw samples but retains the purged cohort tombstone so its one-use
+run identifier cannot be silently reopened. The only connection-local temporary
+tables are the canonical DDL copies used during setup catalog comparison. The
+hourly cron exists only in `vercel.staging.json`; after verifying the linked
+scope/project is exactly `uais-staging`, isolated staging deployments must use
+`vercel deploy --prod --project uais-staging --local-config vercel.staging.json`.
+Here `--prod` means the production target of the separate staging project; it
+never authorizes or targets the UAIS production project. The default
+`vercel.json` contains no cron, so this repository does not register the
+schedule in the production `uais` project. Expiry cleanup requires only
+the isolated staging identity, staging database, immutable host, database
+source guard, and `CRON_SECRET`; it continues after collection is disabled or
+candidate/operator/session configuration is rotated. A 12/12 result (six
+role-appropriate journeys across two viewport classes, each `n >= 30` and
+`p75 <= 200ms`) is reported only as bounded current-SHA isolated-staging RUM.
+It is not production field/CrUX evidence.
+
 ## Operating Rule
 
 When a deployment package adds or changes an env name:

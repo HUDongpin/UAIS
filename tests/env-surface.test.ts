@@ -161,6 +161,34 @@ describe("B-21 environment surface", () => {
     );
   });
 
+  it("quarantines every isolated-staging INP name from production", () => {
+    for (const name of [
+      "UAIS_DB_TEST_DATABASE_URL",
+      "UAIS_P2_STAGING_DATABASE_URL",
+      "UAIS_P2_STAGING_RESTORE_DATABASE_URL",
+      "P2_VERCEL_PROTECTION_BYPASS_SECRET",
+      "P2_CANDIDATE_GIT_SHA",
+      "P2_CANDIDATE_CONTENT_SHA",
+      "P2_IMMUTABLE_DEPLOYMENT_URL",
+      "UAIS_DEPLOYMENT_ENV",
+      "UAIS_DEPLOYMENT_BASE_URL",
+      "UAIS_STAGING_INP_RUM_ENABLED",
+      "UAIS_STAGING_INP_COHORT_ID",
+      "UAIS_STAGING_INP_HMAC_SECRET",
+      "UAIS_STAGING_INP_OPERATOR_ACCOUNT_HASHES",
+      "CRON_SECRET",
+    ]) {
+      const entry = classifyUaisEnvName(name);
+      expect(entry, name).toMatchObject({
+        tier: "quarantined-legacy",
+        serverOnly: true,
+        productionDefault: "quarantined",
+      });
+      expect(entry?.purpose, name).toContain("isolated staging");
+      expect(entry?.purpose, name).toContain("unset in production");
+    }
+  });
+
   it("keeps all example env names documented in the B-21 catalog without requiring them for core production", () => {
     const catalogNames = new Set(getUaisEnvSurfaceCatalog().map((entry) => entry.name));
 

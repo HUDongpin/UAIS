@@ -5,8 +5,14 @@ import { AppShell } from "@/components/layout/app-shell";
 import { AppPreferencesProvider } from "@/components/providers/app-preferences";
 import { SessionUserProvider } from "@/components/providers/session-user";
 import { resolveThemeMode } from "@/components/providers/theme-mode";
+import { UaisStagingInpReporter } from "@/components/observability/uais-staging-inp-reporter";
 import { defaultLocale, supportedLocales, type Locale } from "@/i18n/copy";
 import { getUaisAppSessionUserFromCookieString } from "@/lib/server/uais-app-session";
+import { isApprovedUaisStagingInpOperator } from "@/lib/server/uais-staging-inp-access";
+import {
+  getUaisStagingInpBinding,
+  getUaisStagingInpGuard,
+} from "@/lib/server/uais-staging-inp-runtime";
 import "./globals.css";
 
 const metadataByLocale: Record<Locale, Metadata> = {
@@ -47,6 +53,18 @@ export default async function RootLayout({
     cookieStore.toString(),
     { env: process.env },
   );
+  const stagingInpGuard = getUaisStagingInpGuard(process.env);
+  const stagingInpBinding = stagingInpGuard.enabled
+    ? getUaisStagingInpBinding(process.env)
+    : null;
+  const stagingInpRoleEligible =
+    initialSessionUser?.role === "student" || initialSessionUser?.role === "teacher";
+  const stagingInpEnabled =
+    stagingInpGuard.enabled &&
+    stagingInpBinding !== null &&
+    stagingInpRoleEligible &&
+    initialSessionUser !== null &&
+    isApprovedUaisStagingInpOperator(initialSessionUser.account, process.env);
 
   return (
     <html
@@ -64,6 +82,7 @@ export default async function RootLayout({
             <AppShell initialSessionUser={initialSessionUser}>{children}</AppShell>
           </SessionUserProvider>
         </AppPreferencesProvider>
+        {stagingInpEnabled ? <UaisStagingInpReporter enabled /> : null}
         <Analytics />
       </body>
     </html>

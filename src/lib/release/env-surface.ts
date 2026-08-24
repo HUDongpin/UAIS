@@ -576,6 +576,22 @@ export const uaisEnvSurfaceCatalog = [
     purpose:
       "Phase 1 cutover switch for teaching-operations snapshots: `postgres` or `managed` routes operational reads/writes to the core database, and unset keeps the JSON file path byte-identical. Deliberately separate from the external-append UAIS_TEACHING_OPERATIONS_BACKEND, which the external storage contract rejects under `postgres`.",
   },
+  ...createIsolatedStagingEntries([
+    "UAIS_DB_TEST_DATABASE_URL",
+    "UAIS_P2_STAGING_DATABASE_URL",
+    "UAIS_P2_STAGING_RESTORE_DATABASE_URL",
+    "P2_VERCEL_PROTECTION_BYPASS_SECRET",
+    "P2_CANDIDATE_GIT_SHA",
+    "P2_CANDIDATE_CONTENT_SHA",
+    "P2_IMMUTABLE_DEPLOYMENT_URL",
+    "UAIS_DEPLOYMENT_ENV",
+    "UAIS_DEPLOYMENT_BASE_URL",
+    "UAIS_STAGING_INP_RUM_ENABLED",
+    "UAIS_STAGING_INP_COHORT_ID",
+    "UAIS_STAGING_INP_HMAC_SECRET",
+    "UAIS_STAGING_INP_OPERATOR_ACCOUNT_HASHES",
+    "CRON_SECRET",
+  ]),
   ...createQuarantinedLegacyEntries([
     "UAIS_TEACHER_AUTH_ISSUER_SECRET",
     "UAIS_TEACHER_AUTH_OIDC_ISSUER",
@@ -674,6 +690,19 @@ function createQuarantinedLegacyEntries(names: string[]): UaisEnvSurfaceEntry[] 
   }));
 }
 
+function createIsolatedStagingEntries(names: string[]): UaisEnvSurfaceEntry[] {
+  return names.map((name) => ({
+    name,
+    tier: "quarantined-legacy",
+    owner: name.includes("DATABASE") ? "S19/S12" : "S19/S22",
+    valueKind: readIsolatedStagingValueKind(name),
+    serverOnly: true,
+    productionDefault: "quarantined",
+    purpose:
+      "Used only by an owner-approved isolated staging or disposable database evidence lane; it must remain unset in production.",
+  }));
+}
+
 function readLegacyOwner(name: string): UaisEnvSurfaceEntry["owner"] {
   if (name.includes("TEACHER_AUTH")) return "S19/S12";
   if (name.includes("EXTERNAL_STORAGE") || name.includes("TEACHING_")) return "S19/S22";
@@ -688,5 +717,15 @@ function readLegacyValueKind(name: string): UaisEnvSurfaceEntry["valueKind"] {
   if (name.endsWith("_DIR")) return "storage-path";
   if (name.includes("BACKEND")) return "storage-backend";
   if (name.includes("PROVIDER")) return "auth-provider";
+  return "identifier";
+}
+
+function readIsolatedStagingValueKind(
+  name: string,
+): UaisEnvSurfaceEntry["valueKind"] {
+  if (name.includes("DATABASE_URL")) return "dsn";
+  if (name.endsWith("_URL")) return "base-url";
+  if (/(SECRET|HASHES)/.test(name)) return "secret";
+  if (name.endsWith("_ENABLED")) return "mode";
   return "identifier";
 }
