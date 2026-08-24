@@ -50,6 +50,7 @@ export type UaisStorageBackendBlockedReason =
   | `non-durable-${UaisStorageBackendEnvName}`
   | `missing-external-storage-env-${UaisStorageBackendEnvName}`
   | `weak-external-storage-token-${UaisStorageBackendEnvName}`
+  | `missing-durable-env-${UaisStorageBackendEnvName}`
   | `unimplemented-durable-${UaisStorageBackendEnvName}`
   | `unsupported-${UaisStorageBackendEnvName}`;
 
@@ -60,6 +61,8 @@ export function resolveUaisStorageBackendContract(input: {
   value: string | undefined;
   responsibleSession: UaisStorageBackendResponsibleSession;
   env?: Record<string, string | undefined>;
+  implementedDurableBackendKinds?: readonly ("postgres" | "managed")[];
+  durableBackendConfigured?: boolean;
 }): UaisStorageBackendContract {
   const selector = normalizeStorageBackendSelector(input.value);
 
@@ -102,6 +105,23 @@ export function resolveUaisStorageBackendContract(input: {
   }
 
   if (selector === "postgres" || selector === "managed") {
+    const adapterImplemented = input.implementedDurableBackendKinds?.includes(selector) ?? false;
+    if (adapterImplemented) {
+      const configured = input.durableBackendConfigured === true;
+      return {
+        envName: input.envName,
+        selector,
+        backendKind: selector,
+        durability: "durable",
+        adapterStatus: "implemented",
+        productionStatus: configured ? "ready" : "blocked",
+        ...(configured
+          ? {}
+          : { blockedReason: `missing-durable-env-${input.envName}` as const }),
+        responsibleSession: input.responsibleSession,
+        redaction: createStorageBackendRedaction(),
+      };
+    }
     return {
       envName: input.envName,
       selector,

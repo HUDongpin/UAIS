@@ -5,6 +5,7 @@ import {
   type UaisStorageBackendBlockedReason,
   type UaisStorageBackendContract,
 } from "@/lib/ai/storage-backend-contract";
+import { getUaisCoreDatabaseReadiness } from "@/lib/db/core-database";
 import {
   resolveUaisTeacherAuthProviderContract,
   type UaisTeacherAuthProviderBlockedReason,
@@ -365,6 +366,8 @@ export function buildDeploymentReadinessGate(input: {
     value: input.env.UAIS_TEACHER_AI_OWNERSHIP_BACKEND,
     responsibleSession: "S12",
     env: input.env,
+    implementedDurableBackendKinds: ["postgres", "managed"],
+    durableBackendConfigured: getUaisCoreDatabaseReadiness(input.env).status === "ready",
   });
   const voiceLifecycleAuditBackendContract = resolveUaisStorageBackendContract({
     envName: "UAIS_VOICE_LIFECYCLE_AUDIT_BACKEND",

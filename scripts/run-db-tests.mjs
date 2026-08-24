@@ -51,6 +51,7 @@ await guardSql.end({ timeout: 5 });
 
 const testFiles = [
   "tests/teaching-course-management-postgres-integration.test.ts",
+  "tests/teacher-ai-ownership-postgres-integration.test.ts",
   "tests/learning-chatroom-postgres-integration.test.ts",
   "tests/uais-app-account-postgres-integration.test.ts",
   "tests/teaching-course-management-cutover-integration.test.ts",

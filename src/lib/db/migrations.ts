@@ -87,6 +87,11 @@ export const UAIS_CORE_DATABASE_MIGRATIONS = [
     path: "migrations/0009_learning_event_outbox.sql",
     tables: ["uais_xapi_outbox", "uais_idempotency_records"],
   },
+  {
+    version: "0010_teacher_ai_ownership",
+    path: "migrations/0010_teacher_ai_ownership.sql",
+    tables: ["uais_teacher_ai_ownership"],
+  },
 ] as const;
 
 export type UaisCoreDatabaseMigrationVersion =

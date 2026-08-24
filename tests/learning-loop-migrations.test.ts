@@ -13,18 +13,31 @@ function readProjectFile(path: string) {
 
 describe("P1 additive database migrations", () => {
   it("registers 0008 and 0009 in the runtime migration inventory", () => {
-    expect(UAIS_CORE_DATABASE_MIGRATION_VERSIONS.slice(-2)).toEqual([
-      "0008_learning_closed_loop_domain",
-      "0009_learning_event_outbox",
-    ]);
-    expect(UAIS_CORE_DATABASE_MIGRATIONS.at(-2)?.tables).toEqual(
+    expect(UAIS_CORE_DATABASE_MIGRATION_VERSIONS).toEqual(
+      expect.arrayContaining([
+        "0008_learning_closed_loop_domain",
+        "0009_learning_event_outbox",
+      ]),
+    );
+    expect(
+      UAIS_CORE_DATABASE_MIGRATION_VERSIONS.indexOf("0008_learning_closed_loop_domain"),
+    ).toBeLessThan(
+      UAIS_CORE_DATABASE_MIGRATION_VERSIONS.indexOf("0009_learning_event_outbox"),
+    );
+    const domainMigration = UAIS_CORE_DATABASE_MIGRATIONS.find(
+      (migration) => migration.version === "0008_learning_closed_loop_domain",
+    );
+    const outboxMigration = UAIS_CORE_DATABASE_MIGRATIONS.find(
+      (migration) => migration.version === "0009_learning_event_outbox",
+    );
+    expect(domainMigration?.tables).toEqual(
       expect.arrayContaining([
         "uais_submission_versions",
         "uais_feedback",
         "uais_formative_attempts",
       ]),
     );
-    expect(UAIS_CORE_DATABASE_MIGRATIONS.at(-1)?.tables).toEqual(
+    expect(outboxMigration?.tables).toEqual(
       expect.arrayContaining(["uais_xapi_outbox", "uais_idempotency_records"]),
     );
   });
