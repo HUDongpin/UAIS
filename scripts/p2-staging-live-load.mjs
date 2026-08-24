@@ -17,6 +17,7 @@
 // Every emitted object is an aggregate/control-plane record only.
 
 import { createHash, randomBytes } from "node:crypto";
+import { spawnSync } from "node:child_process";
 import postgres from "postgres";
 import { hashAccountPassword } from "./lib/uais-account-provisioning.mjs";
 import coreDatabaseModule from "../src/lib/db/core-database.ts";
@@ -251,8 +252,17 @@ let sourceLoadCleanup;
 let sourceManualCleanup;
 let restoreLoadCleanup;
 let currentStage = "initial-tagged-cleanup";
+let restoreTargetMigrationPreparation;
 
 try {
+  currentStage = "restore-target-migrations";
+  restoreTargetMigrationPreparation = applyRestoreTargetMigrations();
+  emitProgress(
+    "restore-target-migrations-ready",
+    restoreTargetMigrationPreparation,
+  );
+
+  currentStage = "initial-tagged-cleanup";
   await cleanupTaggedData(sourceSql, {
     accountPrefixes: [loadPrefix, manualPrefix],
     courseIds: [loadCourseId, manualCourseId],
@@ -609,6 +619,7 @@ try {
   const restoreVerificationRecord = {
     status: restored.ok ? "PASS" : "FAIL",
     strategy: "tagged-logical-snapshot-to-distinct-neon-target",
+    targetMigrationPreparation: restoreTargetMigrationPreparation,
     sourceNeonFingerprint: fingerprint(sourceNeonProjectId),
     targetNeonFingerprint: fingerprint(restoreNeonProjectId),
     sourceAndTargetDistinct: sourceNeonProjectId !== restoreNeonProjectId,
@@ -1688,6 +1699,71 @@ async function validateDatabaseGuards(source, restore) {
     reasons.push("restore-database-internal-guard-required");
   }
   return reasons;
+}
+
+function applyRestoreTargetMigrations() {
+  // The source database is migrated by the clean candidate deployment. The
+  // independently-bound restore target is deliberately not part of that build,
+  // so advance it explicitly after its internal staging guard has passed and
+  // before this runner creates or deletes any tagged fixture rows.
+  const result = spawnSync(
+    process.execPath,
+    ["scripts/apply-core-migrations.mjs"],
+    {
+      cwd: process.cwd(),
+      env: {
+        ...process.env,
+        UAIS_CORE_DATABASE_URL: restoreDatabaseUrl,
+        DATABASE_URL: "",
+        POSTGRES_URL: "",
+        VERCEL_ENV: "",
+      },
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+      maxBuffer: 10 * 1024 * 1024,
+      timeout: 600_000,
+    },
+  );
+
+  if (result.error || result.status !== 0) {
+    throw new P2ExecutionError("restore-target-migration-apply-failed");
+  }
+
+  const migrationReport = readMigrationReport(result.stdout);
+  if (
+    migrationReport?.target !== "uais-core-database-migrations" ||
+    migrationReport?.status !== "applied" ||
+    migrationReport?.selectedEnvName !== "UAIS_CORE_DATABASE_URL" ||
+    !Array.isArray(migrationReport.migrations) ||
+    JSON.stringify(migrationReport.migrations) !==
+      JSON.stringify(UAIS_CORE_DATABASE_MIGRATION_VERSIONS) ||
+    migrationReport?.valueRedacted !== true
+  ) {
+    throw new P2ExecutionError("restore-target-migration-evidence-invalid");
+  }
+
+  return {
+    status: "PASS",
+    selectedEnvName: migrationReport.selectedEnvName,
+    migrationVersions: migrationReport.migrations,
+    valueRedacted: true,
+  };
+}
+
+function readMigrationReport(stdout) {
+  if (typeof stdout !== "string") return undefined;
+
+  for (const line of stdout.trim().split(/\r?\n/).reverse()) {
+    try {
+      const parsed = JSON.parse(line);
+      if (parsed?.target === "uais-core-database-migrations") return parsed;
+    } catch {
+      // Ignore non-JSON tool output. The strict shape check above still fails
+      // closed unless the child emits the expected redacted migration record.
+    }
+  }
+
+  return undefined;
 }
 
 async function hasDatabaseGuard(sql, environment) {
