@@ -503,7 +503,9 @@ export function createUaisLearningLoopPostgresStore(options: StoreOptions) {
             SELECT c.id AS course_id, cl.id AS class_id
             FROM uais_courses c
             JOIN uais_classes cl
-              ON cl.course_id = c.id AND cl.external_key = ${input.classExternalId}
+              ON cl.course_id = c.id
+              AND cl.teacher_id = c.teacher_id
+              AND cl.external_key = ${input.classExternalId}
             WHERE c.slug = ${event.context.courseId}
               AND c.status <> 'archived'
               AND cl.status <> 'archived'

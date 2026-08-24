@@ -670,6 +670,9 @@ describe("UAIS external durable storage reference service", () => {
                 operationRecordId: "knowledge-index-operation-external-storage-snapshot",
                 sourceAction: "external-storage-service-test",
                 sourceSystems: ["course-files", "teacher-resources", "agent-grounding-index"],
+                providerStatus: "knowledge-provider-synced",
+                providerSyncId: "knowledge-provider-sync-external-storage-snapshot",
+                providerSyncedAt: "2026-06-22T11:20:30.000Z",
                 syncedAt: "2026-06-22T11:20:00.000Z",
                 storagePolicy: "external-redacted-teaching-course-management-snapshot",
                 storageWritePolicy: "external-optimistic-snapshot-replace",
@@ -721,6 +724,9 @@ describe("UAIS external durable storage reference service", () => {
                 operationRecordId: "course-content-operation-external-storage-snapshot",
                 sourceAction: "external-storage-service-test",
                 releaseScope: "course-visible-content",
+                providerStatus: "content-provider-published",
+                providerPublishId: "content-provider-publish-external-storage-snapshot",
+                providerPublishedAt: "2026-06-22T11:20:45.000Z",
                 publishedAt: "2026-06-22T11:20:00.000Z",
                 storagePolicy: "external-redacted-teaching-course-management-snapshot",
                 storageWritePolicy: "external-optimistic-snapshot-replace",
@@ -1099,6 +1105,26 @@ describe("UAIS external durable storage reference service", () => {
 
       expect(staleResponse.status).toBe(409);
       expect(stale.error).toBe("Teaching course management snapshot revision mismatch.");
+      const readbackResponse = await fetch(
+        `${baseUrl}/teaching-course-management/database`,
+        { headers: { authorization: `Bearer ${accessToken}` } },
+      );
+      const readback = await readbackResponse.json();
+      expect(readbackResponse.status).toBe(200);
+      expect(readback.database.knowledgeIndexes).toEqual([
+        expect.objectContaining({
+          providerStatus: "knowledge-provider-synced",
+          providerSyncId: "knowledge-provider-sync-external-storage-snapshot",
+          providerSyncedAt: "2026-06-22T11:20:30.000Z",
+        }),
+      ]);
+      expect(readback.database.contentPackages).toEqual([
+        expect.objectContaining({
+          providerStatus: "content-provider-published",
+          providerPublishId: "content-provider-publish-external-storage-snapshot",
+          providerPublishedAt: "2026-06-22T11:20:45.000Z",
+        }),
+      ]);
       const persistedSnapshot = await readFile(
         join(dataDir, "teaching-course-management", "database.json"),
         "utf8",
@@ -1112,6 +1138,7 @@ describe("UAIS external durable storage reference service", () => {
         "student-group-suggestion-operation-external-storage-snapshot",
       );
       expect(persistedSnapshot).toContain("knowledge-index-operation-external-storage-snapshot");
+      expect(persistedSnapshot).toContain("knowledge-provider-sync-external-storage-snapshot");
       expect(persistedSnapshot).toContain(
         "resource-review-item-operation-external-storage-snapshot",
       );
@@ -1125,6 +1152,7 @@ describe("UAIS external durable storage reference service", () => {
       );
       expect(persistedSnapshot).toContain("open-access");
       expect(persistedSnapshot).toContain("course-content-operation-external-storage-snapshot");
+      expect(persistedSnapshot).toContain("content-provider-publish-external-storage-snapshot");
       expect(persistedSnapshot).toContain("course-unit-draft-operation-external-storage-snapshot");
       expect(persistedSnapshot).toContain("dashboard-state-operation-external-storage-snapshot");
       expect(persistedSnapshot).toContain("dashboard-snapshot-operation-external-storage-snapshot");

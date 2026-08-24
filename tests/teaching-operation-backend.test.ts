@@ -45,7 +45,10 @@ import {
   joinTeachingClassByInviteCode,
   readTeachingCourseManagementDatabase,
 } from "@/lib/server/teaching-course-management-store";
-import { storeUaisTeacherAiOwnershipRecord } from "@/lib/server/teacher-ai-ownership-store";
+import {
+  storeUaisTeacherAiOwnershipRecord,
+  type UaisTeacherAiOwnershipPostgresClientFactory,
+} from "@/lib/server/teacher-ai-ownership-store";
 import { createUaisTeacherAuthSessionCookieHeader } from "@/lib/server/teacher-auth-session";
 import { normalizeResourceReviewItemRecord } from "@/lib/server/teaching-course-management-record-normalizers";
 import { normalizeDomainProjection } from "@/lib/server/teaching-operations-domain-projection-normalizer";
@@ -23073,6 +23076,106 @@ describe("teaching operation backend persistence", () => {
     },
   );
 
+  it("accepts the ready Postgres course ownership adapter before applying the teaching-operation persistence gate", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "uais-teaching-route-production-postgres-ownership-"));
+    const teacherAuthSecret = "test-teacher-auth-session-signing-secret";
+    const courseId = "teacher-research-methods";
+    const cookie = createUaisTeacherAuthSessionCookieHeader({
+      secret: teacherAuthSecret,
+      claims: {
+        sessionId: "teacher-auth-session-postgres-ownership-production",
+        actorId: "teacher-kang",
+        role: "teacher",
+        authenticatedAt: "2026-06-22T11:00:00.000Z",
+        expiresAt: "2026-06-22T12:00:00.000Z",
+      },
+    });
+    const ownershipQueries: Array<{ statement: string; values: unknown[] }> = [];
+    const createTeacherAiOwnershipDatabase: UaisTeacherAiOwnershipPostgresClientFactory =
+      () => {
+        const sql = Object.assign(
+          async (strings: TemplateStringsArray, ...values: unknown[]) => {
+            ownershipQueries.push({
+              statement: strings.join(" ? ").replace(/\s+/g, " ").trim(),
+              values,
+            });
+            return [
+              {
+                course_ids: [courseId],
+                resources: {
+                  sampleAssets: [],
+                  pptAssets: [],
+                  clonedVoiceRefs: [],
+                  audioManifests: [],
+                },
+              },
+            ];
+          },
+          {
+            begin: async () => {
+              throw new Error("Ownership read must not start a transaction.");
+            },
+            end: async () => undefined,
+          },
+        );
+        return { sql };
+      };
+    const postOperation = createTeachingOperationActionPostHandler({
+      env: {
+        NODE_ENV: "production",
+        VERCEL_ENV: "production",
+        UAIS_TEACHING_OPERATIONS_DATA_DIR: dataDir,
+        UAIS_TEACHER_AI_OWNERSHIP_BACKEND: "postgres",
+        UAIS_CORE_DATABASE_URL: "postgres://redacted.example.test/uais",
+        ...productionTeacherAuthProviderEnv(teacherAuthSecret),
+      },
+      createTeacherAiOwnershipDatabase,
+      now: new Date("2026-06-22T11:05:00.000Z"),
+    });
+
+    try {
+      const response = await postOperation(
+        new Request("https://www.uais.top/api/teaching/operations", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            cookie,
+            "x-uais-trace-id": "trace-production-postgres-ownership-ready",
+          },
+          body: JSON.stringify({
+            operationId: "course-settings",
+            actionSlot: "primary",
+            courseId,
+            sourceAction: "manage",
+            idempotencyKey: "production-postgres-ownership-ready",
+          }),
+        }),
+      );
+      const body = await response.json();
+
+      expect(response.status).toBe(503);
+      expect(body.error).toBe(
+        "Production teaching operation persistence requires a durable backend, not local JSON storage.",
+      );
+      expect(body.error).not.toContain("course ownership access requires external storage");
+      expect(body.traceId).toBe("trace-production-postgres-ownership-ready");
+      expect(body.receipt).toBeUndefined();
+      expect(ownershipQueries).toHaveLength(1);
+      expect(ownershipQueries[0]).toEqual(
+        expect.objectContaining({
+          statement: expect.stringContaining(
+            "FROM uais_teaching_course_management_snapshots",
+          ),
+          values: ["teacher-kang", "teacher-kang"],
+        }),
+      );
+      expect(JSON.stringify(body)).not.toContain("redacted.example.test");
+      expectNoLocalOrSecretValues(body, dataDir);
+    } finally {
+      await rm(dataDir, { recursive: true, force: true });
+    }
+  });
+
   it("rejects production teaching operations before external writes when course ownership access would use local JSON", async () => {
     const dataDir = await mkdtemp(join(tmpdir(), "uais-teaching-route-production-local-ownership-"));
     const operationsDataDir = join(dataDir, "operations");
@@ -23168,7 +23271,7 @@ describe("teaching operation backend persistence", () => {
 
       expect(response.status).toBe(503);
       expect(body.error).toBe(
-        "Production teaching operation course ownership access requires external storage.",
+        "Production teaching operation course ownership access requires a durable backend, not local JSON storage.",
       );
       expect(body.traceId).toBe("trace-production-local-ownership-denied");
       expect(body.receipt).toBeUndefined();

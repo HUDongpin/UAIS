@@ -24,10 +24,9 @@ import {
 } from "@/lib/server/teaching-course-management-store";
 import { createUaisTeachingOperationRepository } from "@/lib/server/teaching-operations-postgres-store";
 import {
-  isExternalStorageBackendReadyContract,
-  resolveUaisStorageBackendContract,
-} from "@/lib/ai/storage-backend-contract";
-import { createUaisTeacherAiOwnershipAdapter } from "@/lib/server/teacher-ai-ownership-store";
+  createUaisTeacherAiOwnershipAdapter,
+  type UaisTeacherAiOwnershipPostgresClientFactory,
+} from "@/lib/server/teacher-ai-ownership-store";
 import { resolveUaisTeacherAuthProviderContract } from "@/lib/server/teacher-auth-provider-contract";
 import { readUaisAuthenticatedTeacherSessionFromSignedCookies } from "@/lib/server/teacher-auth-session";
 import { getUaisAppSessionClaimsFromCookieString } from "@/lib/server/uais-app-session";
@@ -116,6 +115,7 @@ type TeachingOperationActionPostHandlerDeps = {
   now?: Date;
   fetch?: typeof fetch;
   getTeachingOperationCourseOwnership?: GetTeachingOperationCourseOwnership;
+  createTeacherAiOwnershipDatabase?: UaisTeacherAiOwnershipPostgresClientFactory;
   appendExternalTeachingOperation?: TeachingOperationExternalAppendAdapter;
   rollbackExternalTeachingOperation?: TeachingOperationExternalRollbackAdapter;
 };
@@ -157,7 +157,8 @@ export function createTeachingOperationActionPostHandler(
     createTeachingOperationCourseOwnershipAdapter({
       env,
       fetch: deps.fetch,
-  });
+      createDatabase: deps.createTeacherAiOwnershipDatabase,
+    });
   return async function POST(request: Request) {
     const traceId = readSafeTraceId(request);
     try {
@@ -213,6 +214,7 @@ export function createTeachingOperationActionPostHandler(
         assertProductionTeachingOperationCourseOwnershipAccessConfigured({
           env,
           courseId,
+          getTeachingOperationCourseOwnership,
         });
       }
       const access = await authorizeTeachingOperationCourseAccess({
@@ -1335,10 +1337,12 @@ async function attemptTeachingOperationPartialFailureCompensation(input: {
 function createTeachingOperationCourseOwnershipAdapter(input: {
   env: Record<string, string | undefined>;
   fetch?: typeof fetch;
+  createDatabase?: UaisTeacherAiOwnershipPostgresClientFactory;
 }): GetTeachingOperationCourseOwnership | undefined {
   const readOwnership = createUaisTeacherAiOwnershipAdapter({
     env: input.env,
     fetch: input.fetch,
+    createDatabase: input.createDatabase,
   });
   if (!readOwnership) {
     return undefined;
@@ -1354,6 +1358,7 @@ function createTeachingOperationCourseOwnershipAdapter(input: {
 function assertProductionTeachingOperationCourseOwnershipAccessConfigured(input: {
   env: Record<string, string | undefined>;
   courseId?: string;
+  getTeachingOperationCourseOwnership?: GetTeachingOperationCourseOwnership;
 }) {
   if (
     !isTeachingOperationProductionRuntime(input.env) ||
@@ -1363,19 +1368,13 @@ function assertProductionTeachingOperationCourseOwnershipAccessConfigured(input:
     return;
   }
 
-  const backendContract = resolveUaisStorageBackendContract({
-    envName: "UAIS_TEACHER_AI_OWNERSHIP_BACKEND",
-    value: input.env.UAIS_TEACHER_AI_OWNERSHIP_BACKEND,
-    responsibleSession: "S12",
-    env: input.env,
-  });
-  if (isExternalStorageBackendReadyContract(backendContract)) {
+  if (input.getTeachingOperationCourseOwnership) {
     return;
   }
 
   throw new TeachingOperationStoreError(
     503,
-    "Production teaching operation course ownership access requires external storage.",
+    "Production teaching operation course ownership access requires a durable backend, not local JSON storage.",
   );
 }
 

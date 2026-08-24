@@ -591,6 +591,12 @@ describe("P1 learning-loop Postgres store", () => {
     }
     expect(fake.queries.some((query) => query.text.includes("INSERT INTO uais_courses"))).toBe(false);
     expect(fake.queries.some((query) => query.text.includes("INSERT INTO uais_classes"))).toBe(false);
+    const scopeQuery = fake.queries.find(
+      (query) =>
+        query.text.includes("FROM uais_courses c") &&
+        query.text.includes("JOIN uais_classes cl"),
+    );
+    expect(scopeQuery?.text).toContain("cl.teacher_id = c.teacher_id");
     expect(fake.beginCount).toBe(1);
   });
 

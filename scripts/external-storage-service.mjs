@@ -2667,6 +2667,15 @@ function normalizeTeachingKnowledgeIndexSyncRecord(value) {
     operationRecordId: requireSafeId(value.operationRecordId, "operation record id"),
     ...(value.sourceAction ? { sourceAction: requireSafeId(value.sourceAction, "source action") } : {}),
     sourceSystems: ["course-files", "teacher-resources", "agent-grounding-index"],
+    ...(value.providerStatus === "knowledge-provider-synced"
+      ? { providerStatus: "knowledge-provider-synced" }
+      : {}),
+    ...(value.providerSyncId
+      ? { providerSyncId: requireSafeId(value.providerSyncId, "provider sync id") }
+      : {}),
+    ...(value.providerSyncedAt
+      ? { providerSyncedAt: requireIsoDate(value.providerSyncedAt, "providerSyncedAt") }
+      : {}),
     syncedAt: requireIsoDate(value.syncedAt, "syncedAt"),
     storagePolicy: normalizeTeachingCourseRecordStoragePolicy(value.storagePolicy),
     storageWritePolicy: normalizeTeachingCourseStorageWritePolicy(value.storageWritePolicy),
@@ -2789,6 +2798,15 @@ function normalizeTeachingCourseContentPublishRecord(value) {
     ...(value.sourceAction ? { sourceAction: requireSafeId(value.sourceAction, "source action") } : {}),
     releaseScope: "course-visible-content",
     publishedAt: requireIsoDate(value.publishedAt, "publishedAt"),
+    ...(value.providerStatus === "content-provider-published"
+      ? { providerStatus: "content-provider-published" }
+      : {}),
+    ...(value.providerPublishId
+      ? { providerPublishId: requireSafeId(value.providerPublishId, "provider publish id") }
+      : {}),
+    ...(value.providerPublishedAt
+      ? { providerPublishedAt: requireIsoDate(value.providerPublishedAt, "providerPublishedAt") }
+      : {}),
     storagePolicy: normalizeTeachingCourseRecordStoragePolicy(value.storagePolicy),
     storageWritePolicy: normalizeTeachingCourseStorageWritePolicy(value.storageWritePolicy),
     responsibleSession: "S12",
