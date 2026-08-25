@@ -22,7 +22,9 @@ const legacyTestFiles = [
   "tests/teaching-course-management-cutover-integration.test.ts",
   "tests/teaching-operations-cutover-integration.test.ts",
   "tests/learning-loop-postgres-integration.test.ts",
+  "tests/teaching-course-collaborator-postgres-integration.test.ts",
 ];
+const legacyExpectedTests = 26;
 const inpTestFile = "tests/staging-inp-rum-postgres-integration.test.ts";
 
 function createValidGuardEnv(
@@ -300,7 +302,7 @@ describe("guarded Postgres integration lane", () => {
     const inspectTarget = vi.fn(async () => ({ approved: true }));
     const testRunner = vi.fn((input: { lane: string }) => {
       if (input.lane === "legacy") {
-        return createPassingVitestResult(legacyTestFiles, 21);
+        return createPassingVitestResult(legacyTestFiles, legacyExpectedTests);
       }
       if (input.lane === "staging-inp") {
         return createPassingVitestResult([inpTestFile], 2);
@@ -330,8 +332,8 @@ describe("guarded Postgres integration lane", () => {
           {
             id: "legacy",
             testFiles: legacyTestFiles,
-            expectedTests: 21,
-            passedTests: 21,
+            expectedTests: legacyExpectedTests,
+            passedTests: legacyExpectedTests,
             skippedTests: 0,
           },
           {
@@ -439,7 +441,7 @@ describe("guarded Postgres integration lane", () => {
         observedCapabilities.push({ file, token, lane });
 
         return input.lane === "legacy"
-          ? createPassingVitestResult(legacyTestFiles, 21)
+          ? createPassingVitestResult(legacyTestFiles, legacyExpectedTests)
           : createPassingVitestResult([inpTestFile], 2);
       },
     );
@@ -497,7 +499,7 @@ describe("guarded Postgres integration lane", () => {
         expect(JSON.parse(probe.stdout)).toEqual({ approved: true });
         probeOutputs.push(probe.stdout);
         return input.lane === "legacy"
-          ? createPassingVitestResult(legacyTestFiles, 21)
+          ? createPassingVitestResult(legacyTestFiles, legacyExpectedTests)
           : createPassingVitestResult([inpTestFile], 2);
       },
     );
@@ -562,7 +564,7 @@ describe("guarded Postgres integration lane", () => {
   it("fails the dedicated lane when Vitest reports even one skipped live test", async () => {
     const testRunner = vi.fn((input: { lane: string }) => {
       if (input.lane === "legacy") {
-        return createPassingVitestResult(legacyTestFiles, 21);
+        return createPassingVitestResult(legacyTestFiles, legacyExpectedTests);
       }
       const result = createPassingVitestResult([inpTestFile], 2);
       const body = JSON.parse(result.stdout);
@@ -589,8 +591,8 @@ describe("guarded Postgres integration lane", () => {
           {
             id: "legacy",
             testFiles: legacyTestFiles,
-            expectedTests: 21,
-            passedTests: 21,
+            expectedTests: legacyExpectedTests,
+            passedTests: legacyExpectedTests,
             skippedTests: 0,
           },
         ],
@@ -668,7 +670,7 @@ describe("guarded Postgres integration lane", () => {
     }
   }, 90_000);
 
-  it("rejects URL-only ambient execution for all nine live-DB files before any connection", () => {
+  it("rejects URL-only ambient execution for all ten live-DB files before any connection", () => {
     const env = { ...process.env };
     for (const name of [
       "UAIS_DB_TEST_LIVE_MUTATION_CONFIRMATION",

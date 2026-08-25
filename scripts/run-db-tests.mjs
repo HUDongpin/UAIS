@@ -50,7 +50,7 @@ const testLanes = [
   {
     id: "legacy",
     testFiles: legacyTestFiles,
-    expectedTests: 21,
+    expectedTests: 26,
     useCoreDatabaseAlias: true,
   },
   {
@@ -143,8 +143,8 @@ export async function authorizeP1LoadTestTarget({
 
 export async function authorizeLiveDatabaseTestFile({
   env = process.env,
-  lane,
-  testFile,
+  lane = "",
+  testFile = "",
   inspectTarget,
   now = Date.now(),
 } = {}) {

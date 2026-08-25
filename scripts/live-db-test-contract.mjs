@@ -6,6 +6,7 @@ export const LEGACY_LIVE_DB_TEST_FILES = Object.freeze([
   "tests/teaching-course-management-cutover-integration.test.ts",
   "tests/teaching-operations-cutover-integration.test.ts",
   "tests/learning-loop-postgres-integration.test.ts",
+  "tests/teaching-course-collaborator-postgres-integration.test.ts",
 ]);
 
 export const STAGING_INP_LIVE_DB_TEST_FILE =
