@@ -248,7 +248,11 @@ const manualStudentAccount = `${manualPrefix}student`;
 const manualTeacherAccount = `${manualPrefix}teacher`;
 const isolatedSourceEnv = {
   ...process.env,
-  UAIS_CORE_DATABASE_URL: sourceDatabaseUrl,
+  // Exact isolated-staging runtimes deliberately reject generic database
+  // aliases. Reuse the same dedicated selector as the deployed application so
+  // fixture repository writes cannot bypass the staging project/Neon guard.
+  UAIS_P2_STAGING_DATABASE_URL: sourceDatabaseUrl,
+  UAIS_CORE_DATABASE_URL: "",
   DATABASE_URL: "",
   POSTGRES_URL: "",
   RESTORE_DATABASE_URL: "",
