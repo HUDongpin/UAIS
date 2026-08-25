@@ -764,6 +764,12 @@ describe("teaching-course collaborator Postgres store", () => {
       expect(grantWrites).toHaveLength(1);
       expect(grantWrites[0]?.text).toContain("revoked_at = NULL");
       expect(grantWrites[0]?.text).toContain("revoked_by_user_id = NULL");
+      if (lifecycle === "expired") {
+        expect(grantWrites[0]?.text).toContain("expires_at IS NOT NULL");
+        expect(grantWrites[0]?.text).toContain(
+          "expires_at <= EXCLUDED.granted_at",
+        );
+      }
       expect(
         fake.queries.filter((query) =>
           query.text.startsWith("INSERT INTO uais_audit_log"),
