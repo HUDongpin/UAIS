@@ -322,12 +322,12 @@ describe("teaching-course collaborator ACL on real PostgreSQL", () => {
     `;
     const references = await database.sql`
       SELECT
-        grant.recipient_identifier_id AS grant_identifier_id,
+        collaborator_grant.recipient_identifier_id AS grant_identifier_id,
         outbox.recipient_identifier_id AS outbox_identifier_id
-      FROM uais_course_collaborator_grants grant
+      FROM uais_course_collaborator_grants collaborator_grant
       JOIN uais_course_collaborator_notification_outbox outbox
-        ON outbox.grant_id = grant.id
-      WHERE grant.id = ${receipt.grantId}
+        ON outbox.grant_id = collaborator_grant.id
+      WHERE collaborator_grant.id = ${receipt.grantId}
     `;
     expect(references).toEqual([
       { grant_identifier_id: null, outbox_identifier_id: null },
@@ -343,12 +343,13 @@ describe("teaching-course collaborator ACL on real PostgreSQL", () => {
     });
     const database = client();
 
-    await expect(
+    await expectRestrictedUserDeletion(
       database.sql`
         DELETE FROM uais_users
         WHERE id = ${courseCascade.owner.id}
       `,
-    ).rejects.toMatchObject({ code: "23503" });
+      "uais_course_collaborator_grants_granted_by_user_id_fkey",
+    );
 
     const revoker = await createTeacher("course-cascade.revoker");
     const revokedRows = await database.sql`
@@ -366,12 +367,13 @@ describe("teaching-course collaborator ACL on real PostgreSQL", () => {
       revoked_by_user_id: revoker.id,
     });
     expect(revokedRows[0]?.revoked_at).toBeTruthy();
-    await expect(
+    await expectRestrictedUserDeletion(
       database.sql`
         DELETE FROM uais_users
         WHERE id = ${revoker.id}
       `,
-    ).rejects.toMatchObject({ code: "23503" });
+      "uais_course_collaborator_grants_revoked_by_user_id_fkey",
+    );
 
     await database.sql`
       DELETE FROM uais_teaching_course_management_snapshots
@@ -616,6 +618,27 @@ describe("teaching-course collaborator ACL on real PostgreSQL", () => {
     });
   }, 120_000);
 });
+
+async function expectRestrictedUserDeletion(
+  operation: PromiseLike<unknown>,
+  expectedConstraint: string,
+) {
+  let rejection: unknown;
+  try {
+    await operation;
+  } catch (error) {
+    rejection = error;
+  }
+
+  expect(rejection).toMatchObject({ constraint_name: expectedConstraint });
+  const code =
+    rejection && typeof rejection === "object" && "code" in rejection
+      ? rejection.code
+      : undefined;
+  // PostgreSQL 18 reports the SQL-standard RESTRICT violation (23001).
+  // Supported 15-17 targets report the broader foreign-key violation (23503).
+  expect(["23001", "23503"]).toContain(code);
+}
 
 function readRequiredUuid(value: unknown, label: string) {
   if (
