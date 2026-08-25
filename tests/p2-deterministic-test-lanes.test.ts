@@ -13,6 +13,7 @@ const liveDatabaseTestFiles = [
   "tests/teaching-course-management-cutover-integration.test.ts",
   "tests/teaching-operations-cutover-integration.test.ts",
   "tests/learning-loop-postgres-integration.test.ts",
+  "tests/teaching-course-collaborator-postgres-integration.test.ts",
   "tests/staging-inp-rum-postgres-integration.test.ts",
   "tests/learning-loop-postgres-load.integration.test.ts",
 ] as const;
