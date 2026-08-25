@@ -218,8 +218,12 @@ describe("staging INP guarded Postgres lifecycle", () => {
     expect(sql).toContain("metric_id_key");
     expect(sql).toContain("update_count BETWEEN 0 AND 12");
     expect(sql).toContain("uais-staging-inp-v5");
-    expect(sql).toContain("CREATE TEMP TABLE uais_staging_inp_contract_cohorts");
-    expect(sql).toContain("CREATE TEMP TABLE uais_staging_inp_contract_samples");
+    expect(sql).toMatch(
+      /CREATE TEMP TABLE uais_staging_inp_contract_cohorts[\s\S]*?ON COMMIT DROP/,
+    );
+    expect(sql).toMatch(
+      /CREATE TEMP TABLE uais_staging_inp_contract_samples[\s\S]*?ON COMMIT DROP/,
+    );
     expect(sql).toContain("REFERENCES pg_temp.uais_staging_inp_contract_cohorts");
     expect(sql).toContain("ON pg_temp.uais_staging_inp_contract_samples");
     expect(sql).toContain("FROM public.uais_environment_guard");

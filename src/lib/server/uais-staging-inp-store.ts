@@ -1409,7 +1409,7 @@ async function lockPostgresLifecycle(sql: TransactionSql) {
 }
 
 function toStagingInpContractDdl(ddl: string) {
-  return ddl
+  const contractDdl = ddl
     .replace("CREATE TABLE IF NOT EXISTS public.", "CREATE TEMP TABLE ")
     .replaceAll(
       "public.uais_staging_inp_samples",
@@ -1427,6 +1427,7 @@ function toStagingInpContractDdl(ddl: string) {
       "uais_staging_inp_cohorts",
       "uais_staging_inp_contract_cohorts",
     );
+  return `${contractDdl.trimEnd()}\nON COMMIT DROP`;
 }
 
 async function purgeExpiredPostgresSamples(sql: TransactionSql) {
