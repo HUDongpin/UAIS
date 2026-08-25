@@ -693,46 +693,96 @@ describe("teaching-course collaborator Postgres store", () => {
     ).toBe(false);
   });
 
-  it("regrants a revoked canonical row with a new revision and one new grant-issued event", async () => {
-    const fake = createFakeDatabase(({ text }) => {
-      if (text.includes("AS owner_user_id")) return [ownerRow()];
-      if (text.includes("FROM uais_user_login_identifiers i")) return [recipientRow()];
-      if (text.includes("pg_advisory_xact_lock")) return [];
-      if (text.includes("FROM uais_idempotency_records")) return [];
-      if (text.includes("FROM uais_course_collaborator_grants") && text.includes("FOR UPDATE")) {
-        return [
-          grantRow({
-            revision: 2,
-            revoked_at: "2026-08-25T09:30:00.000Z",
-            revoked_by_user_id: ids.owner,
-          }),
-        ];
-      }
-      if (text.startsWith("INSERT INTO uais_course_collaborator_grants")) {
-        return [grantRow({ revision: 3 })];
-      }
-      return [];
-    });
-    const store = createTeachingCourseCollaboratorPostgresStore({
-      env: {},
-      createDatabase: fake.factory,
-      now: () => now,
-    });
+  it.each([
+    {
+      lifecycle: "revoked",
+      previousRevision: 2,
+      existing: grantRow({
+        revision: 2,
+        revoked_at: "2026-08-25T09:30:00.000Z",
+        revoked_by_user_id: ids.owner,
+      }),
+    },
+    {
+      lifecycle: "expired",
+      previousRevision: 7,
+      existing: grantRow({
+        revision: 7,
+        granted_at: "2026-08-24T10:00:00.000Z",
+        expires_at: "2026-08-25T09:59:59.999Z",
+      }),
+    },
+  ])(
+    "regrants a canonical $lifecycle row at revision N+1 with one issued side-effect set",
+    async ({ lifecycle, previousRevision, existing }) => {
+      const fake = createFakeDatabase(({ text }) => {
+        if (text.includes("AS owner_user_id")) return [ownerRow()];
+        if (text.includes("FROM uais_user_login_identifiers i")) {
+          return [recipientRow()];
+        }
+        if (text.includes("pg_advisory_xact_lock")) return [];
+        if (text.includes("FROM uais_idempotency_records")) return [];
+        if (
+          text.includes("FROM uais_course_collaborator_grants") &&
+          text.includes("FOR UPDATE")
+        ) {
+          return [existing];
+        }
+        if (text.startsWith("INSERT INTO uais_course_collaborator_grants")) {
+          return [
+            grantRow({
+              revision: previousRevision + 1,
+              revoked_at: null,
+              revoked_by_user_id: null,
+            }),
+          ];
+        }
+        return [];
+      });
+      const store = createTeachingCourseCollaboratorPostgresStore({
+        env: {},
+        createDatabase: fake.factory,
+        now: () => now,
+      });
 
-    await expect(
-      store.grant(grantInput({ idempotencyKey: "collaborator-regrant-1" })),
-    ).resolves.toMatchObject({
-      status: "persisted",
-      event: "grant-issued",
-      revision: 3,
-      grantStatus: "active",
-    });
-    expect(
-      fake.queries.filter((query) =>
-        query.text.startsWith("INSERT INTO uais_course_collaborator_notification_outbox"),
-      ),
-    ).toHaveLength(1);
-  });
+      const receipt = await store.grant(
+        grantInput({
+          idempotencyKey: `collaborator-regrant-${lifecycle}`,
+        }),
+      );
+
+      expect(receipt).toMatchObject({
+        status: "persisted",
+        event: "grant-issued",
+        revision: previousRevision + 1,
+        grantStatus: "active",
+      });
+      expect(receipt).not.toHaveProperty("revokedAt");
+      const grantWrites = fake.queries.filter((query) =>
+        query.text.startsWith("INSERT INTO uais_course_collaborator_grants"),
+      );
+      expect(grantWrites).toHaveLength(1);
+      expect(grantWrites[0]?.text).toContain("revoked_at = NULL");
+      expect(grantWrites[0]?.text).toContain("revoked_by_user_id = NULL");
+      expect(
+        fake.queries.filter((query) =>
+          query.text.startsWith("INSERT INTO uais_audit_log"),
+        ),
+      ).toHaveLength(1);
+      const outboxWrites = fake.queries.filter((query) =>
+        query.text.startsWith(
+          "INSERT INTO uais_course_collaborator_notification_outbox",
+        ),
+      );
+      expect(outboxWrites).toHaveLength(1);
+      expect(outboxWrites[0]?.values).toContain("grant-issued");
+      expect(
+        fake.queries.filter((query) =>
+          query.text.startsWith("INSERT INTO uais_idempotency_records"),
+        ),
+      ).toHaveLength(1);
+    },
+  );
 
   it("reads and lists canonical rows while reporting expiry and revocation inactive", async () => {
     const expired = grantRow({
@@ -784,14 +834,106 @@ describe("teaching-course collaborator Postgres store", () => {
     ]);
   });
 
-  it("revokes one active revision once and emits one revocation outbox event", async () => {
+  it("replays an exact same-key revoke receipt without repeating side effects", async () => {
+    let row = grantRow();
+    let idempotency:
+      | {
+          actor_user_id: string;
+          scope: string;
+          request_hash: string;
+          response_receipt: unknown;
+        }
+      | undefined;
+    const fake = createFakeDatabase(({ text, values }) => {
+      if (text.includes("AS owner_user_id")) return [ownerRow()];
+      if (text.includes("pg_advisory_xact_lock")) return [];
+      if (text.includes("FROM uais_idempotency_records")) {
+        return idempotency ? [idempotency] : [];
+      }
+      if (
+        text.includes("FROM uais_course_collaborator_grants") &&
+        text.includes("FOR UPDATE")
+      ) {
+        return [row];
+      }
+      if (text.startsWith("UPDATE uais_course_collaborator_grants")) {
+        row = grantRow({
+          revision: 2,
+          revoked_at: now.toISOString(),
+          revoked_by_user_id: ids.owner,
+        });
+        return [row];
+      }
+      if (text.startsWith("INSERT INTO uais_idempotency_records")) {
+        idempotency = {
+          actor_user_id: String(values[1]),
+          scope: String(values[2]),
+          request_hash: String(values[3]),
+          response_receipt: JSON.parse(String(values[5])),
+        };
+      }
+      return [];
+    });
+    const store = createTeachingCourseCollaboratorPostgresStore({
+      env: {},
+      createDatabase: fake.factory,
+      now: () => now,
+    });
+
+    const request = {
+      actorAccount: "teacher-kang",
+      courseId: "course-research-methods",
+      grantId: ids.grant,
+      idempotencyKey: "collaborator-revoke-1",
+      traceId: "trace-collaborator-revoke-1",
+    };
+
+    const receipt = await store.revoke(request);
+    const replayed = await store.revoke(request);
+
+    expect(replayed).toEqual(receipt);
+    expect(idempotency?.response_receipt).toEqual(receipt);
+    expect(receipt).toMatchObject({
+      event: "grant-revoked",
+      grantStatus: "revoked",
+      revision: 2,
+      revokedAt: now.toISOString(),
+    });
+    expect(
+      fake.queries.filter((query) =>
+        query.text.startsWith("UPDATE uais_course_collaborator_grants"),
+      ),
+    ).toHaveLength(1);
+    expect(
+      fake.queries.filter((query) =>
+        query.text.startsWith("INSERT INTO uais_audit_log"),
+      ),
+    ).toHaveLength(1);
+    const outboxWrites = fake.queries.filter((query) =>
+      query.text.startsWith(
+        "INSERT INTO uais_course_collaborator_notification_outbox",
+      ),
+    );
+    expect(outboxWrites).toHaveLength(1);
+    expect(outboxWrites[0]?.values).toContain("grant-revoked");
+    expect(
+      fake.queries.filter((query) =>
+        query.text.startsWith("INSERT INTO uais_idempotency_records"),
+      ),
+    ).toHaveLength(1);
+  });
+
+  it("rejects a different-key revoke after the canonical row is revoked", async () => {
     let row = grantRow();
     let updates = 0;
     const fake = createFakeDatabase(({ text }) => {
       if (text.includes("AS owner_user_id")) return [ownerRow()];
       if (text.includes("pg_advisory_xact_lock")) return [];
       if (text.includes("FROM uais_idempotency_records")) return [];
-      if (text.includes("FROM uais_course_collaborator_grants") && text.includes("FOR UPDATE")) {
+      if (
+        text.includes("FROM uais_course_collaborator_grants") &&
+        text.includes("FOR UPDATE")
+      ) {
         return [row];
       }
       if (text.startsWith("UPDATE uais_course_collaborator_grants")) {
@@ -811,25 +953,14 @@ describe("teaching-course collaborator Postgres store", () => {
       now: () => now,
     });
 
-    const receipt = await store.revoke({
+    await store.revoke({
       actorAccount: "teacher-kang",
       courseId: "course-research-methods",
       grantId: ids.grant,
-      idempotencyKey: "collaborator-revoke-1",
-      traceId: "trace-collaborator-revoke-1",
+      idempotencyKey: "collaborator-revoke-first-key",
+      traceId: "trace-collaborator-revoke-first-key",
     });
 
-    expect(receipt).toMatchObject({
-      event: "grant-revoked",
-      grantStatus: "revoked",
-      revision: 2,
-      revokedAt: now.toISOString(),
-    });
-    expect(
-      fake.queries.find((query) =>
-        query.text.startsWith("INSERT INTO uais_course_collaborator_notification_outbox"),
-      )?.values,
-    ).toContain("grant-revoked");
     await expect(
       store.revoke({
         actorAccount: "teacher-kang",
