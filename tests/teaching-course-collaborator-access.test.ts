@@ -183,6 +183,27 @@ describe("teaching-course collaborator policy normalization", () => {
     ).toBe("2024-02-29T00:00:59.123Z");
   });
 
+  it.each([
+    ["2026-01-01T10:00:00+00:00", "2026-01-01T10:00:00.000Z"],
+    ["2026-01-01T10:00:00-00:30", "2026-01-01T10:30:00.000Z"],
+  ])("normalizes the known explicit offset in %s", (value, expected) => {
+    expect(normalizeTeachingCourseCollaboratorExpiryTimestamp(value)).toBe(
+      expected,
+    );
+  });
+
+  it("rejects the RFC3339 unknown local offset -00:00", () => {
+    expect(() =>
+      normalizeTeachingCourseCollaboratorExpiryTimestamp(
+        "2026-01-01T10:00:00-00:00",
+      ),
+    ).toThrowError(
+      expect.objectContaining({
+        reasonCode: "expiry-invalid",
+      }),
+    );
+  });
+
   it("accepts a finite Date object inside the canonical four-digit UTC range", () => {
     expect(
       normalizeTeachingCourseCollaboratorExpiryTimestamp(

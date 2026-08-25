@@ -472,6 +472,7 @@ function normalizeIsoTimestamp(value: unknown, reasonCode: string) {
   const hour = Number(match[4]);
   const minute = Number(match[5]);
   const second = Number(match[6]);
+  const offsetSign = match[8];
   const offsetHour = match[9] === undefined ? 0 : Number(match[9]);
   const offsetMinute = match[10] === undefined ? 0 : Number(match[10]);
   if (
@@ -483,7 +484,8 @@ function normalizeIsoTimestamp(value: unknown, reasonCode: string) {
     minute > 59 ||
     second > 59 ||
     offsetHour > 23 ||
-    offsetMinute > 59
+    offsetMinute > 59 ||
+    (offsetSign === "-" && offsetHour === 0 && offsetMinute === 0)
   ) {
     throw new TeachingCourseCollaboratorValidationError(reasonCode);
   }
