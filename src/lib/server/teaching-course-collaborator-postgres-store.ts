@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import type { TransactionSql } from "postgres";
 import {
   closeUaisCoreDatabaseClient,
   getUaisCoreDatabasePool,
@@ -14,6 +15,9 @@ import {
   createTeachingCourseCollaboratorAlreadyActiveReceipt,
   createTeachingCourseCollaboratorPersistedReceipt,
   getTeachingCourseCollaboratorGrantStatus,
+  isTeachingCourseCollaboratorPublicId,
+  isTeachingCourseCollaboratorRequestId,
+  isTeachingCourseCollaboratorUuid,
   normalizeTeachingCourseCollaboratorExpiryTimestamp,
   normalizeTeachingCourseCollaboratorGrantPolicy,
   normalizeTeachingCourseCollaboratorPersistedReceipt,
@@ -21,14 +25,12 @@ import {
   type TeachingCourseCollaboratorGrant,
   type TeachingCourseCollaboratorPersistedReceipt,
   type TeachingCourseCollaboratorReceipt,
+  type TeachingCourseCollaboratorRole,
+  type TeachingCourseDelegatableCapability,
 } from "@/lib/server/teaching-course-collaborator-types";
 
-type TeachingCourseCollaboratorSql = {
-  (strings: TemplateStringsArray, ...values: unknown[]): Promise<unknown[]>;
-  array: (values: readonly unknown[], type?: number) => unknown;
-  begin: (
-    run: (sql: TeachingCourseCollaboratorSql) => Promise<void>,
-  ) => Promise<void>;
+type TeachingCourseCollaboratorRootSql = {
+  begin: (run: (sql: TransactionSql) => Promise<void>) => Promise<void>;
   end: (options?: { timeout?: number }) => Promise<void> | void;
 };
 
@@ -37,7 +39,7 @@ export type TeachingCourseCollaboratorPostgresClientFactory = (input: {
   max?: number;
 }) => {
   pooled?: boolean;
-  sql: TeachingCourseCollaboratorSql;
+  sql: TeachingCourseCollaboratorRootSql;
 };
 
 export class TeachingCourseCollaboratorStoreError extends Error {
@@ -93,13 +95,24 @@ type PersistedTeachingCourseCollaboratorGrant =
     recipientIdentifierId?: string;
   };
 
+type IdempotencyReplayBinding =
+  | {
+      kind: "grant";
+      courseId: string;
+      recipientUserId: string;
+      role: TeachingCourseCollaboratorRole;
+      scopes: TeachingCourseDelegatableCapability[];
+      expiresAt?: string;
+    }
+  | {
+      kind: "revoke";
+      courseId: string;
+      grantId: string;
+    };
+
 const grantIdempotencyScope = "teaching-course-collaborator-grant";
 const revokeIdempotencyScope = "teaching-course-collaborator-revoke";
-const uuidPattern =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const safePublicIdPattern = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/;
 const safeAccountPattern = /^[A-Za-z0-9][A-Za-z0-9._-]{0,119}$/;
-const safeRequestIdPattern = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/;
 const registeredEmailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export function createTeachingCourseCollaboratorPostgresStore(
@@ -119,9 +132,8 @@ export function createTeachingCourseCollaboratorPostgresStore(
       );
     }
   }
-  const createDatabase =
-    options.createDatabase ??
-    (getUaisCoreDatabasePool as unknown as TeachingCourseCollaboratorPostgresClientFactory);
+  const createDatabase: TeachingCourseCollaboratorPostgresClientFactory =
+    options.createDatabase ?? getUaisCoreDatabasePool;
   const readNow = options.now ?? (() => new Date());
 
   return {
@@ -178,14 +190,16 @@ export function createTeachingCourseCollaboratorPostgresStore(
             key: idempotencyKey,
             scope: grantIdempotencyScope,
             requestHash,
+            binding: {
+              kind: "grant",
+              courseId,
+              recipientUserId: recipient.userId,
+              role: normalizedRequest.role,
+              scopes: normalizedRequest.scopes,
+              expiresAt: normalizedRequest.expiresAt,
+            },
           });
           if (replay) {
-            if (replay.status === "persisted" && replay.event !== "grant-issued") {
-              throw new TeachingCourseCollaboratorStoreError(
-                500,
-                "idempotency-receipt-invalid",
-              );
-            }
             receipt = replay;
             return;
           }
@@ -502,14 +516,14 @@ export function createTeachingCourseCollaboratorPostgresStore(
             key: idempotencyKey,
             scope: revokeIdempotencyScope,
             requestHash,
+            binding: {
+              kind: "revoke",
+              courseId,
+              grantId,
+            },
           });
           if (replay) {
-            if (replay.status !== "persisted" || replay.event !== "grant-revoked") {
-              throw new TeachingCourseCollaboratorStoreError(
-                500,
-                "idempotency-receipt-invalid",
-              );
-            }
+            if (replay.status !== "persisted") throwInvalidIdempotencyReceipt();
             receipt = replay;
             return;
           }
@@ -621,50 +635,53 @@ export function createTeachingCourseCollaboratorPostgresStore(
       const courseId = requirePublicId(input.courseId, "course-id-invalid");
       const client = createDatabase({ env: options.env, max: 1 });
       try {
-        const rows = await client.sql`
-          WITH requested_principal AS (
-            SELECT principal.id, principal.account, principal.role, principal.status
-            FROM uais_users principal
-            WHERE principal.account = ${principalAccount}
-          )
-          SELECT
-            principal.id AS principal_user_id,
-            principal.account AS principal_account,
-            principal.role AS principal_role,
-            principal.status AS principal_status,
-            owner.id AS owner_user_id,
-            grant.id,
-            grant.course_id,
-            grant.recipient_user_id,
-            grant.recipient_identifier_id,
-            grant.granted_by_user_id,
-            grant.role,
-            grant.scopes,
-            grant.revision,
-            grant.granted_at,
-            grant.expires_at,
-            grant.revoked_at,
-            grant.revoked_by_user_id
-          FROM requested_principal principal
-          LEFT JOIN uais_teaching_course_management_snapshots snapshot
-            ON snapshot.snapshot_key = ${courseId}
-          LEFT JOIN LATERAL jsonb_array_elements(
-            CASE
-              WHEN jsonb_typeof(snapshot.database->'courses') = 'array'
-                THEN snapshot.database->'courses'
-              ELSE '[]'::jsonb
-            END
-          ) AS course(record)
-            ON course.record->>'courseId' = ${courseId}
-          LEFT JOIN uais_users owner
-            ON owner.account = course.record->>'ownerTeacherId'
-            AND owner.role = 'teacher'
-            AND owner.status = 'active'
-          LEFT JOIN uais_course_collaborator_grants grant
-            ON grant.course_id = snapshot.snapshot_key
-            AND grant.recipient_user_id = principal.id
-          LIMIT 2
-        `;
+        let rows: readonly unknown[] = [];
+        await client.sql.begin(async (sql) => {
+          rows = await sql`
+            WITH requested_principal AS (
+              SELECT principal.id, principal.account, principal.role, principal.status
+              FROM uais_users principal
+              WHERE principal.account = ${principalAccount}
+            )
+            SELECT
+              principal.id AS principal_user_id,
+              principal.account AS principal_account,
+              principal.role AS principal_role,
+              principal.status AS principal_status,
+              owner.id AS owner_user_id,
+              grant.id,
+              grant.course_id,
+              grant.recipient_user_id,
+              grant.recipient_identifier_id,
+              grant.granted_by_user_id,
+              grant.role,
+              grant.scopes,
+              grant.revision,
+              grant.granted_at,
+              grant.expires_at,
+              grant.revoked_at,
+              grant.revoked_by_user_id
+            FROM requested_principal principal
+            LEFT JOIN uais_teaching_course_management_snapshots snapshot
+              ON snapshot.snapshot_key = ${courseId}
+            LEFT JOIN LATERAL jsonb_array_elements(
+              CASE
+                WHEN jsonb_typeof(snapshot.database->'courses') = 'array'
+                  THEN snapshot.database->'courses'
+                ELSE '[]'::jsonb
+              END
+            ) AS course(record)
+              ON course.record->>'courseId' = ${courseId}
+            LEFT JOIN uais_users owner
+              ON owner.account = course.record->>'ownerTeacherId'
+              AND owner.role = 'teacher'
+              AND owner.status = 'active'
+            LEFT JOIN uais_course_collaborator_grants grant
+              ON grant.course_id = snapshot.snapshot_key
+              AND grant.recipient_user_id = principal.id
+            LIMIT 2
+          `;
+        });
         if (rows.length !== 1) {
           return authorizeTeachingCourseCapability({
             principal: undefined,
@@ -694,7 +711,7 @@ export function createTeachingCourseCollaboratorPostgresStore(
 }
 
 async function requireCourseOwner(input: {
-  sql: TeachingCourseCollaboratorSql;
+  sql: TransactionSql;
   actorAccount: string;
   courseId: string;
   lock: "update" | "share";
@@ -760,7 +777,7 @@ async function requireCourseOwner(input: {
 }
 
 async function resolveRegisteredRecipient(input: {
-  sql: TeachingCourseCollaboratorSql;
+  sql: TransactionSql;
   registeredEmail: string;
 }): Promise<RecipientContext> {
   const rows = await input.sql`
@@ -835,42 +852,47 @@ function assertEligibleRecipient(input: {
 }
 
 async function lockIdempotencyKey(
-  sql: TeachingCourseCollaboratorSql,
+  sql: TransactionSql,
   key: string,
 ) {
   await sql`
-    SELECT pg_advisory_xact_lock(1430346060, hashtext(${key}))
+    SELECT pg_advisory_xact_lock(hashtextextended(${key}, 0))
   `;
 }
 
 async function lockGrantMutation(input: {
-  sql: TeachingCourseCollaboratorSql;
+  sql: TransactionSql;
   idempotencyKey: string;
   courseId: string;
   recipientUserId: string;
 }) {
-  // The first lock serializes replays for one request key. The second
-  // serializes distinct keys that target the same canonical grant row,
-  // including the first-write case where SELECT ... FOR UPDATE has no row to
-  // lock yet. The two integer namespaces are deliberately disjoint, so a
-  // caller-controlled idempotency key cannot alias a canonical resource lock.
-  // Neither key contains the submitted address.
+  // Every writer of the globally keyed idempotency ledger uses this one-bigint
+  // namespace. Acquire it first and in its own statement so cross-subsystem
+  // reuse deterministically observes the existing scope instead of racing the
+  // ledger primary key.
+  await lockIdempotencyKey(input.sql, input.idempotencyKey);
+
+  // This separate two-integer namespace serializes distinct keys targeting the
+  // same canonical grant, including first-write races where no row exists for
+  // SELECT ... FOR UPDATE yet. Neither lock contains the submitted address.
   await input.sql`
-    SELECT
-      pg_advisory_xact_lock(1430346060, hashtext(${input.idempotencyKey})),
-      pg_advisory_xact_lock(1430346061, hashtext(${`${input.courseId}:${input.recipientUserId}`}))
+    SELECT pg_advisory_xact_lock(
+      1430346061,
+      hashtext(${`${input.courseId}:${input.recipientUserId}`})
+    )
   `;
 }
 
 async function readIdempotentReceipt(input: {
-  sql: TeachingCourseCollaboratorSql;
+  sql: TransactionSql;
   actorUserId: string;
   key: string;
   scope: string;
   requestHash: string;
+  binding: IdempotencyReplayBinding;
 }) {
   const rows = await input.sql`
-    SELECT actor_user_id, scope, request_hash, response_receipt
+    SELECT actor_user_id, scope, request_hash, resource_id, response_receipt
     FROM uais_idempotency_records
     WHERE idempotency_key = ${input.key}
     FOR UPDATE
@@ -898,20 +920,73 @@ async function readIdempotentReceipt(input: {
       "idempotency-key-payload-mismatch",
     );
   }
+  let receipt: TeachingCourseCollaboratorReceipt;
   try {
-    return normalizeTeachingCourseCollaboratorPersistedReceipt(
+    receipt = normalizeTeachingCourseCollaboratorPersistedReceipt(
       row.response_receipt,
     );
   } catch {
-    throw new TeachingCourseCollaboratorStoreError(
-      500,
-      "idempotency-receipt-invalid",
-    );
+    throwInvalidIdempotencyReceipt();
+  }
+  assertIdempotencyReceiptBinding({
+    resourceId: readString(row.resource_id),
+    receipt,
+    binding: input.binding,
+  });
+  return receipt;
+}
+
+function assertIdempotencyReceiptBinding(input: {
+  resourceId: string | undefined;
+  receipt: TeachingCourseCollaboratorReceipt;
+  binding: IdempotencyReplayBinding;
+}) {
+  if (!input.resourceId || input.resourceId !== input.receipt.grantId) {
+    throwInvalidIdempotencyReceipt();
+  }
+
+  if (input.binding.kind === "revoke") {
+    if (
+      input.receipt.status !== "persisted" ||
+      input.receipt.event !== "grant-revoked" ||
+      input.receipt.courseId !== input.binding.courseId ||
+      input.receipt.grantId !== input.binding.grantId
+    ) {
+      throwInvalidIdempotencyReceipt();
+    }
+    return;
+  }
+
+  if (
+    (input.receipt.status === "persisted" &&
+      input.receipt.event !== "grant-issued") ||
+    input.receipt.courseId !== input.binding.courseId ||
+    input.receipt.recipientUserId !== input.binding.recipientUserId ||
+    input.receipt.role !== input.binding.role ||
+    !sameStringList(input.receipt.scopes, input.binding.scopes) ||
+    (input.receipt.expiresAt ?? null) !==
+      (input.binding.expiresAt ?? null)
+  ) {
+    throwInvalidIdempotencyReceipt();
   }
 }
 
+function throwInvalidIdempotencyReceipt(): never {
+  throw new TeachingCourseCollaboratorStoreError(
+    500,
+    "idempotency-receipt-invalid",
+  );
+}
+
+function sameStringList(left: readonly string[], right: readonly string[]) {
+  return (
+    left.length === right.length &&
+    left.every((value, index) => value === right[index])
+  );
+}
+
 async function writeIdempotentReceipt(input: {
-  sql: TeachingCourseCollaboratorSql;
+  sql: TransactionSql;
   actorUserId: string;
   key: string;
   scope: string;
@@ -942,7 +1017,7 @@ async function writeIdempotentReceipt(input: {
 }
 
 async function writeAudit(input: {
-  sql: TeachingCourseCollaboratorSql;
+  sql: TransactionSql;
   actorUserId: string;
   receipt: TeachingCourseCollaboratorPersistedReceipt;
   persistedAt: string;
@@ -980,7 +1055,7 @@ async function writeAudit(input: {
 }
 
 async function writeOutbox(input: {
-  sql: TeachingCourseCollaboratorSql;
+  sql: TransactionSql;
   grant: PersistedTeachingCourseCollaboratorGrant;
   event: "grant-issued" | "grant-revoked";
   persistedAt: string;
@@ -1074,7 +1149,11 @@ function readGrantRow(
     role: policy.role,
     scopes: policy.scopes,
     status: getTeachingCourseCollaboratorGrantStatus(
-      { expiresAt: policy.expiresAt, revokedAt },
+      {
+        grantedAt: policy.grantedAt,
+        expiresAt: policy.expiresAt,
+        revokedAt,
+      },
       now,
     ),
     revision: readPositiveInteger(
@@ -1266,29 +1345,33 @@ function requireAccountValue(value: unknown, reasonCode: string) {
 }
 
 function requirePublicId(value: unknown, reasonCode: string) {
-  if (typeof value !== "string" || !safePublicIdPattern.test(value.trim())) {
+  const normalized = typeof value === "string" ? value.trim() : value;
+  if (!isTeachingCourseCollaboratorPublicId(normalized)) {
     throw new TeachingCourseCollaboratorStoreError(400, reasonCode);
   }
-  return value.trim();
+  return normalized;
 }
 
 function requireRequestId(value: unknown, reasonCode: string) {
-  if (typeof value !== "string" || !safeRequestIdPattern.test(value.trim())) {
+  const normalized = typeof value === "string" ? value.trim() : value;
+  if (!isTeachingCourseCollaboratorRequestId(normalized)) {
     throw new TeachingCourseCollaboratorStoreError(400, reasonCode);
   }
-  return value.trim();
+  return normalized;
 }
 
 function requireUuid(value: unknown, reasonCode: string, status = 500) {
-  if (typeof value !== "string" || !uuidPattern.test(value.trim())) {
+  const normalized = typeof value === "string" ? value.trim() : value;
+  if (!isTeachingCourseCollaboratorUuid(normalized)) {
     throw new TeachingCourseCollaboratorStoreError(status, reasonCode);
   }
-  return value.trim().toLowerCase();
+  return normalized.toLowerCase();
 }
 
 function readOptionalUuid(value: unknown) {
-  return typeof value === "string" && uuidPattern.test(value.trim())
-    ? value.trim().toLowerCase()
+  const normalized = typeof value === "string" ? value.trim() : value;
+  return isTeachingCourseCollaboratorUuid(normalized)
+    ? normalized.toLowerCase()
     : undefined;
 }
 

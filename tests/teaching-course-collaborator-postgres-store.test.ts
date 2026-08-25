@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
+import type { TransactionSql } from "postgres";
 import {
-  TeachingCourseCollaboratorStoreError,
   createTeachingCourseCollaboratorPostgresStore,
   type TeachingCourseCollaboratorPostgresClientFactory,
 } from "@/lib/server/teaching-course-collaborator-postgres-store";
@@ -11,6 +11,7 @@ const ids = {
   otherRecipient: "33333333-3333-4333-8333-333333333333",
   identifier: "44444444-4444-4444-8444-444444444444",
   grant: "55555555-5555-4555-8555-555555555555",
+  otherGrant: "66666666-6666-4666-8666-666666666666",
 };
 const now = new Date("2026-08-25T10:00:00.000Z");
 const rawEmail = "Teacher.Lin@Example.Test";
@@ -22,13 +23,24 @@ type FakeQuery = {
   inTransaction: boolean;
 };
 
+type FakeIdempotencyRow = {
+  actor_user_id: string;
+  scope: string;
+  request_hash: string;
+  resource_id: string;
+  response_receipt: unknown;
+};
+
 function createFakeDatabase(resolve: (query: FakeQuery) => unknown[]) {
   const queries: FakeQuery[] = [];
   const arrayCalls: Array<{ values: unknown[]; type?: number }> = [];
   let transactionDepth = 0;
   let beginCount = 0;
   let ended = 0;
-  const sql = (async (strings: TemplateStringsArray, ...values: unknown[]) => {
+  const transaction = (async (
+    strings: TemplateStringsArray,
+    ...values: unknown[]
+  ) => {
     const query = {
       text: strings.join("?").replace(/\s+/g, " ").trim(),
       values,
@@ -39,10 +51,8 @@ function createFakeDatabase(resolve: (query: FakeQuery) => unknown[]) {
   }) as {
     (strings: TemplateStringsArray, ...values: unknown[]): Promise<unknown[]>;
     array: (values: readonly unknown[], type?: number) => unknown;
-    begin: (run: (transaction: typeof sql) => Promise<void>) => Promise<void>;
-    end: () => Promise<void>;
   };
-  sql.array = (values, type) => {
+  transaction.array = (values, type) => {
     const call = {
       values: [...values],
       ...(type === undefined ? {} : { type }),
@@ -50,20 +60,25 @@ function createFakeDatabase(resolve: (query: FakeQuery) => unknown[]) {
     arrayCalls.push(call);
     return { kind: "postgres-array-parameter", ...call };
   };
-  sql.begin = async (run) => {
-    beginCount += 1;
-    transactionDepth += 1;
-    try {
-      await run(sql);
-    } finally {
-      transactionDepth -= 1;
-    }
+  const sql = {
+    begin: async (run: (transactionSql: TransactionSql) => Promise<void>) => {
+      beginCount += 1;
+      transactionDepth += 1;
+      try {
+        await run(transaction as TransactionSql);
+      } finally {
+        transactionDepth -= 1;
+      }
+    },
+    end: async () => {
+      ended += 1;
+    },
   };
-  sql.end = async () => {
-    ended += 1;
-  };
+  const factory: TeachingCourseCollaboratorPostgresClientFactory = () => ({
+    sql,
+  });
   return {
-    factory: (() => ({ sql })) as unknown as TeachingCourseCollaboratorPostgresClientFactory,
+    factory,
     queries,
     arrayCalls,
     get beginCount() {
@@ -106,7 +121,7 @@ function grantRow(
     id: string;
     course_id: string;
     recipient_user_id: string;
-    recipient_identifier_id: string;
+    recipient_identifier_id: string | null;
     granted_by_user_id: string;
     role: "observer" | "reviewer" | "teaching-assistant" | "co-instructor";
     scopes: string[];
@@ -205,6 +220,7 @@ describe("teaching-course collaborator Postgres store", () => {
       "AS owner_user_id",
       "AS recipient_identifier_id",
       "pg_advisory_xact_lock",
+      "pg_advisory_xact_lock",
       "FROM uais_idempotency_records",
       "FROM uais_course_collaborator_grants",
       "INSERT INTO uais_course_collaborator_grants",
@@ -217,7 +233,7 @@ describe("teaching-course collaborator Postgres store", () => {
         fragments.find((fragment) => query.text.includes(fragment)),
       ),
     ).toEqual(fragments);
-    const grantInsert = fake.queries[5];
+    const grantInsert = fake.queries[6];
     expect(grantInsert.text).toContain(
       "ON CONFLICT (course_id, recipient_user_id)",
     );
@@ -228,18 +244,20 @@ describe("teaching-course collaborator Postgres store", () => {
         type: 25,
       },
     ]);
-    const mutationLocks = fake.queries[2];
-    expect(mutationLocks.text).toContain(
-      "pg_advisory_xact_lock(1430346060, hashtext(?))",
+    const globalIdempotencyLock = fake.queries[2];
+    expect(globalIdempotencyLock.text).toContain(
+      "pg_advisory_xact_lock(hashtextextended(?, 0))",
     );
-    expect(mutationLocks.text).toContain(
-      "pg_advisory_xact_lock(1430346061, hashtext(?))",
-    );
-    expect(mutationLocks.values).toEqual([
-      "collaborator-grant-1",
+    expect(globalIdempotencyLock.values).toEqual(["collaborator-grant-1"]);
+    expect(globalIdempotencyLock.text).not.toContain("1430346060");
+    const canonicalGrantLock = fake.queries[3];
+    expect(canonicalGrantLock.text).toContain("pg_advisory_xact_lock(");
+    expect(canonicalGrantLock.text).toContain("1430346061");
+    expect(canonicalGrantLock.text).toContain("hashtext(?)");
+    expect(canonicalGrantLock.values).toEqual([
       `course-research-methods:${ids.recipient}`,
     ]);
-    const outboxInsert = fake.queries[7];
+    const outboxInsert = fake.queries[8];
     expect(outboxInsert.text).toContain("'pending'");
     expect(outboxInsert.values).toContain("grant-issued");
     expect(outboxInsert.text).toContain("recipient_user_id");
@@ -403,14 +421,7 @@ describe("teaching-course collaborator Postgres store", () => {
   });
 
   it("replays an exact idempotent request and conflicts on changed payload", async () => {
-    let idempotency:
-      | {
-          actor_user_id: string;
-          scope: string;
-          request_hash: string;
-          response_receipt: unknown;
-        }
-      | undefined;
+    let idempotency: FakeIdempotencyRow | undefined;
     let grantWrites = 0;
     const fake = createFakeDatabase(({ text, values }) => {
       if (text.includes("AS owner_user_id")) return [ownerRow()];
@@ -431,6 +442,7 @@ describe("teaching-course collaborator Postgres store", () => {
           actor_user_id: String(values[1]),
           scope: String(values[2]),
           request_hash: String(values[3]),
+          resource_id: String(values[4]),
           response_receipt: JSON.parse(String(values[5])),
         };
       }
@@ -458,16 +470,108 @@ describe("teaching-course collaborator Postgres store", () => {
     expect(grantWrites).toBe(1);
   });
 
+  it.each([
+    {
+      label: "resource id",
+      keySuffix: "resource",
+      resourceId: ids.otherGrant,
+      receiptOverride: {},
+    },
+    {
+      label: "course id",
+      keySuffix: "course",
+      receiptOverride: { courseId: "course-other" },
+    },
+    {
+      label: "recipient user id",
+      keySuffix: "recipient",
+      receiptOverride: { recipientUserId: ids.otherRecipient },
+    },
+    {
+      label: "role",
+      keySuffix: "role",
+      receiptOverride: {
+        role: "observer",
+        scopes: ["course.read"],
+      },
+    },
+    {
+      label: "canonical scopes",
+      keySuffix: "scopes",
+      receiptOverride: { scopes: ["course.read"] },
+    },
+    {
+      label: "expiry",
+      keySuffix: "expiry",
+      receiptOverride: { expiresAt: "2026-10-25T10:00:00.000Z" },
+    },
+  ] as Array<{
+    label: string;
+    keySuffix: string;
+    resourceId?: string;
+    receiptOverride: Record<string, unknown>;
+  }>)(
+    "rejects a grant replay whose stored $label is bound to another request",
+    async ({ keySuffix, resourceId, receiptOverride }) => {
+      let idempotency: FakeIdempotencyRow | undefined;
+      const fake = createFakeDatabase(({ text, values }) => {
+        if (text.includes("AS owner_user_id")) return [ownerRow()];
+        if (text.includes("FROM uais_user_login_identifiers i")) {
+          return [recipientRow()];
+        }
+        if (text.includes("pg_advisory_xact_lock")) return [];
+        if (text.includes("FROM uais_idempotency_records")) {
+          return idempotency ? [idempotency] : [];
+        }
+        if (
+          text.includes("FROM uais_course_collaborator_grants") &&
+          text.includes("FOR UPDATE")
+        ) {
+          return [];
+        }
+        if (text.startsWith("INSERT INTO uais_course_collaborator_grants")) {
+          return [grantRow()];
+        }
+        if (text.startsWith("INSERT INTO uais_idempotency_records")) {
+          idempotency = {
+            actor_user_id: String(values[1]),
+            scope: String(values[2]),
+            request_hash: String(values[3]),
+            resource_id: String(values[4]),
+            response_receipt: JSON.parse(String(values[5])),
+          };
+        }
+        return [];
+      });
+      const store = createTeachingCourseCollaboratorPostgresStore({
+        env: {},
+        createDatabase: fake.factory,
+        now: () => now,
+      });
+      const request = grantInput({
+        idempotencyKey: `hostile-grant-replay-${keySuffix}`,
+      });
+      const created = await store.grant(request);
+      if (!idempotency) throw new Error("Expected persisted idempotency row.");
+      idempotency = {
+        ...idempotency,
+        ...(resourceId ? { resource_id: resourceId } : {}),
+        response_receipt: {
+          ...created,
+          ...receiptOverride,
+        },
+      };
+
+      await expect(store.grant(request)).rejects.toMatchObject({
+        status: 500,
+        reasonCode: "idempotency-receipt-invalid",
+      });
+    },
+  );
+
   it("replays an exact persisted request after its requested expiry", async () => {
     let clock = now;
-    let idempotency:
-      | {
-          actor_user_id: string;
-          scope: string;
-          request_hash: string;
-          response_receipt: unknown;
-        }
-      | undefined;
+    let idempotency: FakeIdempotencyRow | undefined;
     let grantWrites = 0;
     const fake = createFakeDatabase(({ text, values }) => {
       if (text.includes("AS owner_user_id")) return [ownerRow()];
@@ -488,6 +592,7 @@ describe("teaching-course collaborator Postgres store", () => {
           actor_user_id: String(values[1]),
           scope: String(values[2]),
           request_hash: String(values[3]),
+          resource_id: String(values[4]),
           response_receipt: JSON.parse(String(values[5])),
         };
       }
@@ -512,14 +617,7 @@ describe("teaching-course collaborator Postgres store", () => {
 
   it("replays an exact persisted request after the recipient becomes disabled", async () => {
     let recipientStatus: "active" | "disabled" = "active";
-    let idempotency:
-      | {
-          actor_user_id: string;
-          scope: string;
-          request_hash: string;
-          response_receipt: unknown;
-        }
-      | undefined;
+    let idempotency: FakeIdempotencyRow | undefined;
     let grantWrites = 0;
     const fake = createFakeDatabase(({ text, values }) => {
       if (text.includes("AS owner_user_id")) return [ownerRow()];
@@ -542,6 +640,7 @@ describe("teaching-course collaborator Postgres store", () => {
           actor_user_id: String(values[1]),
           scope: String(values[2]),
           request_hash: String(values[3]),
+          resource_id: String(values[4]),
           response_receipt: JSON.parse(String(values[5])),
         };
       }
@@ -842,14 +941,7 @@ describe("teaching-course collaborator Postgres store", () => {
 
   it("replays an exact same-key revoke receipt without repeating side effects", async () => {
     let row = grantRow();
-    let idempotency:
-      | {
-          actor_user_id: string;
-          scope: string;
-          request_hash: string;
-          response_receipt: unknown;
-        }
-      | undefined;
+    let idempotency: FakeIdempotencyRow | undefined;
     const fake = createFakeDatabase(({ text, values }) => {
       if (text.includes("AS owner_user_id")) return [ownerRow()];
       if (text.includes("pg_advisory_xact_lock")) return [];
@@ -875,6 +967,7 @@ describe("teaching-course collaborator Postgres store", () => {
           actor_user_id: String(values[1]),
           scope: String(values[2]),
           request_hash: String(values[3]),
+          resource_id: String(values[4]),
           response_receipt: JSON.parse(String(values[5])),
         };
       }
@@ -899,6 +992,16 @@ describe("teaching-course collaborator Postgres store", () => {
 
     expect(replayed).toEqual(receipt);
     expect(idempotency?.response_receipt).toEqual(receipt);
+    const globalLocks = fake.queries.filter((query) =>
+      query.text.includes("pg_advisory_xact_lock"),
+    );
+    expect(globalLocks).toHaveLength(2);
+    for (const lock of globalLocks) {
+      expect(lock.text).toContain(
+        "pg_advisory_xact_lock(hashtextextended(?, 0))",
+      );
+      expect(lock.values).toEqual([request.idempotencyKey]);
+    }
     expect(receipt).toMatchObject({
       event: "grant-revoked",
       grantStatus: "revoked",
@@ -928,6 +1031,95 @@ describe("teaching-course collaborator Postgres store", () => {
       ),
     ).toHaveLength(1);
   });
+
+  it.each([
+    {
+      label: "resource id",
+      keySuffix: "resource",
+      resourceId: ids.otherGrant,
+      receiptOverride: {},
+    },
+    {
+      label: "grant id",
+      keySuffix: "grant",
+      resourceId: ids.otherGrant,
+      receiptOverride: { grantId: ids.otherGrant },
+    },
+    {
+      label: "course id",
+      keySuffix: "course",
+      receiptOverride: { courseId: "course-other" },
+    },
+  ] as Array<{
+    label: string;
+    keySuffix: string;
+    resourceId?: string;
+    receiptOverride: Record<string, unknown>;
+  }>)(
+    "rejects a revoke replay whose stored $label is bound to another request",
+    async ({ keySuffix, resourceId, receiptOverride }) => {
+      let row = grantRow();
+      let idempotency: FakeIdempotencyRow | undefined;
+      const fake = createFakeDatabase(({ text, values }) => {
+        if (text.includes("AS owner_user_id")) return [ownerRow()];
+        if (text.includes("pg_advisory_xact_lock")) return [];
+        if (text.includes("FROM uais_idempotency_records")) {
+          return idempotency ? [idempotency] : [];
+        }
+        if (
+          text.includes("FROM uais_course_collaborator_grants") &&
+          text.includes("FOR UPDATE")
+        ) {
+          return [row];
+        }
+        if (text.startsWith("UPDATE uais_course_collaborator_grants")) {
+          row = grantRow({
+            revision: 2,
+            revoked_at: now.toISOString(),
+            revoked_by_user_id: ids.owner,
+          });
+          return [row];
+        }
+        if (text.startsWith("INSERT INTO uais_idempotency_records")) {
+          idempotency = {
+            actor_user_id: String(values[1]),
+            scope: String(values[2]),
+            request_hash: String(values[3]),
+            resource_id: String(values[4]),
+            response_receipt: JSON.parse(String(values[5])),
+          };
+        }
+        return [];
+      });
+      const store = createTeachingCourseCollaboratorPostgresStore({
+        env: {},
+        createDatabase: fake.factory,
+        now: () => now,
+      });
+      const request = {
+        actorAccount: "teacher-kang",
+        courseId: "course-research-methods",
+        grantId: ids.grant,
+        idempotencyKey: `hostile-revoke-replay-${keySuffix}`,
+        traceId: `trace-hostile-revoke-replay-${keySuffix}`,
+      };
+      const created = await store.revoke(request);
+      if (!idempotency) throw new Error("Expected persisted idempotency row.");
+      idempotency = {
+        ...idempotency,
+        ...(resourceId ? { resource_id: resourceId } : {}),
+        response_receipt: {
+          ...created,
+          ...receiptOverride,
+        },
+      };
+
+      await expect(store.revoke(request)).rejects.toMatchObject({
+        status: 500,
+        reasonCode: "idempotency-receipt-invalid",
+      });
+    },
+  );
 
   it("rejects a different-key revoke after the canonical row is revoked", async () => {
     let row = grantRow();
@@ -1194,7 +1386,7 @@ describe("teaching-course collaborator Postgres store", () => {
     expect(() =>
       createTeachingCourseCollaboratorPostgresStore({ env: {} }),
     ).toThrowError(
-      expect.objectContaining<TeachingCourseCollaboratorStoreError>({
+      expect.objectContaining({
         status: 503,
         reasonCode: "core-database-required",
       }),

@@ -84,6 +84,10 @@ CREATE INDEX IF NOT EXISTS uais_course_collaborator_grants_active_idx
   ON uais_course_collaborator_grants (course_id, expires_at)
   WHERE revoked_at IS NULL;
 
+CREATE INDEX IF NOT EXISTS uais_course_collaborator_grants_recipient_identifier_idx
+  ON uais_course_collaborator_grants (recipient_identifier_id)
+  WHERE recipient_identifier_id IS NOT NULL;
+
 CREATE TABLE IF NOT EXISTS uais_course_collaborator_notification_outbox (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   grant_id uuid NOT NULL
@@ -131,3 +135,7 @@ CREATE INDEX IF NOT EXISTS uais_course_collaborator_notification_dispatch_idx
 CREATE INDEX IF NOT EXISTS uais_course_collaborator_notification_backlog_idx
   ON uais_course_collaborator_notification_outbox (created_at)
   WHERE status IN ('pending', 'failed', 'dead');
+
+CREATE INDEX IF NOT EXISTS uais_course_collaborator_notification_recipient_identifier_idx
+  ON uais_course_collaborator_notification_outbox (recipient_identifier_id)
+  WHERE recipient_identifier_id IS NOT NULL;

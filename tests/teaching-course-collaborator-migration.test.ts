@@ -73,6 +73,17 @@ describe("teaching-course collaborator ACL migration", () => {
     );
   });
 
+  it("indexes both nullable identifier references for retention deletion", () => {
+    const sql = compactSql(readProjectFile("migrations/0011_course_collaborator_acl.sql"));
+
+    expect(sql).toContain(
+      "CREATE INDEX IF NOT EXISTS uais_course_collaborator_grants_recipient_identifier_idx ON uais_course_collaborator_grants (recipient_identifier_id) WHERE recipient_identifier_id IS NOT NULL",
+    );
+    expect(sql).toContain(
+      "CREATE INDEX IF NOT EXISTS uais_course_collaborator_notification_recipient_identifier_idx ON uais_course_collaborator_notification_outbox (recipient_identifier_id) WHERE recipient_identifier_id IS NOT NULL",
+    );
+  });
+
   it("pins the frozen role ceilings and rejects wildcard or unknown stored scopes", () => {
     const sql = compactSql(readProjectFile("migrations/0011_course_collaborator_acl.sql"));
 

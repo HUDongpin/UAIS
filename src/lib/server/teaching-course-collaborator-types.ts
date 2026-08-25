@@ -131,7 +131,13 @@ export type TeachingCourseCollaboratorReceipt =
   | TeachingCourseCollaboratorAlreadyActiveReceipt;
 
 const explicitOffsetTimestampPattern =
-  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
+  /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?(?:Z|([+-])(\d{2}):(\d{2}))$/;
+const canonicalUtcTimestampPattern =
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
+const uuidPattern =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const safePublicIdPattern = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/;
+const safeRequestIdPattern = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/;
 
 export class TeachingCourseCollaboratorValidationError extends Error {
   readonly reasonCode: string;
@@ -141,6 +147,24 @@ export class TeachingCourseCollaboratorValidationError extends Error {
     this.name = "TeachingCourseCollaboratorValidationError";
     this.reasonCode = reasonCode;
   }
+}
+
+export function isTeachingCourseCollaboratorUuid(
+  value: unknown,
+): value is string {
+  return typeof value === "string" && uuidPattern.test(value);
+}
+
+export function isTeachingCourseCollaboratorPublicId(
+  value: unknown,
+): value is string {
+  return typeof value === "string" && safePublicIdPattern.test(value);
+}
+
+export function isTeachingCourseCollaboratorRequestId(
+  value: unknown,
+): value is string {
+  return typeof value === "string" && safeRequestIdPattern.test(value);
 }
 
 export function isTeachingCourseCollaboratorRole(
@@ -226,18 +250,27 @@ export function normalizeTeachingCourseCollaboratorExpiryTimestamp(
 }
 
 export function getTeachingCourseCollaboratorGrantStatus(
-  input: { expiresAt?: string; revokedAt?: string },
+  input: { grantedAt: string; expiresAt?: string; revokedAt?: string },
   now: Date = new Date(),
 ): TeachingCourseCollaboratorGrantStatus {
   if (input.revokedAt) return "revoked";
-  if (!input.expiresAt) return "active";
   const nowTimestamp = now.getTime();
-  const expiresAt = Date.parse(input.expiresAt);
-  return !Number.isFinite(nowTimestamp) ||
-    !Number.isFinite(expiresAt) ||
-    expiresAt <= nowTimestamp
-    ? "expired"
-    : "active";
+  if (!Number.isFinite(nowTimestamp)) return "expired";
+  let grantedAt: string;
+  try {
+    grantedAt = normalizeIsoTimestamp(input.grantedAt, "granted-at-invalid");
+  } catch {
+    return "expired";
+  }
+  if (Date.parse(grantedAt) > nowTimestamp) return "expired";
+  if (!input.expiresAt) return "active";
+  let expiresAt: string;
+  try {
+    expiresAt = normalizeIsoTimestamp(input.expiresAt, "expiry-invalid");
+  } catch {
+    return "expired";
+  }
+  return Date.parse(expiresAt) <= nowTimestamp ? "expired" : "active";
 }
 
 export function createTeachingCourseCollaboratorPersistedReceipt(input: {
@@ -307,38 +340,85 @@ export function normalizeTeachingCourseCollaboratorPersistedReceipt(
       receipt.grantStatus as TeachingCourseCollaboratorGrantStatus,
     ) ||
     (isAlreadyActive && receipt.grantStatus !== "active") ||
-    !Number.isInteger(receipt.revision) ||
+    !Number.isSafeInteger(receipt.revision) ||
     Number(receipt.revision) <= 0
   ) {
     throw new TeachingCourseCollaboratorValidationError(
       "idempotency-receipt-invalid",
     );
   }
-  const policy = normalizeTeachingCourseCollaboratorGrantPolicy({
-    role: receipt.role,
-    scopes: receipt.scopes,
-    grantedAt: receipt.grantedAt,
-    expiresAt: receipt.expiresAt,
-  });
-  const grantId = requireNonEmptyString(receipt.grantId);
-  const courseId = requireNonEmptyString(receipt.courseId);
-  const recipientUserId = requireNonEmptyString(receipt.recipientUserId);
-  const traceId = requireNonEmptyString(receipt.traceId);
-  if (!grantId || !courseId || !recipientUserId || !traceId) {
+  const expiresAt =
+    receipt.expiresAt === undefined
+      ? undefined
+      : normalizeIsoTimestamp(
+          receipt.expiresAt,
+          "idempotency-receipt-invalid",
+        );
+  let policy: TeachingCourseCollaboratorGrantPolicy;
+  try {
+    policy = normalizeTeachingCourseCollaboratorGrantPolicy({
+      role: receipt.role,
+      scopes: receipt.scopes,
+      grantedAt: receipt.grantedAt,
+      expiresAt,
+    });
+  } catch {
     throw new TeachingCourseCollaboratorValidationError(
       "idempotency-receipt-invalid",
     );
   }
-  const revokedAt = receipt.revokedAt
-    ? normalizeIsoTimestamp(receipt.revokedAt, "idempotency-receipt-invalid")
-    : undefined;
-  const lifecycleIsConsistent = isAlreadyActive
-    ? receipt.grantStatus === "active" && !revokedAt
-    : receipt.event === "grant-issued"
-      ? receipt.grantStatus === "active" && !revokedAt
-      : receipt.event === "grant-revoked" &&
-        receipt.grantStatus === "revoked" &&
-        Boolean(revokedAt);
+  const grantId = normalizeUuid(
+    receipt.grantId,
+    "idempotency-receipt-invalid",
+  );
+  const courseId = requireGuardedString(
+    receipt.courseId,
+    isTeachingCourseCollaboratorPublicId,
+    "idempotency-receipt-invalid",
+  );
+  const recipientUserId = normalizeUuid(
+    receipt.recipientUserId,
+    "idempotency-receipt-invalid",
+  );
+  const traceId = requireGuardedString(
+    receipt.traceId,
+    isTeachingCourseCollaboratorRequestId,
+    "idempotency-receipt-invalid",
+  );
+  const revokedAt =
+    receipt.revokedAt === undefined
+      ? undefined
+      : normalizeIsoTimestamp(
+          receipt.revokedAt,
+          "idempotency-receipt-invalid",
+        );
+  const persistedAt = normalizeIsoTimestamp(
+    receipt.persistedAt,
+    "idempotency-receipt-invalid",
+  );
+  const grantedTimestamp = Date.parse(policy.grantedAt);
+  const persistedTimestamp = Date.parse(persistedAt);
+  const revokedTimestamp = revokedAt ? Date.parse(revokedAt) : undefined;
+  const isActiveAtPersistence =
+    getTeachingCourseCollaboratorGrantStatus(
+      { grantedAt: policy.grantedAt, expiresAt: policy.expiresAt },
+      new Date(persistedTimestamp),
+    ) === "active";
+  const lifecycleIsConsistent =
+    grantedTimestamp <= persistedTimestamp &&
+    (isAlreadyActive
+      ? receipt.grantStatus === "active" &&
+        !revokedAt &&
+        isActiveAtPersistence
+      : receipt.event === "grant-issued"
+        ? receipt.grantStatus === "active" &&
+          !revokedAt &&
+          isActiveAtPersistence
+        : receipt.event === "grant-revoked" &&
+          receipt.grantStatus === "revoked" &&
+          revokedTimestamp !== undefined &&
+          grantedTimestamp <= revokedTimestamp &&
+          revokedTimestamp <= persistedTimestamp);
   if (!lifecycleIsConsistent) {
     throw new TeachingCourseCollaboratorValidationError(
       "idempotency-receipt-invalid",
@@ -351,15 +431,12 @@ export function normalizeTeachingCourseCollaboratorPersistedReceipt(
     role: policy.role,
     scopes: policy.scopes,
     grantStatus: receipt.grantStatus as TeachingCourseCollaboratorGrantStatus,
-    revision: Number(receipt.revision),
+    revision: receipt.revision as number,
     grantedAt: policy.grantedAt,
     ...(policy.expiresAt ? { expiresAt: policy.expiresAt } : {}),
     ...(revokedAt ? { revokedAt } : {}),
     traceId,
-    persistedAt: normalizeIsoTimestamp(
-      receipt.persistedAt,
-      "idempotency-receipt-invalid",
-    ),
+    persistedAt,
   };
   return isAlreadyActive
     ? {
@@ -376,11 +453,37 @@ export function normalizeTeachingCourseCollaboratorPersistedReceipt(
 
 function normalizeIsoTimestamp(value: unknown, reasonCode: string) {
   if (value instanceof Date && Number.isFinite(value.getTime())) {
-    return value.toISOString();
+    const normalized = value.toISOString();
+    if (!canonicalUtcTimestampPattern.test(normalized)) {
+      throw new TeachingCourseCollaboratorValidationError(reasonCode);
+    }
+    return normalized;
   }
+  if (typeof value !== "string") {
+    throw new TeachingCourseCollaboratorValidationError(reasonCode);
+  }
+  const match = explicitOffsetTimestampPattern.exec(value);
+  if (!match) {
+    throw new TeachingCourseCollaboratorValidationError(reasonCode);
+  }
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const hour = Number(match[4]);
+  const minute = Number(match[5]);
+  const second = Number(match[6]);
+  const offsetHour = match[9] === undefined ? 0 : Number(match[9]);
+  const offsetMinute = match[10] === undefined ? 0 : Number(match[10]);
   if (
-    typeof value !== "string" ||
-    !explicitOffsetTimestampPattern.test(value)
+    month < 1 ||
+    month > 12 ||
+    day < 1 ||
+    day > daysInMonth(year, month) ||
+    hour > 23 ||
+    minute > 59 ||
+    second > 59 ||
+    offsetHour > 23 ||
+    offsetMinute > 59
   ) {
     throw new TeachingCourseCollaboratorValidationError(reasonCode);
   }
@@ -388,7 +491,11 @@ function normalizeIsoTimestamp(value: unknown, reasonCode: string) {
   if (!Number.isFinite(timestamp)) {
     throw new TeachingCourseCollaboratorValidationError(reasonCode);
   }
-  return new Date(timestamp).toISOString();
+  const normalized = new Date(timestamp).toISOString();
+  if (!canonicalUtcTimestampPattern.test(normalized)) {
+    throw new TeachingCourseCollaboratorValidationError(reasonCode);
+  }
+  return normalized;
 }
 
 function readRecord(value: unknown, reasonCode: string): Record<string, unknown> {
@@ -398,6 +505,27 @@ function readRecord(value: unknown, reasonCode: string): Record<string, unknown>
   return value as Record<string, unknown>;
 }
 
-function requireNonEmptyString(value: unknown) {
-  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+function daysInMonth(year: number, month: number) {
+  if (month === 2) {
+    return year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0) ? 29 : 28;
+  }
+  return [4, 6, 9, 11].includes(month) ? 30 : 31;
+}
+
+function normalizeUuid(value: unknown, reasonCode: string) {
+  if (!isTeachingCourseCollaboratorUuid(value)) {
+    throw new TeachingCourseCollaboratorValidationError(reasonCode);
+  }
+  return value.toLowerCase();
+}
+
+function requireGuardedString(
+  value: unknown,
+  guard: (candidate: unknown) => candidate is string,
+  reasonCode: string,
+) {
+  if (!guard(value)) {
+    throw new TeachingCourseCollaboratorValidationError(reasonCode);
+  }
+  return value;
 }

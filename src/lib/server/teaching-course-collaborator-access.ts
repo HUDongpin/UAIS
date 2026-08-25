@@ -110,6 +110,36 @@ export function authorizeTeachingCourseCapability(input: {
       reasonCode: "collaborator-grant-invalid",
     };
   }
+  const authorizationNow = input.now ?? new Date();
+  const authorizationTimestamp = authorizationNow.getTime();
+  if (!Number.isFinite(authorizationTimestamp)) {
+    return {
+      authorized: false,
+      reasonCode: "collaborator-grant-invalid",
+    };
+  }
+  let policy: ReturnType<
+    typeof normalizeTeachingCourseCollaboratorGrantPolicy
+  >;
+  try {
+    policy = normalizeTeachingCourseCollaboratorGrantPolicy({
+      role: grant.role,
+      scopes: grant.scopes,
+      grantedAt: grant.grantedAt,
+      expiresAt: grant.expiresAt,
+    });
+  } catch {
+    return {
+      authorized: false,
+      reasonCode: "collaborator-grant-invalid",
+    };
+  }
+  if (Date.parse(policy.grantedAt) > authorizationTimestamp) {
+    return {
+      authorized: false,
+      reasonCode: "collaborator-grant-invalid",
+    };
+  }
   if (grant.revokedAt || grant.status === "revoked") {
     return {
       authorized: false,
@@ -117,8 +147,12 @@ export function authorizeTeachingCourseCapability(input: {
     };
   }
   const derivedStatus = getTeachingCourseCollaboratorGrantStatus(
-    { expiresAt: grant.expiresAt, revokedAt: grant.revokedAt },
-    input.now,
+    {
+      grantedAt: policy.grantedAt,
+      expiresAt: policy.expiresAt,
+      revokedAt: grant.revokedAt,
+    },
+    authorizationNow,
   );
   if (grant.status === "expired" || derivedStatus === "expired") {
     return {
@@ -133,23 +167,10 @@ export function authorizeTeachingCourseCapability(input: {
     };
   }
 
-  try {
-    const policy = normalizeTeachingCourseCollaboratorGrantPolicy({
-      role: grant.role,
-      scopes: grant.scopes,
-      grantedAt: grant.grantedAt,
-      expiresAt: grant.expiresAt,
-    });
-    if (!policy.scopes.includes(input.capability)) {
-      return {
-        authorized: false,
-        reasonCode: "collaborator-scope-required",
-      };
-    }
-  } catch {
+  if (!policy.scopes.includes(input.capability)) {
     return {
       authorized: false,
-      reasonCode: "collaborator-grant-invalid",
+      reasonCode: "collaborator-scope-required",
     };
   }
 
