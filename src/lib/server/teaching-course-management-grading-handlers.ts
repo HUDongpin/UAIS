@@ -1,4 +1,5 @@
 import { TeachingCourseManagementStoreError } from "./teaching-course-management-error";
+import { isTeachingCourseManagementActorAuthorized } from "./teaching-course-management-authorization";
 import { createRedaction, requireSafeId } from "./teaching-course-management-guards";
 import {
   createAuditEvent,
@@ -71,7 +72,12 @@ export async function saveTeachingGradingQueueRecord(input: {
     }
 
     const course = database.courses[courseIndex];
-    if (course.ownerTeacherId !== actorId) {
+    if (!isTeachingCourseManagementActorAuthorized({
+      ownerTeacherId: course.ownerTeacherId,
+      actorId,
+      courseId,
+      requiredCapability: "course.grading.manage",
+    })) {
       throw new TeachingCourseManagementStoreError(
         403,
         "Teaching course ownership is required.",
@@ -255,7 +261,12 @@ export async function saveTeachingGradingFeedbackDraftRecord(input: {
     }
 
     const course = database.courses[courseIndex];
-    if (course.ownerTeacherId !== actorId) {
+    if (!isTeachingCourseManagementActorAuthorized({
+      ownerTeacherId: course.ownerTeacherId,
+      actorId,
+      courseId,
+      requiredCapability: "course.grading.manage",
+    })) {
       throw new TeachingCourseManagementStoreError(
         403,
         "Teaching course ownership is required.",
@@ -402,7 +413,12 @@ export async function markTeachingGradingFeedbackProviderGenerated(input: {
     }
 
     const course = database.courses[courseIndex];
-    if (course.ownerTeacherId !== actorId) {
+    if (!isTeachingCourseManagementActorAuthorized({
+      ownerTeacherId: course.ownerTeacherId,
+      actorId,
+      courseId,
+      requiredCapability: "course.grading.manage",
+    })) {
       throw new TeachingCourseManagementStoreError(
         403,
         "Teaching course ownership is required.",

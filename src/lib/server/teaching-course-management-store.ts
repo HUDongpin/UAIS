@@ -14,6 +14,7 @@ import type {
   TeachingCourseSettingsRecord,
 } from "@/lib/server/teaching-course-management-types";
 import { TeachingCourseManagementStoreError } from "./teaching-course-management-error";
+import { isTeachingCourseManagementActorAuthorized } from "./teaching-course-management-authorization";
 import {
   createRedaction,
   requireSafeId,
@@ -589,7 +590,15 @@ export async function saveTeachingCourseSettingsRecord(input: {
     );
     const existingCourse =
       existingCourseIndex >= 0 ? database.courses[existingCourseIndex] : undefined;
-    if (existingCourse && existingCourse.ownerTeacherId !== actorId) {
+    if (
+      existingCourse &&
+      !isTeachingCourseManagementActorAuthorized({
+        ownerTeacherId: existingCourse.ownerTeacherId,
+        actorId,
+        courseId,
+        requiredCapability: "course.settings.manage",
+      })
+    ) {
       throw new TeachingCourseManagementStoreError(
         403,
         "Teaching course ownership is required.",
@@ -716,4 +725,3 @@ export async function saveTeachingCourseSettingsRecord(input: {
 
   throw createTeachingCourseManagementContentionError();
 }
-

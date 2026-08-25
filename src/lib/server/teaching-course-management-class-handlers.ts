@@ -1,4 +1,5 @@
 import { TeachingCourseManagementStoreError } from "./teaching-course-management-error";
+import { isTeachingCourseManagementActorAuthorized } from "./teaching-course-management-authorization";
 import {
   createRedaction,
   requireInviteCode,
@@ -311,7 +312,15 @@ export async function saveTeachingClassInviteCodeDraftRecord(input: {
     const database = snapshot.database;
     const courseIndex = database.courses.findIndex((item) => item.courseId === courseId);
     const course = courseIndex >= 0 ? database.courses[courseIndex] : undefined;
-    if (course && course.ownerTeacherId !== actorId) {
+    if (
+      course &&
+      !isTeachingCourseManagementActorAuthorized({
+        ownerTeacherId: course.ownerTeacherId,
+        actorId,
+        courseId,
+        requiredCapability: "course.students.manage",
+      })
+    ) {
       throw new TeachingCourseManagementStoreError(403, "Teaching course ownership is required.");
     }
 
@@ -323,7 +332,12 @@ export async function saveTeachingClassInviteCodeDraftRecord(input: {
     }
 
     const classItem = database.classes[classIndex];
-    if (classItem.ownerTeacherId !== actorId) {
+    if (!isTeachingCourseManagementActorAuthorized({
+      ownerTeacherId: classItem.ownerTeacherId,
+      actorId,
+      courseId,
+      requiredCapability: "course.students.manage",
+    })) {
       throw new TeachingCourseManagementStoreError(403, "Teaching class ownership is required.");
     }
 
@@ -478,7 +492,15 @@ export async function publishTeachingClassInviteCode(input: {
     const database = snapshot.database;
     const courseIndex = database.courses.findIndex((item) => item.courseId === courseId);
     const course = courseIndex >= 0 ? database.courses[courseIndex] : undefined;
-    if (course && course.ownerTeacherId !== actorId) {
+    if (
+      course &&
+      !isTeachingCourseManagementActorAuthorized({
+        ownerTeacherId: course.ownerTeacherId,
+        actorId,
+        courseId,
+        requiredCapability: "course.students.manage",
+      })
+    ) {
       throw new TeachingCourseManagementStoreError(403, "Teaching course ownership is required.");
     }
 
@@ -490,7 +512,12 @@ export async function publishTeachingClassInviteCode(input: {
     }
 
     const classItem = database.classes[classIndex];
-    if (classItem.ownerTeacherId !== actorId) {
+    if (!isTeachingCourseManagementActorAuthorized({
+      ownerTeacherId: classItem.ownerTeacherId,
+      actorId,
+      courseId,
+      requiredCapability: "course.students.manage",
+    })) {
       throw new TeachingCourseManagementStoreError(403, "Teaching class ownership is required.");
     }
 
@@ -658,7 +685,12 @@ export async function readTeachingClassInviteCodePublishTarget(input: {
   if (!classItem) {
     throw new TeachingCourseManagementStoreError(404, "Teaching class was not found.");
   }
-  if (classItem.ownerTeacherId !== actorId) {
+  if (!isTeachingCourseManagementActorAuthorized({
+    ownerTeacherId: classItem.ownerTeacherId,
+    actorId,
+    courseId,
+    requiredCapability: "course.students.manage",
+  })) {
     throw new TeachingCourseManagementStoreError(403, "Teaching class ownership is required.");
   }
 

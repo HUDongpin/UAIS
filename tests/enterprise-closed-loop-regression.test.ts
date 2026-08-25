@@ -235,8 +235,9 @@ describe("enterprise closed-loop regression guards", () => {
       route.indexOf("const receipt = await executeTeachingOperationAction"),
     );
     expect(preflightCallIndex).toBeLessThan(
-      route.indexOf("const domainPersistence = await persistTeachingOperationDomainObjects"),
+      route.indexOf("const domainPersistence = await runWithCourseAuthorization"),
     );
+    expect(route).toContain("persistTeachingOperationDomainObjects({");
 
     const preflightSection = route.slice(
       route.indexOf("function preflightProductionProviderSideEffects"),

@@ -9701,6 +9701,733 @@ describe("teaching operation backend persistence", () => {
     }
   });
 
+  it("lets an exact-scope collaborator persist only the mapped teaching operation", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "uais-teaching-route-collaborator-"));
+    const teacherAuthSecret = "test-teacher-auth-session-signing-secret";
+    const { course } = await createTeachingCourseRecord({
+      dataDir,
+      actorId: "teacher-owner",
+      draft: {
+        name: "Collaborator scope integration course",
+        instructor: "Course Owner",
+        unit: "UAIS",
+        department: "Teaching",
+        semester: "2026 Fall",
+      },
+      now: new Date("2026-08-26T04:55:00.000Z"),
+    });
+    const cookie = createUaisTeacherAuthSessionCookieHeader({
+      secret: teacherAuthSecret,
+      claims: {
+        sessionId: "teacher-collaborator-operation-session",
+        actorId: "teacher-collaborator",
+        role: "teacher",
+        authenticatedAt: "2026-08-26T05:00:00.000Z",
+        expiresAt: "2026-08-26T06:00:00.000Z",
+      },
+    });
+    const capabilityChecks: unknown[] = [];
+    const postOperation = createTeachingOperationActionPostHandler({
+      env: {
+        UAIS_TEACHING_OPERATIONS_DATA_DIR: dataDir,
+        UAIS_TEACHING_COURSES_DATA_DIR: dataDir,
+        UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET: teacherAuthSecret,
+      },
+      getTeachingOperationCourseOwnership: async () => ({
+        teacherId: "teacher-collaborator",
+        courseIds: [],
+      }),
+      readTeachingCourseCapability: async (input) => {
+        capabilityChecks.push(input);
+        return {
+          authorized: true,
+          reasonCode: "collaborator-exact-scope",
+          capability: "course.read",
+          grantId: "00000000-0000-4000-8000-000000000111",
+          revision: 3,
+        };
+      },
+      now: new Date("2026-08-26T05:10:00.000Z"),
+    });
+
+    try {
+      const response = await postOperation(
+        new Request("https://www.uais.top/api/teaching/operations", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            cookie,
+            "x-uais-trace-id": "trace-collaborator-dashboard-refresh",
+          },
+          body: JSON.stringify({
+            operationId: "dashboard",
+            actionSlot: "primary",
+            courseId: course.courseId,
+          }),
+        }),
+      );
+      const body = await response.json();
+      const database = await readTeachingOperationDatabase({ dataDir });
+
+      expect(response.status, JSON.stringify(body)).toBe(200);
+      expect(capabilityChecks).toEqual([
+        {
+          principalAccount: "teacher-collaborator",
+          courseId: course.courseId,
+          capability: "course.read",
+        },
+      ]);
+      expect(body.receipt).toEqual(
+        expect.objectContaining({
+          operationId: "dashboard",
+          actionSlot: "primary",
+          actorId: "teacher-collaborator",
+          courseId: course.courseId,
+          status: "persisted",
+        }),
+      );
+      expect(database.records).toHaveLength(1);
+      expect(database.records[0]).toEqual(
+        expect.objectContaining({
+          actorId: "teacher-collaborator",
+          courseId: course.courseId,
+        }),
+      );
+      expectNoLocalOrSecretValues(body, dataDir);
+    } finally {
+      await rm(dataDir, { recursive: true, force: true });
+    }
+  });
+
+  it.each([
+    ["course-settings", "primary", "course.settings.manage"],
+    ["course-settings", "secondary", "course.read"],
+    ["agents", "primary", "course.settings.manage"],
+    ["agents", "secondary", "course.settings.manage"],
+    ["knowledge-base", "primary", "course.content.write"],
+    ["knowledge-base", "secondary", "course.content.write"],
+    ["content", "primary", "course.content.write"],
+    ["content", "secondary", "course.content.write"],
+    ["students", "primary", "course.students.manage"],
+    ["students", "secondary", "course.students.manage"],
+    ["data-export", "primary", "course.export"],
+    ["data-export", "secondary", "course.export"],
+    ["dashboard", "primary", "course.read"],
+    ["dashboard", "secondary", "course.settings.manage"],
+    ["quiz-board", "primary", "course.read"],
+    ["quiz-board", "secondary", "course.grading.manage"],
+    ["grading", "primary", "course.grading.manage"],
+    ["grading", "secondary", "course.grading.manage"],
+    ["invite-code", "primary", "course.students.manage"],
+    ["invite-code", "secondary", "course.students.manage"],
+  ] as const)(
+    "persists collaborator %s/%s through its exact %s domain boundary",
+    async (operationId, actionSlot, capability) => {
+      const dataDir = await mkdtemp(join(tmpdir(), "uais-teaching-collaborator-domain-"));
+      const operationsDataDir = join(dataDir, "operations");
+      const coursesDataDir = join(dataDir, "courses");
+      const teacherAuthSecret = "test-teacher-auth-session-signing-secret";
+      const { course } = await createTeachingCourseRecord({
+        dataDir: coursesDataDir,
+        actorId: "teacher-owner",
+        draft: {
+          name: `Collaborator ${operationId} ${actionSlot}`,
+          instructor: "Course Owner",
+          unit: "UAIS",
+          department: "Teaching",
+          semester: "2026 Fall",
+        },
+        now: new Date("2026-08-26T04:50:00.000Z"),
+      });
+      const { classItem } = await createTeachingClassRecord({
+        dataDir: coursesDataDir,
+        actorId: "teacher-owner",
+        courseId: course.courseId,
+        draft: { className: "Collaborator acceptance class" },
+        now: new Date("2026-08-26T04:51:00.000Z"),
+      });
+      const cookie = createUaisTeacherAuthSessionCookieHeader({
+        secret: teacherAuthSecret,
+        claims: {
+          sessionId: `teacher-collaborator-${operationId}-${actionSlot}`,
+          actorId: "teacher-collaborator",
+          role: "teacher",
+          authenticatedAt: "2026-08-26T05:00:00.000Z",
+          expiresAt: "2026-08-26T06:00:00.000Z",
+        },
+      });
+      const capabilityChecks: unknown[] = [];
+      const postOperation = createTeachingOperationActionPostHandler({
+        env: {
+          UAIS_TEACHING_OPERATIONS_DATA_DIR: operationsDataDir,
+          UAIS_TEACHING_COURSES_DATA_DIR: coursesDataDir,
+          UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET: teacherAuthSecret,
+        },
+        getTeachingOperationCourseOwnership: async () => ({
+          teacherId: "teacher-collaborator",
+          courseIds: [],
+        }),
+        readTeachingCourseCapability: async (input) => {
+          capabilityChecks.push(input);
+          return {
+            authorized: true,
+            reasonCode: "collaborator-exact-scope",
+            capability,
+            grantId: "00000000-0000-4000-8000-000000000125",
+            revision: 5,
+          };
+        },
+        now: new Date("2026-08-26T05:10:00.000Z"),
+      });
+
+      try {
+        const response = await postOperation(
+          new Request("https://www.uais.top/api/teaching/operations", {
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+              cookie,
+              "x-uais-trace-id": `trace-collaborator-${operationId}-${actionSlot}`,
+              "x-uais-idempotency-key": `collaborator-${operationId}-${actionSlot}`,
+            },
+            body: JSON.stringify({
+              operationId,
+              actionSlot,
+              courseId: course.courseId,
+              sourceAction: "collaborator-domain-acceptance",
+              ...(operationId === "invite-code"
+                ? { targetClassId: classItem.classId }
+                : {}),
+              ...(operationId === "knowledge-base" && actionSlot === "secondary"
+                ? {
+                    knowledgeResource: {
+                      title: "Collaborator-reviewed public source",
+                      sourceUrl:
+                        "https://library.example.edu/collaborator-reviewed-source",
+                      rightsBasis: "open-access",
+                      visibility: "course-only",
+                    },
+                  }
+                : {}),
+            }),
+          }),
+        );
+        const body = await response.json();
+        const operationDatabase = await readTeachingOperationDatabase({
+          dataDir: operationsDataDir,
+        });
+
+        expect(response.status, JSON.stringify(body)).toBe(200);
+        expect(capabilityChecks).toEqual([
+          {
+            principalAccount: "teacher-collaborator",
+            courseId: course.courseId,
+            capability,
+          },
+        ]);
+        expect(body.domainPersistenceSummary).toEqual(
+          expect.objectContaining({
+            status: "persisted",
+            required: true,
+            operationId,
+            actionSlot,
+            courseId: course.courseId,
+            missingObjectTypes: [],
+          }),
+        );
+        expect(operationDatabase.records).toEqual([
+          expect.objectContaining({
+            actorId: "teacher-collaborator",
+            courseId: course.courseId,
+            operationId,
+            actionSlot,
+            status: "persisted",
+          }),
+        ]);
+        expectNoLocalOrSecretValues(body, dataDir);
+      } finally {
+        await rm(dataDir, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it.each([
+    "collaborator-scope-required",
+    "collaborator-grant-revoked",
+    "collaborator-grant-expired",
+  ] as const)(
+    "denies a collaborator operation when the persisted capability says %s",
+    async (reasonCode) => {
+      const dataDir = await mkdtemp(join(tmpdir(), "uais-teaching-route-collaborator-denied-"));
+      const teacherAuthSecret = "test-teacher-auth-session-signing-secret";
+      const cookie = createUaisTeacherAuthSessionCookieHeader({
+        secret: teacherAuthSecret,
+        claims: {
+          sessionId: `teacher-collaborator-denied-${reasonCode}`,
+          actorId: "teacher-collaborator",
+          role: "teacher",
+          authenticatedAt: "2026-08-26T05:00:00.000Z",
+          expiresAt: "2026-08-26T06:00:00.000Z",
+        },
+      });
+      const postOperation = createTeachingOperationActionPostHandler({
+        env: {
+          UAIS_TEACHING_OPERATIONS_DATA_DIR: dataDir,
+          UAIS_TEACHING_COURSES_DATA_DIR: dataDir,
+          UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET: teacherAuthSecret,
+        },
+        getTeachingOperationCourseOwnership: async () => ({
+          teacherId: "teacher-collaborator",
+          courseIds: [],
+        }),
+        readTeachingCourseCapability: async () => ({
+          authorized: false,
+          reasonCode,
+        }),
+        now: new Date("2026-08-26T05:10:00.000Z"),
+      });
+
+      try {
+        const response = await postOperation(
+          new Request("https://www.uais.top/api/teaching/operations", {
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+              cookie,
+              "x-uais-trace-id": `trace-collaborator-denied-${reasonCode}`,
+            },
+            body: JSON.stringify({
+              operationId: "content",
+              actionSlot: "primary",
+              courseId: "teacher-research-methods",
+            }),
+          }),
+        );
+        const body = await response.json();
+        const database = await readTeachingOperationDatabase({ dataDir });
+
+        expect(response.status).toBe(403);
+        expect(body).toEqual(
+          expect.objectContaining({
+            error: "UAIS teaching operation course capability is required.",
+            access: expect.objectContaining({
+              status: "denied",
+              reasonCode,
+              actor: { actorId: "teacher-collaborator", role: "teacher" },
+              resource: { courseId: "teacher-research-methods" },
+            }),
+          }),
+        );
+        expect(database.records).toHaveLength(0);
+        expect(database.auditEvents).toHaveLength(0);
+        expect(database.domainProjections).toHaveLength(0);
+        expectNoLocalOrSecretValues(body, dataDir);
+      } finally {
+        await rm(dataDir, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it("keeps collaborator administration owner-only without querying a delegated capability", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "uais-teaching-route-collaborator-admin-"));
+    const teacherAuthSecret = "test-teacher-auth-session-signing-secret";
+    const cookie = createUaisTeacherAuthSessionCookieHeader({
+      secret: teacherAuthSecret,
+      claims: {
+        sessionId: "teacher-collaborator-admin-session",
+        actorId: "teacher-collaborator",
+        role: "teacher",
+        authenticatedAt: "2026-08-26T05:00:00.000Z",
+        expiresAt: "2026-08-26T06:00:00.000Z",
+      },
+    });
+    let capabilityCheckCount = 0;
+    const postOperation = createTeachingOperationActionPostHandler({
+      env: {
+        UAIS_TEACHING_OPERATIONS_DATA_DIR: dataDir,
+        UAIS_TEACHING_COURSES_DATA_DIR: dataDir,
+        UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET: teacherAuthSecret,
+      },
+      getTeachingOperationCourseOwnership: async () => ({
+        teacherId: "teacher-collaborator",
+        courseIds: [],
+      }),
+      readTeachingCourseCapability: async () => {
+        capabilityCheckCount += 1;
+        return {
+          authorized: true,
+          reasonCode: "collaborator-exact-scope",
+          capability: "course.settings.manage",
+          grantId: "00000000-0000-4000-8000-000000000112",
+          revision: 1,
+        };
+      },
+      now: new Date("2026-08-26T05:10:00.000Z"),
+    });
+
+    try {
+      const response = await postOperation(
+        new Request("https://www.uais.top/api/teaching/operations", {
+          method: "POST",
+          headers: { "content-type": "application/json", cookie },
+          body: JSON.stringify({
+            operationId: "admins",
+            actionSlot: "secondary",
+            courseId: "teacher-research-methods",
+          }),
+        }),
+      );
+      const body = await response.json();
+      const database = await readTeachingOperationDatabase({ dataDir });
+
+      expect(response.status).toBe(403);
+      expect(body.access).toEqual(
+        expect.objectContaining({
+          status: "denied",
+          reasonCode: "course-scope-denied",
+        }),
+      );
+      expect(capabilityCheckCount).toBe(0);
+      expect(database.records).toHaveLength(0);
+      expectNoLocalOrSecretValues(body, dataDir);
+    } finally {
+      await rm(dataDir, { recursive: true, force: true });
+    }
+  });
+
+  it("fails closed before writes when the collaborator capability backend fails", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "uais-teaching-route-capability-failure-"));
+    const teacherAuthSecret = "test-teacher-auth-session-signing-secret";
+    const cookie = createUaisTeacherAuthSessionCookieHeader({
+      secret: teacherAuthSecret,
+      claims: {
+        sessionId: "teacher-collaborator-capability-failure",
+        actorId: "teacher-collaborator",
+        role: "teacher",
+        authenticatedAt: "2026-08-26T05:00:00.000Z",
+        expiresAt: "2026-08-26T06:00:00.000Z",
+      },
+    });
+    const postOperation = createTeachingOperationActionPostHandler({
+      env: {
+        UAIS_TEACHING_OPERATIONS_DATA_DIR: dataDir,
+        UAIS_TEACHING_COURSES_DATA_DIR: dataDir,
+        UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET: teacherAuthSecret,
+      },
+      getTeachingOperationCourseOwnership: async () => ({
+        teacherId: "teacher-collaborator",
+        courseIds: [],
+      }),
+      readTeachingCourseCapability: async () => {
+        throw new Error("capability backend secret-token unavailable");
+      },
+      now: new Date("2026-08-26T05:10:00.000Z"),
+    });
+
+    try {
+      const response = await postOperation(
+        new Request("https://www.uais.top/api/teaching/operations", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            cookie,
+            "x-uais-trace-id": "trace-collaborator-capability-failure",
+          },
+          body: JSON.stringify({
+            operationId: "data-export",
+            actionSlot: "primary",
+            courseId: "teacher-research-methods",
+          }),
+        }),
+      );
+      const body = await response.json();
+      const database = await readTeachingOperationDatabase({ dataDir });
+
+      expect(response.status).toBe(503);
+      expect(body).toEqual(
+        expect.objectContaining({
+          error: "UAIS teaching operation course capability check failed.",
+          traceId: "trace-collaborator-capability-failure",
+          access: expect.objectContaining({
+            status: "denied",
+            reasonCode: "teacher-course-capability-check-failed",
+          }),
+        }),
+      );
+      expect(JSON.stringify(body)).not.toContain("secret-token");
+      expect(database.records).toHaveLength(0);
+      expect(database.auditEvents).toHaveLength(0);
+      expect(database.domainProjections).toHaveLength(0);
+      expectNoLocalOrSecretValues(body, dataDir);
+    } finally {
+      await rm(dataDir, { recursive: true, force: true });
+    }
+  });
+
+  it("returns only exact-scope collaborator audit evidence and never another unauthorized course", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "uais-teaching-audit-collaborator-"));
+    const teacherAuthSecret = "test-teacher-auth-session-signing-secret";
+    const cookie = createUaisTeacherAuthSessionCookieHeader({
+      secret: teacherAuthSecret,
+      claims: {
+        sessionId: "teacher-collaborator-audit-session",
+        actorId: "teacher-collaborator",
+        role: "teacher",
+        authenticatedAt: "2026-08-26T05:00:00.000Z",
+        expiresAt: "2026-08-26T06:00:00.000Z",
+      },
+    });
+    const allowedReceipt = await executeTeachingOperationAction({
+      dataDir,
+      operationId: "content",
+      actionSlot: "primary",
+      actorId: "teacher-collaborator",
+      courseId: "teacher-course-allowed",
+      audit: {
+        traceId: "trace-collaborator-audit-allowed-write",
+        actorRole: "teacher",
+        authMode: "signed-teacher-session",
+        requestSource: {
+          userAgent: "UAIS collaborator audit allowed write",
+          ipAddress: "redacted",
+        },
+      },
+      now: new Date("2026-08-26T05:10:00.000Z"),
+    });
+    const deniedReceipt = await executeTeachingOperationAction({
+      dataDir,
+      operationId: "data-export",
+      actionSlot: "primary",
+      actorId: "teacher-collaborator",
+      courseId: "teacher-course-denied",
+      audit: {
+        traceId: "trace-collaborator-audit-denied-write",
+        actorRole: "teacher",
+        authMode: "signed-teacher-session",
+        requestSource: {
+          userAgent: "UAIS collaborator audit denied write",
+          ipAddress: "redacted",
+        },
+      },
+      now: new Date("2026-08-26T05:11:00.000Z"),
+    });
+    const capabilityChecks: unknown[] = [];
+    const getAudit = createTeachingOperationAuditGetHandler({
+      env: {
+        UAIS_TEACHING_OPERATIONS_DATA_DIR: dataDir,
+        UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET: teacherAuthSecret,
+      },
+      getTeachingOperationCourseOwnership: async () => ({
+        teacherId: "teacher-collaborator",
+        courseIds: [],
+      }),
+      readTeachingCourseCapability: async (input) => {
+        capabilityChecks.push(input);
+        if (
+          input.courseId === "teacher-course-allowed" &&
+          input.capability === "course.content.write"
+        ) {
+          return {
+            authorized: true,
+            reasonCode: "collaborator-exact-scope",
+            capability: "course.content.write",
+            grantId: "00000000-0000-4000-8000-000000000126",
+            revision: 2,
+          };
+        }
+        return {
+          authorized: false,
+          reasonCode: "collaborator-scope-required",
+        };
+      },
+      now: new Date("2026-08-26T05:12:00.000Z"),
+    });
+
+    try {
+      const response = await getAudit(
+        new Request("https://www.uais.top/api/teaching/operations/audit", {
+          method: "GET",
+          headers: {
+            cookie,
+            "x-uais-trace-id": "trace-collaborator-audit-exact-scope",
+          },
+        }),
+      );
+      const body = await response.json();
+
+      expect(response.status, JSON.stringify(body)).toBe(200);
+      expect(capabilityChecks).toEqual([
+        {
+          principalAccount: "teacher-collaborator",
+          courseId: "teacher-course-allowed",
+          capability: "course.content.write",
+        },
+        {
+          principalAccount: "teacher-collaborator",
+          courseId: "teacher-course-denied",
+          capability: "course.export",
+        },
+      ]);
+      expect(body).toEqual(
+        expect.objectContaining({
+          actorId: "teacher-collaborator",
+          courseIds: ["teacher-course-allowed"],
+          recordCount: 1,
+          auditEventCount: 1,
+        }),
+      );
+      expect(body.records).toEqual([
+        expect.objectContaining({
+          recordId: allowedReceipt.receiptId,
+          actorId: "teacher-collaborator",
+          courseId: "teacher-course-allowed",
+          operationId: "content",
+          actionSlot: "primary",
+        }),
+      ]);
+      expect(body.domainProjections).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            operationRecordId: allowedReceipt.receiptId,
+            courseId: "teacher-course-allowed",
+          }),
+        ]),
+      );
+      expect(JSON.stringify(body)).not.toContain(deniedReceipt.receiptId);
+      expect(JSON.stringify(body)).not.toContain("teacher-course-denied");
+      expectNoLocalOrSecretValues(body, dataDir);
+    } finally {
+      await rm(dataDir, { recursive: true, force: true });
+    }
+  });
+
+  it("denies collaborator audit readback when every persisted action is outside current scope", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "uais-teaching-audit-collaborator-denied-"));
+    const teacherAuthSecret = "test-teacher-auth-session-signing-secret";
+    const cookie = createUaisTeacherAuthSessionCookieHeader({
+      secret: teacherAuthSecret,
+      claims: {
+        sessionId: "teacher-collaborator-audit-denied-session",
+        actorId: "teacher-collaborator",
+        role: "teacher",
+        authenticatedAt: "2026-08-26T05:00:00.000Z",
+        expiresAt: "2026-08-26T06:00:00.000Z",
+      },
+    });
+    await executeTeachingOperationAction({
+      dataDir,
+      operationId: "grading",
+      actionSlot: "primary",
+      actorId: "teacher-collaborator",
+      courseId: "teacher-course-revoked",
+      now: new Date("2026-08-26T05:10:00.000Z"),
+    });
+    const getAudit = createTeachingOperationAuditGetHandler({
+      env: {
+        UAIS_TEACHING_OPERATIONS_DATA_DIR: dataDir,
+        UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET: teacherAuthSecret,
+      },
+      getTeachingOperationCourseOwnership: async () => ({
+        teacherId: "teacher-collaborator",
+        courseIds: [],
+      }),
+      readTeachingCourseCapability: async () => ({
+        authorized: false,
+        reasonCode: "collaborator-grant-revoked",
+      }),
+      now: new Date("2026-08-26T05:12:00.000Z"),
+    });
+
+    try {
+      const response = await getAudit(
+        new Request("https://www.uais.top/api/teaching/operations/audit", {
+          method: "GET",
+          headers: { cookie },
+        }),
+      );
+      const body = await response.json();
+
+      expect(response.status).toBe(403);
+      expect(body).toEqual(
+        expect.objectContaining({
+          error: "UAIS teaching operation audit course capability is required.",
+          access: expect.objectContaining({
+            status: "denied",
+            reasonCode: "collaborator-grant-revoked",
+          }),
+        }),
+      );
+      expect(body).not.toHaveProperty("records");
+      expect(body).not.toHaveProperty("auditEvents");
+      expectNoLocalOrSecretValues(body, dataDir);
+    } finally {
+      await rm(dataDir, { recursive: true, force: true });
+    }
+  });
+
+  it("fails collaborator audit readback closed when the capability backend fails", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "uais-teaching-audit-capability-failure-"));
+    const teacherAuthSecret = "test-teacher-auth-session-signing-secret";
+    const cookie = createUaisTeacherAuthSessionCookieHeader({
+      secret: teacherAuthSecret,
+      claims: {
+        sessionId: "teacher-collaborator-audit-capability-failure",
+        actorId: "teacher-collaborator",
+        role: "teacher",
+        authenticatedAt: "2026-08-26T05:00:00.000Z",
+        expiresAt: "2026-08-26T06:00:00.000Z",
+      },
+    });
+    await executeTeachingOperationAction({
+      dataDir,
+      operationId: "students",
+      actionSlot: "primary",
+      actorId: "teacher-collaborator",
+      courseId: "teacher-course-capability-failure",
+      now: new Date("2026-08-26T05:10:00.000Z"),
+    });
+    const getAudit = createTeachingOperationAuditGetHandler({
+      env: {
+        UAIS_TEACHING_OPERATIONS_DATA_DIR: dataDir,
+        UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET: teacherAuthSecret,
+      },
+      getTeachingOperationCourseOwnership: async () => ({
+        teacherId: "teacher-collaborator",
+        courseIds: [],
+      }),
+      readTeachingCourseCapability: async () => {
+        throw new Error("database-url secret value");
+      },
+      now: new Date("2026-08-26T05:12:00.000Z"),
+    });
+
+    try {
+      const response = await getAudit(
+        new Request("https://www.uais.top/api/teaching/operations/audit", {
+          method: "GET",
+          headers: { cookie },
+        }),
+      );
+      const body = await response.json();
+
+      expect(response.status).toBe(503);
+      expect(body).toEqual(
+        expect.objectContaining({
+          error: "UAIS teaching operation audit course capability check failed.",
+          access: expect.objectContaining({
+            status: "denied",
+            reasonCode: "teacher-course-capability-check-failed",
+          }),
+        }),
+      );
+      expect(JSON.stringify(body)).not.toContain("database-url");
+      expect(body).not.toHaveProperty("records");
+      expectNoLocalOrSecretValues(body, dataDir);
+    } finally {
+      await rm(dataDir, { recursive: true, force: true });
+    }
+  });
+
   it("requires server-side course ownership before writing a teacher operation", async () => {
     const dataDir = await mkdtemp(join(tmpdir(), "uais-teaching-route-ownership-"));
     const teacherAuthSecret = "test-teacher-auth-session-signing-secret";

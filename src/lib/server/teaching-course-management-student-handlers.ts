@@ -1,4 +1,5 @@
 import { TeachingCourseManagementStoreError } from "./teaching-course-management-error";
+import { isTeachingCourseManagementActorAuthorized } from "./teaching-course-management-authorization";
 import { createRedaction, requireSafeId } from "./teaching-course-management-guards";
 import {
   countApprovedMembershipsForClass,
@@ -86,7 +87,12 @@ export async function saveTeachingStudentPreviewSessionRecord(input: {
     }
 
     const course = database.courses[courseIndex];
-    if (course.ownerTeacherId !== actorId) {
+    if (!isTeachingCourseManagementActorAuthorized({
+      ownerTeacherId: course.ownerTeacherId,
+      actorId,
+      courseId,
+      requiredCapability: "course.read",
+    })) {
       throw new TeachingCourseManagementStoreError(
         403,
         "Teaching course ownership is required.",
@@ -237,7 +243,12 @@ export async function saveTeachingStudentRosterSyncRecord(input: {
     }
 
     const course = database.courses[courseIndex];
-    if (course.ownerTeacherId !== actorId) {
+    if (!isTeachingCourseManagementActorAuthorized({
+      ownerTeacherId: course.ownerTeacherId,
+      actorId,
+      courseId,
+      requiredCapability: "course.students.manage",
+    })) {
       throw new TeachingCourseManagementStoreError(
         403,
         "Teaching course ownership is required.",
@@ -407,7 +418,12 @@ export async function markTeachingStudentRosterProviderSynced(input: {
     }
 
     const course = database.courses[courseIndex];
-    if (course.ownerTeacherId !== actorId) {
+    if (!isTeachingCourseManagementActorAuthorized({
+      ownerTeacherId: course.ownerTeacherId,
+      actorId,
+      courseId,
+      requiredCapability: "course.students.manage",
+    })) {
       throw new TeachingCourseManagementStoreError(
         403,
         "Teaching course ownership is required.",
@@ -532,7 +548,12 @@ export async function markTeachingKnowledgeIndexProviderSynced(input: {
     }
 
     const course = database.courses[courseIndex];
-    if (course.ownerTeacherId !== actorId) {
+    if (!isTeachingCourseManagementActorAuthorized({
+      ownerTeacherId: course.ownerTeacherId,
+      actorId,
+      courseId,
+      requiredCapability: "course.content.write",
+    })) {
       throw new TeachingCourseManagementStoreError(
         403,
         "Teaching course ownership is required.",
@@ -659,7 +680,12 @@ export async function saveTeachingStudentGroupSuggestionRecord(input: {
     }
 
     const course = database.courses[courseIndex];
-    if (course.ownerTeacherId !== actorId) {
+    if (!isTeachingCourseManagementActorAuthorized({
+      ownerTeacherId: course.ownerTeacherId,
+      actorId,
+      courseId,
+      requiredCapability: "course.students.manage",
+    })) {
       throw new TeachingCourseManagementStoreError(
         403,
         "Teaching course ownership is required.",
@@ -827,7 +853,12 @@ export async function saveTeachingKnowledgeIndexSyncRecord(input: {
     }
 
     const course = database.courses[courseIndex];
-    if (course.ownerTeacherId !== actorId) {
+    if (!isTeachingCourseManagementActorAuthorized({
+      ownerTeacherId: course.ownerTeacherId,
+      actorId,
+      courseId,
+      requiredCapability: "course.content.write",
+    })) {
       throw new TeachingCourseManagementStoreError(
         403,
         "Teaching course ownership is required.",

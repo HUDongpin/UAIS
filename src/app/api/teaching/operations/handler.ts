@@ -24,7 +24,9 @@ import {
 } from "@/lib/server/teaching-course-management-store";
 import { createUaisTeachingOperationRepository } from "@/lib/server/teaching-operations-postgres-store";
 import {
-  createUaisTeacherAiOwnershipAdapter,
+  runWithTeachingCourseManagementDelegatedAuthorization,
+} from "@/lib/server/teaching-course-management-authorization";
+import {
   type UaisTeacherAiOwnershipPostgresClientFactory,
 } from "@/lib/server/teacher-ai-ownership-store";
 import { resolveUaisTeacherAuthProviderContract } from "@/lib/server/teacher-auth-provider-contract";
@@ -96,6 +98,17 @@ import {
   readStudentRosterSyncProviderConfig,
 } from "./provider-config";
 import {
+  assertProductionTeachingOperationCourseOwnershipAccessConfigured,
+  authorizeTeachingOperationCourseAccess,
+  createDeniedAccess,
+  createTeachingCourseCapabilityAdapter,
+  createTeachingOperationCourseOwnershipAdapter,
+  getTeachingOperationAccessDeniedError,
+  getTeachingOperationAccessDeniedStatus,
+  type GetTeachingOperationCourseOwnership,
+  type ReadTeachingCourseCapability,
+} from "./course-access";
+import {
   createRedaction,
   isRecord,
   isTeachingOperationProductionRuntime,
@@ -113,31 +126,11 @@ type TeachingOperationActionPostHandlerDeps = {
   now?: Date;
   fetch?: typeof fetch;
   getTeachingOperationCourseOwnership?: GetTeachingOperationCourseOwnership;
+  readTeachingCourseCapability?: ReadTeachingCourseCapability;
   createTeacherAiOwnershipDatabase?: UaisTeacherAiOwnershipPostgresClientFactory;
   appendExternalTeachingOperation?: TeachingOperationExternalAppendAdapter;
   rollbackExternalTeachingOperation?: TeachingOperationExternalRollbackAdapter;
 };
-
-type TeachingOperationAccessDeniedReason =
-  | "auth-adapter-not-configured"
-  | "authenticated-session-required"
-  | "teacher-auth-provider-not-production-ready"
-  | "teacher-role-required"
-  | "course-id-required"
-  | "course-id-invalid"
-  | "teacher-course-ownership-required"
-  | "teacher-course-ownership-check-failed"
-  | "course-scope-denied";
-
-type TeachingOperationCourseOwnership = {
-  teacherId: string;
-  courseIds?: string[];
-};
-
-type GetTeachingOperationCourseOwnership = (input: {
-  request: Request;
-  authenticatedTeacher: TeachingOperationAuthenticatedTeacher;
-}) => Promise<TeachingOperationCourseOwnership | undefined>;
 
 const maxBodyBytes = 100_000;
 const maxSafeIdLength = 120;
@@ -155,6 +148,9 @@ export function createTeachingOperationActionPostHandler(
       fetch: deps.fetch,
       createDatabase: deps.createTeacherAiOwnershipDatabase,
     });
+  const readTeachingCourseCapability =
+    deps.readTeachingCourseCapability ??
+    createTeachingCourseCapabilityAdapter({ env, now: deps.now });
   return async function POST(request: Request) {
     const traceId = readSafeTraceId(request);
     try {
@@ -206,6 +202,7 @@ export function createTeachingOperationActionPostHandler(
       }
 
       const courseId = typeof body.courseId === "string" ? body.courseId : undefined;
+      const operationId = typeof body.operationId === "string" ? body.operationId : "";
       if (usesDefaultTeachingOperationCourseOwnership) {
         assertProductionTeachingOperationCourseOwnershipAccessConfigured({
           env,
@@ -217,7 +214,10 @@ export function createTeachingOperationActionPostHandler(
         request,
         authenticatedTeacher,
         courseId,
+        operationId,
+        actionSlot: body.actionSlot,
         getTeachingOperationCourseOwnership,
+        readTeachingCourseCapability,
       });
       if (access.status === "denied") {
         return jsonResponse(getTeachingOperationAccessDeniedStatus(access.reasonCode), {
@@ -227,6 +227,17 @@ export function createTeachingOperationActionPostHandler(
           redaction: createRedaction(),
         }, traceId);
       }
+      const delegatedAuthorization =
+        access.reasonCode === "collaborator-exact-scope"
+          ? access.delegatedAuthorization
+          : undefined;
+      const runWithCourseAuthorization = <T>(operation: () => T): T =>
+        delegatedAuthorization
+          ? runWithTeachingCourseManagementDelegatedAuthorization(
+              delegatedAuthorization,
+              operation,
+            )
+          : operation();
       const appendExternalTeachingOperation =
         deps.appendExternalTeachingOperation ??
         createUaisTeachingOperationExternalAppendAdapter({
@@ -250,7 +261,6 @@ export function createTeachingOperationActionPostHandler(
         );
       }
 
-      const operationId = typeof body.operationId === "string" ? body.operationId : "";
       const actionSlot = normalizeActionSlot(body.actionSlot);
       assertSafeInviteTargetClassId({
         body,
@@ -270,15 +280,17 @@ export function createTeachingOperationActionPostHandler(
       });
       // One read answers both halves of a publish preflight: that the named
       // class is this teacher's, and which code that class already owns.
-      const classInvitePublishTarget = await preflightClassInvitePublishTarget({
-        env,
-        fetch: deps.fetch,
-        body,
-        operationId,
-        actionSlot,
-        authenticatedTeacher,
-        courseId,
-      });
+      const classInvitePublishTarget = await runWithCourseAuthorization(() =>
+        preflightClassInvitePublishTarget({
+          env,
+          fetch: deps.fetch,
+          body,
+          operationId,
+          actionSlot,
+          authenticatedTeacher,
+          courseId,
+        }),
+      );
       const targetClassId = readTargetClassId(body);
 
       const receipt = await executeTeachingOperationAction({
@@ -312,17 +324,19 @@ export function createTeachingOperationActionPostHandler(
         appendExternalTeachingOperation,
         now: deps.now,
       });
-      const domainPersistence = await persistTeachingOperationDomainObjects({
-        env,
-        fetch: deps.fetch,
-        body,
-        receipt,
-        authenticatedTeacher,
-        courseId,
-        traceId,
-        requestSource: readAuditRequestSource(request),
-        now: deps.now,
-      }).catch(async (error) => {
+      const domainPersistence = await runWithCourseAuthorization(() =>
+        persistTeachingOperationDomainObjects({
+          env,
+          fetch: deps.fetch,
+          body,
+          receipt,
+          authenticatedTeacher,
+          courseId,
+          traceId,
+          requestSource: readAuditRequestSource(request),
+          now: deps.now,
+        }),
+      ).catch(async (error) => {
         if (
           shouldReturnCourseManagementDomainObjectPartialFailure({
             error,
@@ -448,17 +462,19 @@ export function createTeachingOperationActionPostHandler(
         | Awaited<ReturnType<typeof maybePublishClassInviteCode>>
         | undefined;
       try {
-        classInvitePublicationReceipt = await maybePublishClassInviteCode({
-          env,
-          fetch: deps.fetch,
-          body,
-          receipt,
-          authenticatedTeacher,
-          courseId,
-          traceId,
-          requestSource: readAuditRequestSource(request),
-          now: deps.now,
-        });
+        classInvitePublicationReceipt = await runWithCourseAuthorization(() =>
+          maybePublishClassInviteCode({
+            env,
+            fetch: deps.fetch,
+            body,
+            receipt,
+            authenticatedTeacher,
+            courseId,
+            traceId,
+            requestSource: readAuditRequestSource(request),
+            now: deps.now,
+          }),
+        );
       } catch (error) {
         if (shouldReturnClassInvitePublicationPartialFailure({
           receipt,
@@ -1330,121 +1346,6 @@ async function attemptTeachingOperationPartialFailureCompensation(input: {
   }
 }
 
-function createTeachingOperationCourseOwnershipAdapter(input: {
-  env: Record<string, string | undefined>;
-  fetch?: typeof fetch;
-  createDatabase?: UaisTeacherAiOwnershipPostgresClientFactory;
-}): GetTeachingOperationCourseOwnership | undefined {
-  const readOwnership = createUaisTeacherAiOwnershipAdapter({
-    env: input.env,
-    fetch: input.fetch,
-    createDatabase: input.createDatabase,
-  });
-  if (!readOwnership) {
-    return undefined;
-  }
-
-  return async ({ request, authenticatedTeacher }) =>
-    readOwnership({
-      request,
-      authenticatedSession: authenticatedTeacher,
-    });
-}
-
-function assertProductionTeachingOperationCourseOwnershipAccessConfigured(input: {
-  env: Record<string, string | undefined>;
-  courseId?: string;
-  getTeachingOperationCourseOwnership?: GetTeachingOperationCourseOwnership;
-}) {
-  if (
-    !isTeachingOperationProductionRuntime(input.env) ||
-    !input.courseId ||
-    !isSafeTeachingOperationId(input.courseId)
-  ) {
-    return;
-  }
-
-  if (input.getTeachingOperationCourseOwnership) {
-    return;
-  }
-
-  throw new TeachingOperationStoreError(
-    503,
-    "Production teaching operation course ownership access requires a durable backend, not local JSON storage.",
-  );
-}
-
-async function authorizeTeachingOperationCourseAccess(input: {
-  request: Request;
-  authenticatedTeacher: TeachingOperationAuthenticatedTeacher;
-  courseId?: string;
-  getTeachingOperationCourseOwnership?: GetTeachingOperationCourseOwnership;
-}) {
-  const actor = {
-    actorId: input.authenticatedTeacher.actorId,
-    role: input.authenticatedTeacher.role,
-  };
-  if (!input.courseId) {
-    return createDeniedAccess("course-id-required", actor);
-  }
-  if (!isSafeTeachingOperationId(input.courseId)) {
-    return createDeniedAccess("course-id-invalid", actor);
-  }
-  const resource = { courseId: input.courseId };
-  if (!input.getTeachingOperationCourseOwnership) {
-    return createDeniedAccess("teacher-course-ownership-required", actor, resource);
-  }
-
-  let ownership: TeachingOperationCourseOwnership | undefined;
-  try {
-    ownership = await input.getTeachingOperationCourseOwnership({
-      request: input.request,
-      authenticatedTeacher: input.authenticatedTeacher,
-    });
-  } catch {
-    return createDeniedAccess("teacher-course-ownership-check-failed", actor, resource);
-  }
-  if (!ownership || ownership.teacherId !== input.authenticatedTeacher.actorId) {
-    return createDeniedAccess("teacher-course-ownership-required", actor, resource);
-  }
-  if (!new Set(ownership.courseIds ?? []).has(input.courseId)) {
-    return createDeniedAccess("course-scope-denied", actor, resource);
-  }
-
-  return {
-    status: "authorized" as const,
-    reasonCode: "authorized" as const,
-    responsibleSession: "S12" as const,
-    actor,
-    resource,
-    redaction: createRedaction(),
-  };
-}
-
-function getTeachingOperationAccessDeniedStatus(
-  reasonCode: TeachingOperationAccessDeniedReason,
-) {
-  if (reasonCode === "course-id-required" || reasonCode === "course-id-invalid") {
-    return 400;
-  }
-  if (reasonCode === "teacher-course-ownership-check-failed") {
-    return 503;
-  }
-  return 403;
-}
-
-function getTeachingOperationAccessDeniedError(
-  reasonCode: TeachingOperationAccessDeniedReason,
-) {
-  if (reasonCode === "course-id-invalid") {
-    return "UAIS teaching operation course id is invalid.";
-  }
-  if (reasonCode === "teacher-course-ownership-check-failed") {
-    return "UAIS teaching operation course ownership check failed.";
-  }
-  return "UAIS teaching operation course ownership is required.";
-}
-
 function isSafeTeachingOperationId(value: string) {
   return (
     value.length >= 1 &&
@@ -1527,19 +1428,4 @@ function createErrorResponse(error: unknown, traceId: string) {
     traceId,
     redaction: createRedaction(),
   }, traceId);
-}
-
-function createDeniedAccess(
-  reasonCode: TeachingOperationAccessDeniedReason,
-  actor?: { actorId: string; role: "teacher" },
-  resource?: { courseId: string },
-) {
-  return {
-    status: "denied",
-    reasonCode,
-    responsibleSession: "S12",
-    ...(actor ? { actor } : {}),
-    ...(resource ? { resource } : {}),
-    redaction: createRedaction(),
-  };
 }

@@ -4,6 +4,7 @@
 // modules; store types are a type-only import.
 
 import { TeachingCourseManagementStoreError } from "./teaching-course-management-error";
+import { isTeachingCourseManagementActorAuthorized } from "./teaching-course-management-authorization";
 import { createRedaction, requireSafeId } from "./teaching-course-management-guards";
 import {
   createAuditEvent,
@@ -218,7 +219,12 @@ export async function saveTeachingAgentSettingsRecord(input: {
     }
 
     const course = database.courses[courseIndex];
-    if (course.ownerTeacherId !== actorId) {
+    if (!isTeachingCourseManagementActorAuthorized({
+      ownerTeacherId: course.ownerTeacherId,
+      actorId,
+      courseId,
+      requiredCapability: "course.settings.manage",
+    })) {
       throw new TeachingCourseManagementStoreError(
         403,
         "Teaching course ownership is required.",
@@ -365,7 +371,12 @@ export async function saveTeachingAgentPermissionPreflightRecord(input: {
     }
 
     const course = database.courses[courseIndex];
-    if (course.ownerTeacherId !== actorId) {
+    if (!isTeachingCourseManagementActorAuthorized({
+      ownerTeacherId: course.ownerTeacherId,
+      actorId,
+      courseId,
+      requiredCapability: "course.settings.manage",
+    })) {
       throw new TeachingCourseManagementStoreError(
         403,
         "Teaching course ownership is required.",

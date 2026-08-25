@@ -1,4 +1,5 @@
 import { TeachingCourseManagementStoreError } from "./teaching-course-management-error";
+import { isTeachingCourseManagementActorAuthorized } from "./teaching-course-management-authorization";
 import { createRedaction, requireSafeId } from "./teaching-course-management-guards";
 import {
   createAuditEvent,
@@ -75,7 +76,12 @@ export async function saveTeachingCourseExportManifestRecord(input: {
     }
 
     const course = database.courses[courseIndex];
-    if (course.ownerTeacherId !== actorId) {
+    if (!isTeachingCourseManagementActorAuthorized({
+      ownerTeacherId: course.ownerTeacherId,
+      actorId,
+      courseId,
+      requiredCapability: "course.export",
+    })) {
       throw new TeachingCourseManagementStoreError(
         403,
         "Teaching course ownership is required.",
@@ -225,7 +231,12 @@ export async function markTeachingCourseExportProviderExported(input: {
     }
 
     const course = database.courses[courseIndex];
-    if (course.ownerTeacherId !== actorId) {
+    if (!isTeachingCourseManagementActorAuthorized({
+      ownerTeacherId: course.ownerTeacherId,
+      actorId,
+      courseId,
+      requiredCapability: "course.export",
+    })) {
       throw new TeachingCourseManagementStoreError(
         403,
         "Teaching course ownership is required.",
@@ -354,7 +365,12 @@ export async function saveTeachingCourseExportRedactionValidationRecord(input: {
     }
 
     const course = database.courses[courseIndex];
-    if (course.ownerTeacherId !== actorId) {
+    if (!isTeachingCourseManagementActorAuthorized({
+      ownerTeacherId: course.ownerTeacherId,
+      actorId,
+      courseId,
+      requiredCapability: "course.export",
+    })) {
       throw new TeachingCourseManagementStoreError(
         403,
         "Teaching course ownership is required.",

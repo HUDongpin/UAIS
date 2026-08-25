@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { getUaisCoreDatabaseReadiness } from "@/lib/db/core-database";
 import {
   normalizeExternalTeachingOperationAuditReadbackRecord,
   isTeachingOperationProductionDatabaseAdapterEvidence,
@@ -23,12 +24,16 @@ import {
   resolveUaisStorageBackendContract,
 } from "@/lib/ai/storage-backend-contract";
 import { resolveUaisTeacherAuthProviderContract } from "@/lib/server/teacher-auth-provider-contract";
+import type { TeachingCourseCapabilityDecision } from "@/lib/server/teaching-course-collaborator-access";
+import { createTeachingCourseCollaboratorPostgresStore } from "@/lib/server/teaching-course-collaborator-postgres-store";
+import { resolveTeachingOperationCollaboratorCapability } from "@/lib/server/teaching-operation-collaborator-policy";
 
 type TeachingOperationAuditGetHandlerDeps = {
   env?: Record<string, string | undefined>;
   now?: Date;
   fetch?: typeof fetch;
   getTeachingOperationCourseOwnership?: GetTeachingOperationCourseOwnership;
+  readTeachingCourseCapability?: ReadTeachingCourseCapability;
   readExternalTeachingOperationAudit?: TeachingOperationExternalAuditAdapter;
 };
 
@@ -50,6 +55,12 @@ type GetTeachingOperationCourseOwnership = (input: {
   authenticatedTeacher: AuthenticatedTeacher;
 }) => Promise<TeachingOperationCourseOwnership | undefined>;
 
+type ReadTeachingCourseCapability = (input: {
+  principalAccount: string;
+  courseId: string;
+  capability: unknown;
+}) => Promise<TeachingCourseCapabilityDecision>;
+
 type TeachingOperationExternalAuditAdapter = (input: {
   teacherId: string;
 }) => Promise<{
@@ -61,6 +72,20 @@ type TeachingOperationExternalAuditAdapter = (input: {
   storagePolicy: "external-redacted-teaching-operation-audit-log";
   storageWritePolicy: "external-append-only-audit-log";
 }>;
+
+type TeachingOperationAuditEvidenceSource = {
+  events: TeachingOperationAuditEvent[];
+  records: TeachingOperationRecord[];
+  domainProjections: TeachingOperationDomainProjection[];
+  rollbackRecords: TeachingOperationRollbackReadbackRecord[];
+  productionDatabaseAdapter?: TeachingOperationProductionDatabaseAdapterEvidence;
+  storagePolicy:
+    | "external-redacted-teaching-operation-audit-log"
+    | "local-json-teaching-operation-audit-log";
+  storageWritePolicy:
+    | "external-append-only-audit-log"
+    | "read-only-local-json-file";
+};
 
 type TeachingOperationRollbackReadbackRecord = {
   rollbackId: string;
@@ -89,7 +114,12 @@ type TeachingOperationAuditAccessDeniedReason =
   | "teacher-auth-provider-not-production-ready"
   | "teacher-role-required"
   | "teacher-course-ownership-required"
-  | "teacher-course-ownership-check-failed";
+  | "teacher-course-ownership-check-failed"
+  | "teacher-course-capability-check-failed"
+  | Extract<
+      TeachingCourseCapabilityDecision,
+      { authorized: false }
+    >["reasonCode"];
 
 export function createTeachingOperationAuditGetHandler(
   deps: TeachingOperationAuditGetHandlerDeps = {},
@@ -101,6 +131,9 @@ export function createTeachingOperationAuditGetHandler(
       env,
       fetch: deps.fetch,
     });
+  const readTeachingCourseCapability =
+    deps.readTeachingCourseCapability ??
+    createTeachingCourseCapabilityAdapter({ env, now: deps.now });
 
   return async function GET(request: Request) {
     const traceId = readSafeTraceId(request);
@@ -146,47 +179,40 @@ export function createTeachingOperationAuditGetHandler(
           redaction: createRedaction(),
         }, traceId);
       }
-      if (!getTeachingOperationCourseOwnership) {
-        return jsonResponse(403, {
-          error: "UAIS teaching operation course ownership is required.",
-          traceId,
-          access: createDeniedAccess("teacher-course-ownership-required", {
-            actorId: authenticatedTeacher.actorId,
-            role: authenticatedTeacher.role,
-          }),
-          redaction: createRedaction(),
-        }, traceId);
-      }
       let ownership: TeachingOperationCourseOwnership | undefined;
-      try {
-        ownership = await getTeachingOperationCourseOwnership({
-          request,
-          authenticatedTeacher,
-        });
-      } catch {
-        return jsonResponse(503, {
-          error: "UAIS teaching operation audit course ownership check failed.",
+      let ownershipCheckFailed = false;
+      if (getTeachingOperationCourseOwnership) {
+        try {
+          ownership = await getTeachingOperationCourseOwnership({
+            request,
+            authenticatedTeacher,
+          });
+        } catch {
+          ownershipCheckFailed = true;
+        }
+      }
+      const ownershipMatchesActor =
+        ownership?.teacherId === authenticatedTeacher.actorId;
+      if (!ownershipMatchesActor && !readTeachingCourseCapability) {
+        const reasonCode = ownershipCheckFailed
+          ? "teacher-course-ownership-check-failed"
+          : "teacher-course-ownership-required";
+        return jsonResponse(ownershipCheckFailed ? 503 : 403, {
+          error: ownershipCheckFailed
+            ? "UAIS teaching operation audit course ownership check failed."
+            : "UAIS teaching operation course ownership is required.",
           traceId,
-          access: createDeniedAccess("teacher-course-ownership-check-failed", {
+          access: createDeniedAccess(reasonCode, {
             actorId: authenticatedTeacher.actorId,
             role: authenticatedTeacher.role,
           }),
           redaction: createRedaction(),
         }, traceId);
       }
-      if (!ownership || ownership.teacherId !== authenticatedTeacher.actorId) {
-        return jsonResponse(403, {
-          error: "UAIS teaching operation course ownership is required.",
-          traceId,
-          access: createDeniedAccess("teacher-course-ownership-required", {
-            actorId: authenticatedTeacher.actorId,
-            role: authenticatedTeacher.role,
-          }),
-          redaction: createRedaction(),
-        }, traceId);
-      }
-      const courseIds = [...new Set(ownership.courseIds ?? [])].sort();
-      const courseIdSet = new Set(courseIds);
+      const ownedCourseIds = ownershipMatchesActor && ownership
+        ? [...new Set(ownership.courseIds ?? [])].sort()
+        : [];
+      const ownedCourseIdSet = new Set(ownedCourseIds);
       const externalAudit =
         deps.readExternalTeachingOperationAudit ??
         createUaisTeachingOperationExternalAuditAdapter({
@@ -201,77 +227,87 @@ export function createTeachingOperationAuditGetHandler(
         );
       }
 
+      let auditSource: TeachingOperationAuditEvidenceSource;
       if (externalAudit) {
-        const externalAuditResult = await externalAudit({
+        auditSource = await externalAudit({
           teacherId: authenticatedTeacher.actorId,
         });
-        const auditEvents = externalAuditResult.events.filter((event) =>
-          isAuditEventCourseVisible(event, courseIdSet),
-        );
-        const records = externalAuditResult.records.filter((record) =>
-          typeof record.courseId === "string" && courseIdSet.has(record.courseId),
-        );
-        const domainProjections = externalAuditResult.domainProjections.filter(
-          (projection) => courseIdSet.has(projection.courseId),
-        );
-        const rollbackRecords = externalAuditResult.rollbackRecords.filter(
-          (rollbackRecord) =>
-            rollbackRecord.teacherId === authenticatedTeacher.actorId &&
-            courseIdSet.has(rollbackRecord.courseId),
-        );
+      } else {
+        const database = await readTeachingOperationDatabase({
+          dataDir: resolveTeachingOperationDataDir(env.UAIS_TEACHING_OPERATIONS_DATA_DIR),
+        });
+        auditSource = {
+          events: database.auditEvents,
+          records: database.records,
+          domainProjections: database.domainProjections,
+          rollbackRecords: database.domainProjections
+            .filter(isTeachingOperationRollbackProjection)
+            .map(createLocalRollbackReadbackRecord),
+          storagePolicy: "local-json-teaching-operation-audit-log",
+          storageWritePolicy: "read-only-local-json-file",
+        };
+      }
 
-        return jsonResponse(200, {
+      const visibility = await resolveTeachingOperationAuditVisibility({
+        actorId: authenticatedTeacher.actorId,
+        ownershipFallbackReason: ownershipMatchesActor
+          ? undefined
+          : ownershipCheckFailed
+            ? "teacher-course-ownership-check-failed"
+            : "teacher-course-ownership-required",
+        ownedCourseIds,
+        ownedCourseIdSet,
+        source: auditSource,
+        readTeachingCourseCapability,
+      });
+      if (visibility.status === "capability-check-failed") {
+        return jsonResponse(503, {
+          error: "UAIS teaching operation audit course capability check failed.",
           traceId,
-          actorId: authenticatedTeacher.actorId,
-          courseIds,
-          records,
-          auditEvents,
-          domainProjections,
-          rollbackRecords,
-          recordCount: records.length,
-          auditEventCount: auditEvents.length,
-          domainProjectionCount: domainProjections.length,
-          rollbackRecordCount: rollbackRecords.length,
-          ...(externalAuditResult.productionDatabaseAdapter
-            ? { productionDatabaseAdapter: externalAuditResult.productionDatabaseAdapter }
-            : {}),
-          storagePolicy: externalAuditResult.storagePolicy,
-          storageWritePolicy: externalAuditResult.storageWritePolicy,
-          responsibleSession: "S12",
+          access: createDeniedAccess("teacher-course-capability-check-failed", {
+            actorId: authenticatedTeacher.actorId,
+            role: authenticatedTeacher.role,
+          }),
+          redaction: createRedaction(),
+        }, traceId);
+      }
+      if (visibility.status === "denied") {
+        const ownershipFailure =
+          visibility.reasonCode === "teacher-course-ownership-check-failed";
+        const ownershipRequired =
+          visibility.reasonCode === "teacher-course-ownership-required";
+        return jsonResponse(ownershipFailure ? 503 : 403, {
+          error: ownershipFailure
+            ? "UAIS teaching operation audit course ownership check failed."
+            : ownershipRequired
+              ? "UAIS teaching operation course ownership is required."
+              : "UAIS teaching operation audit course capability is required.",
+          traceId,
+          access: createDeniedAccess(visibility.reasonCode, {
+            actorId: authenticatedTeacher.actorId,
+            role: authenticatedTeacher.role,
+          }),
           redaction: createRedaction(),
         }, traceId);
       }
 
-      const database = await readTeachingOperationDatabase({
-        dataDir: resolveTeachingOperationDataDir(env.UAIS_TEACHING_OPERATIONS_DATA_DIR),
-      });
-      const records = database.records.filter((record) =>
-        typeof record.courseId === "string" && courseIdSet.has(record.courseId),
-      );
-      const auditEvents = database.auditEvents.filter((event) =>
-        isAuditEventCourseVisible(event, courseIdSet),
-      );
-      const domainProjections = database.domainProjections.filter((projection) =>
-        courseIdSet.has(projection.courseId),
-      );
-      const rollbackRecords = domainProjections
-        .filter(isTeachingOperationRollbackProjection)
-        .map(createLocalRollbackReadbackRecord);
-
       return jsonResponse(200, {
         traceId,
         actorId: authenticatedTeacher.actorId,
-        courseIds,
-        records,
-        auditEvents,
-        domainProjections,
-        rollbackRecords,
-        recordCount: records.length,
-        auditEventCount: auditEvents.length,
-        domainProjectionCount: domainProjections.length,
-        rollbackRecordCount: rollbackRecords.length,
-        storagePolicy: "local-json-teaching-operation-audit-log",
-        storageWritePolicy: "read-only-local-json-file",
+        courseIds: visibility.courseIds,
+        records: visibility.records,
+        auditEvents: visibility.auditEvents,
+        domainProjections: visibility.domainProjections,
+        rollbackRecords: visibility.rollbackRecords,
+        recordCount: visibility.records.length,
+        auditEventCount: visibility.auditEvents.length,
+        domainProjectionCount: visibility.domainProjections.length,
+        rollbackRecordCount: visibility.rollbackRecords.length,
+        ...(auditSource.productionDatabaseAdapter
+          ? { productionDatabaseAdapter: auditSource.productionDatabaseAdapter }
+          : {}),
+        storagePolicy: auditSource.storagePolicy,
+        storageWritePolicy: auditSource.storageWritePolicy,
         responsibleSession: "S12",
         redaction: createRedaction(),
       }, traceId);
@@ -298,6 +334,238 @@ function createTeachingOperationCourseOwnershipAdapter(input: {
       request,
       authenticatedSession: authenticatedTeacher,
     });
+}
+
+function createTeachingCourseCapabilityAdapter(input: {
+  env: Record<string, string | undefined>;
+  now?: Date;
+}): ReadTeachingCourseCapability | undefined {
+  if (getUaisCoreDatabaseReadiness(input.env).status !== "ready") {
+    return undefined;
+  }
+  const fixedNow = input.now;
+  const store = createTeachingCourseCollaboratorPostgresStore({
+    env: input.env,
+    ...(fixedNow ? { now: () => fixedNow } : {}),
+  });
+  return async (request) => store.readCapability(request);
+}
+
+type TeachingOperationAuditVisibilityResult =
+  | {
+      status: "authorized";
+      courseIds: string[];
+      records: TeachingOperationRecord[];
+      auditEvents: TeachingOperationAuditEvent[];
+      domainProjections: TeachingOperationDomainProjection[];
+      rollbackRecords: TeachingOperationRollbackReadbackRecord[];
+    }
+  | {
+      status: "denied";
+      reasonCode: TeachingOperationAuditAccessDeniedReason;
+    }
+  | {
+      status: "capability-check-failed";
+    };
+
+async function resolveTeachingOperationAuditVisibility(input: {
+  actorId: string;
+  ownershipFallbackReason?: Extract<
+    TeachingOperationAuditAccessDeniedReason,
+    "teacher-course-ownership-required" | "teacher-course-ownership-check-failed"
+  >;
+  ownedCourseIds: string[];
+  ownedCourseIdSet: Set<string>;
+  source: TeachingOperationAuditEvidenceSource;
+  readTeachingCourseCapability?: ReadTeachingCourseCapability;
+}): Promise<TeachingOperationAuditVisibilityResult> {
+  const collaboratorCandidates = new Map<
+    string,
+    {
+      courseId: string;
+      operationId: TeachingOperationRecord["operationId"];
+      actionSlot: TeachingOperationRecord["actionSlot"];
+      capability: NonNullable<
+        ReturnType<typeof resolveTeachingOperationCollaboratorCapability>
+      >;
+    }
+  >();
+  let firstDeniedReason: TeachingOperationAuditAccessDeniedReason | undefined;
+
+  for (const record of input.source.records) {
+    if (
+      record.actorId !== input.actorId ||
+      typeof record.courseId !== "string" ||
+      input.ownedCourseIdSet.has(record.courseId)
+    ) {
+      continue;
+    }
+    const capability = resolveTeachingOperationCollaboratorCapability({
+      operationId: record.operationId,
+      actionSlot: record.actionSlot,
+    });
+    if (!capability) {
+      firstDeniedReason ??= "collaborator-scope-required";
+      continue;
+    }
+    const key = createTeachingOperationCapabilityKey({
+      courseId: record.courseId,
+      operationId: record.operationId,
+      actionSlot: record.actionSlot,
+    });
+    collaboratorCandidates.set(key, {
+      courseId: record.courseId,
+      operationId: record.operationId,
+      actionSlot: record.actionSlot,
+      capability,
+    });
+  }
+
+  const authorizedCapabilityKeys = new Set<string>();
+  const sortedCandidates = [...collaboratorCandidates.entries()].sort(([left], [right]) =>
+    left.localeCompare(right),
+  );
+  for (const [key, candidate] of sortedCandidates) {
+    if (!input.readTeachingCourseCapability) {
+      firstDeniedReason ??= "teacher-course-ownership-required";
+      continue;
+    }
+    let decision: TeachingCourseCapabilityDecision;
+    try {
+      decision = await input.readTeachingCourseCapability({
+        principalAccount: input.actorId,
+        courseId: candidate.courseId,
+        capability: candidate.capability,
+      });
+    } catch {
+      return { status: "capability-check-failed" };
+    }
+    if (!decision.authorized) {
+      firstDeniedReason ??= decision.reasonCode;
+      continue;
+    }
+    authorizedCapabilityKeys.add(key);
+  }
+
+  const records = input.source.records.filter((record) => {
+    if (typeof record.courseId !== "string") {
+      return false;
+    }
+    if (input.ownedCourseIdSet.has(record.courseId)) {
+      return true;
+    }
+    return (
+      record.actorId === input.actorId &&
+      authorizedCapabilityKeys.has(
+        createTeachingOperationCapabilityKey({
+          courseId: record.courseId,
+          operationId: record.operationId,
+          actionSlot: record.actionSlot,
+        }),
+      )
+    );
+  });
+  const visibleRecordCourses = new Map(
+    records.flatMap((record) =>
+      typeof record.courseId === "string"
+        ? [[record.recordId, record.courseId] as const]
+        : [],
+    ),
+  );
+  const collaboratorCourseIds = records
+    .filter(
+      (record) =>
+        typeof record.courseId === "string" &&
+        !input.ownedCourseIdSet.has(record.courseId),
+    )
+    .map((record) => record.courseId as string);
+  const courseIds = [...new Set([...input.ownedCourseIds, ...collaboratorCourseIds])].sort();
+  const auditEvents = input.source.events.filter((event) => {
+    if (isAuditEventCourseVisible(event, input.ownedCourseIdSet)) {
+      return true;
+    }
+    if (event.actorId !== input.actorId) {
+      return false;
+    }
+    if (
+      "courseId" in event &&
+      typeof event.courseId === "string" &&
+      "operationId" in event &&
+      typeof event.operationId === "string" &&
+      "actionSlot" in event &&
+      (event.actionSlot === "primary" || event.actionSlot === "secondary")
+    ) {
+      return authorizedCapabilityKeys.has(
+        createTeachingOperationCapabilityKey({
+          courseId: event.courseId,
+          operationId: event.operationId,
+          actionSlot: event.actionSlot,
+        }),
+      );
+    }
+    return (
+      "targetRecordId" in event &&
+      typeof event.targetRecordId === "string" &&
+      "courseId" in event &&
+      typeof event.courseId === "string" &&
+      visibleRecordCourses.get(event.targetRecordId) === event.courseId
+    );
+  });
+  const domainProjections = input.source.domainProjections.filter((projection) => {
+    if (input.ownedCourseIdSet.has(projection.courseId)) {
+      return true;
+    }
+    if (
+      "operationRecordId" in projection &&
+      typeof projection.operationRecordId === "string" &&
+      visibleRecordCourses.get(projection.operationRecordId) === projection.courseId
+    ) {
+      return true;
+    }
+    return (
+      "targetRecordId" in projection &&
+      typeof projection.targetRecordId === "string" &&
+      visibleRecordCourses.get(projection.targetRecordId) === projection.courseId
+    );
+  });
+  const rollbackRecords = input.source.rollbackRecords.filter(
+    (rollbackRecord) =>
+      rollbackRecord.teacherId === input.actorId &&
+      (input.ownedCourseIdSet.has(rollbackRecord.courseId) ||
+        visibleRecordCourses.get(rollbackRecord.targetRecordId) ===
+          rollbackRecord.courseId),
+  );
+
+  if (
+    input.ownedCourseIds.length === 0 &&
+    authorizedCapabilityKeys.size === 0 &&
+    (collaboratorCandidates.size > 0 || firstDeniedReason || input.ownershipFallbackReason)
+  ) {
+    return {
+      status: "denied",
+      reasonCode:
+        firstDeniedReason ??
+        input.ownershipFallbackReason ??
+        "teacher-course-ownership-required",
+    };
+  }
+
+  return {
+    status: "authorized",
+    courseIds,
+    records,
+    auditEvents,
+    domainProjections,
+    rollbackRecords,
+  };
+}
+
+function createTeachingOperationCapabilityKey(input: {
+  courseId: string;
+  operationId: string;
+  actionSlot: "primary" | "secondary";
+}) {
+  return `${input.courseId}\u0000${input.operationId}\u0000${input.actionSlot}`;
 }
 
 function createUaisTeachingOperationExternalAuditAdapter(input: {
