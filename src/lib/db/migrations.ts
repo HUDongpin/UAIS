@@ -92,6 +92,14 @@ export const UAIS_CORE_DATABASE_MIGRATIONS = [
     path: "migrations/0010_teacher_ai_ownership.sql",
     tables: ["uais_teacher_ai_ownership"],
   },
+  {
+    version: "0011_course_collaborator_acl",
+    path: "migrations/0011_course_collaborator_acl.sql",
+    tables: [
+      "uais_course_collaborator_grants",
+      "uais_course_collaborator_notification_outbox",
+    ],
+  },
 ] as const;
 
 export type UaisCoreDatabaseMigrationVersion =
