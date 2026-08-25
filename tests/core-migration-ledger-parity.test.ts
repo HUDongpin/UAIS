@@ -21,6 +21,7 @@ describe("core migration ledger parity", () => {
       "0009_learning_event_outbox",
       "0010_teacher_ai_ownership",
       "0011_course_collaborator_acl",
+      "0012_course_collaborator_identifier_retention",
     ]);
     expect(manifest.every((entry) => /^[a-f0-9]{64}$/.test(entry.checksum))).toBe(
       true,

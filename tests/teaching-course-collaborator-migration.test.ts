@@ -84,6 +84,28 @@ describe("teaching-course collaborator ACL migration", () => {
     );
   });
 
+  it("corrects both composite identifier foreign keys with column-scoped SET NULL", () => {
+    const sql = compactSql(
+      readProjectFile(
+        "migrations/0012_course_collaborator_identifier_retention.sql",
+      ),
+    );
+
+    expect(sql).toContain(
+      "ALTER TABLE uais_course_collaborator_grants DROP CONSTRAINT IF EXISTS uais_course_collaborator_grants_recipient_identifier_owner_fk",
+    );
+    expect(sql).toContain(
+      "CONSTRAINT uais_course_collaborator_grants_recipient_identifier_owner_fk FOREIGN KEY (recipient_user_id, recipient_identifier_id) REFERENCES uais_user_login_identifiers(user_id, identifier_id) ON DELETE SET NULL (recipient_identifier_id)",
+    );
+    expect(sql).toContain(
+      "ALTER TABLE uais_course_collaborator_notification_outbox DROP CONSTRAINT IF EXISTS uais_course_collaborator_outbox_recipient_identifier_owner_fk",
+    );
+    expect(sql).toContain(
+      "CONSTRAINT uais_course_collaborator_outbox_recipient_identifier_owner_fk FOREIGN KEY (recipient_user_id, recipient_identifier_id) REFERENCES uais_user_login_identifiers(user_id, identifier_id) ON DELETE SET NULL (recipient_identifier_id)",
+    );
+    expect(sql.match(/ON DELETE SET NULL \(recipient_identifier_id\)/g)).toHaveLength(2);
+  });
+
   it("pins the frozen role ceilings and rejects wildcard or unknown stored scopes", () => {
     const sql = compactSql(readProjectFile("migrations/0011_course_collaborator_acl.sql"));
 
@@ -131,14 +153,21 @@ describe("teaching-course collaborator ACL migration", () => {
     expect(source).not.toMatch(/recipient_email|email_hash|recipient_email_hash/i);
   });
 
-  it("registers both new tables without expanding the Drizzle core-table surface", () => {
-    expect(UAIS_CORE_DATABASE_MIGRATIONS.at(-1)).toEqual({
-      version: "0011_course_collaborator_acl",
-      path: "migrations/0011_course_collaborator_acl.sql",
-      tables: [
-        "uais_course_collaborator_grants",
-        "uais_course_collaborator_notification_outbox",
-      ],
-    });
+  it("registers the ACL tables and the immutable follow-up correction", () => {
+    expect(UAIS_CORE_DATABASE_MIGRATIONS.slice(-2)).toEqual([
+      {
+        version: "0011_course_collaborator_acl",
+        path: "migrations/0011_course_collaborator_acl.sql",
+        tables: [
+          "uais_course_collaborator_grants",
+          "uais_course_collaborator_notification_outbox",
+        ],
+      },
+      {
+        version: "0012_course_collaborator_identifier_retention",
+        path: "migrations/0012_course_collaborator_identifier_retention.sql",
+        tables: [],
+      },
+    ]);
   });
 });

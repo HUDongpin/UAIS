@@ -100,6 +100,11 @@ export const UAIS_CORE_DATABASE_MIGRATIONS = [
       "uais_course_collaborator_notification_outbox",
     ],
   },
+  {
+    version: "0012_course_collaborator_identifier_retention",
+    path: "migrations/0012_course_collaborator_identifier_retention.sql",
+    tables: [],
+  },
 ] as const;
 
 export type UaisCoreDatabaseMigrationVersion =

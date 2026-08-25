@@ -275,7 +275,7 @@ describe("teaching-course collaborator ACL on real PostgreSQL", () => {
     }
   }, 60_000);
 
-  it("applies 0011 and nulls both retained identifier references on deletion", async () => {
+  it("applies both ACL migrations and nulls retained identifier references", async () => {
     const fixture = await createFixture({ label: "identifier-null" });
     const receipt = await grant({
       fixture,
@@ -287,10 +287,19 @@ describe("teaching-course collaborator ACL on real PostgreSQL", () => {
     const ledgerRows = await database.sql`
       SELECT version, checksum
       FROM uais_schema_migrations
-      WHERE version = '0011_course_collaborator_acl'
+      WHERE version IN (
+        '0011_course_collaborator_acl',
+        '0012_course_collaborator_identifier_retention'
+      )
+      ORDER BY version
     `;
-    expect(ledgerRows).toHaveLength(1);
-    expect(ledgerRows[0]?.checksum).toMatch(/^[a-f0-9]{64}$/);
+    expect(ledgerRows.map((row) => row.version)).toEqual([
+      "0011_course_collaborator_acl",
+      "0012_course_collaborator_identifier_retention",
+    ]);
+    expect(
+      ledgerRows.every((row) => /^[a-f0-9]{64}$/.test(String(row.checksum))),
+    ).toBe(true);
 
     const indexRows = await database.sql`
       SELECT indexname
