@@ -10,6 +10,7 @@ import { type Dispatch, type SetStateAction } from "react";
 import Link from "next/link";
 import { ArrowRight } from "@phosphor-icons/react/dist/ssr/ArrowRight";
 import { Plus } from "@phosphor-icons/react/dist/ssr/Plus";
+import { CourseCollaboratorManager } from "@/components/teaching/course-collaborator-manager";
 import { LearningGroupManager } from "@/components/teaching/learning-group-workspace";
 import type { TeacherGroupSuggestionDraft } from "@/components/teaching/group-suggestion-review";
 import {
@@ -339,6 +340,7 @@ export function CourseSettingsWorkspace({
                     {locale === "zh-CN" ? "学习任务" : "Learning Activities"}
                   </Link>
                 </div>
+                <CourseCollaboratorManager course={course} locale={locale} />
                 <CourseClassManager
                   classes={courseClasses[course.id] ?? []}
                   membershipsByClass={classMemberships}
