@@ -6,18 +6,37 @@ import type { LearningLoopPostgresClientFactory } from "@/lib/learning-loop/post
 
 type FakeQuery = { text: string; values: unknown[] };
 
-function createFakeDatabase(resolve: (query: FakeQuery) => unknown[]) {
+function createFakeDatabase(
+  resolve: (query: FakeQuery) => unknown[],
+  options: { delayMilliseconds?: number } = {},
+) {
   const queries: FakeQuery[] = [];
+  let inFlight = 0;
+  let maxInFlight = 0;
   const sql = async (strings: TemplateStringsArray, ...values: unknown[]) => {
     const query = { text: strings.join("?"), values };
     queries.push(query);
-    return resolve(query);
+    inFlight += 1;
+    maxInFlight = Math.max(maxInFlight, inFlight);
+    try {
+      if ((options.delayMilliseconds ?? 0) > 0) {
+        await new Promise((resolveDelay) =>
+          setTimeout(resolveDelay, options.delayMilliseconds),
+        );
+      }
+      return resolve(query);
+    } finally {
+      inFlight -= 1;
+    }
   };
   sql.begin = async (run: (tx: typeof sql) => Promise<void>) => run(sql);
   sql.end = async () => undefined;
   return {
     queries,
     createDatabase: (() => ({ sql })) as unknown as LearningLoopPostgresClientFactory,
+    get maxInFlight() {
+      return maxInFlight;
+    },
   };
 }
 
@@ -32,6 +51,54 @@ const ids = {
 };
 
 describe("P1 learning-loop Postgres read store", () => {
+  it("pipelines independent student projections after resolving the activity scope", async () => {
+    const fake = createFakeDatabase(({ text }) => {
+      if (text.includes("FROM uais_users") && text.includes("role = 'student'")) {
+        return [{ id: ids.student }];
+      }
+      if (text.includes("FROM uais_assessments a") && text.includes("a.status = 'published'")) {
+        return [
+          {
+            activity_id: ids.activity,
+            activity_version: 1,
+            activity_status: "published",
+            title_i18n: {},
+            instructions_i18n: {},
+            rubric: [],
+            formative_check: { kind: "short-answer", prompt: {} },
+            due_at: null,
+            ai_policy: "teacher-requested-draft",
+            lesson_id: ids.lesson,
+            lesson_key: "lesson-1",
+            lesson_position: 1,
+            lesson_title: "Lesson one",
+            course_id: ids.course,
+            course_external_id: "course-1",
+            class_id: ids.class,
+            class_external_id: "class-1",
+          },
+        ];
+      }
+      if (text.includes("FROM uais_formative_attempts")) {
+        return [{ count: 0, last_attempted_at: null }];
+      }
+      return [];
+    }, { delayMilliseconds: 5 });
+    const store = createUaisLearningLoopPostgresReadStore({
+      env: { UAIS_CORE_DATABASE_URL: "postgres://redacted@example.test/uais" },
+      createDatabase: fake.createDatabase,
+    });
+
+    await store.readStudentUnit({
+      studentAccount: "student-1",
+      courseExternalId: "course-1",
+      classExternalId: "class-1",
+      lessonKey: "lesson-1",
+    });
+
+    expect(fake.maxInFlight).toBeGreaterThanOrEqual(3);
+  });
+
   it("returns only the signed student's unit, draft and released feedback", async () => {
     const fake = createFakeDatabase(({ text }) => {
       if (text.includes("FROM uais_users") && text.includes("role = 'student'")) {

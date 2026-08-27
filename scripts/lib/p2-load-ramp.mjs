@@ -328,6 +328,10 @@ async function runStage({
   ) {
     failureCodes.push("p95-threshold-exceeded");
   }
+  const actorJourneyP95Milliseconds = percentile(actorLatencies, 0.95);
+  if (actorJourneyP95Milliseconds > maximumP95Milliseconds) {
+    failureCodes.push("actor-journey-p95-threshold-exceeded");
+  }
 
   const attemptErrorCounts = countValues(
     actorOutcomes.flatMap((outcome) => outcome.attemptErrors),
@@ -356,7 +360,7 @@ async function runStage({
     inFlightAtCompletion: totalTransportInFlight,
     failed: failedActorOutcomes.length,
     p50Milliseconds: percentile(actorLatencies, 0.5),
-    p95Milliseconds: percentile(actorLatencies, 0.95),
+    p95Milliseconds: actorJourneyP95Milliseconds,
     p99Milliseconds: percentile(actorLatencies, 0.99),
     maximumP95Milliseconds,
     operationMetrics,

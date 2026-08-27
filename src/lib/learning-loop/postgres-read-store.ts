@@ -191,53 +191,55 @@ export function createUaisLearningLoopPostgresReadStore(options: ReadStoreOption
             throw new LearningLoopStoreError(404, "published-learning-unit-required");
           }
 
-          const attemptRows = await sql`
-            SELECT count(*)::integer AS count, max(attempted_at) AS last_attempted_at
-            FROM uais_formative_attempts
-            WHERE assessment_id = ${readString(activity.activity_id)}
-              AND user_id = ${studentId}
-          `;
+          const [attemptRows, submissionRows, profileRows] = await Promise.all([
+            sql`
+              SELECT count(*)::integer AS count, max(attempted_at) AS last_attempted_at
+              FROM uais_formative_attempts
+              WHERE assessment_id = ${readString(activity.activity_id)}
+                AND user_id = ${studentId}
+            `,
+            sql`
+              SELECT
+                s.id AS submission_id, s.state AS submission_state,
+                s.current_version_no, v.id AS version_id,
+                v.status AS version_status, v.content_text, v.draft_revision,
+                v.submitted_at, s.updated_at
+              FROM uais_submissions s
+              JOIN uais_submission_versions v
+                ON v.submission_id = s.id AND v.version_no = s.current_version_no
+              WHERE s.assessment_id = ${readString(activity.activity_id)}
+                AND s.user_id = ${studentId}
+              LIMIT 1
+            `,
+            sql`
+              SELECT projection_version, last_event_at
+              FROM uais_learner_profiles
+              WHERE user_id = ${studentId}
+                AND course_id = ${readString(activity.course_id)}
+            `,
+          ]);
           const attempt = firstRow(attemptRows);
           const attemptCount = readInteger(attempt?.count);
-          const submissionRows = await sql`
-            SELECT
-              s.id AS submission_id, s.state AS submission_state,
-              s.current_version_no, v.id AS version_id,
-              v.status AS version_status, v.content_text, v.draft_revision,
-              v.submitted_at, s.updated_at
-            FROM uais_submissions s
-            JOIN uais_submission_versions v
-              ON v.submission_id = s.id AND v.version_no = s.current_version_no
-            WHERE s.assessment_id = ${readString(activity.activity_id)}
-              AND s.user_id = ${studentId}
-            LIMIT 1
-          `;
           const submission = firstRow(submissionRows);
-          const versions = submission
-            ? await sql`
-                SELECT id, version_no, status, content_text, draft_revision, submitted_at
-                FROM uais_submission_versions
-                WHERE submission_id = ${readString(submission.submission_id)}
-                ORDER BY version_no
-              `
-            : [];
-          const feedback = submission
-            ? await sql`
-                SELECT
-                  id, submission_version_id, origin, status, rubric_judgments,
-                  feedback_text, requires_revision, released_at
-                FROM uais_feedback
-                WHERE submission_id = ${readString(submission.submission_id)}
-                  AND status IN ('released', 'superseded')
-                ORDER BY released_at, created_at
-              `
-            : [];
-          const profileRows = await sql`
-            SELECT projection_version, last_event_at
-            FROM uais_learner_profiles
-            WHERE user_id = ${studentId}
-              AND course_id = ${readString(activity.course_id)}
-          `;
+          const [versions, feedback] = submission
+            ? await Promise.all([
+                sql`
+                  SELECT id, version_no, status, content_text, draft_revision, submitted_at
+                  FROM uais_submission_versions
+                  WHERE submission_id = ${readString(submission.submission_id)}
+                  ORDER BY version_no
+                `,
+                sql`
+                  SELECT
+                    id, submission_version_id, origin, status, rubric_judgments,
+                    feedback_text, requires_revision, released_at
+                  FROM uais_feedback
+                  WHERE submission_id = ${readString(submission.submission_id)}
+                    AND status IN ('released', 'superseded')
+                  ORDER BY released_at, created_at
+                `,
+              ])
+            : [[], []];
           const profile = firstRow(profileRows);
           const submissionState = submission
             ? readSubmissionState(submission.submission_state)
@@ -610,24 +612,26 @@ export function createUaisLearningLoopPostgresReadStore(options: ReadStoreOption
         `;
         const row = firstRow(rows);
         if (!row) throw new LearningLoopStoreError(404, "teacher-submission-required");
-        const versions = await (client.sql as ReadSql)`
-          SELECT
-            id, version_no, status, content_text, content_hash,
-            draft_revision, created_at, updated_at, submitted_at
-          FROM uais_submission_versions
-          WHERE submission_id = ${input.submissionId}
-          ORDER BY version_no
-        `;
-        const feedback = await (client.sql as ReadSql)`
-          SELECT
-            id, submission_version_id, origin, status, rubric_judgments,
-            feedback_text, requires_revision, ai_trace_ref,
-            source_draft_revision, created_at, updated_at, released_at
-          FROM uais_feedback
-          WHERE submission_id = ${input.submissionId}
-            AND (status <> 'draft' OR teacher_user_id = ${teacherId})
-          ORDER BY created_at, id
-        `;
+        const [versions, feedback] = await Promise.all([
+          (client.sql as ReadSql)`
+            SELECT
+              id, version_no, status, content_text, content_hash,
+              draft_revision, created_at, updated_at, submitted_at
+            FROM uais_submission_versions
+            WHERE submission_id = ${input.submissionId}
+            ORDER BY version_no
+          `,
+          (client.sql as ReadSql)`
+            SELECT
+              id, submission_version_id, origin, status, rubric_judgments,
+              feedback_text, requires_revision, ai_trace_ref,
+              source_draft_revision, created_at, updated_at, released_at
+            FROM uais_feedback
+            WHERE submission_id = ${input.submissionId}
+              AND (status <> 'draft' OR teacher_user_id = ${teacherId})
+            ORDER BY created_at, id
+          `,
+        ]);
         return {
           id: readString(row.submission_id),
           state: readSubmissionState(row.submission_state),

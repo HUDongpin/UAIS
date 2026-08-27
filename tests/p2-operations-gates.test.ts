@@ -17,9 +17,71 @@ const repositoryHeadSha = spawnSync("git", ["rev-parse", "HEAD"], {
 type ClosureManifestFixture = {
   candidate: {
     gitSha: string;
-    deployment: { gitSha: string };
+    deployment: { id: string; gitSha: string };
   };
-  requirements: Array<{ id: number; status: string }>;
+  currentExternalVerification: {
+    realProviderOperations: {
+      status: string;
+      historicalControlledOutboxCandidateGitSha: string;
+      historicalControlledOutboxRealProvider: boolean;
+    };
+    humanAccessibility: {
+      status: string;
+      candidateGitSha: string;
+      safariVoiceOver: string;
+      windowsNvda: string;
+      fieldInpP75: string;
+      historicalCandidateGitSha: string;
+      historicalDeploymentId: string;
+      historicalPartialEvidencePromoted: boolean;
+    };
+  };
+  historical7305ExternalVerification: {
+    controlledOutboxRecovery: {
+      status: string;
+      closureEffect: string;
+      evidenceClass: string;
+      emulator: { realProvider: boolean };
+      limitations: string[];
+    };
+    windowsEdgeNvdaJourneys: {
+      status: string;
+      evidenceClass: string;
+      candidateGitSha: string;
+      deploymentId: string;
+      immutableOriginUsed: boolean;
+      fixtureCredentialRotation: {
+        state: string;
+        oneTimeCiphertextOnly: boolean;
+        accountDeletionPerformed: boolean;
+        canonicalAliasUnchanged: boolean;
+      };
+      teacherJourney: {
+        loginWithoutManualRefresh: string;
+        dataMutationAttempted: boolean;
+      };
+      studentJourney: {
+        loginWithoutManualRefresh: string;
+        noRealCourseChatroomFailsClosed: string;
+        composerAndSendUnavailable: boolean;
+        fabricatedTranscriptExposed: boolean;
+      };
+      temporaryAccountsLoggedOut: boolean;
+      assistiveTechnologyStoppedAfterRun: boolean;
+      vmInputReleasedAfterRun: boolean;
+      automationKernelResetAfterRun: boolean;
+      ignoredExecutorProjectionRemoved: boolean;
+      protectionBypassCookieDeleted: boolean;
+      fieldInpP75: string;
+      remaining: string[];
+    };
+  };
+  requirements: Array<{
+    id: number;
+    status: string;
+    evidenceClass: string;
+    evidenceRefs: string[];
+  }>;
 };
 
 const candidateGitSha = "1".repeat(40);
@@ -208,9 +270,9 @@ describe("P2 protected operations gates", () => {
         },
         requirements: {
           total: 11,
-          passed: 1,
-          passedIds: [2],
-          blockedIds: [1, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+          passed: 2,
+          passedIds: [1, 2],
+          blockedIds: [3, 4, 5, 6, 7, 8, 9, 10, 11],
         },
         teacherWorkspaces: {
           total: 11,
@@ -219,8 +281,8 @@ describe("P2 protected operations gates", () => {
         },
         credentialSources: {
           total: 7,
-          ownerApproved: 0,
-          missing: 7,
+          ownerApproved: 2,
+          missing: 5,
         },
         safety: {
           valuesRedacted: true,
@@ -230,6 +292,160 @@ describe("P2 protected operations gates", () => {
     } finally {
       rmSync(temporaryDirectory, { recursive: true, force: true });
     }
+  });
+
+  it("binds every canonical current report to repository HEAD and the immutable deployment", () => {
+    const manifest = JSON.parse(
+      readFileSync(
+        "coordination/reports/p2/current-candidate-closure.json",
+        "utf8",
+      ),
+    ) as ClosureManifestFixture;
+    const shaBoundReports = [
+      "coordination/reports/p2/README.md",
+      "coordination/reports/p2/current-baseline.md",
+      "coordination/reports/p2/current-load.md",
+      "coordination/reports/p2/current-operations.md",
+      "coordination/reports/p2/current-a11y.md",
+      "coordination/reports/p2/current-performance.md",
+      "coordination/reports/p2/current-journey-matrix.md",
+      "coordination/reports/p2/current-release-gate.md",
+      "coordination/reports/2026-08-23-current-candidate-closure-ledger.md",
+    ];
+    const deploymentBoundReports = [
+      "coordination/reports/p2/README.md",
+      "coordination/reports/p2/current-baseline.md",
+      "coordination/reports/p2/current-load.md",
+      "coordination/reports/p2/current-operations.md",
+      "coordination/reports/p2/current-a11y.md",
+      "coordination/reports/p2/current-release-gate.md",
+      "coordination/reports/2026-08-23-current-candidate-closure-ledger.md",
+    ];
+
+    expect(manifest.candidate.gitSha).toBe(repositoryHeadSha);
+    expect(manifest.candidate.deployment.gitSha).toBe(repositoryHeadSha);
+    for (const reportPath of shaBoundReports) {
+      expect(readFileSync(reportPath, "utf8"), reportPath).toContain(
+        repositoryHeadSha,
+      );
+    }
+    for (const reportPath of deploymentBoundReports) {
+      expect(readFileSync(reportPath, "utf8"), reportPath).toContain(
+        manifest.candidate.deployment.id,
+      );
+    }
+  });
+
+  it("preserves the historical controlled outbox drill without promoting requirement seven", () => {
+    const manifest = JSON.parse(
+      readFileSync(
+        "coordination/reports/p2/current-candidate-closure.json",
+        "utf8",
+      ),
+    ) as ClosureManifestFixture;
+    const requirementSeven = manifest.requirements.find(
+      (requirement) => requirement.id === 7,
+    );
+
+    expect(manifest.historical7305ExternalVerification.controlledOutboxRecovery).toMatchObject({
+      status: "HISTORICAL_PARTIAL_PASS",
+      closureEffect: "PARTIAL_ONLY",
+      evidenceClass:
+        "historical-7305-provider-independent-controlled-system-drill",
+      emulator: { realProvider: false },
+      limitations: expect.arrayContaining([
+        "does-not-prove-provider-pitr",
+        "does-not-prove-oss-recovery",
+        "does-not-close-real-provider-credential-or-journey-gates",
+      ]),
+    });
+    expect(manifest.currentExternalVerification.realProviderOperations).toMatchObject({
+      status: "NOT_RUN",
+      historicalControlledOutboxCandidateGitSha:
+        "7305d3411af4eb247e2179262df8af6f44602f91",
+      historicalControlledOutboxRealProvider: false,
+    });
+    expect(requirementSeven).toMatchObject({
+      id: 7,
+      status: "BLOCKED_ENV",
+      evidenceRefs: expect.arrayContaining([
+        "controlled-http-outbox-drill-remains-historical-7305-emulator-evidence",
+        "376-real-lrs-replay-provider-fault-and-delete-reconciliation-not-run",
+        "376-provider-pitr-and-oss-recovery-not-run",
+      ]),
+    });
+  });
+
+  it("keeps Windows NVDA historical without promoting requirement eight", () => {
+    const manifest = JSON.parse(
+      readFileSync(
+        "coordination/reports/p2/current-candidate-closure.json",
+        "utf8",
+      ),
+    ) as ClosureManifestFixture;
+    const requirementEight = manifest.requirements.find(
+      (requirement) => requirement.id === 8,
+    );
+
+    expect(manifest.historical7305ExternalVerification.windowsEdgeNvdaJourneys).toMatchObject({
+      status: "HISTORICAL_PARTIAL_PASS",
+      evidenceClass: "historical-7305-human-at-partial",
+      candidateGitSha: "7305d3411af4eb247e2179262df8af6f44602f91",
+      deploymentId: "dpl_6egJgMSpWiFsFw2P8sv9yHqyHcv6",
+      immutableOriginUsed: true,
+      fixtureCredentialRotation: {
+        state: "EXPECTED_ERROR_AFTER_EXIT_86",
+        oneTimeCiphertextOnly: true,
+        accountDeletionPerformed: false,
+        canonicalAliasUnchanged: true,
+      },
+      teacherJourney: {
+        loginWithoutManualRefresh: "PASS",
+        dataMutationAttempted: false,
+      },
+      studentJourney: {
+        loginWithoutManualRefresh: "PASS",
+        noRealCourseChatroomFailsClosed: "PASS",
+        composerAndSendUnavailable: true,
+        fabricatedTranscriptExposed: false,
+      },
+      temporaryAccountsLoggedOut: true,
+      assistiveTechnologyStoppedAfterRun: true,
+      vmInputReleasedAfterRun: true,
+      automationKernelResetAfterRun: true,
+      ignoredExecutorProjectionRemoved: true,
+      protectionBypassCookieDeleted: false,
+      fieldInpP75: "NOT_RUN",
+      remaining: expect.arrayContaining([
+        "real-enrolled-course-and-learning-media-journeys",
+        "chat-send-and-live-region-journeys",
+        "teacher-create-settings-and-danger-dialogs",
+        "independent-reviewer-attestation",
+      ]),
+    });
+    expect(
+      manifest.historical7305ExternalVerification.windowsEdgeNvdaJourneys
+        .candidateGitSha,
+    ).not.toBe(repositoryHeadSha);
+    expect(manifest.currentExternalVerification.humanAccessibility).toMatchObject({
+      status: "NOT_RUN",
+      candidateGitSha: repositoryHeadSha,
+      safariVoiceOver: "NOT_RUN_ON_CURRENT_CANDIDATE",
+      windowsNvda: "NOT_RUN_ON_CURRENT_CANDIDATE",
+      fieldInpP75: "NOT_RUN",
+      historicalCandidateGitSha:
+        "7305d3411af4eb247e2179262df8af6f44602f91",
+      historicalDeploymentId: "dpl_6egJgMSpWiFsFw2P8sv9yHqyHcv6",
+      historicalPartialEvidencePromoted: false,
+    });
+    expect(requirementEight).toMatchObject({
+      id: 8,
+      status: "NOT_RUN",
+      evidenceRefs: expect.arrayContaining([
+        "windows-nvda-partial-record-remains-bound-to-historical-7305",
+        "376-safari-voiceover-windows-nvda-and-field-inp-not-run",
+      ]),
+    });
   });
 
   it("rejects a historical restore record promoted to PASS", () => {
@@ -246,6 +462,7 @@ describe("P2 protected operations gates", () => {
           if (!restoreRequirement) {
             throw new Error("Restore requirement fixture is missing.");
           }
+          restoreRequirement.evidenceClass = "historical";
           restoreRequirement.status = "PASS";
         },
       );

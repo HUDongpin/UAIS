@@ -447,6 +447,54 @@ describe("P2 staged load ramp", () => {
     expect(receipt.stages[0].operationMetrics.read.p95Milliseconds).toBeGreaterThan(1);
   });
 
+  it("fails before later stages when the aggregate actor journey exceeds the ramp SLO", async () => {
+    const actors = Array.from({ length: 200 }, (_unused, index) => ({
+      actorId: `student-${index + 1}`,
+    }));
+    const maximumP95Milliseconds = 60;
+
+    const receipt = await runP2LoadRamp({
+      actors,
+      rampTargets: [5, 20, 50, 100, 200],
+      maximumP95Milliseconds,
+      runActor: async ({ targetActiveUsers, trackOperation, trackTransport }) => {
+        for (const operation of [
+          "read",
+          "group-chat-write",
+          "group-chat-readback",
+        ] as const) {
+          await trackOperation(operation, () =>
+            trackTransport(operation, async () => {
+              if (targetActiveUsers === 5) {
+                await new Promise((resolve) => setTimeout(resolve, 30));
+              }
+              return { ok: true, status: 200 };
+            }),
+          );
+        }
+      },
+    });
+
+    expect(receipt.status).toBe("FAIL");
+    expect(receipt.stages).toHaveLength(1);
+    expect(receipt.stages[0]).toMatchObject({
+      status: "FAIL",
+      targetActiveUsers: 5,
+      failed: 0,
+      failureCodes: expect.arrayContaining([
+        "actor-journey-p95-threshold-exceeded",
+      ]),
+    });
+    expect(receipt.stages[0].p95Milliseconds).toBeGreaterThan(
+      maximumP95Milliseconds,
+    );
+    for (const metrics of Object.values(receipt.stages[0].operationMetrics)) {
+      expect(metrics.p95Milliseconds).toBeLessThanOrEqual(
+        maximumP95Milliseconds,
+      );
+    }
+  });
+
   it("measures latency through body decoding and validation after response headers", async () => {
     const actors = Array.from({ length: 5 }, (_unused, index) => ({
       actorId: `student-${index + 1}`,

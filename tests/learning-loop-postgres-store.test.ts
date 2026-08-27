@@ -21,14 +21,41 @@ const ids = {
 };
 type FakeQuery = { text: string; values: unknown[] };
 
-function createFakeDatabase(resolve: (query: FakeQuery) => unknown[]) {
+function createFakeDatabase(
+  resolve: (query: FakeQuery) => unknown[],
+  options: {
+    delayMilliseconds?: number;
+    trackQuery?: (query: FakeQuery) => boolean;
+  } = {},
+) {
   const queries: FakeQuery[] = [];
   let beginCount = 0;
   let ended = 0;
+  let inFlight = 0;
+  let maxInFlight = 0;
+  let trackedInFlight = 0;
+  let maxTrackedInFlight = 0;
   const sql = async (strings: TemplateStringsArray, ...values: unknown[]) => {
     const query = { text: strings.join("?"), values };
     queries.push(query);
-    return resolve(query);
+    inFlight += 1;
+    maxInFlight = Math.max(maxInFlight, inFlight);
+    const tracked = options.trackQuery?.(query) ?? true;
+    if (tracked) {
+      trackedInFlight += 1;
+      maxTrackedInFlight = Math.max(maxTrackedInFlight, trackedInFlight);
+    }
+    try {
+      if ((options.delayMilliseconds ?? 0) > 0) {
+        await new Promise((resolveDelay) =>
+          setTimeout(resolveDelay, options.delayMilliseconds),
+        );
+      }
+      return resolve(query);
+    } finally {
+      inFlight -= 1;
+      if (tracked) trackedInFlight -= 1;
+    }
   };
   sql.begin = async (run: (tx: typeof sql) => Promise<void>) => {
     beginCount += 1;
@@ -46,6 +73,12 @@ function createFakeDatabase(resolve: (query: FakeQuery) => unknown[]) {
     },
     get ended() {
       return ended;
+    },
+    get maxInFlight() {
+      return maxInFlight;
+    },
+    get maxTrackedInFlight() {
+      return maxTrackedInFlight;
     },
   };
 }
@@ -72,12 +105,265 @@ function validDraft() {
 }
 
 describe("P1 learning-loop Postgres store", () => {
-  it("rejects a globally reused idempotency key from another actor or endpoint scope", async () => {
+  it("pipelines independent formative side effects inside the transaction", async () => {
     const fake = createFakeDatabase(({ text }) => {
       if (text.includes("pg_advisory_xact_lock")) return [];
+      if (text.includes("FROM uais_idempotency_records")) return [];
+      if (text.includes("FROM uais_users") && text.includes("role = 'student'")) {
+        return [{ id: ids.student }];
+      }
+      if (text.includes("FROM uais_assessments a") && text.includes("formative_check")) {
+        return [
+          {
+            activity_id: ids.activity,
+            course_id: ids.course,
+            course_external_id: "course-1",
+            class_id: ids.class,
+            lesson_id: ids.lesson,
+            lesson_key: "lesson-1",
+            formative_check: { kind: "short-answer" },
+            rubric: [],
+          },
+        ];
+      }
+      if (text.includes("max(attempt_no)")) return [{ attempt_no: 0 }];
+      if (text.includes("SELECT progress") && text.includes("uais_learner_profiles")) {
+        return [];
+      }
+      if (text.includes("INSERT INTO uais_learner_profiles")) {
+        return [{ projection_version: 1 }];
+      }
+      return [];
+    }, { delayMilliseconds: 5 });
+    const sequence = [
+      "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+      ids.event,
+      "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+      ids.outbox,
+    ];
+    const store = createUaisLearningLoopPostgresStore({
+      env: { UAIS_CORE_DATABASE_URL: "postgres://redacted@example.test/uais" },
+      createDatabase: fake.createDatabase,
+      now: () => new Date("2026-08-20T17:40:00.000Z"),
+      createId: () => sequence.shift() ?? ids.outbox,
+    });
+
+    await store.recordFormativeAttempt({
+      studentAccount: "student-1",
+      activityId: ids.activity,
+      classExternalId: "class-1",
+      response: { kind: "short-answer", text: "student private answer" },
+      idempotencyKey: "checkpoint-pipeline-1",
+      traceId: "trace-checkpoint-pipeline-1",
+    });
+
+    expect(fake.maxInFlight).toBeGreaterThanOrEqual(5);
+  });
+
+  it("pipelines independent draft preconditions after resolving the student", async () => {
+    const fake = createFakeDatabase(({ text }) => {
+      if (text.includes("FROM uais_users") && text.includes("role = 'student'")) {
+        return [{ id: ids.student }];
+      }
+      if (text.includes("FROM uais_assessments") && text.includes("target_class_external_id")) {
+        return [{ id: ids.activity }];
+      }
+      if (text.includes("FROM uais_formative_attempts")) return [{ count: 1 }];
+      if (text.includes("FROM uais_submissions") && text.includes("FOR UPDATE")) {
+        return [
+          {
+            id: ids.submission,
+            state: "draft",
+            current_version_no: 1,
+            version_id: ids.version,
+            draft_revision: 1,
+            content_text: "old text",
+          },
+        ];
+      }
+      return [];
+    }, { delayMilliseconds: 5 });
+    const store = createUaisLearningLoopPostgresStore({
+      env: { UAIS_CORE_DATABASE_URL: "postgres://redacted@example.test/uais" },
+      createDatabase: fake.createDatabase,
+    });
+
+    await store.saveSubmissionDraft({
+      studentAccount: "student-1",
+      activityId: ids.activity,
+      classExternalId: "class-1",
+      contentText: "new text",
+      expectedDraftRevision: 1,
+      traceId: "trace-draft-pipeline-1",
+    });
+
+    expect(fake.maxInFlight).toBeGreaterThanOrEqual(3);
+  });
+
+  it("pipelines a new draft's ordered persistence and audit side effects", async () => {
+    const fake = createFakeDatabase(({ text }) => {
+      if (text.includes("FROM uais_users") && text.includes("role = 'student'")) {
+        return [{ id: ids.student }];
+      }
+      if (text.includes("FROM uais_assessments") && text.includes("target_class_external_id")) {
+        return [{ id: ids.activity }];
+      }
+      if (text.includes("FROM uais_formative_attempts")) return [{ count: 1 }];
+      if (text.includes("FROM uais_submissions") && text.includes("FOR UPDATE")) return [];
+      return [];
+    }, {
+      delayMilliseconds: 5,
+      trackQuery: ({ text }) =>
+        text.includes("INSERT INTO uais_submissions") ||
+        text.includes("INSERT INTO uais_submission_versions") ||
+        text.includes("INSERT INTO uais_audit_log"),
+    });
+    const sequence = [ids.submission, ids.version];
+    const store = createUaisLearningLoopPostgresStore({
+      env: { UAIS_CORE_DATABASE_URL: "postgres://redacted@example.test/uais" },
+      createDatabase: fake.createDatabase,
+      now: () => new Date("2026-08-20T17:34:00.000Z"),
+      createId: () => sequence.shift() ?? ids.version,
+    });
+
+    await store.saveSubmissionDraft({
+      studentAccount: "student-1",
+      activityId: ids.activity,
+      classExternalId: "class-1",
+      contentText: "new draft text",
+      expectedDraftRevision: 0,
+      traceId: "trace-draft-side-effects-pipeline-1",
+    });
+
+    expect(fake.maxTrackedInFlight).toBeGreaterThanOrEqual(3);
+  });
+
+  it("pipelines independent submit side effects after the projection is reserved", async () => {
+    const fake = createFakeDatabase(({ text }) => {
+      if (text.includes("pg_advisory_xact_lock")) return [];
+      if (text.includes("FROM uais_idempotency_records")) return [];
+      if (text.includes("FROM uais_users") && text.includes("role = 'student'")) {
+        return [{ id: ids.student }];
+      }
+      if (text.includes("FROM uais_submissions") && text.includes("FOR UPDATE")) {
+        return [
+          {
+            submission_id: ids.submission,
+            state: "draft",
+            current_version_no: 1,
+            version_id: ids.version,
+            version_status: "draft",
+            draft_revision: 2,
+            course_id: ids.course,
+            class_id: ids.class,
+            lesson_id: ids.lesson,
+            lesson_key: "lesson-1",
+            activity_id: ids.activity,
+            checkpoint_attempts: 1,
+          },
+        ];
+      }
+      if (text.includes("SELECT progress") && text.includes("uais_learner_profiles")) {
+        return [{ progress: {}, projection_version: 0 }];
+      }
+      if (text.includes("INSERT INTO uais_learner_profiles")) {
+        return [{ projection_version: 1 }];
+      }
+      return [];
+    }, { delayMilliseconds: 5 });
+    const sequence = [ids.event, "dddddddd-dddd-4ddd-8ddd-dddddddddddd", ids.outbox];
+    const store = createUaisLearningLoopPostgresStore({
+      env: { UAIS_CORE_DATABASE_URL: "postgres://redacted@example.test/uais" },
+      createDatabase: fake.createDatabase,
+      now: () => new Date("2026-08-20T17:35:00.000Z"),
+      createId: () => sequence.shift() ?? ids.outbox,
+    });
+
+    await store.submitSubmission({
+      studentAccount: "student-1",
+      activityId: ids.activity,
+      classExternalId: "class-1",
+      expectedDraftRevision: 2,
+      idempotencyKey: "submit-pipeline-1",
+      traceId: "trace-submit-pipeline-1",
+    });
+
+    expect(fake.maxInFlight).toBeGreaterThanOrEqual(5);
+  });
+
+  it("pipelines independent teacher-decision side effects after validation", async () => {
+    const fake = createFakeDatabase(({ text }) => {
+      if (text.includes("pg_advisory_xact_lock")) return [];
+      if (text.includes("FROM uais_idempotency_records")) return [];
+      if (text.includes("FROM uais_users") && text.includes("role = 'teacher'")) {
+        return [{ id: ids.teacher }];
+      }
+      if (text.includes("FROM uais_submissions s") && text.includes("FOR UPDATE OF s, v")) {
+        return [
+          {
+            submission_id: ids.submission,
+            student_id: ids.student,
+            state: "submitted",
+            current_version_no: 1,
+            version_id: ids.version,
+            version_status: "sealed",
+            activity_id: ids.activity,
+            rubric: [{ id: "accuracy" }, { id: "relationships" }, { id: "examples" }],
+            course_id: ids.course,
+            class_id: ids.class,
+            lesson_id: ids.lesson,
+            lesson_key: "lesson-1",
+          },
+        ];
+      }
+      if (text.includes("SELECT progress") && text.includes("uais_learner_profiles")) {
+        return [{ progress: {}, projection_version: 4 }];
+      }
+      if (text.includes("INSERT INTO uais_learner_profiles")) {
+        return [{ projection_version: 5 }];
+      }
+      return [];
+    }, { delayMilliseconds: 5 });
+    const sequence = [
+      ids.feedback,
+      ids.event,
+      ids.decisionEvent,
+      "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+      ids.outbox,
+      "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+    ];
+    const store = createUaisLearningLoopPostgresStore({
+      env: { UAIS_CORE_DATABASE_URL: "postgres://redacted@example.test/uais" },
+      createDatabase: fake.createDatabase,
+      now: () => new Date("2026-08-20T18:15:00.000Z"),
+      createId: () => sequence.shift() ?? ids.outbox,
+    });
+
+    await store.decideSubmission({
+      teacherAccount: "teacher-1",
+      submissionId: ids.submission,
+      expectedSubmissionVersionId: ids.version,
+      decision: "accept",
+      feedbackText: "The explanation is clear and can be accepted.",
+      rubricJudgments: {
+        accuracy: "met",
+        relationships: "met",
+        examples: "partly-met",
+      },
+      origin: "teacher",
+      idempotencyKey: "decision-pipeline-1",
+      traceId: "trace-decision-pipeline-1",
+    });
+
+    expect(fake.maxInFlight).toBeGreaterThanOrEqual(5);
+  });
+
+  it("rejects a globally reused idempotency key from another actor or endpoint scope", async () => {
+    const fake = createFakeDatabase(({ text }) => {
       if (text.includes("FROM uais_idempotency_records")) {
         return [
           {
+            idempotency_key: "globally-reused-key",
             actor_account: "another-teacher",
             scope: "teacher-save-feedback-draft",
             request_hash: "0".repeat(64),
@@ -92,6 +378,7 @@ describe("P1 learning-loop Postgres store", () => {
           },
         ];
       }
+      if (text.includes("pg_advisory_xact_lock")) return [];
       return [];
     });
     const store = createUaisLearningLoopPostgresStore({
@@ -119,6 +406,14 @@ describe("P1 learning-loop Postgres store", () => {
       status: 409,
       reasonCode: "idempotency-key-scope-conflict",
     });
+    const idempotencyReads = fake.queries.filter(
+      ({ text }) =>
+        text.includes("pg_advisory_xact_lock") ||
+        text.includes("FROM uais_idempotency_records"),
+    );
+    expect(idempotencyReads).toHaveLength(1);
+    expect(idempotencyReads[0]?.text).toContain("pg_advisory_xact_lock");
+    expect(idempotencyReads[0]?.text).toContain("FROM uais_idempotency_records");
   });
 
   it("creates course/class/lesson identity and the activity in one transaction", async () => {
@@ -435,6 +730,9 @@ describe("P1 learning-loop Postgres store", () => {
       if (text.includes("SELECT progress") && text.includes("uais_learner_profiles")) {
         return [{ progress: {}, projection_version: 0 }];
       }
+      if (text.includes("INSERT INTO uais_learner_profiles")) {
+        return [{ projection_version: 1 }];
+      }
       return [];
     });
     const sequence = [ids.event, ids.outbox];
@@ -498,6 +796,9 @@ describe("P1 learning-loop Postgres store", () => {
       }
       if (text.includes("max(attempt_no)")) return [{ attempt_no: 0 }];
       if (text.includes("SELECT progress") && text.includes("uais_learner_profiles")) return [];
+      if (text.includes("INSERT INTO uais_learner_profiles")) {
+        return [{ projection_version: 1 }];
+      }
       return [];
     });
     const sequence = [
@@ -550,6 +851,9 @@ describe("P1 learning-loop Postgres store", () => {
       if (text.includes("SELECT progress") && text.includes("uais_learner_profiles")) {
         return [{ progress: {}, projection_version: 2 }];
       }
+      if (text.includes("INSERT INTO uais_learner_profiles")) {
+        return [{ projection_version: 3 }];
+      }
       return [];
     });
     const sequence = [ids.event, ids.outbox];
@@ -591,6 +895,18 @@ describe("P1 learning-loop Postgres store", () => {
     }
     expect(fake.queries.some((query) => query.text.includes("INSERT INTO uais_courses"))).toBe(false);
     expect(fake.queries.some((query) => query.text.includes("INSERT INTO uais_classes"))).toBe(false);
+    const projectionWrites = fake.queries.filter((query) =>
+      query.text.includes("INSERT INTO uais_learner_profiles"),
+    );
+    expect(projectionWrites).toHaveLength(1);
+    expect(projectionWrites[0]?.text).toContain("RETURNING projection_version");
+    expect(
+      fake.queries.some(
+        (query) =>
+          query.text.includes("SELECT progress") &&
+          query.text.includes("FROM uais_learner_profiles"),
+      ),
+    ).toBe(false);
     const scopeQuery = fake.queries.find(
       (query) =>
         query.text.includes("FROM uais_courses c") &&
@@ -707,6 +1023,9 @@ describe("P1 learning-loop Postgres store", () => {
       }
       if (text.includes("SELECT progress") && text.includes("uais_learner_profiles")) {
         return [{ progress: {}, projection_version: 4 }];
+      }
+      if (text.includes("INSERT INTO uais_learner_profiles")) {
+        return [{ projection_version: 5 }];
       }
       if (text.includes("SELECT ai_trace_ref") && text.includes("origin = 'ai-assisted'")) {
         return [{ ai_trace_ref: "f".repeat(64) }];

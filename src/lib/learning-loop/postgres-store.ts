@@ -627,26 +627,28 @@ export function createUaisLearningLoopPostgresStore(options: StoreOptions) {
             receipt = replay;
             return;
           }
-          const studentId = await requireUserId({
-            sql,
-            account: input.studentAccount,
-            role: "student",
-          });
-          const rows = await sql`
-            SELECT
-              a.id AS activity_id, a.formative_check, a.rubric,
-              l.id AS lesson_id, l.external_key AS lesson_key,
-              c.id AS course_id, c.slug AS course_external_id,
-              cl.id AS class_id
-            FROM uais_assessments a
-            JOIN uais_lessons l ON l.id = a.lesson_id
-            JOIN uais_courses c ON c.id = l.course_id
-            JOIN uais_classes cl
-              ON cl.course_id = c.id AND cl.external_key = a.target_class_external_id
-            WHERE a.id = ${input.activityId}
-              AND a.status = 'published'
-              AND a.target_class_external_id = ${input.classExternalId}
-          `;
+          const [studentId, rows] = await Promise.all([
+            requireUserId({
+              sql,
+              account: input.studentAccount,
+              role: "student",
+            }),
+            sql`
+              SELECT
+                a.id AS activity_id, a.formative_check, a.rubric,
+                l.id AS lesson_id, l.external_key AS lesson_key,
+                c.id AS course_id, c.slug AS course_external_id,
+                cl.id AS class_id
+              FROM uais_assessments a
+              JOIN uais_lessons l ON l.id = a.lesson_id
+              JOIN uais_courses c ON c.id = l.course_id
+              JOIN uais_classes cl
+                ON cl.course_id = c.id AND cl.external_key = a.target_class_external_id
+              WHERE a.id = ${input.activityId}
+                AND a.status = 'published'
+                AND a.target_class_external_id = ${input.classExternalId}
+            `,
+          ]);
           const row = firstRow(rows);
           if (!row) {
             throw new LearningLoopStoreError(404, "published-activity-required");
@@ -684,50 +686,8 @@ export function createUaisLearningLoopPostgresStore(options: StoreOptions) {
             persistedAt,
             attemptNo,
           });
-          await sql`
-            INSERT INTO uais_learning_events (
-              id, user_id, course_id, class_id, assessment_id,
-              verb, object_id, idempotency_key, schema_version, source,
-              projection_version, context, occurred_at, created_at
-            )
-            VALUES (
-              ${eventId}, ${studentId}, ${readString(row.course_id)}, ${readString(row.class_id)},
-              ${input.activityId}, 'formative-check.attempted',
-              ${`activity:${input.activityId}:checkpoint`},
-              ${`learning-loop:${input.idempotencyKey}`}, 1, 'learning-loop-api',
-              ${projectionVersion},
-              ${JSON.stringify({
-                activityId: input.activityId,
-                classId: input.classExternalId,
-                lessonKey: readString(row.lesson_key),
-                attemptNo,
-                checkpointKind: response.kind,
-              })}::text::jsonb,
-              ${persistedAt}, ${persistedAt}
-            )
-          `;
-          await sql`
-            INSERT INTO uais_recommendations (
-              id, user_id, course_id, next_lesson_id, rationale, reason_code,
-              next_action_type, source_state_version, source_event_id, created_at
-            )
-            VALUES (
-              ${createId()}, ${studentId}, ${readString(row.course_id)}, ${readString(row.lesson_id)},
-              'The formative checkpoint is complete; start the required submission.',
-              'submission-not-started', 'start-submission', ${projectionVersion},
-              ${eventId}, ${persistedAt}
-            )
-          `;
-          await sql`
-            INSERT INTO uais_xapi_outbox (
-              id, learning_event_id, statement_id, status, attempt_count,
-              next_attempt_at, created_at, updated_at
-            )
-            VALUES (
-              ${createId()}, ${eventId}, ${createDeterministicXapiStatementId(eventId)},
-              'pending', 0, ${persistedAt}, ${persistedAt}, ${persistedAt}
-            )
-          `;
+          const recommendationId = createId();
+          const outboxId = createId();
           receipt = {
             status: "persisted",
             resourceId: attemptId,
@@ -737,31 +697,77 @@ export function createUaisLearningLoopPostgresStore(options: StoreOptions) {
             traceId: input.traceId,
             persistedAt,
           };
-          await writeAudit({
-            sql,
-            actorId: studentId,
-            action: "learning-formative-attempt-recorded",
-            targetType: "learning-activity",
-            targetId: input.activityId,
-            traceId: input.traceId,
-            metadata: {
-              attemptId,
-              attemptNo,
-              checkpointKind: response.kind,
-              responseHash,
-              eventId,
-            },
-            persistedAt,
-          });
-          await writeIdempotentReceipt({
-            sql,
-            actorUserId: studentId,
-            key: input.idempotencyKey,
-            scope: "student-formative-attempt",
-            requestHash,
-            receipt,
-            persistedAt,
-          });
+          await Promise.all([
+            sql`
+              INSERT INTO uais_learning_events (
+                id, user_id, course_id, class_id, assessment_id,
+                verb, object_id, idempotency_key, schema_version, source,
+                projection_version, context, occurred_at, created_at
+              )
+              VALUES (
+                ${eventId}, ${studentId}, ${readString(row.course_id)}, ${readString(row.class_id)},
+                ${input.activityId}, 'formative-check.attempted',
+                ${`activity:${input.activityId}:checkpoint`},
+                ${`learning-loop:${input.idempotencyKey}`}, 1, 'learning-loop-api',
+                ${projectionVersion},
+                ${JSON.stringify({
+                  activityId: input.activityId,
+                  classId: input.classExternalId,
+                  lessonKey: readString(row.lesson_key),
+                  attemptNo,
+                  checkpointKind: response.kind,
+                })}::text::jsonb,
+                ${persistedAt}, ${persistedAt}
+              )
+            `,
+            sql`
+              INSERT INTO uais_recommendations (
+                id, user_id, course_id, next_lesson_id, rationale, reason_code,
+                next_action_type, source_state_version, source_event_id, created_at
+              )
+              VALUES (
+                ${recommendationId}, ${studentId}, ${readString(row.course_id)}, ${readString(row.lesson_id)},
+                'The formative checkpoint is complete; start the required submission.',
+                'submission-not-started', 'start-submission', ${projectionVersion},
+                ${eventId}, ${persistedAt}
+              )
+            `,
+            sql`
+              INSERT INTO uais_xapi_outbox (
+                id, learning_event_id, statement_id, status, attempt_count,
+                next_attempt_at, created_at, updated_at
+              )
+              VALUES (
+                ${outboxId}, ${eventId}, ${createDeterministicXapiStatementId(eventId)},
+                'pending', 0, ${persistedAt}, ${persistedAt}, ${persistedAt}
+              )
+            `,
+            writeAudit({
+              sql,
+              actorId: studentId,
+              action: "learning-formative-attempt-recorded",
+              targetType: "learning-activity",
+              targetId: input.activityId,
+              traceId: input.traceId,
+              metadata: {
+                attemptId,
+                attemptNo,
+                checkpointKind: response.kind,
+                responseHash,
+                eventId,
+              },
+              persistedAt,
+            }),
+            writeIdempotentReceipt({
+              sql,
+              actorUserId: studentId,
+              key: input.idempotencyKey,
+              scope: "student-formative-attempt",
+              requestHash,
+              receipt,
+              persistedAt,
+            }),
+          ]);
         });
       } finally {
         await closeUaisCoreDatabaseClient(client);
@@ -939,60 +945,66 @@ export function createUaisLearningLoopPostgresStore(options: StoreOptions) {
             account: input.studentAccount,
             role: "student",
           });
-          const activityRows = await sql`
-            SELECT a.id
-            FROM uais_assessments a
-            WHERE a.id = ${input.activityId}
-              AND a.status = 'published'
-              AND a.target_class_external_id = ${input.classExternalId}
-          `;
+          const [activityRows, attemptRows, submissionRows] = await Promise.all([
+            sql`
+              SELECT a.id
+              FROM uais_assessments a
+              WHERE a.id = ${input.activityId}
+                AND a.status = 'published'
+                AND a.target_class_external_id = ${input.classExternalId}
+            `,
+            sql`
+              SELECT count(*)::integer AS count
+              FROM uais_formative_attempts
+              WHERE assessment_id = ${input.activityId} AND user_id = ${studentId}
+            `,
+            sql`
+              SELECT
+                s.id, s.state, s.current_version_no,
+                v.id AS version_id, v.draft_revision, v.content_text
+              FROM uais_submissions s
+              JOIN uais_submission_versions v
+                ON v.submission_id = s.id AND v.version_no = s.current_version_no
+              WHERE s.assessment_id = ${input.activityId} AND s.user_id = ${studentId}
+              FOR UPDATE OF s, v
+            `,
+          ]);
           readRequiredId(activityRows, "published-activity-required");
-          const attemptRows = await sql`
-            SELECT count(*)::integer AS count
-            FROM uais_formative_attempts
-            WHERE assessment_id = ${input.activityId} AND user_id = ${studentId}
-          `;
           if (readCount(attemptRows) < 1) {
             throw new LearningLoopStoreError(409, "formative-attempt-required");
           }
-          const submissionRows = await sql`
-            SELECT
-              s.id, s.state, s.current_version_no,
-              v.id AS version_id, v.draft_revision, v.content_text
-            FROM uais_submissions s
-            JOIN uais_submission_versions v
-              ON v.submission_id = s.id AND v.version_no = s.current_version_no
-            WHERE s.assessment_id = ${input.activityId} AND s.user_id = ${studentId}
-            FOR UPDATE OF s, v
-          `;
           const existing = firstRow(submissionRows);
+          let persistenceQueries: Array<Promise<unknown[]>>;
+          let persistedReceipt: LearningLoopPersistedReceipt;
           if (!existing) {
             if (input.expectedDraftRevision !== 0) {
               throw staleDraftError(0, "");
             }
             const submissionId = createId();
             const versionId = createId();
-            await sql`
-              INSERT INTO uais_submissions (
-                id, assessment_id, user_id, state, class_external_id,
-                current_version_no, created_at, updated_at
-              )
-              VALUES (
-                ${submissionId}, ${input.activityId}, ${studentId}, 'draft',
-                ${input.classExternalId}, 1, ${persistedAt}, ${persistedAt}
-              )
-            `;
-            await sql`
-              INSERT INTO uais_submission_versions (
-                id, submission_id, version_no, status, content_text,
-                content_hash, draft_revision, created_at, updated_at
-              )
-              VALUES (
-                ${versionId}, ${submissionId}, 1, 'draft', ${contentText},
-                ${contentHash}, 1, ${persistedAt}, ${persistedAt}
-              )
-            `;
-            receipt = {
+            persistenceQueries = [
+              sql`
+                INSERT INTO uais_submissions (
+                  id, assessment_id, user_id, state, class_external_id,
+                  current_version_no, created_at, updated_at
+                )
+                VALUES (
+                  ${submissionId}, ${input.activityId}, ${studentId}, 'draft',
+                  ${input.classExternalId}, 1, ${persistedAt}, ${persistedAt}
+                )
+              `,
+              sql`
+                INSERT INTO uais_submission_versions (
+                  id, submission_id, version_no, status, content_text,
+                  content_hash, draft_revision, created_at, updated_at
+                )
+                VALUES (
+                  ${versionId}, ${submissionId}, 1, 'draft', ${contentText},
+                  ${contentHash}, 1, ${persistedAt}, ${persistedAt}
+                )
+              `,
+            ];
+            persistedReceipt = {
               status: "persisted",
               resourceId: submissionId,
               state: "draft",
@@ -1017,22 +1029,24 @@ export function createUaisLearningLoopPostgresStore(options: StoreOptions) {
                 throw staleDraftError(0, latestContent);
               }
               const versionId = createId();
-              await sql`
-                INSERT INTO uais_submission_versions (
-                  id, submission_id, version_no, status, content_text,
-                  content_hash, draft_revision, created_at, updated_at
-                )
-                VALUES (
-                  ${versionId}, ${readString(existing.id)}, ${nextVersionNo}, 'draft',
-                  ${contentText}, ${contentHash}, 1, ${persistedAt}, ${persistedAt}
-                )
-              `;
-              await sql`
-                UPDATE uais_submissions
-                SET state = 'draft', current_version_no = ${nextVersionNo}, updated_at = ${persistedAt}
-                WHERE id = ${readString(existing.id)}
-              `;
-              receipt = {
+              persistenceQueries = [
+                sql`
+                  INSERT INTO uais_submission_versions (
+                    id, submission_id, version_no, status, content_text,
+                    content_hash, draft_revision, created_at, updated_at
+                  )
+                  VALUES (
+                    ${versionId}, ${readString(existing.id)}, ${nextVersionNo}, 'draft',
+                    ${contentText}, ${contentHash}, 1, ${persistedAt}, ${persistedAt}
+                  )
+                `,
+                sql`
+                  UPDATE uais_submissions
+                  SET state = 'draft', current_version_no = ${nextVersionNo}, updated_at = ${persistedAt}
+                  WHERE id = ${readString(existing.id)}
+                `,
+              ];
+              persistedReceipt = {
                 status: "persisted",
                 resourceId: readString(existing.id),
                 state: "draft",
@@ -1048,13 +1062,15 @@ export function createUaisLearningLoopPostgresStore(options: StoreOptions) {
                 throw staleDraftError(latestRevision, latestContent);
               }
               const nextRevision = latestRevision + 1;
-              await sql`
-                UPDATE uais_submission_versions
-                SET content_text = ${contentText}, content_hash = ${contentHash},
-                    draft_revision = ${nextRevision}, updated_at = ${persistedAt}
-                WHERE id = ${readString(existing.version_id)} AND status = 'draft'
-              `;
-              receipt = {
+              persistenceQueries = [
+                sql`
+                  UPDATE uais_submission_versions
+                  SET content_text = ${contentText}, content_hash = ${contentHash},
+                      draft_revision = ${nextRevision}, updated_at = ${persistedAt}
+                  WHERE id = ${readString(existing.version_id)} AND status = 'draft'
+                `,
+              ];
+              persistedReceipt = {
                 status: "persisted",
                 resourceId: readString(existing.id),
                 state: "draft",
@@ -1064,20 +1080,24 @@ export function createUaisLearningLoopPostgresStore(options: StoreOptions) {
               };
             }
           }
-          await writeAudit({
-            sql,
-            actorId: studentId,
-            action: "learning-submission-draft-saved",
-            targetType: "learning-submission",
-            targetId: receipt.resourceId,
-            traceId: input.traceId,
-            metadata: {
-              activityId: input.activityId,
-              draftRevision: receipt.revision,
-              contentHash,
-            },
-            persistedAt,
-          });
+          receipt = persistedReceipt;
+          await Promise.all([
+            ...persistenceQueries,
+            writeAudit({
+              sql,
+              actorId: studentId,
+              action: "learning-submission-draft-saved",
+              targetType: "learning-submission",
+              targetId: persistedReceipt.resourceId,
+              traceId: input.traceId,
+              metadata: {
+                activityId: input.activityId,
+                draftRevision: persistedReceipt.revision,
+                contentHash,
+              },
+              persistedAt,
+            }),
+          ]);
         });
       } finally {
         await closeUaisCoreDatabaseClient(client);
@@ -1163,17 +1183,19 @@ export function createUaisLearningLoopPostgresStore(options: StoreOptions) {
           const versionNo = readInteger(row.current_version_no);
           const nextState = versionNo === 1 ? "submitted" : "resubmitted";
           assertSubmissionTransition({ from: "draft", to: nextState, versionNo });
-          await sql`
-            UPDATE uais_submission_versions
-            SET status = 'sealed', submitted_at = ${persistedAt}, updated_at = ${persistedAt}
-            WHERE id = ${readString(row.version_id)} AND status = 'draft'
-          `;
-          await sql`
-            UPDATE uais_submissions
-            SET state = ${nextState}, submitted_at = COALESCE(submitted_at, ${persistedAt}),
-                last_submitted_at = ${persistedAt}, updated_at = ${persistedAt}
-            WHERE id = ${readString(row.submission_id)}
-          `;
+          await Promise.all([
+            sql`
+              UPDATE uais_submission_versions
+              SET status = 'sealed', submitted_at = ${persistedAt}, updated_at = ${persistedAt}
+              WHERE id = ${readString(row.version_id)} AND status = 'draft'
+            `,
+            sql`
+              UPDATE uais_submissions
+              SET state = ${nextState}, submitted_at = COALESCE(submitted_at, ${persistedAt}),
+                  last_submitted_at = ${persistedAt}, updated_at = ${persistedAt}
+              WHERE id = ${readString(row.submission_id)}
+            `,
+          ]);
 
           const eventId = createId();
           const projectionVersion = await writeSubmissionProjection({
@@ -1186,55 +1208,9 @@ export function createUaisLearningLoopPostgresStore(options: StoreOptions) {
             persistedAt,
             eventId,
           });
-          await sql`
-            INSERT INTO uais_learning_events (
-              id, user_id, course_id, class_id, assessment_id, submission_id,
-              verb, object_id, idempotency_key, schema_version, source,
-              projection_version, context, occurred_at, created_at
-            )
-            VALUES (
-              ${eventId}, ${studentId}, ${readString(row.course_id)}, ${readString(row.class_id)},
-              ${input.activityId}, ${readString(row.submission_id)},
-              ${nextState === "resubmitted"
-                ? "submission.resubmitted"
-                : "submission.submitted"},
-              ${`submission:${readString(row.submission_id)}:v${versionNo}`},
-              ${`learning-loop:${input.idempotencyKey}`}, 1, 'learning-loop-api',
-              ${projectionVersion},
-              ${JSON.stringify({
-                activityId: input.activityId,
-                classId: input.classExternalId,
-                lessonKey: readString(row.lesson_key),
-                submissionState: nextState,
-                versionNo,
-              })}::text::jsonb,
-              ${persistedAt}, ${persistedAt}
-            )
-          `;
-          await sql`
-            INSERT INTO uais_recommendations (
-              id, user_id, course_id, next_lesson_id, rationale, reason_code,
-              next_action_type, source_state_version, source_event_id, created_at
-            )
-            VALUES (
-              ${createId()}, ${studentId}, ${readString(row.course_id)}, ${readString(row.lesson_id)},
-              'Teacher review is pending for the current submission.',
-              'teacher-review-pending', 'await-teacher-review', ${projectionVersion},
-              ${eventId}, ${persistedAt}
-            )
-          `;
+          const recommendationId = createId();
           const outboxId = createId();
-          await sql`
-            INSERT INTO uais_xapi_outbox (
-              id, learning_event_id, statement_id, status, attempt_count,
-              next_attempt_at, created_at, updated_at
-            )
-            VALUES (
-              ${outboxId}, ${eventId}, ${createDeterministicXapiStatementId(eventId)},
-              'pending', 0, ${persistedAt}, ${persistedAt}, ${persistedAt}
-            )
-          `;
-          receipt = {
+          const persistedReceipt: LearningLoopPersistedReceipt = {
             status: "persisted",
             resourceId: readString(row.submission_id),
             state: nextState,
@@ -1243,30 +1219,83 @@ export function createUaisLearningLoopPostgresStore(options: StoreOptions) {
             traceId: input.traceId,
             persistedAt,
           };
-          await writeAudit({
-            sql,
-            actorId: studentId,
-            action: "learning-submission-sealed",
-            targetType: "learning-submission",
-            targetId: receipt.resourceId,
-            traceId: input.traceId,
-            metadata: {
-              activityId: input.activityId,
-              versionNo,
-              submissionState: nextState,
-              eventId,
-            },
-            persistedAt,
-          });
-          await writeIdempotentReceipt({
-            sql,
-            actorUserId: studentId,
-            key: input.idempotencyKey,
-            scope: "student-submit-submission",
-            requestHash,
-            receipt,
-            persistedAt,
-          });
+          receipt = persistedReceipt;
+
+          // postgres.js preserves query order on this transaction connection while
+          // pipelining the round trips. Keep the parent event ahead of its FK users.
+          await Promise.all([
+            sql`
+              INSERT INTO uais_learning_events (
+                id, user_id, course_id, class_id, assessment_id, submission_id,
+                verb, object_id, idempotency_key, schema_version, source,
+                projection_version, context, occurred_at, created_at
+              )
+              VALUES (
+                ${eventId}, ${studentId}, ${readString(row.course_id)}, ${readString(row.class_id)},
+                ${input.activityId}, ${readString(row.submission_id)},
+                ${nextState === "resubmitted"
+                  ? "submission.resubmitted"
+                  : "submission.submitted"},
+                ${`submission:${readString(row.submission_id)}:v${versionNo}`},
+                ${`learning-loop:${input.idempotencyKey}`}, 1, 'learning-loop-api',
+                ${projectionVersion},
+                ${JSON.stringify({
+                  activityId: input.activityId,
+                  classId: input.classExternalId,
+                  lessonKey: readString(row.lesson_key),
+                  submissionState: nextState,
+                  versionNo,
+                })}::text::jsonb,
+                ${persistedAt}, ${persistedAt}
+              )
+            `,
+            sql`
+              INSERT INTO uais_recommendations (
+                id, user_id, course_id, next_lesson_id, rationale, reason_code,
+                next_action_type, source_state_version, source_event_id, created_at
+              )
+              VALUES (
+                ${recommendationId}, ${studentId}, ${readString(row.course_id)}, ${readString(row.lesson_id)},
+                'Teacher review is pending for the current submission.',
+                'teacher-review-pending', 'await-teacher-review', ${projectionVersion},
+                ${eventId}, ${persistedAt}
+              )
+            `,
+            sql`
+              INSERT INTO uais_xapi_outbox (
+                id, learning_event_id, statement_id, status, attempt_count,
+                next_attempt_at, created_at, updated_at
+              )
+              VALUES (
+                ${outboxId}, ${eventId}, ${createDeterministicXapiStatementId(eventId)},
+                'pending', 0, ${persistedAt}, ${persistedAt}, ${persistedAt}
+              )
+            `,
+            writeAudit({
+              sql,
+              actorId: studentId,
+              action: "learning-submission-sealed",
+              targetType: "learning-submission",
+              targetId: persistedReceipt.resourceId,
+              traceId: input.traceId,
+              metadata: {
+                activityId: input.activityId,
+                versionNo,
+                submissionState: nextState,
+                eventId,
+              },
+              persistedAt,
+            }),
+            writeIdempotentReceipt({
+              sql,
+              actorUserId: studentId,
+              key: input.idempotencyKey,
+              scope: "student-submit-submission",
+              requestHash,
+              receipt: persistedReceipt,
+              persistedAt,
+            }),
+          ]);
         });
       } finally {
         await closeUaisCoreDatabaseClient(client);
@@ -1775,35 +1804,37 @@ export function createUaisLearningLoopPostgresStore(options: StoreOptions) {
                 )
               : undefined;
 
-          await sql`
-            UPDATE uais_feedback
-            SET status = 'superseded', updated_at = ${persistedAt}
-            WHERE submission_id = ${input.submissionId}
-              AND status = 'released'
-              AND submission_version_id <> ${versionId}
-          `;
           const feedbackId = createId();
-          await sql`
-            INSERT INTO uais_feedback (
-              id, submission_id, submission_version_id, teacher_user_id,
-              origin, status, rubric_judgments, feedback_text,
-              requires_revision, ai_trace_ref, source_draft_revision,
-              created_at, updated_at, released_at
-            )
-            VALUES (
-              ${feedbackId}, ${input.submissionId}, ${versionId}, ${teacherId},
-              ${input.origin}, 'released', ${JSON.stringify(rubricJudgments)}::text::jsonb,
-              ${feedbackText}, ${input.decision === "request-revision"},
-              ${aiTraceRef ?? null}, 1, ${persistedAt}, ${persistedAt}, ${persistedAt}
-            )
-          `;
-          await sql`
-            UPDATE uais_submissions
-            SET state = ${nextState}, reviewed_at = ${persistedAt},
-                accepted_version_id = ${input.decision === "accept" ? versionId : null},
-                updated_at = ${persistedAt}
-            WHERE id = ${input.submissionId}
-          `;
+          await Promise.all([
+            sql`
+              UPDATE uais_feedback
+              SET status = 'superseded', updated_at = ${persistedAt}
+              WHERE submission_id = ${input.submissionId}
+                AND status = 'released'
+                AND submission_version_id <> ${versionId}
+            `,
+            sql`
+              INSERT INTO uais_feedback (
+                id, submission_id, submission_version_id, teacher_user_id,
+                origin, status, rubric_judgments, feedback_text,
+                requires_revision, ai_trace_ref, source_draft_revision,
+                created_at, updated_at, released_at
+              )
+              VALUES (
+                ${feedbackId}, ${input.submissionId}, ${versionId}, ${teacherId},
+                ${input.origin}, 'released', ${JSON.stringify(rubricJudgments)}::text::jsonb,
+                ${feedbackText}, ${input.decision === "request-revision"},
+                ${aiTraceRef ?? null}, 1, ${persistedAt}, ${persistedAt}, ${persistedAt}
+              )
+            `,
+            sql`
+              UPDATE uais_submissions
+              SET state = ${nextState}, reviewed_at = ${persistedAt},
+                  accepted_version_id = ${input.decision === "accept" ? versionId : null},
+                  updated_at = ${persistedAt}
+              WHERE id = ${input.submissionId}
+            `,
+          ]);
 
           const feedbackEventId = createId();
           const decisionEventId = createId();
@@ -1830,68 +1861,10 @@ export function createUaisLearningLoopPostgresStore(options: StoreOptions) {
             versionNo,
             rubricDimensionIds,
           };
-          await sql`
-            INSERT INTO uais_learning_events (
-              id, user_id, course_id, class_id, assessment_id, submission_id,
-              verb, object_id, idempotency_key, schema_version, source,
-              projection_version, context, occurred_at, created_at
-            )
-            VALUES
-              (
-                ${feedbackEventId}, ${teacherId}, ${courseId}, ${classId}, ${activityId},
-                ${input.submissionId}, 'feedback.released',
-                ${`submission:${input.submissionId}:v${versionNo}:feedback`},
-                ${`learning-loop:${input.idempotencyKey}:feedback`}, 1,
-                'learning-loop-api', ${projectionVersion},
-                ${JSON.stringify(eventContext)}::text::jsonb, ${persistedAt}, ${persistedAt}
-              ),
-              (
-                ${decisionEventId}, ${teacherId}, ${courseId}, ${classId}, ${activityId},
-                ${input.submissionId},
-                ${input.decision === "accept"
-                  ? "submission.accepted"
-                  : "submission.revision-requested"},
-                ${`submission:${input.submissionId}:v${versionNo}`},
-                ${`learning-loop:${input.idempotencyKey}:decision`}, 1,
-                'learning-loop-api', ${projectionVersion},
-                ${JSON.stringify(eventContext)}::text::jsonb, ${persistedAt}, ${persistedAt}
-              )
-          `;
-          await sql`
-            INSERT INTO uais_recommendations (
-              id, user_id, course_id, next_lesson_id, rationale, reason_code,
-              next_action_type, source_state_version, source_event_id, created_at
-            )
-            VALUES (
-              ${createId()}, ${studentId}, ${courseId}, ${lessonId},
-              ${input.decision === "accept"
-                ? "The current learning unit is accepted."
-                : "Revise the current submission using released teacher feedback."},
-              ${input.decision === "accept"
-                ? "current-unit-accepted"
-                : "revision-requested"},
-              ${input.decision === "accept" ? "open-next-lesson" : "revise-submission"},
-              ${projectionVersion}, ${decisionEventId}, ${persistedAt}
-            )
-          `;
-          await sql`
-            INSERT INTO uais_xapi_outbox (
-              id, learning_event_id, statement_id, status, attempt_count,
-              next_attempt_at, created_at, updated_at
-            )
-            VALUES
-              (
-                ${createId()}, ${feedbackEventId},
-                ${createDeterministicXapiStatementId(feedbackEventId)}, 'pending', 0,
-                ${persistedAt}, ${persistedAt}, ${persistedAt}
-              ),
-              (
-                ${createId()}, ${decisionEventId},
-                ${createDeterministicXapiStatementId(decisionEventId)}, 'pending', 0,
-                ${persistedAt}, ${persistedAt}, ${persistedAt}
-              )
-          `;
-          receipt = {
+          const recommendationId = createId();
+          const feedbackOutboxId = createId();
+          const decisionOutboxId = createId();
+          const persistedReceipt: LearningLoopPersistedReceipt = {
             status: "persisted",
             resourceId: input.submissionId,
             state: nextState,
@@ -1900,36 +1873,101 @@ export function createUaisLearningLoopPostgresStore(options: StoreOptions) {
             traceId: input.traceId,
             persistedAt,
           };
-          await writeAudit({
-            sql,
-            actorId: teacherId,
-            action:
-              input.decision === "accept"
-                ? "learning-submission-accepted"
-                : "learning-submission-revision-requested",
-            targetType: "learning-submission",
-            targetId: input.submissionId,
-            traceId: input.traceId,
-            metadata: {
-              activityId,
-              versionId,
-              versionNo,
-              feedbackId,
-              origin: input.origin,
-              rubricDimensionIds,
-              decisionEventId,
-            },
-            persistedAt,
-          });
-          await writeIdempotentReceipt({
-            sql,
-            actorUserId: teacherId,
-            key: input.idempotencyKey,
-            scope: "teacher-submission-decision",
-            requestHash,
-            receipt,
-            persistedAt,
-          });
+          receipt = persistedReceipt;
+
+          await Promise.all([
+            sql`
+              INSERT INTO uais_learning_events (
+                id, user_id, course_id, class_id, assessment_id, submission_id,
+                verb, object_id, idempotency_key, schema_version, source,
+                projection_version, context, occurred_at, created_at
+              )
+              VALUES
+                (
+                  ${feedbackEventId}, ${teacherId}, ${courseId}, ${classId}, ${activityId},
+                  ${input.submissionId}, 'feedback.released',
+                  ${`submission:${input.submissionId}:v${versionNo}:feedback`},
+                  ${`learning-loop:${input.idempotencyKey}:feedback`}, 1,
+                  'learning-loop-api', ${projectionVersion},
+                  ${JSON.stringify(eventContext)}::text::jsonb, ${persistedAt}, ${persistedAt}
+                ),
+                (
+                  ${decisionEventId}, ${teacherId}, ${courseId}, ${classId}, ${activityId},
+                  ${input.submissionId},
+                  ${input.decision === "accept"
+                    ? "submission.accepted"
+                    : "submission.revision-requested"},
+                  ${`submission:${input.submissionId}:v${versionNo}`},
+                  ${`learning-loop:${input.idempotencyKey}:decision`}, 1,
+                  'learning-loop-api', ${projectionVersion},
+                  ${JSON.stringify(eventContext)}::text::jsonb, ${persistedAt}, ${persistedAt}
+                )
+            `,
+            sql`
+              INSERT INTO uais_recommendations (
+                id, user_id, course_id, next_lesson_id, rationale, reason_code,
+                next_action_type, source_state_version, source_event_id, created_at
+              )
+              VALUES (
+                ${recommendationId}, ${studentId}, ${courseId}, ${lessonId},
+                ${input.decision === "accept"
+                  ? "The current learning unit is accepted."
+                  : "Revise the current submission using released teacher feedback."},
+                ${input.decision === "accept"
+                  ? "current-unit-accepted"
+                  : "revision-requested"},
+                ${input.decision === "accept" ? "open-next-lesson" : "revise-submission"},
+                ${projectionVersion}, ${decisionEventId}, ${persistedAt}
+              )
+            `,
+            sql`
+              INSERT INTO uais_xapi_outbox (
+                id, learning_event_id, statement_id, status, attempt_count,
+                next_attempt_at, created_at, updated_at
+              )
+              VALUES
+                (
+                  ${feedbackOutboxId}, ${feedbackEventId},
+                  ${createDeterministicXapiStatementId(feedbackEventId)}, 'pending', 0,
+                  ${persistedAt}, ${persistedAt}, ${persistedAt}
+                ),
+                (
+                  ${decisionOutboxId}, ${decisionEventId},
+                  ${createDeterministicXapiStatementId(decisionEventId)}, 'pending', 0,
+                  ${persistedAt}, ${persistedAt}, ${persistedAt}
+                )
+            `,
+            writeAudit({
+              sql,
+              actorId: teacherId,
+              action:
+                input.decision === "accept"
+                  ? "learning-submission-accepted"
+                  : "learning-submission-revision-requested",
+              targetType: "learning-submission",
+              targetId: input.submissionId,
+              traceId: input.traceId,
+              metadata: {
+                activityId,
+                versionId,
+                versionNo,
+                feedbackId,
+                origin: input.origin,
+                rubricDimensionIds,
+                decisionEventId,
+              },
+              persistedAt,
+            }),
+            writeIdempotentReceipt({
+              sql,
+              actorUserId: teacherId,
+              key: input.idempotencyKey,
+              scope: "teacher-submission-decision",
+              requestHash,
+              receipt: persistedReceipt,
+              persistedAt,
+            }),
+          ]);
         });
       } finally {
         await closeUaisCoreDatabaseClient(client);
@@ -1946,41 +1984,20 @@ async function writeGenericLearningEventProjection(input: {
   event: LearningRecordEventInput;
   persistedAt: string;
 }) {
-  const profileRows = await input.sql`
-    SELECT progress, projection_version
-    FROM uais_learner_profiles
-    WHERE user_id = ${input.studentId} AND course_id = ${input.courseId}
-    FOR UPDATE
-  `;
-  const current = firstRow(profileRows);
-  const projectionVersion = readInteger(current?.projection_version ?? 0) + 1;
-  const progress = {
-    ...readRecord(current?.progress),
-    lastEventType: input.event.type,
-    lastEventObjectId: input.event.object.id,
-    ...(input.event.context.lessonId
-      ? { lastLessonKey: input.event.context.lessonId }
-      : {}),
-    updatedAt: input.persistedAt,
-  };
-  await input.sql`
-    INSERT INTO uais_learner_profiles (
-      user_id, course_id, mastery, preferences, progress,
-      projection_version, last_event_at, updated_at
-    )
-    VALUES (
-      ${input.studentId}, ${input.courseId}, '{}'::jsonb, '{}'::jsonb,
-      ${JSON.stringify(progress)}::text::jsonb, ${projectionVersion},
-      ${input.persistedAt}, ${input.persistedAt}
-    )
-    ON CONFLICT (user_id, course_id)
-    DO UPDATE SET
-      progress = EXCLUDED.progress,
-      projection_version = EXCLUDED.projection_version,
-      last_event_at = EXCLUDED.last_event_at,
-      updated_at = EXCLUDED.updated_at
-  `;
-  return projectionVersion;
+  return upsertLearnerProjection({
+    sql: input.sql,
+    studentId: input.studentId,
+    courseId: input.courseId,
+    progressPatch: {
+      lastEventType: input.event.type,
+      lastEventObjectId: input.event.object.id,
+      ...(input.event.context.lessonId
+        ? { lastLessonKey: input.event.context.lessonId }
+        : {}),
+      updatedAt: input.persistedAt,
+    },
+    persistedAt: input.persistedAt,
+  });
 }
 
 async function writeSubmissionProjection(input: {
@@ -1993,38 +2010,17 @@ async function writeSubmissionProjection(input: {
   persistedAt: string;
   eventId: string;
 }) {
-  const profileRows = await input.sql`
-    SELECT progress, projection_version
-    FROM uais_learner_profiles
-    WHERE user_id = ${input.studentId} AND course_id = ${input.courseId}
-    FOR UPDATE
-  `;
-  const current = firstRow(profileRows);
-  const projectionVersion = readInteger(current?.projection_version ?? 0) + 1;
-  const progress = {
-    ...readRecord(current?.progress),
-    lastLessonKey: input.lessonKey,
-    lastSubmissionState: input.submissionState,
-    updatedAt: input.persistedAt,
-  };
-  await input.sql`
-    INSERT INTO uais_learner_profiles (
-      user_id, course_id, mastery, preferences, progress,
-      projection_version, last_event_at, updated_at
-    )
-    VALUES (
-      ${input.studentId}, ${input.courseId}, '{}'::jsonb, '{}'::jsonb,
-      ${JSON.stringify(progress)}::text::jsonb, ${projectionVersion},
-      ${input.persistedAt}, ${input.persistedAt}
-    )
-    ON CONFLICT (user_id, course_id)
-    DO UPDATE SET
-      progress = EXCLUDED.progress,
-      projection_version = EXCLUDED.projection_version,
-      last_event_at = EXCLUDED.last_event_at,
-      updated_at = EXCLUDED.updated_at
-  `;
-  return projectionVersion;
+  return upsertLearnerProjection({
+    sql: input.sql,
+    studentId: input.studentId,
+    courseId: input.courseId,
+    progressPatch: {
+      lastLessonKey: input.lessonKey,
+      lastSubmissionState: input.submissionState,
+      updatedAt: input.persistedAt,
+    },
+    persistedAt: input.persistedAt,
+  });
 }
 
 async function writeFormativeProjection(input: {
@@ -2035,38 +2031,51 @@ async function writeFormativeProjection(input: {
   persistedAt: string;
   attemptNo: number;
 }) {
-  const profileRows = await input.sql`
-    SELECT progress, projection_version
-    FROM uais_learner_profiles
-    WHERE user_id = ${input.studentId} AND course_id = ${input.courseId}
-    FOR UPDATE
-  `;
-  const current = firstRow(profileRows);
-  const projectionVersion = readInteger(current?.projection_version ?? 0) + 1;
-  const progress = {
-    ...readRecord(current?.progress),
-    lastLessonKey: input.lessonKey,
-    lastCheckpointAttemptNo: input.attemptNo,
-    lastCheckpointAttemptedAt: input.persistedAt,
-    updatedAt: input.persistedAt,
-  };
-  await input.sql`
+  return upsertLearnerProjection({
+    sql: input.sql,
+    studentId: input.studentId,
+    courseId: input.courseId,
+    progressPatch: {
+      lastLessonKey: input.lessonKey,
+      lastCheckpointAttemptNo: input.attemptNo,
+      lastCheckpointAttemptedAt: input.persistedAt,
+      updatedAt: input.persistedAt,
+    },
+    persistedAt: input.persistedAt,
+  });
+}
+
+async function upsertLearnerProjection(input: {
+  sql: LearningLoopSql;
+  studentId: string;
+  courseId: string;
+  progressPatch: Record<string, unknown>;
+  persistedAt: string;
+}) {
+  const rows = await input.sql`
     INSERT INTO uais_learner_profiles (
       user_id, course_id, mastery, preferences, progress,
       projection_version, last_event_at, updated_at
     )
     VALUES (
       ${input.studentId}, ${input.courseId}, '{}'::jsonb, '{}'::jsonb,
-      ${JSON.stringify(progress)}::text::jsonb, ${projectionVersion},
+      ${JSON.stringify(input.progressPatch)}::text::jsonb, 1,
       ${input.persistedAt}, ${input.persistedAt}
     )
     ON CONFLICT (user_id, course_id)
     DO UPDATE SET
-      progress = EXCLUDED.progress,
-      projection_version = EXCLUDED.projection_version,
+      progress =
+        COALESCE(uais_learner_profiles.progress, '{}'::jsonb) || EXCLUDED.progress,
+      projection_version =
+        COALESCE(uais_learner_profiles.projection_version, 0) + 1,
       last_event_at = EXCLUDED.last_event_at,
       updated_at = EXCLUDED.updated_at
+    RETURNING projection_version
   `;
+  const projectionVersion = readInteger(firstRow(rows)?.projection_version);
+  if (projectionVersion < 1) {
+    throw new LearningLoopStoreError(500, "learner-projection-write-failed");
+  }
   return projectionVersion;
 }
 
@@ -2406,16 +2415,28 @@ async function readIdempotentReceipt(input: {
   requestHash: string;
 }) {
   requireIdempotencyKey(input.key);
-  await input.sql`SELECT pg_advisory_xact_lock(hashtextextended(${input.key}, 0))`;
   const rows = await input.sql`
-    SELECT u.account AS actor_account, ir.scope, ir.request_hash, ir.response_receipt
-    FROM uais_idempotency_records ir
-    JOIN uais_users u ON u.id = ir.actor_user_id
-    WHERE ir.idempotency_key = ${input.key}
-    FOR UPDATE OF ir
+    WITH idempotency_lock AS MATERIALIZED (
+      SELECT pg_advisory_xact_lock(hashtextextended(${input.key}, 0))
+    ), locked_record AS MATERIALIZED (
+      SELECT
+        ir.idempotency_key, u.account AS actor_account, ir.scope,
+        ir.request_hash, ir.response_receipt
+      FROM uais_idempotency_records ir
+      JOIN uais_users u ON u.id = ir.actor_user_id
+      CROSS JOIN idempotency_lock
+      WHERE ir.idempotency_key = ${input.key}
+      FOR UPDATE OF ir
+    )
+    SELECT
+      locked_record.idempotency_key, locked_record.actor_account,
+      locked_record.scope, locked_record.request_hash,
+      locked_record.response_receipt
+    FROM idempotency_lock
+    LEFT JOIN locked_record ON true
   `;
   const row = firstRow(rows);
-  if (!row) return undefined;
+  if (!row || !readString(row.idempotency_key)) return undefined;
   if (
     readString(row.actor_account) !== input.actorAccount ||
     readString(row.scope) !== input.scope
