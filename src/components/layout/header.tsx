@@ -240,7 +240,7 @@ export function Header({
         <div className="flex shrink-0 items-center gap-2 text-[var(--foreground)]">
           <button
             type="button"
-            className="hidden h-10 items-center gap-2 rounded-full px-3 text-sm font-medium outline-none transition hover:bg-[var(--surface-soft)] focus-visible:ring-2 focus-visible:ring-[var(--accent)] lg:inline-flex"
+            className="hidden h-11 items-center gap-2 rounded-full px-3 text-sm font-medium outline-none transition hover:bg-[var(--surface-soft)] focus-visible:ring-2 focus-visible:ring-[var(--accent)] lg:inline-flex"
             aria-label={locale === "zh-CN" ? "日历" : "Calendar"}
           >
             <CalendarBlank size={19} weight="duotone" />
@@ -248,7 +248,7 @@ export function Header({
           </button>
           <button
             type="button"
-            className="hidden size-10 items-center justify-center rounded-full outline-none transition hover:bg-[var(--surface-soft)] focus-visible:ring-2 focus-visible:ring-[var(--accent)] md:inline-flex"
+            className="hidden size-11 items-center justify-center rounded-full outline-none transition hover:bg-[var(--surface-soft)] focus-visible:ring-2 focus-visible:ring-[var(--accent)] md:inline-flex"
             aria-label={locale === "zh-CN" ? "通知" : "Notifications"}
           >
             <Bell size={19} weight="duotone" />
@@ -256,7 +256,7 @@ export function Header({
           <button
             type="button"
             onClick={toggleLocale}
-            className="inline-flex h-10 items-center gap-2 whitespace-nowrap rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 text-sm font-medium text-[var(--foreground)] shadow-[0_8px_24px_var(--shadow)] outline-none transition hover:bg-[var(--surface-soft)] active:translate-y-px focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+            className="inline-flex h-11 min-w-11 items-center justify-center gap-2 whitespace-nowrap rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 text-sm font-medium text-[var(--foreground)] shadow-[0_8px_24px_var(--shadow)] outline-none transition hover:bg-[var(--surface-soft)] active:translate-y-px focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
             aria-label={t.controls.language}
           >
             <Translate size={18} weight="duotone" />
@@ -265,7 +265,7 @@ export function Header({
           <button
             type="button"
             onClick={toggleTheme}
-            className="inline-flex size-10 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--surface)] text-[var(--foreground)] shadow-[0_8px_24px_var(--shadow)] outline-none transition hover:bg-[var(--surface-soft)] active:translate-y-px focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+            className="inline-flex size-11 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--surface)] text-[var(--foreground)] shadow-[0_8px_24px_var(--shadow)] outline-none transition hover:bg-[var(--surface-soft)] active:translate-y-px focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
             aria-label={t.controls.theme}
           >
             {theme === "dark" ? (

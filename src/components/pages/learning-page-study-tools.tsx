@@ -69,7 +69,7 @@ export function StudyToolsPanel({
               type="button"
               aria-label={zh ? "关闭学习工具" : "Close study tools"}
               onClick={onClose}
-              className="grid size-9 shrink-0 place-items-center rounded-full border border-[var(--border)] bg-[var(--surface)] text-[var(--muted)] outline-none transition hover:border-[var(--accent-border)] hover:text-[var(--accent)] focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+              className="grid size-11 shrink-0 place-items-center rounded-full border border-[var(--border)] bg-[var(--surface)] text-[var(--muted)] outline-none transition hover:border-[var(--accent-border)] hover:text-[var(--accent)] focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
             >
               <X size={17} weight="bold" />
             </button>
@@ -126,6 +126,7 @@ export function StudyToolsPanel({
     </>
   );
 }
+
 
 function SlideNotesView({
   locale,
@@ -274,4 +275,3 @@ function SlideConceptsView({
     </section>
   );
 }
-

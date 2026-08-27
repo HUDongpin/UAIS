@@ -57,7 +57,7 @@ import { LangGraphTracePanel } from "./learning-page-trace-panel";
 import { LearningPracticePanel } from "./learning-practice-panel";
 
 const playbackJumpLinkClassName =
-  "inline-flex h-10 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 text-sm font-semibold text-[var(--foreground)] outline-none transition hover:border-[var(--accent-border)] hover:text-[var(--accent)] focus-visible:ring-2 focus-visible:ring-[var(--accent)]";
+  "inline-flex h-11 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 text-sm font-semibold text-[var(--foreground)] outline-none transition hover:border-[var(--accent-border)] hover:text-[var(--accent)] focus-visible:ring-2 focus-visible:ring-[var(--accent)]";
 
 type PrimaryCompanionView = "ai" | "subtitles" | "outline" | "practice";
 
@@ -568,7 +568,7 @@ export function LearningPage({ initialCourseId, initialClassId }: LearningPagePr
         ) : null}
         <Link
           href="/learning/chatroom"
-          className="ml-auto inline-flex h-8 items-center gap-1.5 rounded-full border border-[var(--accent-border)] bg-[var(--accent-soft)] px-3 text-xs font-semibold text-[var(--accent)] outline-none transition hover:bg-[var(--surface-soft)] active:translate-y-px focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+          className="ml-auto inline-flex h-11 items-center gap-1.5 rounded-full border border-[var(--accent-border)] bg-[var(--accent-soft)] px-3 text-xs font-semibold text-[var(--accent)] outline-none transition hover:bg-[var(--surface-soft)] active:translate-y-px focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
         >
           <ChatsCircle size={15} weight="duotone" aria-hidden="true" />
           {t.learning.openChatroom}
@@ -1107,7 +1107,7 @@ function LearningCompanionPanel({
                       setGuideError("");
                       guideInputRef.current?.focus();
                     }}
-                    className="w-fit rounded-lg border border-[var(--border)] bg-[var(--surface)] px-4 py-2 text-left text-sm font-medium text-[var(--foreground)] shadow-[0_4px_12px_var(--shadow)]"
+                    className="min-h-11 w-fit rounded-lg border border-[var(--border)] bg-[var(--surface)] px-4 py-2 text-left text-sm font-medium text-[var(--foreground)] shadow-[0_4px_12px_var(--shadow)]"
                   >
                     {prompt}
                   </button>
@@ -1196,13 +1196,13 @@ function LearningCompanionPanel({
                     setGuideError("");
                   }}
                   placeholder={locale === "zh-CN" ? "向智能助教提问..." : "Ask the AI assistant..."}
-                  className="h-10 min-w-0 flex-1 rounded-lg bg-[var(--surface-elevated)] px-3 text-sm outline-none placeholder:text-[var(--placeholder)] focus:ring-2 focus:ring-[var(--accent)]"
+                  className="h-11 min-w-0 flex-1 rounded-lg bg-[var(--surface-elevated)] px-3 text-sm outline-none placeholder:text-[var(--placeholder)] focus:ring-2 focus:ring-[var(--accent)]"
                 />
                 <button
                   type="submit"
                   disabled={pendingGuideAgentId !== null}
                   aria-busy={pendingGuideAgentId === "multi-agent"}
-                  className="grid size-10 place-items-center rounded-full bg-[var(--accent)] text-white outline-none transition hover:bg-[var(--accent-strong)] active:translate-y-px focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2"
+                  className="grid size-11 place-items-center rounded-full bg-[var(--accent)] text-white outline-none transition hover:bg-[var(--accent-strong)] active:translate-y-px focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2"
                   aria-label={locale === "zh-CN" ? "发送" : "Send"}
                 >
                   <PaperPlaneTilt size={18} weight="fill" />
@@ -1267,9 +1267,9 @@ function LearningCompanionPanel({
               <input
                 aria-label={locale === "zh-CN" ? "搜索当前页字幕" : "Search subtitles"}
                 placeholder={locale === "zh-CN" ? "搜索当前页字幕" : "Search subtitles"}
-                className="h-10 min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 text-sm outline-none placeholder:text-[var(--placeholder)] focus:ring-2 focus:ring-[var(--accent)]"
+                className="h-11 min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 text-sm outline-none placeholder:text-[var(--placeholder)] focus:ring-2 focus:ring-[var(--accent)]"
               />
-              <button type="button" className="grid size-10 place-items-center rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--accent)]" aria-label={locale === "zh-CN" ? "筛选字幕" : "Filter subtitles"}>
+              <button type="button" className="grid size-11 place-items-center rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--accent)]" aria-label={locale === "zh-CN" ? "筛选字幕" : "Filter subtitles"}>
                 <SlidersHorizontal size={18} weight="duotone" />
               </button>
             </div>

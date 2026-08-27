@@ -191,7 +191,7 @@ export function PptStage({
     const FullscreenIcon = isPptFullscreen ? CornersIn : CornersOut;
     const fullscreenButtonClassName = (placementClassName: string) =>
       [
-        "absolute z-10 grid size-10 place-items-center rounded-lg border outline-none transition active:translate-y-px focus-visible:ring-2",
+        "absolute z-10 grid size-11 place-items-center rounded-lg border outline-none transition active:translate-y-px focus-visible:ring-2",
         placementClassName,
         isPptFullscreen
           ? "border-white/30 bg-black/55 text-white shadow-[0_12px_28px_rgba(0,0,0,0.28)] backdrop-blur hover:bg-black/70 focus-visible:ring-white"
@@ -350,7 +350,7 @@ export function PptStage({
               <Link
                 href={signInHref}
                 data-uais-learning-ppt-sign-in="true"
-                className="inline-flex h-7 items-center gap-1 rounded-full bg-[var(--accent)] px-2.5 text-xs font-semibold text-white outline-none transition hover:bg-[var(--accent-strong)] focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]"
+                className="inline-flex h-11 items-center gap-1 rounded-full bg-[var(--accent)] px-2.5 text-xs font-semibold text-white outline-none transition hover:bg-[var(--accent-strong)] focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]"
               >
                 <SignIn size={13} weight="bold" aria-hidden="true" />
                 {copy[locale].auth.signIn}
@@ -359,7 +359,7 @@ export function PptStage({
             {publishedPlaybackError === "unavailable" && onRetryPublishedPlayback ? (
               <button
                 type="button"
-                className="inline-flex min-h-9 items-center rounded-full bg-[var(--accent)] px-3 text-xs font-semibold text-white outline-none transition hover:bg-[var(--accent-strong)] focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]"
+                className="inline-flex min-h-11 items-center rounded-full bg-[var(--accent)] px-3 text-xs font-semibold text-white outline-none transition hover:bg-[var(--accent-strong)] focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]"
                 onClick={onRetryPublishedPlayback}
               >
                 {locale === "zh-CN" ? "重新加载课件" : "Retry loading slides"}
@@ -555,7 +555,7 @@ function StudyActionBar({
             onClick={() => onStudyAction(action.action)}
             className={[
               "relative inline-flex min-w-0 items-center justify-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 text-sm font-semibold text-[var(--foreground)] outline-none transition hover:border-[var(--accent)] hover:text-[var(--accent)] focus-visible:ring-2 focus-visible:ring-[var(--accent)]",
-              compact ? "h-10" : "h-11",
+              "h-11",
             ].join(" ")}
           >
             <Icon size={17} weight="duotone" />

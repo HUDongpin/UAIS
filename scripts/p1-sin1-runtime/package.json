@@ -1,0 +1,12 @@
+{
+  "name": "uais-p1-sin1-runtime",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "dependencies": {
+    "@langchain/langgraph-checkpoint-postgres": "1.0.4",
+    "drizzle-orm": "0.45.2",
+    "postgres": "3.4.9",
+    "vitest": "4.1.9"
+  }
+}

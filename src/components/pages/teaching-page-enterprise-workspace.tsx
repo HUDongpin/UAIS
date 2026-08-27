@@ -209,7 +209,7 @@ export function EnterpriseWorkspace({
                     ? "在课程设置中复核分组建议"
                     : "Review group suggestions in course settings"
                 }
-                className="mt-4 inline-flex h-10 items-center rounded-full bg-[var(--accent)] px-4 text-sm font-semibold text-white outline-none transition hover:bg-[var(--accent-strong)] focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+                className="mt-4 inline-flex h-11 items-center rounded-full bg-[var(--accent)] px-4 text-sm font-semibold text-white outline-none transition hover:bg-[var(--accent-strong)] focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
                 onClick={onReviewGroupSuggestions}
               >
                 {locale === "zh-CN"

@@ -116,7 +116,7 @@ export function HeaderMobileMenu({
         aria-expanded={open}
         aria-label={open ? t.controls.menuClose : t.controls.menu}
         onClick={() => setOpen((current) => !current)}
-        className="inline-flex size-10 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--surface)] text-[var(--foreground)] shadow-[0_8px_24px_var(--shadow)] outline-none transition hover:bg-[var(--surface-soft)] active:translate-y-px focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+        className="inline-flex size-11 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--surface)] text-[var(--foreground)] shadow-[0_8px_24px_var(--shadow)] outline-none transition hover:bg-[var(--surface-soft)] active:translate-y-px focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
       >
         {open ? (
           <X size={19} weight="bold" />
@@ -160,7 +160,7 @@ export function HeaderMobileMenu({
                 type="button"
                 aria-label={t.controls.menuClose}
                 onClick={closeMenu}
-                className="grid size-9 shrink-0 place-items-center rounded-full border border-[var(--border)] bg-[var(--surface-elevated)] text-[var(--foreground)] outline-none transition hover:bg-[var(--surface-soft)] focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+                className="grid size-11 shrink-0 place-items-center rounded-full border border-[var(--border)] bg-[var(--surface-elevated)] text-[var(--foreground)] outline-none transition hover:bg-[var(--surface-soft)] focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
               >
                 <X size={17} weight="bold" />
               </button>

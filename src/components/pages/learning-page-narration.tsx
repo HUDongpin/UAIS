@@ -344,7 +344,7 @@ export function NarrationDock({
                     step={0.1}
                     value={narrationCurrentTime}
                     onChange={handleNarrationProgressChange}
-                    className="h-2 w-full cursor-pointer accent-[var(--accent)]"
+                    className="h-11 w-full cursor-pointer accent-[var(--accent)]"
                   />
                 </div>
                 <button
@@ -352,7 +352,7 @@ export function NarrationDock({
                   aria-label={muteLabel}
                   title={muteLabel}
                   onClick={handleNarrationMuteToggle}
-                  className="grid size-10 place-items-center rounded-full text-[var(--foreground)] outline-none transition hover:bg-[var(--surface)] focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+                  className="grid size-11 place-items-center rounded-full text-[var(--foreground)] outline-none transition hover:bg-[var(--surface)] focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
                 >
                   {isNarrationMuted ? (
                     <SpeakerSlash size={23} weight="bold" />
@@ -382,14 +382,14 @@ export function NarrationDock({
 
         <div
           data-uais-learning-segment-controls="compact"
-          className="grid min-w-0 grid-cols-[36px_36px_1px_72px_minmax(140px,1fr)] items-center justify-end gap-2 sm:pl-4"
+          className="grid min-w-0 grid-cols-[44px_44px_1px_72px_minmax(140px,1fr)] items-center justify-end gap-2 sm:pl-4"
         >
           <button
             type="button"
             onClick={onPreviousPublishedSlide}
             disabled={!canShowPrevious}
             className={[
-              "grid size-9 place-items-center rounded-full border outline-none transition focus-visible:ring-2 focus-visible:ring-[var(--accent)]",
+              "grid size-11 place-items-center rounded-full border outline-none transition focus-visible:ring-2 focus-visible:ring-[var(--accent)]",
               canShowPrevious
                 ? "border-[var(--border)] bg-[var(--surface)] text-[var(--foreground)] hover:border-[var(--accent)] hover:text-[var(--accent)]"
                 : "cursor-not-allowed border-[var(--border)] bg-[var(--surface-elevated)] text-[var(--placeholder)]",
@@ -403,7 +403,7 @@ export function NarrationDock({
             onClick={onNextPublishedSlide}
             disabled={!canShowNext}
             className={[
-              "grid size-9 place-items-center rounded-full border outline-none transition focus-visible:ring-2 focus-visible:ring-[var(--accent)]",
+              "grid size-11 place-items-center rounded-full border outline-none transition focus-visible:ring-2 focus-visible:ring-[var(--accent)]",
               canShowNext
                 ? "border-[var(--border)] bg-[var(--surface)] text-[var(--foreground)] hover:border-[var(--accent)] hover:text-[var(--accent)]"
                 : "cursor-not-allowed border-[var(--border)] bg-[var(--surface-elevated)] text-[var(--placeholder)]",
@@ -414,7 +414,7 @@ export function NarrationDock({
           </button>
           <span className="h-9 w-px bg-[var(--border)]" />
           <button
-            className="inline-flex h-9 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2 text-sm font-semibold text-[var(--foreground)] outline-none transition hover:border-[var(--accent)] hover:text-[var(--accent)] focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+            className="inline-flex h-11 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2 text-sm font-semibold text-[var(--foreground)] outline-none transition hover:border-[var(--accent)] hover:text-[var(--accent)] focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
             type="button"
             onClick={handleNarrationSpeedToggle}
             aria-label={narrationSpeedTitle}
@@ -430,7 +430,7 @@ export function NarrationDock({
             title={locale === "zh-CN" ? "学习工具" : "Study Tools"}
             onClick={onOpenStudyTools}
             className={[
-              "inline-flex h-9 w-full min-w-0 items-center justify-between gap-2 rounded-lg border px-3 text-left text-sm font-semibold outline-none transition focus-visible:ring-2 focus-visible:ring-[var(--accent)]",
+              "inline-flex h-11 w-full min-w-0 items-center justify-between gap-2 rounded-lg border px-3 text-left text-sm font-semibold outline-none transition focus-visible:ring-2 focus-visible:ring-[var(--accent)]",
               studyToolsOpen
                 ? "border-[var(--accent-border)] bg-[var(--accent-soft)] text-[var(--accent)]"
                 : "border-[var(--border)] bg-[var(--surface)] text-[var(--muted)] hover:border-[var(--accent-border)] hover:text-[var(--accent)]",

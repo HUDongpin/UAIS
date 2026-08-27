@@ -335,7 +335,7 @@ export function CourseSettingsWorkspace({
                   </Link>
                   <Link
                     href={`/teaching/courses/${encodeURIComponent(course.id)}/activities`}
-                    className="inline-flex h-10 items-center gap-2 rounded-full border border-[var(--accent)] bg-[var(--surface)] px-4 text-sm font-semibold text-[var(--accent)] outline-none transition hover:bg-[var(--accent-soft)] focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+                    className="inline-flex h-11 items-center gap-2 rounded-full border border-[var(--accent)] bg-[var(--surface)] px-4 text-sm font-semibold text-[var(--accent)] outline-none transition hover:bg-[var(--accent-soft)] focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
                   >
                     {locale === "zh-CN" ? "学习任务" : "Learning Activities"}
                   </Link>

@@ -162,7 +162,7 @@ function SignInHandoffLink({ label }: { label: string }) {
     <Link
       href={chatroomLoginHref}
       data-uais-chatroom-sign-in-link="true"
-      className="ml-1.5 inline-flex h-6 items-center gap-1 rounded-full border border-[var(--accent-border)] bg-[var(--accent-soft)] px-2 text-xs font-semibold text-[var(--accent)] outline-none transition hover:bg-[var(--surface-soft)] focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+      className="ml-1.5 inline-flex h-11 items-center gap-1 rounded-full border border-[var(--accent-border)] bg-[var(--accent-soft)] px-2 text-xs font-semibold text-[var(--accent)] outline-none transition hover:bg-[var(--surface-soft)] focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
     >
       <SignIn size={13} weight="bold" aria-hidden="true" />
       {label}
@@ -359,7 +359,7 @@ export function HumanAiChatroom({ summary }: HumanAiChatroomProps) {
                 type="button"
                 data-uais-chatroom-jump-to-latest="true"
                 onClick={scrollThreadToBottom}
-                className="absolute -top-11 left-1/2 z-10 inline-flex h-9 -translate-x-1/2 items-center gap-1.5 rounded-full bg-[var(--accent)] px-3 text-xs font-semibold text-white shadow-[0_10px_28px_var(--shadow-accent)] outline-none transition hover:bg-[var(--accent-strong)] active:translate-y-px focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+                className="absolute -top-11 left-1/2 z-10 inline-flex h-11 -translate-x-1/2 items-center gap-1.5 rounded-full bg-[var(--accent)] px-3 text-xs font-semibold text-white shadow-[0_10px_28px_var(--shadow-accent)] outline-none transition hover:bg-[var(--accent-strong)] active:translate-y-px focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
               >
                 <ArrowDown size={14} weight="bold" aria-hidden="true" />
                 {t.learning.chatroomJumpToLatest}
@@ -407,7 +407,7 @@ function RoomHeader({
       <div className="min-w-0">
         <Link
           href="/learning"
-          className="inline-flex h-8 items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--surface-elevated)] px-3 text-xs font-semibold text-[var(--foreground)] outline-none transition hover:bg-[var(--surface-soft)] active:translate-y-px focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+          className="inline-flex h-11 items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--surface-elevated)] px-3 text-xs font-semibold text-[var(--foreground)] outline-none transition hover:bg-[var(--surface-soft)] active:translate-y-px focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
         >
           <ArrowLeft size={15} weight="bold" aria-hidden="true" />
           {t.learning.backToLearning}
@@ -458,7 +458,7 @@ function RoomHeader({
             type="button"
             onClick={room.handleExport}
             title={t.learning.exportPrintHint}
-            className="inline-flex h-10 items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface-elevated)] px-4 text-sm font-semibold text-[var(--foreground)] outline-none transition hover:bg-[var(--surface-soft)] active:translate-y-px focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+            className="inline-flex h-11 items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface-elevated)] px-4 text-sm font-semibold text-[var(--foreground)] outline-none transition hover:bg-[var(--surface-soft)] active:translate-y-px focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
           >
             <FilePdf size={17} weight="duotone" aria-hidden="true" />
             {t.learning.exportPdf}
@@ -468,7 +468,7 @@ function RoomHeader({
             onClick={() => {
               void room.handleShare();
             }}
-            className="inline-flex h-10 items-center gap-2 rounded-full bg-[var(--accent)] px-4 text-sm font-semibold text-white outline-none transition hover:bg-[var(--accent-strong)] active:translate-y-px focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]"
+            className="inline-flex h-11 items-center gap-2 rounded-full bg-[var(--accent)] px-4 text-sm font-semibold text-white outline-none transition hover:bg-[var(--accent-strong)] active:translate-y-px focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]"
           >
             <LinkSimple size={17} weight="bold" aria-hidden="true" />
             {t.learning.shareLink}
@@ -547,7 +547,7 @@ function ShareRevokeControl({ room }: { room: LearningChatroomController }) {
         type="button"
         data-uais-chatroom-share-revoke="idle"
         onClick={room.armShareRevoke}
-        className="inline-flex h-8 items-center gap-1.5 rounded-full border border-rose-200 bg-rose-50 px-3 text-xs font-semibold text-rose-700 outline-none transition hover:bg-rose-100 focus-visible:ring-2 focus-visible:ring-rose-400 dark:border-rose-900 dark:bg-rose-950 dark:text-rose-200"
+        className="inline-flex h-11 items-center gap-1.5 rounded-full border border-rose-200 bg-rose-50 px-3 text-xs font-semibold text-rose-700 outline-none transition hover:bg-rose-100 focus-visible:ring-2 focus-visible:ring-rose-400 dark:border-rose-900 dark:bg-rose-950 dark:text-rose-200"
       >
         <Prohibit size={14} weight="bold" aria-hidden="true" />
         {t.learning.shareRevoke}
@@ -569,7 +569,7 @@ function ShareRevokeControl({ room }: { room: LearningChatroomController }) {
           onClick={() => {
             void room.confirmShareRevoke();
           }}
-          className="inline-flex h-8 items-center rounded-full bg-rose-600 px-3 text-xs font-semibold text-white outline-none transition hover:bg-rose-700 focus-visible:ring-2 focus-visible:ring-rose-400 disabled:cursor-not-allowed disabled:opacity-60"
+          className="inline-flex h-11 items-center rounded-full bg-rose-600 px-3 text-xs font-semibold text-white outline-none transition hover:bg-rose-700 focus-visible:ring-2 focus-visible:ring-rose-400 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {t.learning.shareRevokeConfirm}
         </button>
@@ -577,7 +577,7 @@ function ShareRevokeControl({ room }: { room: LearningChatroomController }) {
           type="button"
           data-uais-chatroom-share-revoke-cancel="true"
           onClick={room.cancelShareRevoke}
-          className="inline-flex h-8 items-center rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 text-xs font-semibold text-[var(--foreground)] outline-none transition hover:bg-[var(--surface-soft)] focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+          className="inline-flex h-11 items-center rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 text-xs font-semibold text-[var(--foreground)] outline-none transition hover:bg-[var(--surface-soft)] focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
         >
           {t.learning.shareRevokeCancel}
         </button>
@@ -600,7 +600,7 @@ function FreezeToggle({ room }: { room: LearningChatroomController }) {
       disabled={room.moderation.pending}
       data-uais-chatroom-freeze-toggle={frozen ? "frozen" : "open"}
       aria-pressed={frozen}
-      className="inline-flex h-10 items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface-elevated)] px-4 text-sm font-semibold text-[var(--foreground)] outline-none transition hover:bg-[var(--surface-soft)] active:translate-y-px focus-visible:ring-2 focus-visible:ring-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-60"
+      className="inline-flex h-11 items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface-elevated)] px-4 text-sm font-semibold text-[var(--foreground)] outline-none transition hover:bg-[var(--surface-soft)] active:translate-y-px focus-visible:ring-2 focus-visible:ring-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-60"
     >
       {frozen ? (
         <LockOpen size={17} weight="duotone" aria-hidden="true" />
@@ -761,7 +761,7 @@ function RosterPanel({
         data-uais-chatroom-roster-toggle={expanded ? "expanded" : "collapsed"}
         aria-expanded={expanded}
         onClick={() => setExpanded((current) => !current)}
-        className="mt-3 flex h-9 w-full items-center justify-between gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] px-3 text-xs font-semibold text-[var(--foreground)] outline-none transition hover:bg-[var(--surface-soft)] focus-visible:ring-2 focus-visible:ring-[var(--accent)] xl:hidden"
+        className="mt-3 flex h-11 w-full items-center justify-between gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] px-3 text-xs font-semibold text-[var(--foreground)] outline-none transition hover:bg-[var(--surface-soft)] focus-visible:ring-2 focus-visible:ring-[var(--accent)] xl:hidden"
       >
         {expanded ? t.learning.groupRosterCollapse : t.learning.groupRosterExpand}
         <CaretDown

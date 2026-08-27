@@ -116,7 +116,7 @@ export function InlineWorkspaceStatus({
                   <div className="mt-3 flex flex-wrap items-center gap-2">
                     <button
                       type="button"
-                      className="inline-flex h-9 items-center gap-2 rounded-full border border-[var(--accent-border)] bg-[var(--surface)] px-3 text-xs font-semibold text-[var(--accent)] outline-none transition hover:bg-[var(--accent-soft)] focus-visible:ring-2 focus-visible:ring-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-60"
+                      className="inline-flex h-11 items-center gap-2 rounded-full border border-[var(--accent-border)] bg-[var(--surface)] px-3 text-xs font-semibold text-[var(--accent)] outline-none transition hover:bg-[var(--accent-soft)] focus-visible:ring-2 focus-visible:ring-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-60"
                       disabled={rollbackStatus?.status === "pending" || rollbackStatus?.status === "rolled-back"}
                       onClick={() =>
                         runInlineWorkspaceRollback({
@@ -188,7 +188,7 @@ export function InlineWorkspaceStatus({
                   <div className="mt-3 flex flex-wrap items-center gap-2">
                     <button
                       type="button"
-                      className="inline-flex h-9 items-center gap-2 rounded-full border border-[var(--accent-border)] bg-[var(--surface)] px-3 text-xs font-semibold text-[var(--accent)] outline-none transition hover:bg-[var(--accent-soft)] focus-visible:ring-2 focus-visible:ring-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-60"
+                      className="inline-flex h-11 items-center gap-2 rounded-full border border-[var(--accent-border)] bg-[var(--surface)] px-3 text-xs font-semibold text-[var(--accent)] outline-none transition hover:bg-[var(--accent-soft)] focus-visible:ring-2 focus-visible:ring-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-60"
                       disabled={alertNotificationStatus?.status === "pending"}
                       onClick={() =>
                         queueInlineWorkspaceAuditAlertNotifications(

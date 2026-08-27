@@ -219,7 +219,7 @@ export function LearningGroupManager({
               ? `管理${courseTitle}的小组`
               : `Manage groups for ${courseTitle}`
           }
-          className="inline-flex h-9 items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface)] px-4 text-sm font-semibold text-[var(--foreground)] outline-none transition hover:bg-[var(--surface-soft)] active:translate-y-px focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+          className="inline-flex h-11 items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface)] px-4 text-sm font-semibold text-[var(--foreground)] outline-none transition hover:bg-[var(--surface-soft)] active:translate-y-px focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
           onClick={onToggle}
         >
           {isOpen ? t.groupHide : t.groupManage}
@@ -278,7 +278,7 @@ export function LearningGroupManager({
                         ? `复核并创建${suggestion.groupName}`
                         : `Review and create ${suggestion.groupName}`
                   }
-                  className="inline-flex h-9 items-center gap-2 rounded-full border border-[var(--accent-border)] bg-[var(--surface)] px-4 text-sm font-semibold text-[var(--accent)] outline-none transition hover:bg-[var(--surface-soft)] focus-visible:ring-2 focus-visible:ring-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-60"
+                  className="inline-flex h-11 items-center gap-2 rounded-full border border-[var(--accent-border)] bg-[var(--surface)] px-4 text-sm font-semibold text-[var(--accent)] outline-none transition hover:bg-[var(--surface-soft)] focus-visible:ring-2 focus-visible:ring-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-60"
                   onClick={() => setDialogState({ mode: "create", suggestion })}
                 >
                   <PencilSimple size={16} weight="bold" />
@@ -309,7 +309,7 @@ export function LearningGroupManager({
                 ? `为${courseTitle}新建小组`
                 : `New group for ${courseTitle}`
             }
-            className="inline-flex h-10 items-center gap-2 rounded-full bg-[var(--accent)] px-4 text-sm font-semibold text-white outline-none transition hover:bg-[var(--accent-strong)] active:translate-y-px focus-visible:ring-2 focus-visible:ring-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-60"
+            className="inline-flex h-11 items-center gap-2 rounded-full bg-[var(--accent)] px-4 text-sm font-semibold text-white outline-none transition hover:bg-[var(--accent-strong)] active:translate-y-px focus-visible:ring-2 focus-visible:ring-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-60"
             onClick={() => setDialogState({ mode: "create" })}
           >
             <Plus size={17} weight="bold" />
@@ -343,7 +343,7 @@ export function LearningGroupManager({
                   min={learningGroupMinMembers}
                   max={learningGroupMaxMembers}
                   value={autoSplitSize}
-                  className="mt-2 h-10 w-28 rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] px-3 text-sm font-medium text-[var(--foreground)] outline-none transition focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent)]/20"
+                  className="mt-2 h-11 w-28 rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] px-3 text-sm font-medium text-[var(--foreground)] outline-none transition focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent)]/20"
                   onChange={(event) => setAutoSplitSize(event.target.value)}
                 />
               </div>
@@ -359,7 +359,7 @@ export function LearningGroupManager({
                     ? `为${courseTitle}自动分组`
                     : `Auto-split ${courseTitle} into groups`
                 }
-                className="inline-flex h-10 items-center gap-2 rounded-full border border-[var(--accent-border)] bg-[var(--accent-soft)] px-4 text-sm font-semibold text-[var(--accent)] outline-none transition hover:bg-[var(--surface-soft)] active:translate-y-px focus-visible:ring-2 focus-visible:ring-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-60"
+                className="inline-flex h-11 items-center gap-2 rounded-full border border-[var(--accent-border)] bg-[var(--accent-soft)] px-4 text-sm font-semibold text-[var(--accent)] outline-none transition hover:bg-[var(--surface-soft)] active:translate-y-px focus-visible:ring-2 focus-visible:ring-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-60"
                 onClick={() => void runAutoSplit()}
               >
                 <UsersThree size={17} weight="bold" />
@@ -402,7 +402,7 @@ export function LearningGroupManager({
                             ? `进入${group.groupName}聊天室`
                             : `Open the ${group.groupName} chatroom`
                         }
-                        className="inline-flex h-9 items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface-soft)] px-3 text-sm font-semibold text-[var(--foreground)] outline-none transition hover:bg-[var(--surface-elevated)] focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+                        className="inline-flex h-11 items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface-soft)] px-3 text-sm font-semibold text-[var(--foreground)] outline-none transition hover:bg-[var(--surface-elevated)] focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
                       >
                         <Eye size={16} weight="bold" />
                         {t.groupObserve}
@@ -414,7 +414,7 @@ export function LearningGroupManager({
                             ? `编辑${group.groupName}`
                             : `Edit ${group.groupName}`
                         }
-                        className="inline-flex h-9 items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface-soft)] px-3 text-sm font-semibold text-[var(--foreground)] outline-none transition hover:bg-[var(--surface-elevated)] focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+                        className="inline-flex h-11 items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface-soft)] px-3 text-sm font-semibold text-[var(--foreground)] outline-none transition hover:bg-[var(--surface-elevated)] focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
                         onClick={() => setDialogState({ mode: "edit", group })}
                       >
                         <PencilSimple size={16} weight="bold" />
@@ -427,7 +427,7 @@ export function LearningGroupManager({
                             ? `删除${group.groupName}`
                             : `Delete ${group.groupName}`
                         }
-                        className="inline-flex h-9 items-center gap-2 rounded-full border border-rose-200 bg-rose-50 px-3 text-sm font-semibold text-rose-700 outline-none transition hover:bg-rose-100 focus-visible:ring-2 focus-visible:ring-rose-400 dark:border-rose-900 dark:bg-rose-950 dark:text-rose-200"
+                        className="inline-flex h-11 items-center gap-2 rounded-full border border-rose-200 bg-rose-50 px-3 text-sm font-semibold text-rose-700 outline-none transition hover:bg-rose-100 focus-visible:ring-2 focus-visible:ring-rose-400 dark:border-rose-900 dark:bg-rose-950 dark:text-rose-200"
                         onClick={() => {
                           setDeleteError(undefined);
                           setPendingDeleteGroupId(group.groupId);
@@ -460,14 +460,14 @@ export function LearningGroupManager({
                               ? `确认删除${group.groupName}`
                               : `Confirm deleting ${group.groupName}`
                           }
-                          className="inline-flex h-9 items-center rounded-full bg-rose-600 px-4 text-sm font-semibold text-white outline-none transition hover:bg-rose-700 focus-visible:ring-2 focus-visible:ring-rose-400"
+                          className="inline-flex h-11 items-center rounded-full bg-rose-600 px-4 text-sm font-semibold text-white outline-none transition hover:bg-rose-700 focus-visible:ring-2 focus-visible:ring-rose-400"
                           onClick={() => void confirmDeleteGroup(group.groupId)}
                         >
                           {t.groupDeleteConfirm}
                         </button>
                         <button
                           type="button"
-                          className="inline-flex h-9 items-center rounded-full border border-[var(--border)] bg-[var(--surface)] px-4 text-sm font-semibold text-[var(--foreground)] outline-none transition hover:bg-[var(--surface-soft)] focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+                          className="inline-flex h-11 items-center rounded-full border border-[var(--border)] bg-[var(--surface)] px-4 text-sm font-semibold text-[var(--foreground)] outline-none transition hover:bg-[var(--surface-soft)] focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
                           onClick={() => {
                             setDeleteError(undefined);
                             setPendingDeleteGroupId(undefined);
@@ -688,7 +688,7 @@ export function LearningGroupDialog({
               locale === "zh-CN" ? "关闭小组弹窗" : "Close the group dialog"
             }
             disabled={isSubmitting}
-            className="inline-flex size-10 items-center justify-center rounded-full text-[var(--muted)] outline-none transition hover:bg-[var(--surface-soft)] focus-visible:ring-2 focus-visible:ring-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-55"
+            className="inline-flex size-11 items-center justify-center rounded-full text-[var(--muted)] outline-none transition hover:bg-[var(--surface-soft)] focus-visible:ring-2 focus-visible:ring-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-55"
             onClick={onCancel}
           >
             <X size={26} weight="bold" />
@@ -760,7 +760,7 @@ export function LearningGroupDialog({
                 value={memberFilter}
                 aria-label={t.groupMemberFilterLabel}
                 placeholder={t.groupMemberFilterPlaceholder}
-                className="h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] px-3 text-sm font-medium text-[var(--foreground)] outline-none transition focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent)]/20"
+                className="h-11 w-full rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] px-3 text-sm font-medium text-[var(--foreground)] outline-none transition focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent)]/20"
                 onChange={(event) => setMemberFilter(event.target.value)}
               />
             </div>

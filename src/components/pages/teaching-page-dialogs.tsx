@@ -240,7 +240,7 @@ export function CourseClassManager({
                       </span>
                     </span>
                   </div>
-                  <div className="flex shrink-0 flex-wrap items-center gap-4">
+                  <div className="flex min-w-0 flex-wrap items-center gap-4 sm:justify-end">
                     <Link
                       href={createTeachingClassActionHref("students", classItem, "enter-class")}
                       aria-label={
@@ -887,7 +887,7 @@ export function NewCourseDialog({
                 <button
                   type="button"
                   disabled={!isReady || isGeneratingCover}
-                  className="inline-flex min-h-10 items-center gap-2 text-base font-semibold italic text-[#6777ff] outline-none transition hover:text-[#4058f2] focus-visible:ring-2 focus-visible:ring-[#2f7cff] disabled:cursor-not-allowed disabled:text-[#aab3c2]"
+                  className="inline-flex min-h-11 items-center gap-2 text-base font-semibold italic text-[#6777ff] outline-none transition hover:text-[#4058f2] focus-visible:ring-2 focus-visible:ring-[#2f7cff] disabled:cursor-not-allowed disabled:text-[#aab3c2]"
                   onClick={generateCourseCover}
                 >
                   <MagicWand size={22} weight="fill" />

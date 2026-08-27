@@ -1558,7 +1558,7 @@ describe("LearningPage", () => {
     expect(progressRail?.className).toContain("max-w-[520px]");
     expect(timeReadout?.className).toContain("min-w-[92px]");
     expect(segmentControls?.className).toContain(
-      "grid-cols-[36px_36px_1px_72px_minmax(140px,1fr)]",
+      "grid-cols-[44px_44px_1px_72px_minmax(140px,1fr)]",
     );
     expect(segmentControls?.className).not.toContain("grid-rows-[38px_30px]");
     expect(segmentControls?.className).toContain("sm:pl-4");

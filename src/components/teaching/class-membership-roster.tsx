@@ -137,7 +137,7 @@ export function ClassMembershipRoster({
             value={nameFilter}
             aria-label={t.rosterFilterLabel}
             placeholder={t.rosterFilterPlaceholder}
-            className="h-9 w-56 max-w-full rounded-full border border-[var(--border)] bg-[var(--surface-elevated)] pl-9 pr-3 text-sm font-medium text-[var(--foreground)] outline-none transition focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent)]/20"
+            className="h-11 w-56 max-w-full rounded-full border border-[var(--border)] bg-[var(--surface-elevated)] pl-9 pr-3 text-sm font-medium text-[var(--foreground)] outline-none transition focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent)]/20"
             onChange={(event) => setNameFilter(event.target.value)}
           />
         </div>
@@ -166,7 +166,7 @@ export function ClassMembershipRoster({
                   ? `批准${classItem.name}的全部 ${pendingMemberships.length} 条待审批申请`
                   : `Approve all ${pendingMemberships.length} pending requests for ${classItem.name}`
               }
-              className="inline-flex h-9 items-center gap-2 rounded-full bg-[var(--accent)] px-4 text-sm font-semibold text-white outline-none transition hover:bg-[var(--accent-strong)] active:translate-y-px focus-visible:ring-2 focus-visible:ring-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex h-11 items-center gap-2 rounded-full bg-[var(--accent)] px-4 text-sm font-semibold text-white outline-none transition hover:bg-[var(--accent-strong)] active:translate-y-px focus-visible:ring-2 focus-visible:ring-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-60"
               onClick={() => setIsConfirmingApproveAll(true)}
             >
               <Check size={16} weight="bold" />
@@ -189,7 +189,7 @@ export function ClassMembershipRoster({
             <div className="mt-3 flex flex-wrap gap-3">
               <button
                 type="button"
-                className="inline-flex h-9 items-center rounded-full bg-[var(--accent)] px-4 text-sm font-semibold text-white outline-none transition hover:bg-[var(--accent-strong)] focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+                className="inline-flex h-11 items-center rounded-full bg-[var(--accent)] px-4 text-sm font-semibold text-white outline-none transition hover:bg-[var(--accent-strong)] focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
                 onClick={() => {
                   setIsConfirmingApproveAll(false);
                   onApproveAllPendingMemberships(classItem, pendingMemberships);
@@ -199,7 +199,7 @@ export function ClassMembershipRoster({
               </button>
               <button
                 type="button"
-                className="inline-flex h-9 items-center rounded-full border border-[var(--border)] bg-[var(--surface)] px-4 text-sm font-semibold text-[var(--foreground)] outline-none transition hover:bg-[var(--surface-soft)] focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+                className="inline-flex h-11 items-center rounded-full border border-[var(--border)] bg-[var(--surface)] px-4 text-sm font-semibold text-[var(--foreground)] outline-none transition hover:bg-[var(--surface-soft)] focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
                 onClick={() => setIsConfirmingApproveAll(false)}
               >
                 {t.rosterCancel}
@@ -243,7 +243,7 @@ export function ClassMembershipRoster({
                         : `Approve ${membership.studentDisplayName} for ${classItem.name}`
                     }
                     disabled={pendingMembershipIds.includes(membership.id)}
-                    className="inline-flex h-9 items-center justify-center rounded-full bg-[#2f7cff] px-4 text-sm font-semibold text-white outline-none transition hover:bg-[#2364d9] focus-visible:ring-2 focus-visible:ring-[#2f7cff] disabled:cursor-not-allowed disabled:opacity-70"
+                    className="inline-flex h-11 items-center justify-center rounded-full bg-[#2f7cff] px-4 text-sm font-semibold text-white outline-none transition hover:bg-[#2364d9] focus-visible:ring-2 focus-visible:ring-[#2f7cff] disabled:cursor-not-allowed disabled:opacity-70"
                     onClick={() => onApproveMembership(classItem, membership)}
                   >
                     {t.rosterApprove}
@@ -256,7 +256,7 @@ export function ClassMembershipRoster({
                         : `Reject ${membership.studentDisplayName} for ${classItem.name}`
                     }
                     disabled={pendingMembershipIds.includes(membership.id)}
-                    className="inline-flex h-9 items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-4 text-sm font-semibold text-rose-700 outline-none transition hover:bg-rose-100 focus-visible:ring-2 focus-visible:ring-rose-400 disabled:cursor-not-allowed disabled:opacity-70 dark:border-rose-900 dark:bg-rose-950 dark:text-rose-200"
+                    className="inline-flex h-11 items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-4 text-sm font-semibold text-rose-700 outline-none transition hover:bg-rose-100 focus-visible:ring-2 focus-visible:ring-rose-400 disabled:cursor-not-allowed disabled:opacity-70 dark:border-rose-900 dark:bg-rose-950 dark:text-rose-200"
                     onClick={() => onRejectMembership(classItem, membership)}
                   >
                     <X size={15} weight="bold" />
@@ -304,7 +304,7 @@ export function ClassMembershipRoster({
                           ? `确认将${membership.studentDisplayName}移出${classItem.name}`
                           : `Confirm removing ${membership.studentDisplayName} from ${classItem.name}`
                       }
-                      className="inline-flex h-9 items-center rounded-full bg-rose-600 px-4 text-sm font-semibold text-white outline-none transition hover:bg-rose-700 focus-visible:ring-2 focus-visible:ring-rose-400"
+                      className="inline-flex h-11 items-center rounded-full bg-rose-600 px-4 text-sm font-semibold text-white outline-none transition hover:bg-rose-700 focus-visible:ring-2 focus-visible:ring-rose-400"
                       onClick={() => {
                         setPendingRemovalMembershipId(undefined);
                         onRemoveMembership(classItem, membership);
@@ -314,7 +314,7 @@ export function ClassMembershipRoster({
                     </button>
                     <button
                       type="button"
-                      className="inline-flex h-9 items-center rounded-full border border-[var(--border)] bg-[var(--surface)] px-4 text-sm font-semibold text-[var(--foreground)] outline-none transition hover:bg-[var(--surface-soft)] focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+                      className="inline-flex h-11 items-center rounded-full border border-[var(--border)] bg-[var(--surface)] px-4 text-sm font-semibold text-[var(--foreground)] outline-none transition hover:bg-[var(--surface-soft)] focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
                       onClick={() => setPendingRemovalMembershipId(undefined)}
                     >
                       {t.rosterCancel}
@@ -329,7 +329,7 @@ export function ClassMembershipRoster({
                         : `Remove ${membership.studentDisplayName} from ${classItem.name}`
                     }
                     disabled={pendingMembershipIds.includes(membership.id)}
-                    className="inline-flex h-9 shrink-0 items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-4 text-sm font-semibold text-rose-700 outline-none transition hover:bg-rose-100 focus-visible:ring-2 focus-visible:ring-rose-400 disabled:cursor-not-allowed disabled:opacity-70 dark:border-rose-900 dark:bg-rose-950 dark:text-rose-200"
+                    className="inline-flex h-11 shrink-0 items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-4 text-sm font-semibold text-rose-700 outline-none transition hover:bg-rose-100 focus-visible:ring-2 focus-visible:ring-rose-400 disabled:cursor-not-allowed disabled:opacity-70 dark:border-rose-900 dark:bg-rose-950 dark:text-rose-200"
                     onClick={() => setPendingRemovalMembershipId(membership.id)}
                   >
                     <UserMinus size={15} weight="bold" />
