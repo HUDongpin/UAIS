@@ -34,13 +34,22 @@ const projectId = "prj_dcWZvGLSYNtSWN3lnTyfZPyWKgQL";
 const authorityKeyId = "s22-soak-authority-test-1";
 const p1RunId = "p1-live-all-gates-01";
 const p2RunId = "p2-live-all-gates-01";
+const p2LoadAuthority = {
+  runnerSha256: digestText("accepted-p2-load-runner-v7"),
+  validationReceiptSha256: digestText("accepted-p2-load-runner-v7-validation"),
+  dependencyAttestationSha256: digestText("accepted-p2-load-dependencies"),
+  sourceEndpointFingerprintSha256:
+    "67276f107dc12185c7d7e789ceb1213c1ea35d84194cc36d1a6d11ea67587150",
+  neonProjectId: "delicate-truth-41768638",
+  sourceBranch: "main",
+} as const;
 const rumCohortId = "p2-inp-real-adults-01";
 const rumRunId = rumCohortId;
 const manualExecutionId = "manual-a11y-all-gates-01";
 const receiptSchemas = [
   "uais.staging-health.v1",
   "uais.p1-load.v1",
-  "uais.p2-load.v1",
+  "uais.p2-load.v2",
   "uais.rum-approval.v1",
   "uais.manual-accessibility.v1",
   "uais.dependency-review.v1",
@@ -49,7 +58,7 @@ const receiptSchemas = [
 const sourceAuthorityRoles: Record<(typeof receiptSchemas)[number], string> = {
   "uais.staging-health.v1": "health-probe-issuer",
   "uais.p1-load.v1": "p1-load-issuer",
-  "uais.p2-load.v1": "p2-load-issuer",
+  "uais.p2-load.v2": "p2-load-issuer",
   "uais.rum-approval.v1": "rum-independent-approver",
   "uais.manual-accessibility.v1": "manual-a11y-reviewer",
   "uais.dependency-review.v1": "dependency-audit-reviewer",
@@ -230,6 +239,30 @@ describe("P2 staging soak admission gate", () => {
     });
   });
 
+  it("rejects an owner-pinned candidate whose deployable working tree is dirty", () => {
+    const inspectCommittedCandidateSource = (
+      soakGateModule as unknown as {
+        inspectCommittedCandidateSource?: (root: string) => {
+          ok: boolean;
+          errors?: string[];
+        };
+      }
+    ).inspectCommittedCandidateSource;
+    expect(inspectCommittedCandidateSource).toBeTypeOf("function");
+    const candidateRoot = createCommittedCandidateRepository();
+    writeFileSync(
+      join(candidateRoot, "scripts", "marker.mjs"),
+      "export const marker = 'dirty';\n",
+      "utf8",
+    );
+    expect(inspectCommittedCandidateSource!(candidateRoot)).toMatchObject({
+      ok: false,
+      errors: expect.arrayContaining([
+        "current-candidate-deployable-source-dirty",
+      ]),
+    });
+  });
+
   it("rejects owner pins whose RUM run and cohort IDs differ", () => {
     const bundle = createSignedBundle();
     bundle.ownerPins.expectedRuns.rum.runId = "p2-inp-different-owner-run";
@@ -246,7 +279,7 @@ describe("P2 staging soak admission gate", () => {
     const bundle = createSignedBundle((payloads) => {
       payloads["uais.p1-load.v1"].executionClass = "diagnostic";
       payloads["uais.p1-load.v1"].performance.passClaimAuthorized = false;
-      payloads["uais.p2-load.v1"].executionClass = "simulation";
+      payloads["uais.p2-load.v2"].executionClass = "simulation";
     });
 
     const result = runGate(bundle.manifestPath, bundle.trustPolicyPath, bundle);
@@ -285,7 +318,7 @@ describe("P2 staging soak admission gate", () => {
 
   it("does not let sustained load pass when the same-run active-user ramp fails", () => {
     const bundle = createSignedBundle((payloads) => {
-      payloads["uais.p2-load.v1"].activeUserStages[4].latenciesMs = Array(200).fill(2_500);
+      payloads["uais.p2-load.v2"].activeUserStages[4].latenciesMs = Array(200).fill(2_500);
     });
 
     const result = runGate(bundle.manifestPath, bundle.trustPolicyPath, bundle);
@@ -618,21 +651,142 @@ describe("P2 staging soak admission gate", () => {
     });
   });
 
+  it("rejects a signed P2 summary that omits the accepted V7 live receipt contract", () => {
+    const bundle = createSignedBundle((payloads) => {
+      delete (payloads["uais.p2-load.v2"] as Partial<
+        ReturnType<typeof passingPayloads>["uais.p2-load.v2"]
+      >).runnerBinding;
+    });
+
+    const result = runGate(bundle.manifestPath, bundle.trustPolicyPath, bundle);
+
+    expect(result.status).toBe(1);
+    expect(result.body.validationErrors).toEqual(
+      expect.arrayContaining([
+        "artifact:p2-load:p2-v7-receipt-keys-invalid",
+      ]),
+    );
+  });
+
+  it("rejects a P2 V2 receipt signed for an owner-unpinned runner", () => {
+    const bundle = createSignedBundle((payloads) => {
+      payloads["uais.p2-load.v2"].runnerBinding.runnerSha256 =
+        digestText("unapproved-p2-load-runner");
+    });
+
+    const result = runGate(bundle.manifestPath, bundle.trustPolicyPath, bundle);
+
+    expect(result.status).toBe(1);
+    expect(result.body.validationErrors).toEqual(
+      expect.arrayContaining([
+        "artifact:p2-load:p2-runner-binding-mismatch",
+      ]),
+    );
+  });
+
+  it.each([
+    ["missing sustained receipt", (payloads: ReturnType<typeof passingPayloads>) => {
+      delete (payloads["uais.p2-load.v2"] as Partial<
+        ReturnType<typeof passingPayloads>["uais.p2-load.v2"]
+      >).sustained;
+    }],
+    ["null invite stage", (payloads: ReturnType<typeof passingPayloads>) => {
+      payloads["uais.p2-load.v2"].inviteStages[0] = null as never;
+    }],
+    ["null active-user stage", (payloads: ReturnType<typeof passingPayloads>) => {
+      payloads["uais.p2-load.v2"].activeUserStages[0] = null as never;
+    }],
+    ["null topology entry", (payloads: ReturnType<typeof passingPayloads>) => {
+      payloads["uais.p2-load.v2"].groupTopology[0] = null as never;
+    }],
+  ] as const)("fails closed without throwing for %s", (_label, mutate) => {
+    const bundle = createSignedBundle(mutate);
+
+    expect(() =>
+      runGate(bundle.manifestPath, bundle.trustPolicyPath, bundle),
+    ).not.toThrow();
+    const result = runGate(bundle.manifestPath, bundle.trustPolicyPath, bundle);
+    expect(result.status).toBe(1);
+    expect(result.body).toMatchObject({ status: "FAIL", soakAdmitted: false });
+  });
+
+  it.each([
+    ["source advisory lock", (payloads: ReturnType<typeof passingPayloads>) => {
+      payloads["uais.p2-load.v2"].sourceTarget.advisoryLockAcquired = false;
+    }, [false, false, false]],
+    ["initial residue", (payloads: ReturnType<typeof passingPayloads>) => {
+      payloads["uais.p2-load.v2"].initialResidue.loginFailures = 1;
+      payloads["uais.p2-load.v2"].initialResidue.residualTaggedRows = 1;
+    }, [false, false, false]],
+    ["sustained cadence", (payloads: ReturnType<typeof passingPayloads>) => {
+      const timing = payloads["uais.p2-load.v2"].sustained.timing;
+      timing.completedAt = new Date(Date.parse(timing.startedAt) + 599_999).toISOString();
+      timing.elapsedMilliseconds = 599_999;
+    }, [true, true, false]],
+    ["group isolation", (payloads: ReturnType<typeof passingPayloads>) => {
+      payloads["uais.p2-load.v2"].isolation.crossGroupMessages = 1;
+    }, [true, true, false]],
+    ["final residue", (payloads: ReturnType<typeof passingPayloads>) => {
+      payloads["uais.p2-load.v2"].residue.inviteClaims = 1;
+      payloads["uais.p2-load.v2"].residue.residualTaggedRows = 1;
+    }, [false, false, false]],
+    ["connection close", (payloads: ReturnType<typeof passingPayloads>) => {
+      payloads["uais.p2-load.v2"].concurrency.status = "FAIL";
+      payloads["uais.p2-load.v2"].concurrency.sourcePoolClosed = false;
+    }, [false, false, false]],
+  ] as const)("keeps P2 soak gates closed when %s fails", (
+    _label,
+    mutate,
+    [invitePass, activePass, sustainedPass],
+  ) => {
+    const bundle = createSignedBundle(mutate);
+
+    const result = runGate(bundle.manifestPath, bundle.trustPolicyPath, bundle);
+
+    expect(result.status).toBe(2);
+    expect(result.body).toMatchObject({
+      gates: {
+        "p2-invite-ramp": invitePass,
+        "p2-active-user-ramp": activePass,
+        "p2-sustained-load": sustainedPass,
+      },
+      soakAdmitted: false,
+    });
+  });
+
+  it("keeps invite and all downstream P2 gates closed on blocking attempt errors", () => {
+    const bundle = createSignedBundle((payloads) => {
+      const stage = payloads["uais.p2-load.v2"].inviteStages[4];
+      stage.blockingAttemptErrorCount = 1;
+      stage.attemptErrorCounts = { "http-429": 1 };
+      stage.retryCount = 1;
+    });
+
+    const result = runGate(bundle.manifestPath, bundle.trustPolicyPath, bundle);
+
+    expect(result.status).toBe(2);
+    expect(result.body.gates).toMatchObject({
+      "p2-invite-ramp": false,
+      "p2-active-user-ramp": false,
+      "p2-sustained-load": false,
+    });
+  });
+
   it.each([
     ["duplicate invitee", (payloads: ReturnType<typeof passingPayloads>) => {
-      const finalStage = payloads["uais.p2-load.v1"].inviteStages[4];
+      const finalStage = payloads["uais.p2-load.v2"].inviteStages[4];
       finalStage.inviteeFingerprints[199] = finalStage.inviteeFingerprints[0];
     }],
     ["duplicate group", (payloads: ReturnType<typeof passingPayloads>) => {
-      const topology = payloads["uais.p2-load.v1"].groupTopology;
+      const topology = payloads["uais.p2-load.v2"].groupTopology;
       topology[39].groupFingerprint = topology[0].groupFingerprint;
     }],
     ["missing group", (payloads: ReturnType<typeof passingPayloads>) => {
-      payloads["uais.p2-load.v1"].groupTopology =
-        payloads["uais.p2-load.v1"].groupTopology.slice(0, 39);
+      payloads["uais.p2-load.v2"].groupTopology =
+        payloads["uais.p2-load.v2"].groupTopology.slice(0, 39);
     }],
     ["duplicate actor across groups", (payloads: ReturnType<typeof passingPayloads>) => {
-      const topology = payloads["uais.p2-load.v1"].groupTopology;
+      const topology = payloads["uais.p2-load.v2"].groupTopology;
       topology[39].actorFingerprints[4] = topology[0].actorFingerprints[0];
     }],
   ])("rejects P2 topology with %s", (_name, mutate) => {
@@ -646,7 +800,7 @@ describe("P2 staging soak admission gate", () => {
 
   it("does not accept different final invitee and active-actor cohorts", () => {
     const bundle = createSignedBundle((payloads) => {
-      payloads["uais.p2-load.v1"].inviteStages[4].inviteeFingerprints[199] =
+      payloads["uais.p2-load.v2"].inviteStages[4].inviteeFingerprints[199] =
         digestText("p2-invitee-not-in-active-cohort");
     });
 
@@ -661,7 +815,7 @@ describe("P2 staging soak admission gate", () => {
 
   it("rejects sustained load without exact per-actor request conservation", () => {
     const bundle = createSignedBundle((payloads) => {
-      const firstGroup = payloads["uais.p2-load.v1"].sustained.groupRequestCounts[0];
+      const firstGroup = payloads["uais.p2-load.v2"].sustained.groupRequestCounts[0];
       firstGroup.actorRequestCounts[0].requestCount = 9;
       firstGroup.actorRequestCounts[1].requestCount = 11;
     });
@@ -693,7 +847,7 @@ describe("P2 staging soak admission gate", () => {
 
   it.each([
     ["P2", (payloads: ReturnType<typeof passingPayloads>) => {
-      payloads["uais.p2-load.v1"].runId = "p2-live-older-replayed-run";
+      payloads["uais.p2-load.v2"].runId = "p2-live-older-replayed-run";
     }, "artifact:p2-load:p2-run-id-mismatch"],
     ["RUM", (payloads: ReturnType<typeof passingPayloads>) => {
       payloads["uais.rum-approval.v1"].cohortId = "p2-inp-older-replayed-cohort";
@@ -1007,6 +1161,7 @@ function createSignedBundle(
       },
       expiresAt: "2026-09-10T23:59:59Z",
     },
+    p2LoadAuthority: { ...p2LoadAuthority },
     rumAuthorities: {
       collector: collectorAuthority,
       approver: {
@@ -1068,6 +1223,111 @@ function passingPayloads(
     groupFingerprint,
     actorFingerprints: actorFingerprints.slice(index * 5, index * 5 + 5),
   }));
+  const p2LatencyEvidence = (count: number, value = 1_200) => ({
+    status: "PASS",
+    algorithm: "nearest-rank-v1",
+    sampleUnit: "milliseconds",
+    sampleCount: count,
+    samples: operationSamples(count, value),
+    p50Milliseconds: value,
+    p95Milliseconds: value,
+    p99Milliseconds: value,
+    maximumMilliseconds: value,
+  });
+  const inviteAddedUsers = [5, 15, 30, 50, 100];
+  const inviteStages = phaseTargets.map((targetUsers, index) => ({
+    status: "PASS",
+    targetUsers,
+    addedUsers: inviteAddedUsers[index],
+    completedUsers: targetUsers,
+    concurrency: 1,
+    requestCount: inviteAddedUsers[index],
+    successCount: inviteAddedUsers[index],
+    failureCount: 0,
+    successRate: 1,
+    serverErrorCount: 0,
+    serverErrorRate: 0,
+    retryCount: 0,
+    blockingAttemptErrorCount: 0,
+    attemptErrorCounts: {},
+    affectedRequestCounts: {},
+    p95Milliseconds: 1_200,
+    maximumMilliseconds: 1_200,
+    latencyEvidence: p2LatencyEvidence(inviteAddedUsers[index]),
+    inviteeFingerprints: actorFingerprints.slice(0, targetUsers),
+    latenciesMs: operationSamples(inviteAddedUsers[index]),
+  }));
+  const activeUserStages = phaseTargets.map((targetActiveUsers) => {
+    const operationMetrics = Object.fromEntries(
+      ["read", "group-chat-write", "group-chat-readback"].map((operation) => [
+        operation,
+        {
+          requestCount: targetActiveUsers,
+          p50Milliseconds: 1_200,
+          p95Milliseconds: 1_200,
+          p99Milliseconds: 1_200,
+          maximumMilliseconds: 1_200,
+          latencyEvidence: p2LatencyEvidence(targetActiveUsers),
+        },
+      ]),
+    );
+    return {
+      status: "PASS",
+      targetActiveUsers,
+      scheduledActors: targetActiveUsers,
+      observedDistinctActors: targetActiveUsers,
+      started: targetActiveUsers,
+      completed: targetActiveUsers,
+      failed: 0,
+      workersQuiesced: true,
+      inFlightAtCompletion: 0,
+      p50Milliseconds: 1_200,
+      p95Milliseconds: 1_200,
+      p99Milliseconds: 1_200,
+      maximumMilliseconds: 1_200,
+      maximumP95Milliseconds: 2_000,
+      actorJourneyLatencyEvidence: p2LatencyEvidence(targetActiveUsers),
+      operationMetrics,
+      attemptErrorCounts: {},
+      affectedRequestCounts: {},
+      affectedActorCounts: {},
+      failureCodes: [],
+      actorFingerprints: actorFingerprints.slice(0, targetActiveUsers),
+      latenciesMs: operationSamples(targetActiveUsers),
+    };
+  });
+  const zeroResidue = {
+    users: 0,
+    loginFailures: 0,
+    coreCourses: 0,
+    classes: 0,
+    enrollments: 0,
+    learningEvents: 0,
+    learnerProfiles: 0,
+    courseSnapshots: 0,
+    retiredCourseSnapshots: 0,
+    inviteClaims: 0,
+    transcriptSnapshots: 0,
+    retiredTranscriptSnapshots: 0,
+    shareSnapshots: 0,
+    operationSnapshots: 0,
+    residualTaggedRows: 0,
+  };
+  const sustainedTiming = {
+    timingMode: "live",
+    startedAt: new Date(now - 610_000).toISOString(),
+    completedAt: new Date(now - 10_000).toISOString(),
+    elapsedMilliseconds: 600_000,
+    roundCount: 10,
+    maximumCadenceDriftMilliseconds: 0,
+    rounds: Array.from({ length: 10 }, (_unused, index) => ({
+      round: index + 1,
+      scheduledOffsetMilliseconds: index * 60_000,
+      actualOffsetMilliseconds: index * 60_000,
+      cadenceDriftMilliseconds: 0,
+      requestCount: 200,
+    })),
+  };
   const operatorFingerprints = [1, 2, 3].map((value) =>
     digestText(`rum-human-${value}`),
   );
@@ -1179,28 +1439,80 @@ function passingPayloads(
         },
       },
     },
-    "uais.p2-load.v1": {
+    "uais.p2-load.v2": {
       status: "PASS",
       executionClass: "live",
+      liveEvidence: true,
       runId: p2RunId,
       maximumP95Ms: 2_000,
-      inviteStages: phaseTargets.map((targetUsers) => ({
-        targetUsers,
-        completedUsers: targetUsers,
-        inviteeFingerprints: actorFingerprints.slice(0, targetUsers),
-        latenciesMs: operationSamples(targetUsers),
-      })),
-      activeUserStages: phaseTargets.map((targetActiveUsers) => ({
-        targetActiveUsers,
-        observedDistinctActors: targetActiveUsers,
-        actorFingerprints: actorFingerprints.slice(0, targetActiveUsers),
-        latenciesMs: operationSamples(targetActiveUsers),
-      })),
+      runnerBinding: {
+        ...p2LoadAuthority,
+        candidateGitSha: candidate.gitSha,
+        candidateContentSha256: candidate.contentSha256,
+        deploymentId: candidate.deploymentId,
+        deploymentHost: candidate.deploymentHost,
+        projectId: candidate.projectId,
+      },
+      sourceTarget: {
+        status: "PASS",
+        guard: "isolated-p2-staging-source",
+        endpointFingerprintMatched: true,
+        currentDatabaseMatched: true,
+        currentUserMatched: true,
+        sessionReplicationRoleMatched: true,
+        sourceGuardMatched: true,
+        advisoryLockAcquired: true,
+        databaseWriteCount: 0,
+        valuesRedacted: true,
+      },
+      initialResidue: { ...zeroResidue },
+      inviteStages,
+      inviteAggregate: {
+        status: "PASS",
+        requestCount: 200,
+        successCount: 200,
+        failureCount: 0,
+        successRate: 1,
+        serverErrorCount: 0,
+        serverErrorRate: 0,
+        retryCount: 0,
+        blockingAttemptErrorCount: 0,
+        attemptErrorCounts: {},
+        affectedRequestCounts: {},
+        p95Milliseconds: 1_200,
+        maximumMilliseconds: 1_200,
+        latencyEvidence: p2LatencyEvidence(200),
+      },
+      activeUserStages,
+      groupRamp: {
+        status: "PASS",
+        rampTargets: phaseTargets,
+        stages: activeUserStages,
+        failureCodes: [],
+      },
       groupTopology,
       sustained: {
+        status: "PASS",
         activeUsers: 200,
+        users: 200,
+        groups: 40,
         rounds: 10,
         requestCount: 2_000,
+        successCount: 2_000,
+        failureCount: 0,
+        successRate: 1,
+        serverErrorCount: 0,
+        serverErrorRate: 0,
+        retryCount: 0,
+        blockingAttemptErrorCount: 0,
+        attemptErrorCounts: {},
+        affectedRequestCounts: {},
+        p95Milliseconds: 1_200,
+        maximumMilliseconds: 1_200,
+        workersQuiesced: true,
+        inFlightAtCompletion: 0,
+        latencyEvidence: p2LatencyEvidence(2_000),
+        timing: sustainedTiming,
         latenciesMs: operationSamples(2_000),
         actorFingerprints,
         groupRequestCounts: groupFingerprints.map((groupFingerprint, groupIndex) => ({
@@ -1214,10 +1526,39 @@ function passingPayloads(
             })),
         })),
       },
+      isolation: {
+        status: "PASS",
+        groupsChecked: 40,
+        duplicateWrites: 0,
+        crossGroupMessages: 0,
+      },
       cleanup: {
         sourceRowsRemaining: 0,
         restoreRowsRemaining: 0,
         runTaggedResidueZero: true,
+        ...zeroResidue,
+      },
+      residue: { ...zeroResidue },
+      concurrency: {
+        status: "PASS",
+        runtimePoolClosed: true,
+        advisoryLockAcquired: true,
+        advisoryLockReleased: true,
+        reservedSessionReleased: true,
+        sourcePoolClosed: true,
+        valuesRedacted: true,
+      },
+      failureCodes: [],
+      safety: {
+        loadOnly: true,
+        sourceGuardRequired: true,
+        workersQuiesceBeforeCleanup: true,
+        exactRunCleanupOnly: true,
+        restoreAction: false,
+        healthObserverStarted: false,
+        manualFixtureCreated: false,
+        p1Started: false,
+        productionAction: false,
       },
     },
     "uais.rum-approval.v1": {
@@ -1458,6 +1799,45 @@ function runGate(
     evaluationNowMs,
   });
   return { status: result.exitCode, body: result.report, stderr: "" };
+}
+
+function createCommittedCandidateRepository() {
+  const root = makeTemporaryDirectory();
+  for (const directory of ["data", "migrations", "public", "scripts", "src"]) {
+    mkdirSync(join(root, directory), { recursive: true });
+    writeFileSync(join(root, directory, ".keep"), `${directory}\n`, "utf8");
+  }
+  const files = new Map([
+    [".env.local.example", "UAIS_EXAMPLE=redacted\n"],
+    [".vercelignore", "node_modules\n"],
+    ["next.config.ts", "export default {};\n"],
+    ["package-lock.json", "{}\n"],
+    ["package.json", "{}\n"],
+    ["postcss.config.mjs", "export default {};\n"],
+    ["tsconfig.json", "{}\n"],
+    ["vercel.json", "{}\n"],
+    ["vercel.staging.json", "{}\n"],
+  ]);
+  for (const [path, contents] of files) {
+    writeFileSync(join(root, path), contents, "utf8");
+  }
+  execFileSync("git", ["init", "--quiet"], { cwd: root });
+  execFileSync("git", ["add", "--all"], { cwd: root });
+  execFileSync(
+    "git",
+    [
+      "-c",
+      "user.name=UAIS test",
+      "-c",
+      "user.email=uais-test@example.invalid",
+      "commit",
+      "--quiet",
+      "-m",
+      "test fixture",
+    ],
+    { cwd: root },
+  );
+  return root;
 }
 
 function makeTemporaryDirectory() {

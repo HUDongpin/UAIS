@@ -9,10 +9,14 @@ import {
   lstatSync,
   openSync,
   readFileSync,
+  realpathSync,
 } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { computeUaisStagingCandidateContentSha } from "./p2-staging-candidate-content.mjs";
+import {
+  computeUaisStagingCandidateContentSha,
+  uaisStagingCandidateContentEntries,
+} from "./p2-staging-candidate-content.mjs";
 import { resolveSoakEvidencePacket } from "./p2-soak-evidence-resolver.mjs";
 
 const defaultManifestPath =
@@ -22,7 +26,7 @@ const fixedOwnerPinPath =
 const requiredReceiptSchemas = [
   "uais.staging-health.v1",
   "uais.p1-load.v1",
-  "uais.p2-load.v1",
+  "uais.p2-load.v2",
   "uais.rum-approval.v1",
   "uais.manual-accessibility.v1",
   "uais.dependency-review.v1",
@@ -31,7 +35,7 @@ const requiredReceiptSchemas = [
 const requiredArtifacts = [
   ["staging-health", "uais.staging-health.v1", "health-probe-issuer"],
   ["p1-load", "uais.p1-load.v1", "p1-load-issuer"],
-  ["p2-load", "uais.p2-load.v1", "p2-load-issuer"],
+  ["p2-load", "uais.p2-load.v2", "p2-load-issuer"],
   ["rum-approval", "uais.rum-approval.v1", "rum-independent-approver"],
   ["manual-accessibility", "uais.manual-accessibility.v1", "manual-a11y-reviewer"],
   ["dependency-review", "uais.dependency-review.v1", "dependency-audit-reviewer"],
@@ -51,7 +55,7 @@ const derivedFieldAllowlist = Object.fromEntries(
 const receiptGateIds = {
   "uais.staging-health.v1": ["staging-health"],
   "uais.p1-load.v1": ["p1-cleanup", "p1-conservation", "p1-performance"],
-  "uais.p2-load.v1": ["p2-active-user-ramp", "p2-invite-ramp", "p2-sustained-load"],
+  "uais.p2-load.v2": ["p2-active-user-ramp", "p2-invite-ramp", "p2-sustained-load"],
   "uais.rum-approval.v1": ["field-inp-p75"],
   "uais.manual-accessibility.v1": [
     "keyboard-journey",
@@ -71,6 +75,24 @@ const secureCliInvocation = Symbol("secure-fixed-owner-pins-cli-invocation");
 const productionProjectId = "prj_MZIjawDPTU4tj4yuTBsd9hyLxHXA";
 const productionDomains = ["uais.top", "www.uais.top"];
 const expectedRampTargets = [5, 20, 50, 100, 200];
+const expectedInviteAddedUsers = [5, 15, 30, 50, 100];
+const p2ResidueKeys = [
+  "users",
+  "loginFailures",
+  "coreCourses",
+  "classes",
+  "enrollments",
+  "learningEvents",
+  "learnerProfiles",
+  "courseSnapshots",
+  "retiredCourseSnapshots",
+  "inviteClaims",
+  "transcriptSnapshots",
+  "retiredTranscriptSnapshots",
+  "shareSnapshots",
+  "operationSnapshots",
+];
+const p2GroupOperations = ["read", "group-chat-write", "group-chat-readback"];
 const expectedP1OperationCounts = {
   taskRead: 200,
   checkpoint: 200,
@@ -145,20 +167,14 @@ function runP2SoakAdmissionGateCore({
     return invalidResult(pinErrors, {}, authoritativeInvocation);
   }
 
-  const currentGitSha = readCurrentGitSha(root);
-  if (!currentGitSha) {
-    return invalidResult(["current-git-sha-unavailable"], {}, authoritativeInvocation);
+  const currentSource = authoritativeInvocation
+    ? inspectCommittedCandidateSource(root)
+    : inspectCandidateSource(root, false);
+  if (!currentSource.ok) {
+    return invalidResult(currentSource.errors, {}, authoritativeInvocation);
   }
-  let currentContentSha256;
-  try {
-    currentContentSha256 = computeUaisStagingCandidateContentSha(root);
-  } catch {
-    return invalidResult(
-      ["current-candidate-content-digest-failed"],
-      {},
-      authoritativeInvocation,
-    );
-  }
+  const currentGitSha = currentSource.gitSha;
+  const currentContentSha256 = currentSource.contentSha256;
   const currentCandidate = {
     gitSha: currentGitSha,
     contentSha256: currentContentSha256,
@@ -187,6 +203,7 @@ function runP2SoakAdmissionGateCore({
       expectedRunIds: ownerPins.expectedRuns,
       currentLockfileSha256,
       dependencyMitigation: ownerPins.dependencyMitigation,
+      p2LoadAuthority: ownerPins.p2LoadAuthority,
       rumAuthorities: ownerPins.rumAuthorities,
       evaluationNowMs,
     }),
@@ -348,6 +365,7 @@ function createReceiptValidators({
   expectedRunIds,
   currentLockfileSha256,
   dependencyMitigation,
+  p2LoadAuthority,
   rumAuthorities,
   evaluationNowMs,
 }) {
@@ -356,8 +374,13 @@ function createReceiptValidators({
       validateStagingHealth(payload, context, expectedCandidate, evaluationNowMs),
     "uais.p1-load.v1": (payload) =>
       validateP1Load(payload, expectedRunIds.p1),
-    "uais.p2-load.v1": (payload) =>
-      validateP2Load(payload, expectedRunIds.p2),
+    "uais.p2-load.v2": (payload) =>
+      validateP2Load(
+        payload,
+        expectedRunIds.p2,
+        expectedCandidate,
+        p2LoadAuthority,
+      ),
     "uais.rum-approval.v1": (payload, context) =>
       validateRumApproval(
         payload,
@@ -631,140 +654,682 @@ function validateP1Load(payload, expectedRunId) {
   });
 }
 
-function validateP2Load(payload, expectedRunId) {
+function validateP2Load(
+  payload,
+  expectedRunId,
+  expectedCandidate,
+  expectedRunnerAuthority,
+) {
   const errors = [];
   if (!hasExactKeys(payload, [
     "activeUserStages",
     "cleanup",
+    "concurrency",
     "executionClass",
+    "failureCodes",
+    "groupRamp",
     "groupTopology",
+    "initialResidue",
+    "inviteAggregate",
     "inviteStages",
+    "isolation",
+    "liveEvidence",
     "maximumP95Ms",
+    "residue",
     "runId",
+    "runnerBinding",
+    "safety",
+    "sourceTarget",
     "status",
     "sustained",
-  ])) errors.push("p2-payload-keys-invalid");
+  ])) errors.push("p2-v7-receipt-keys-invalid");
   if (!validStatus(payload?.status)) errors.push("p2-status-invalid");
   if (!["live", "diagnostic", "simulation", "fixture"].includes(payload?.executionClass)) {
     errors.push("p2-execution-class-invalid");
   }
+  if (typeof payload?.liveEvidence !== "boolean") errors.push("p2-live-evidence-invalid");
   if (!validRunId(payload?.runId, "p2")) errors.push("p2-run-id-invalid");
   if (payload?.runId !== expectedRunId) errors.push("p2-run-id-mismatch");
   if (payload?.maximumP95Ms !== 2_000) errors.push("p2-maximum-p95-invalid");
-  validateRamp(payload?.inviteStages, "invite", errors);
-  validateRamp(payload?.activeUserStages, "active", errors);
-  const topology = validateGroupTopology(payload?.groupTopology, errors);
-  if (!hasExactKeys(payload?.sustained, [
-    "activeUsers",
-    "actorFingerprints",
-    "groupRequestCounts",
-    "latenciesMs",
-    "requestCount",
-    "rounds",
-  ])) errors.push("p2-sustained-keys-invalid");
-  if (
-    payload?.sustained?.activeUsers !== 200 ||
-    payload?.sustained?.rounds !== 10 ||
-    payload?.sustained?.requestCount !== 2_000 ||
-    !validSamples(payload?.sustained?.latenciesMs, 2_000, 2_000) ||
-    !validFingerprintSet(payload?.sustained?.actorFingerprints, 200)
-  ) errors.push("p2-sustained-shape-invalid");
-  const sustainedGroupCounts = validateSustainedGroupCounts(
-    payload?.sustained?.groupRequestCounts,
-    topology.groups,
+
+  const runnerBindingPass = validateP2RunnerBinding(
+    payload?.runnerBinding,
+    expectedCandidate,
+    expectedRunnerAuthority,
     errors,
   );
-  if (!hasExactKeys(payload?.cleanup, [
-    "restoreRowsRemaining",
-    "runTaggedResidueZero",
-    "sourceRowsRemaining",
-  ])) errors.push("p2-cleanup-keys-invalid");
+  const sourceTargetPass = validateP2SourceTarget(payload?.sourceTarget, errors);
+  const initialResiduePass = validateP2ZeroResidue(
+    payload?.initialResidue,
+    "initial-residue",
+    errors,
+  );
+  const cleanupPass = validateP2ZeroResidue(
+    payload?.cleanup,
+    "cleanup",
+    errors,
+    true,
+  );
+  const finalResiduePass = validateP2ZeroResidue(
+    payload?.residue,
+    "residue",
+    errors,
+  );
+  const invitePass = validateP2InviteRamp(payload, errors);
+  const activePass = validateP2ActiveUserRamp(payload, errors);
+  const topology = validateGroupTopology(payload?.groupTopology, errors);
+  const sustainedPass = validateP2Sustained(
+    payload?.sustained,
+    topology,
+    payload?.maximumP95Ms,
+    errors,
+  );
+  const cohortPass =
+    Array.isArray(payload?.inviteStages) &&
+    Array.isArray(payload?.activeUserStages) &&
+    sameStringSet(
+      payload.inviteStages.at(-1)?.inviteeFingerprints,
+      payload.activeUserStages.at(-1)?.actorFingerprints,
+    ) &&
+    sameStringSet(
+      payload.activeUserStages.at(-1)?.actorFingerprints,
+      topology.actorFingerprints,
+    ) &&
+    sameStringSet(
+      payload?.sustained?.actorFingerprints,
+      topology.actorFingerprints,
+    );
+  const isolationPass = validateP2Isolation(payload?.isolation, errors);
+  const concurrencyPass = validateP2Concurrency(payload?.concurrency, errors);
+  const safetyPass = validateP2Safety(payload?.safety, errors);
+  if (!Array.isArray(payload?.failureCodes) || payload.failureCodes.some(
+    (code) => typeof code !== "string" || !/^[a-z0-9-]{3,64}$/.test(code),
+  )) errors.push("p2-failure-codes-invalid");
   if (errors.length > 0) return invalidSource(errors);
-  const live = payload.executionClass === "live";
-  const cleanupPass =
-    payload.cleanup.sourceRowsRemaining === 0 &&
-    payload.cleanup.restoreRowsRemaining === 0 &&
-    payload.cleanup.runTaggedResidueZero === true;
-  const invitePass =
-    live &&
+
+  const liveBoundary =
+    payload.executionClass === "live" &&
+    payload.liveEvidence === true &&
+    runnerBindingPass &&
+    sourceTargetPass &&
+    initialResiduePass &&
+    safetyPass;
+  const commonPass =
+    liveBoundary &&
     payload.status === "PASS" &&
+    payload.failureCodes.length === 0 &&
     cleanupPass &&
-    payload.inviteStages.every(
-      (stage, index) =>
-        stage.targetUsers === expectedRampTargets[index] &&
-        stage.completedUsers === stage.targetUsers &&
-        stage.inviteeFingerprints.length === stage.targetUsers &&
-        new Set(stage.inviteeFingerprints).size === stage.targetUsers &&
-        percentile(stage.latenciesMs, 0.95) < payload.maximumP95Ms,
-    );
-  const activePass =
-    live &&
-    payload.status === "PASS" &&
-    cleanupPass &&
-    payload.activeUserStages.every(
-      (stage, index) =>
-        stage.targetActiveUsers === expectedRampTargets[index] &&
-        stage.observedDistinctActors === stage.targetActiveUsers &&
-        stage.actorFingerprints.length === stage.targetActiveUsers &&
-        new Set(stage.actorFingerprints).size === stage.targetActiveUsers &&
-        percentile(stage.latenciesMs, 0.95) < payload.maximumP95Ms,
-    );
-  const sustainedPass =
-    live &&
-    payload.status === "PASS" &&
-    cleanupPass &&
-    activePass &&
-    topology.valid &&
-    sustainedGroupCounts.valid &&
-    sameStringSet(
-      payload.inviteStages.at(-1).inviteeFingerprints,
-      payload.activeUserStages.at(-1).actorFingerprints,
-    ) &&
-    sameStringSet(
-      payload.activeUserStages.at(-1).actorFingerprints,
-      topology.actorFingerprints,
-    ) &&
-    sameStringSet(
-      payload.sustained.actorFingerprints,
-      topology.actorFingerprints,
-    ) &&
-    sameStringSet(
-      sustainedGroupCounts.actorFingerprints,
-      topology.actorFingerprints,
-    ) &&
-    sameStringSet(topology.groupFingerprints, sustainedGroupCounts.groupFingerprints) &&
-    percentile(payload.sustained.latenciesMs, 0.95) < payload.maximumP95Ms;
+    finalResiduePass &&
+    concurrencyPass;
   return validSource({
-    eligible: live,
+    eligible: liveBoundary,
     gates: {
-      "p2-invite-ramp": invitePass,
-      "p2-active-user-ramp": activePass,
-      "p2-sustained-load": sustainedPass,
+      "p2-invite-ramp": commonPass && invitePass,
+      "p2-active-user-ramp": commonPass && invitePass && activePass,
+      "p2-sustained-load":
+        commonPass &&
+        invitePass &&
+        activePass &&
+        cohortPass &&
+        topology.valid &&
+        sustainedPass &&
+        isolationPass,
     },
   });
 }
 
-function validateRamp(stages, kind, errors) {
-  if (!Array.isArray(stages) || stages.length !== expectedRampTargets.length) {
-    errors.push(`p2-${kind}-stages-invalid`);
-    return;
+function validateP2RunnerBinding(value, candidate, authority, errors) {
+  const keys = [
+    "candidateContentSha256",
+    "candidateGitSha",
+    "dependencyAttestationSha256",
+    "deploymentHost",
+    "deploymentId",
+    "neonProjectId",
+    "projectId",
+    "runnerSha256",
+    "sourceBranch",
+    "sourceEndpointFingerprintSha256",
+    "validationReceiptSha256",
+  ];
+  if (!hasExactKeys(value, keys)) {
+    errors.push("p2-runner-binding-keys-invalid");
+    return false;
   }
-  stages.forEach((stage, index) => {
-    const targetKey = kind === "invite" ? "targetUsers" : "targetActiveUsers";
-    const observedKey = kind === "invite" ? "completedUsers" : "observedDistinctActors";
-    const fingerprintKey = kind === "invite" ? "inviteeFingerprints" : "actorFingerprints";
-    if (!hasExactKeys(stage, [fingerprintKey, observedKey, "latenciesMs", targetKey])) {
-      errors.push(`p2-${kind}-stage-keys-invalid`);
-      return;
+  const pass =
+    value.candidateGitSha === candidate?.gitSha &&
+    value.candidateContentSha256 === candidate?.contentSha256 &&
+    value.deploymentId === candidate?.deploymentId &&
+    value.deploymentHost === candidate?.deploymentHost &&
+    value.projectId === candidate?.projectId &&
+    [
+      "dependencyAttestationSha256",
+      "neonProjectId",
+      "runnerSha256",
+      "sourceBranch",
+      "sourceEndpointFingerprintSha256",
+      "validationReceiptSha256",
+    ].every((key) => value[key] === authority?.[key]);
+  if (!pass) errors.push("p2-runner-binding-mismatch");
+  return pass;
+}
+
+function validateP2SourceTarget(value, errors) {
+  const keys = [
+    "advisoryLockAcquired",
+    "currentDatabaseMatched",
+    "currentUserMatched",
+    "databaseWriteCount",
+    "endpointFingerprintMatched",
+    "guard",
+    "sessionReplicationRoleMatched",
+    "sourceGuardMatched",
+    "status",
+    "valuesRedacted",
+  ];
+  if (!hasExactKeys(value, keys)) {
+    errors.push("p2-source-target-keys-invalid");
+    return false;
+  }
+  return (
+    value.status === "PASS" &&
+    value.guard === "isolated-p2-staging-source" &&
+    value.endpointFingerprintMatched === true &&
+    value.currentDatabaseMatched === true &&
+    value.currentUserMatched === true &&
+    value.sessionReplicationRoleMatched === true &&
+    value.sourceGuardMatched === true &&
+    value.advisoryLockAcquired === true &&
+    value.databaseWriteCount === 0 &&
+    value.valuesRedacted === true
+  );
+}
+
+function validateP2ZeroResidue(value, label, errors, legacyCleanup = false) {
+  const keys = [
+    ...p2ResidueKeys,
+    "residualTaggedRows",
+    ...(legacyCleanup
+      ? ["restoreRowsRemaining", "runTaggedResidueZero", "sourceRowsRemaining"]
+      : []),
+  ];
+  if (!hasExactKeys(value, keys)) {
+    errors.push(`p2-${label}-keys-invalid`);
+    return false;
+  }
+  const countsValid = [...p2ResidueKeys, "residualTaggedRows"].every(
+    (key) => Number.isInteger(value[key]) && value[key] >= 0,
+  );
+  if (!countsValid) {
+    errors.push(`p2-${label}-counts-invalid`);
+    return false;
+  }
+  return (
+    p2ResidueKeys.every((key) => value[key] === 0) &&
+    value.residualTaggedRows === 0 &&
+    (!legacyCleanup ||
+      (value.sourceRowsRemaining === 0 &&
+        value.restoreRowsRemaining === 0 &&
+        value.runTaggedResidueZero === true))
+  );
+}
+
+function validateP2InviteRamp(payload, errors) {
+  const stages = payload?.inviteStages;
+  if (!Array.isArray(stages) || stages.length !== expectedRampTargets.length) {
+    errors.push("p2-invite-stages-invalid");
+    return false;
+  }
+  let cumulative = 0;
+  const stagesPass = stages.every((stage, index) => {
+    const expectedRequestCount = expectedInviteAddedUsers[index];
+    cumulative += Number.isInteger(stage?.addedUsers) ? stage.addedUsers : 0;
+    const metricsPass = validateP2RequestMetrics(
+      stage,
+      expectedRequestCount,
+      [
+        "addedUsers",
+        "completedUsers",
+        "concurrency",
+        "inviteeFingerprints",
+        "latenciesMs",
+        "targetUsers",
+      ],
+      `invite-${index + 1}`,
+      errors,
+    );
+    if (!validSamples(stage?.latenciesMs, expectedRequestCount, expectedRequestCount)) {
+      errors.push(`p2-invite-${index + 1}-samples-invalid`);
     }
-    const target = expectedRampTargets[index];
-    if (
-      stage[targetKey] !== target ||
-      !Number.isInteger(stage[observedKey]) ||
-      !validFingerprintSet(stage[fingerprintKey], target) ||
-      !validSamples(stage.latenciesMs, target, target * 10)
-    ) errors.push(`p2-${kind}-stage-shape-invalid`);
+    const fingerprintsPass = validFingerprintSet(
+      stage.inviteeFingerprints,
+      stage.targetUsers,
+    );
+    if (!fingerprintsPass) {
+      errors.push(`p2-invite-${index + 1}-fingerprints-invalid`);
+    }
+    return (
+      metricsPass &&
+      stage.targetUsers === expectedRampTargets[index] &&
+      stage.addedUsers === expectedRequestCount &&
+      stage.completedUsers === stage.targetUsers &&
+      stage.concurrency === 1 &&
+      cumulative === stage.targetUsers &&
+      fingerprintsPass &&
+      sameNumberArray(stage.latenciesMs, stage.latencyEvidence.samples)
+    );
   });
+  return (
+    stagesPass &&
+    validateP2RequestMetrics(
+      payload?.inviteAggregate,
+      200,
+      [],
+      "invite-aggregate",
+      errors,
+    )
+  );
+}
+
+function validateP2ActiveUserRamp(payload, errors) {
+  const stages = payload?.activeUserStages;
+  if (!Array.isArray(stages) || stages.length !== expectedRampTargets.length) {
+    errors.push("p2-active-stages-invalid");
+    return false;
+  }
+  const stagesPass = stages.every((stage, index) => {
+    const target = expectedRampTargets[index];
+    const keys = [
+      "actorFingerprints",
+      "actorJourneyLatencyEvidence",
+      "affectedActorCounts",
+      "affectedRequestCounts",
+      "attemptErrorCounts",
+      "completed",
+      "failed",
+      "failureCodes",
+      "inFlightAtCompletion",
+      "latenciesMs",
+      "maximumMilliseconds",
+      "maximumP95Milliseconds",
+      "observedDistinctActors",
+      "operationMetrics",
+      "p50Milliseconds",
+      "p95Milliseconds",
+      "p99Milliseconds",
+      "scheduledActors",
+      "started",
+      "status",
+      "targetActiveUsers",
+      "workersQuiesced",
+    ];
+    if (!hasExactKeys(stage, keys)) {
+      errors.push(`p2-active-${index + 1}-keys-invalid`);
+      return false;
+    }
+    const journeyPass = validateP2LatencyEvidence(
+      stage.actorJourneyLatencyEvidence,
+      target,
+      stage,
+      `active-${index + 1}-journey`,
+      errors,
+    );
+    const operationPass =
+      hasExactKeys(stage.operationMetrics, p2GroupOperations) &&
+      p2GroupOperations.every((operation) => {
+        const metrics = stage.operationMetrics[operation];
+        if (!hasExactKeys(metrics, [
+          "latencyEvidence",
+          "maximumMilliseconds",
+          "p50Milliseconds",
+          "p95Milliseconds",
+          "p99Milliseconds",
+          "requestCount",
+        ])) {
+          errors.push(`p2-active-${index + 1}-${operation}-keys-invalid`);
+          return false;
+        }
+        return (
+          metrics.requestCount === target &&
+          metrics.p95Milliseconds <= payload.maximumP95Ms &&
+          validateP2LatencyEvidence(
+            metrics.latencyEvidence,
+            target,
+            metrics,
+            `active-${index + 1}-${operation}`,
+            errors,
+          )
+        );
+      });
+    return (
+      stage.status === "PASS" &&
+      stage.targetActiveUsers === target &&
+      stage.scheduledActors === target &&
+      stage.observedDistinctActors === target &&
+      stage.started === target &&
+      stage.completed === target &&
+      stage.failed === 0 &&
+      stage.workersQuiesced === true &&
+      stage.inFlightAtCompletion === 0 &&
+      stage.maximumP95Milliseconds === payload.maximumP95Ms &&
+      stage.p95Milliseconds <= payload.maximumP95Ms &&
+      journeyPass &&
+      operationPass &&
+      validFingerprintSet(stage.actorFingerprints, target) &&
+      validSamples(stage.latenciesMs, target, target) &&
+      sameNumberArray(stage.latenciesMs, stage.actorJourneyLatencyEvidence.samples) &&
+      countMapSum(stage.attemptErrorCounts) === 0 &&
+      countMapSum(stage.affectedRequestCounts) === 0 &&
+      countMapSum(stage.affectedActorCounts) === 0 &&
+      Array.isArray(stage.failureCodes) &&
+      stage.failureCodes.length === 0
+    );
+  });
+  if (!hasExactKeys(payload?.groupRamp, ["failureCodes", "rampTargets", "stages", "status"])) {
+    errors.push("p2-group-ramp-keys-invalid");
+    return false;
+  }
+  return (
+    stagesPass &&
+    payload.groupRamp.status === "PASS" &&
+    sameNumberArray(payload.groupRamp.rampTargets, expectedRampTargets) &&
+    sha256Canonical(payload.groupRamp.stages) === sha256Canonical(stages) &&
+    Array.isArray(payload.groupRamp.failureCodes) &&
+    payload.groupRamp.failureCodes.length === 0
+  );
+}
+
+function validateP2Sustained(value, topology, maximumP95Ms, errors) {
+  const extraKeys = [
+    "activeUsers",
+    "actorFingerprints",
+    "groupRequestCounts",
+    "groups",
+    "inFlightAtCompletion",
+    "latenciesMs",
+    "rounds",
+    "timing",
+    "users",
+    "workersQuiesced",
+  ];
+  const metricsPass = validateP2RequestMetrics(
+    value,
+    2_000,
+    extraKeys,
+    "sustained",
+    errors,
+  );
+  const sustainedGroupCounts = validateSustainedGroupCounts(
+    value?.groupRequestCounts,
+    topology.groups,
+    errors,
+  );
+  return (
+    metricsPass &&
+    value.activeUsers === 200 &&
+    value.users === 200 &&
+    value.groups === 40 &&
+    value.rounds === 10 &&
+    value.workersQuiesced === true &&
+    value.inFlightAtCompletion === 0 &&
+    value.p95Milliseconds <= maximumP95Ms &&
+    validFingerprintSet(value.actorFingerprints, 200) &&
+    validSamples(value.latenciesMs, 2_000, 2_000) &&
+    sameNumberArray(value.latenciesMs, value.latencyEvidence.samples) &&
+    sustainedGroupCounts.valid &&
+    sameStringSet(value.actorFingerprints, topology.actorFingerprints) &&
+    sameStringSet(sustainedGroupCounts.actorFingerprints, topology.actorFingerprints) &&
+    sameStringSet(topology.groupFingerprints, sustainedGroupCounts.groupFingerprints) &&
+    validateP2SustainedTiming(value.timing, errors)
+  );
+}
+
+function validateP2RequestMetrics(value, expectedCount, extraKeys, label, errors) {
+  const keys = [
+    "affectedRequestCounts",
+    "attemptErrorCounts",
+    "blockingAttemptErrorCount",
+    "failureCount",
+    "latencyEvidence",
+    "maximumMilliseconds",
+    "p95Milliseconds",
+    "requestCount",
+    "retryCount",
+    "serverErrorCount",
+    "serverErrorRate",
+    "status",
+    "successCount",
+    "successRate",
+    ...extraKeys,
+  ];
+  if (!hasExactKeys(value, keys)) {
+    errors.push(`p2-${label}-metric-keys-invalid`);
+    return false;
+  }
+  const countsValid = [
+    "blockingAttemptErrorCount",
+    "failureCount",
+    "requestCount",
+    "retryCount",
+    "serverErrorCount",
+    "successCount",
+  ].every((key) => Number.isInteger(value[key]) && value[key] >= 0);
+  if (
+    !countsValid ||
+    value.requestCount !== expectedCount ||
+    value.successCount + value.failureCount !== value.requestCount ||
+    value.successRate !== value.successCount / value.requestCount ||
+    value.serverErrorRate !== value.serverErrorCount / value.requestCount ||
+    value.serverErrorCount > value.failureCount ||
+    !isRecord(value.attemptErrorCounts) ||
+    !isRecord(value.affectedRequestCounts)
+  ) {
+    errors.push(`p2-${label}-metric-conservation-invalid`);
+    return false;
+  }
+  const latencyPass = validateP2LatencyEvidence(
+    value.latencyEvidence,
+    expectedCount,
+    value,
+    label,
+    errors,
+  );
+  return (
+    value.status === "PASS" &&
+    value.successRate >= 0.99 &&
+    value.serverErrorRate <= 0.005 &&
+    value.blockingAttemptErrorCount === 0 &&
+    countMapSum(value.attemptErrorCounts) === 0 &&
+    countMapSum(value.affectedRequestCounts) === 0 &&
+    value.p95Milliseconds <= 2_000 &&
+    latencyPass
+  );
+}
+
+function validateP2LatencyEvidence(value, expectedCount, aggregate, label, errors) {
+  if (!hasExactKeys(value, [
+    "algorithm",
+    "maximumMilliseconds",
+    "p50Milliseconds",
+    "p95Milliseconds",
+    "p99Milliseconds",
+    "sampleCount",
+    "samples",
+    "sampleUnit",
+    "status",
+  ])) {
+    errors.push(`p2-${label}-latency-evidence-keys-invalid`);
+    return false;
+  }
+  if (
+    value.status !== "PASS" ||
+    value.algorithm !== "nearest-rank-v1" ||
+    value.sampleUnit !== "milliseconds" ||
+    value.sampleCount !== expectedCount ||
+    !validSamples(value.samples, expectedCount, expectedCount) ||
+    value.samples.some((sample) => !Number.isInteger(sample) || sample > 300_000)
+  ) {
+    errors.push(`p2-${label}-latency-evidence-invalid`);
+    return false;
+  }
+  const recomputed = {
+    p50Milliseconds: percentile(value.samples, 0.5),
+    p95Milliseconds: percentile(value.samples, 0.95),
+    p99Milliseconds: percentile(value.samples, 0.99),
+    maximumMilliseconds: Math.max(...value.samples),
+  };
+  const pass =
+    Object.entries(recomputed).every(([key, metric]) => value[key] === metric) &&
+    Object.entries(recomputed).every(
+      ([key, metric]) => !Object.hasOwn(aggregate, key) || aggregate[key] === metric,
+    );
+  if (!pass) errors.push(`p2-${label}-latency-recomputation-mismatch`);
+  return pass;
+}
+
+function validateP2SustainedTiming(value, errors) {
+  if (!hasExactKeys(value, [
+    "completedAt",
+    "elapsedMilliseconds",
+    "maximumCadenceDriftMilliseconds",
+    "roundCount",
+    "rounds",
+    "startedAt",
+    "timingMode",
+  ])) {
+    errors.push("p2-sustained-timing-keys-invalid");
+    return false;
+  }
+  const startedAt = Date.parse(value.startedAt ?? "");
+  const completedAt = Date.parse(value.completedAt ?? "");
+  if (
+    value.timingMode !== "live" ||
+    !Number.isFinite(startedAt) ||
+    !Number.isFinite(completedAt) ||
+    value.elapsedMilliseconds < 600_000 ||
+    completedAt - startedAt !== value.elapsedMilliseconds ||
+    value.roundCount !== 10 ||
+    !Array.isArray(value.rounds) ||
+    value.rounds.length !== 10
+  ) return false;
+  const roundsPass = value.rounds.every((round, index) => {
+    const scheduled = index * 60_000;
+    const drift = Math.abs(round?.actualOffsetMilliseconds - scheduled);
+    return (
+      hasExactKeys(round, [
+        "actualOffsetMilliseconds",
+        "cadenceDriftMilliseconds",
+        "requestCount",
+        "round",
+        "scheduledOffsetMilliseconds",
+      ]) &&
+      round.round === index + 1 &&
+      round.scheduledOffsetMilliseconds === scheduled &&
+      Number.isInteger(round.actualOffsetMilliseconds) &&
+      round.actualOffsetMilliseconds >= 0 &&
+      round.cadenceDriftMilliseconds === drift &&
+      drift <= 5_000 &&
+      round.requestCount === 200
+    );
+  });
+  const maximumDrift = Math.max(
+    0,
+    ...value.rounds.map((round) => round.cadenceDriftMilliseconds),
+  );
+  return (
+    roundsPass &&
+    value.maximumCadenceDriftMilliseconds === maximumDrift &&
+    maximumDrift <= 5_000
+  );
+}
+
+function validateP2Isolation(value, errors) {
+  if (!hasExactKeys(value, [
+    "crossGroupMessages",
+    "duplicateWrites",
+    "groupsChecked",
+    "status",
+  ])) {
+    errors.push("p2-isolation-keys-invalid");
+    return false;
+  }
+  return (
+    value.status === "PASS" &&
+    value.groupsChecked === 40 &&
+    value.duplicateWrites === 0 &&
+    value.crossGroupMessages === 0
+  );
+}
+
+function validateP2Concurrency(value, errors) {
+  if (!hasExactKeys(value, [
+    "advisoryLockAcquired",
+    "advisoryLockReleased",
+    "reservedSessionReleased",
+    "runtimePoolClosed",
+    "sourcePoolClosed",
+    "status",
+    "valuesRedacted",
+  ])) {
+    errors.push("p2-concurrency-keys-invalid");
+    return false;
+  }
+  return (
+    value.status === "PASS" &&
+    value.runtimePoolClosed === true &&
+    value.advisoryLockAcquired === true &&
+    value.advisoryLockReleased === true &&
+    value.reservedSessionReleased === true &&
+    value.sourcePoolClosed === true &&
+    value.valuesRedacted === true
+  );
+}
+
+function validateP2Safety(value, errors) {
+  if (!hasExactKeys(value, [
+    "exactRunCleanupOnly",
+    "healthObserverStarted",
+    "loadOnly",
+    "manualFixtureCreated",
+    "p1Started",
+    "productionAction",
+    "restoreAction",
+    "sourceGuardRequired",
+    "workersQuiesceBeforeCleanup",
+  ])) {
+    errors.push("p2-safety-keys-invalid");
+    return false;
+  }
+  return (
+    value.loadOnly === true &&
+    value.sourceGuardRequired === true &&
+    value.workersQuiesceBeforeCleanup === true &&
+    value.exactRunCleanupOnly === true &&
+    value.restoreAction === false &&
+    value.healthObserverStarted === false &&
+    value.manualFixtureCreated === false &&
+    value.p1Started === false &&
+    value.productionAction === false
+  );
+}
+
+function countMapSum(value) {
+  if (!isRecord(value)) return Number.POSITIVE_INFINITY;
+  let total = 0;
+  for (const count of Object.values(value)) {
+    if (!Number.isInteger(count) || count < 0) return Number.POSITIVE_INFINITY;
+    total += count;
+  }
+  return total;
+}
+
+function sameNumberArray(left, right) {
+  return (
+    Array.isArray(left) &&
+    Array.isArray(right) &&
+    left.length === right.length &&
+    left.every((value, index) => value === right[index])
+  );
 }
 
 function validateGroupTopology(value, errors) {
@@ -1724,15 +2289,83 @@ function readOption(values, name) {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
-function readCurrentGitSha(root) {
-  const result = spawnSync("git", ["rev-parse", "HEAD"], {
+export function inspectCommittedCandidateSource(root) {
+  return inspectCandidateSource(root, true);
+}
+
+function inspectCandidateSource(root, requireClean) {
+  const absoluteRoot = resolve(root);
+  const topLevel = runReadOnlyGit(absoluteRoot, ["rev-parse", "--show-toplevel"]);
+  if (
+    topLevel.status !== 0 ||
+    !topLevel.stdout.trim() ||
+    realpathSync(topLevel.stdout.trim()) !== realpathSync(absoluteRoot)
+  ) {
+    return { ok: false, errors: ["current-candidate-git-root-invalid"] };
+  }
+  const head = runReadOnlyGit(absoluteRoot, ["rev-parse", "HEAD"]);
+  const gitSha = head.status === 0 ? head.stdout.trim() : "";
+  if (!/^[0-9a-f]{40}$/.test(gitSha)) {
+    return { ok: false, errors: ["current-git-sha-unavailable"] };
+  }
+  const tracked = runReadOnlyGit(absoluteRoot, [
+    "diff",
+    "--quiet",
+    "--no-ext-diff",
+    "--no-textconv",
+    "HEAD",
+    "--",
+    ...uaisStagingCandidateContentEntries,
+  ]);
+  const untracked = runReadOnlyGit(absoluteRoot, [
+    "ls-files",
+    "--others",
+    "--exclude-standard",
+    "-z",
+    "--",
+    ...uaisStagingCandidateContentEntries,
+  ]);
+  if (
+    requireClean &&
+    (tracked.status === 1 || (untracked.status === 0 && untracked.stdout.length > 0))
+  ) {
+    return {
+      ok: false,
+      errors: ["current-candidate-deployable-source-dirty"],
+    };
+  }
+  if (![0, 1].includes(tracked.status) || untracked.status !== 0) {
+    return { ok: false, errors: ["current-candidate-git-status-unavailable"] };
+  }
+  try {
+    return {
+      ok: true,
+      gitSha,
+      contentSha256: computeUaisStagingCandidateContentSha(absoluteRoot),
+    };
+  } catch {
+    return {
+      ok: false,
+      errors: ["current-candidate-content-digest-failed"],
+    };
+  }
+}
+
+function runReadOnlyGit(root, args) {
+  return spawnSync("/usr/bin/git", args, {
     cwd: root,
     encoding: "utf8",
-    env: process.env,
+    env: {
+      GIT_CONFIG_GLOBAL: "/dev/null",
+      GIT_CONFIG_NOSYSTEM: "1",
+      GIT_OPTIONAL_LOCKS: "0",
+      LANG: "C",
+      LC_ALL: "C",
+      PATH: "/usr/bin:/bin",
+    },
+    maxBuffer: 64 * 1024,
     timeout: 5_000,
   });
-  const value = result.status === 0 ? result.stdout.trim() : "";
-  return /^[0-9a-f]{40}$/.test(value) ? value : "";
 }
 
 function readFixedOwnerPins() {
@@ -1811,6 +2444,7 @@ function validateOwnerPins(value) {
     "expectedRuns",
     "kind",
     "ownerDecisionDigestSha256",
+    "p2LoadAuthority",
     "productionAuthorization",
     "rumAuthorities",
     "schemaVersion",
@@ -1823,6 +2457,29 @@ function validateOwnerPins(value) {
     errors.push("owner-decision-digest-pin-invalid");
   }
   if (!isDigest(value?.trustPolicySha256)) errors.push("trust-policy-digest-pin-invalid");
+  const p2LoadAuthority = value?.p2LoadAuthority;
+  if (!hasExactKeys(p2LoadAuthority, [
+    "dependencyAttestationSha256",
+    "neonProjectId",
+    "runnerSha256",
+    "sourceBranch",
+    "sourceEndpointFingerprintSha256",
+    "validationReceiptSha256",
+  ])) errors.push("owner-p2-load-authority-keys-invalid");
+  for (const key of [
+    "dependencyAttestationSha256",
+    "runnerSha256",
+    "sourceEndpointFingerprintSha256",
+    "validationReceiptSha256",
+  ]) {
+    if (!isDigest(p2LoadAuthority?.[key])) {
+      errors.push(`owner-p2-load-${key}-invalid`);
+    }
+  }
+  if (
+    p2LoadAuthority?.neonProjectId !== "delicate-truth-41768638" ||
+    p2LoadAuthority?.sourceBranch !== "main"
+  ) errors.push("owner-p2-load-source-binding-invalid");
   if (!/^[a-z0-9][a-z0-9._-]{0,127}$/.test(value?.authorityKeyId ?? "")) {
     errors.push("authority-key-id-pin-invalid");
   }
