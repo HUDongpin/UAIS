@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { TeachingCourseManagementStoreError } from "./teaching-course-management-error";
 import { isTeachingCourseManagementActorAuthorized } from "./teaching-course-management-authorization";
 import {
@@ -781,7 +782,10 @@ export async function joinTeachingClassByInviteCode(input: {
       throw new TeachingCourseManagementStoreError(500, "Teaching class course is missing.");
     }
 
-    const membershipId = `membership-${classItem.classId}-${studentId}`;
+    const membershipId = createTeachingClassMembershipId(
+      classItem.classId,
+      studentId,
+    );
     const existingMembershipIndex = database.memberships.findIndex(
       (membership) => membership.membershipId === membershipId,
     );
@@ -922,6 +926,20 @@ export async function joinTeachingClassByInviteCode(input: {
   }
 
   throw createTeachingCourseManagementContentionError();
+}
+
+function createTeachingClassMembershipId(classId: string, studentId: string) {
+  const readableId = `membership-${classId}-${studentId}`;
+  if (readableId.length <= 160) {
+    return readableId;
+  }
+  const digest = createHash("sha256")
+    .update("uais-teaching-membership-id:v1\0", "utf8")
+    .update(classId, "utf8")
+    .update("\0", "utf8")
+    .update(studentId, "utf8")
+    .digest("hex");
+  return `membership-sha256-${digest}`;
 }
 
 export async function approveTeachingClassMembership(input: {
