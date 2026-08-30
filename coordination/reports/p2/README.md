@@ -12,3 +12,22 @@ These files are retained as redacted derivatives of historical machine output. O
 The canonical readiness position is therefore `BLOCKED`: a newly committed candidate must be deployed only to the isolated staging project, bound to its exact Git/content identity and immutable deployment identity, then rerun through the required database, restore, browser, provider, load, accessibility, and soak gates. Operator-supplied identifiers are attestations, not independent proof that the remote deployment contains a given commit.
 
 No file in this directory authorizes a push, `main` merge, production deployment, production migration, provider call, or production data write.
+
+## Candidate/evidence commit binding
+
+The closure gate treats the candidate Git SHA and the checkout that produced the
+evidence as separate identities. With no explicit selection, `npm run
+release:p2:closure` requires the manifest candidate SHA to equal the current
+checkout `HEAD` and fails closed on a stale manifest. When evidence was produced
+from a clean descendant checkout after the immutable candidate was deployed,
+the operator may pass the exact candidate SHA explicitly:
+
+```bash
+npm run release:p2:closure -- --manifest <manifest> --candidate-sha <candidate-sha>
+```
+
+The explicit candidate must exist in the checkout's history. The gate reports the
+current evidence checkout separately and rejects a candidate that is not its
+ancestor. This avoids the impossible invariant of embedding a commit's own
+`HEAD` in a tracked report and then committing that report, while preserving the
+exact candidate/deployment binding.

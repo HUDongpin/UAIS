@@ -33,6 +33,14 @@ npm run build
 If `npm run build` hangs or cannot finish, do not claim release readiness.
 Record the exact last output and hand the blocker to S22.
 
+The closure manifest may be generated after the immutable candidate commit. Do
+not force a tracked report to contain the commit that contains the report. Run
+the closure gate with `--candidate-sha <exact-candidate-sha>` when the evidence
+checkout is a clean descendant of that candidate; the gate records both SHAs and
+rejects a candidate outside the evidence checkout history. Without that explicit
+argument, a manifest must match the current `HEAD` and a stale manifest fails
+closed.
+
 `npm run test:db` is the database lane. The Postgres-backed stores - teaching
 course management, chatroom transcripts, chatroom shares, and first-party
 accounts with their login-failure lockout - have integration suites that skip

@@ -5,7 +5,9 @@ import { spawnSync } from "node:child_process";
 
 const defaultManifestPath =
   "coordination/reports/p2/current-candidate-closure.json";
-const manifestPath = readManifestPath(process.argv.slice(2));
+const args = process.argv.slice(2);
+const manifestPath = readManifestPath(args);
+const candidateSelection = readCandidateSelection(args);
 const validationErrors = [];
 
 if (!existsSync(manifestPath)) {
@@ -29,10 +31,29 @@ if (!currentGitSha) {
 if (manifest.schemaVersion !== 1) {
   validationErrors.push("unsupported-schema-version");
 }
-if (!isGitSha(manifest.candidate?.gitSha)) {
+const manifestCandidateGitSha = manifest.candidate?.gitSha;
+if (!isGitSha(manifestCandidateGitSha)) {
   validationErrors.push("candidate-git-sha-invalid");
-} else if (currentGitSha && manifest.candidate.gitSha !== currentGitSha) {
+} else if (candidateSelection.explicit) {
+  if (!isGitSha(candidateSelection.sha)) {
+    validationErrors.push("candidate-git-sha-request-invalid");
+  } else if (manifestCandidateGitSha !== candidateSelection.sha) {
+    validationErrors.push("candidate-git-sha-does-not-match-requested-candidate");
+  }
+} else if (currentGitSha && manifestCandidateGitSha !== currentGitSha) {
   validationErrors.push("candidate-git-sha-does-not-match-head");
+}
+const candidateIsAncestor =
+  isGitSha(manifestCandidateGitSha) &&
+  isGitSha(currentGitSha) &&
+  isAncestor(manifestCandidateGitSha, currentGitSha);
+if (
+  candidateSelection.explicit &&
+  isGitSha(manifestCandidateGitSha) &&
+  isGitSha(currentGitSha) &&
+  !candidateIsAncestor
+) {
+  validationErrors.push("candidate-git-sha-not-ancestor-of-evidence-head");
 }
 if (!isSha256(manifest.candidate?.archiveSha256)) {
   validationErrors.push("candidate-archive-sha256-invalid");
@@ -118,6 +139,12 @@ const output = {
     sameShaImmutableDeployment: sameShaImmutableDeployment ? "PASS" : "FAIL",
     implementationOverlayDeployed:
       manifest.candidate.implementationOverlayDeployed === true,
+  },
+  evidence: {
+    gitSha: currentGitSha,
+    candidateSelection: candidateSelection.explicit ? "explicit" : "head",
+    candidateSelectionSource: candidateSelection.source,
+    candidateIsAncestor,
   },
   requirements: {
     total: requirements.length,
@@ -300,6 +327,18 @@ function readManifestPath(args) {
   return value;
 }
 
+function readCandidateSelection(args) {
+  const flagIndex = args.indexOf("--candidate-sha");
+  if (flagIndex !== -1) {
+    return {
+      sha: args[flagIndex + 1]?.trim() ?? "",
+      explicit: true,
+      source: "argument",
+    };
+  }
+  return { sha: "", explicit: false, source: "head" };
+}
+
 function readCurrentGitSha() {
   const result = spawnSync("git", ["rev-parse", "HEAD"], {
     cwd: process.cwd(),
@@ -308,6 +347,20 @@ function readCurrentGitSha() {
     timeout: 5_000,
   });
   return result.status === 0 ? result.stdout.trim() : "";
+}
+
+function isAncestor(ancestor, descendant) {
+  const result = spawnSync(
+    "git",
+    ["merge-base", "--is-ancestor", ancestor, descendant],
+    {
+      cwd: process.cwd(),
+      encoding: "utf8",
+      env: process.env,
+      timeout: 5_000,
+    },
+  );
+  return result.status === 0;
 }
 
 function isGitSha(value) {
