@@ -1,18 +1,19 @@
 {
   "schemaVersion": 1,
-  "evidenceDate": "2026-08-23 Asia/Hong_Kong",
+  "evidenceDate": "2026-08-30 Asia/Hong_Kong",
   "candidate": {
-    "gitSha": "0e156b25b7b9a003a07b7f94cf7c8f8d7323ec3e",
-    "archiveSha256": "8e1f2bf51939b220e3032e41cdeb294ccfc40b9e45a810028df13ccdb1d660f2",
+    "gitSha": "2bb838cf5cb10007a27f78de77e448700fc74b5d",
+    "archiveSha256": "b31f7332b01f8dfc4f2940e978878ad67163fcd23336b5a59cd441ce77593ea1",
+    "deployableContentSha256": "30247a84e8b51fb656a011d46850e1facf7985d531690d775657b2a681ef9fc3",
     "deployment": {
       "project": "uais-staging",
-      "id": "dpl_8yQGJ5irPzpfnJU8aCLpJ9DRNrVi",
-      "url": "https://uais-staging-ksc3ooyx3-peter-dongpin-hu-s-projects.vercel.app/",
+      "id": "dpl_CWxFKDJVKrUDpWvH2Nv9NpVxBLbS",
+      "url": "https://uais-staging-j8syiio9i-peter-dongpin-hu-s-projects.vercel.app/",
       "status": "READY",
       "evidenceClass": "current-candidate",
-      "gitSha": "0e156b25b7b9a003a07b7f94cf7c8f8d7323ec3e"
+      "gitSha": "2bb838cf5cb10007a27f78de77e448700fc74b5d"
     },
-    "implementationOverlayDeployed": false
+    "implementationOverlayDeployed": true
   },
   "requirements": [
     {
@@ -25,7 +26,7 @@
       "id": 2,
       "status": "PASS",
       "evidenceClass": "current-candidate",
-      "evidenceRefs": ["current-immutable-deployment-metadata", "current-immutable-health-observation"]
+      "evidenceRefs": ["dpl_CWxFKDJVKrUDpWvH2Nv9NpVxBLbS-control-plane-ready", "dpl_CWxFKDJVKrUDpWvH2Nv9NpVxBLbS-staging-guard-build-pass"]
     },
     {
       "id": 3,
@@ -68,8 +69,8 @@
       "status": "NOT_RUN",
       "evidenceClass": "control-plane-only",
       "evidenceRefs": [
-        "current-production-baseline-sha-differs-from-candidate",
-        "production-authorization-and-readback-not-run"
+        "production-authenticated-journey-not-run",
+        "production-database-and-oss-readback-not-run"
       ]
     },
     {

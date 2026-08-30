@@ -393,25 +393,40 @@ describe("P2 protected operations gates", () => {
   });
 
   it("does not let an ambient candidate SHA bypass the default HEAD binding", () => {
-    const result = run(
-      "scripts/p2-current-candidate-closure-gate.mjs",
-      [],
-      {
-        ...cleanEnv,
-        P2_CANDIDATE_GIT_SHA:
-          "0e156b25b7b9a003a07b7f94cf7c8f8d7323ec3e",
-      },
+    const temporaryDirectory = mkdtempSync(
+      join(tmpdir(), "uais-p2-closure-gate-"),
     );
+    try {
+      const staleCandidateSha =
+        "0e156b25b7b9a003a07b7f94cf7c8f8d7323ec3e";
+      const manifestPath = writeClosureManifest(
+        temporaryDirectory,
+        (manifest) => {
+          manifest.candidate.gitSha = staleCandidateSha;
+          manifest.candidate.deployment.gitSha = staleCandidateSha;
+        },
+      );
+      const result = run(
+        "scripts/p2-current-candidate-closure-gate.mjs",
+        ["--manifest", manifestPath],
+        {
+          ...cleanEnv,
+          P2_CANDIDATE_GIT_SHA: staleCandidateSha,
+        },
+      );
 
-    expect(result.status).toBe(1);
-    expect(JSON.parse(result.stdout)).toMatchObject({
-      target: "p2-current-candidate-closure",
-      status: "FAIL",
-      releaseReady: false,
-      validationErrors: expect.arrayContaining([
-        "candidate-git-sha-does-not-match-head",
-      ]),
-    });
+      expect(result.status).toBe(1);
+      expect(JSON.parse(result.stdout)).toMatchObject({
+        target: "p2-current-candidate-closure",
+        status: "FAIL",
+        releaseReady: false,
+        validationErrors: expect.arrayContaining([
+          "candidate-git-sha-does-not-match-head",
+        ]),
+      });
+    } finally {
+      rmSync(temporaryDirectory, { recursive: true, force: true });
+    }
   });
 
   it("rejects a historical restore record promoted to PASS", () => {
