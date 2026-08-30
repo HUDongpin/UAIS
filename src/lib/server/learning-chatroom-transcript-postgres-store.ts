@@ -8,11 +8,13 @@ import {
 import {
   LearningChatroomTranscriptStoreError,
   createEmptyLearningChatroomTranscriptDatabase,
+  learningChatroomTranscriptRoomKeyMismatchReasonCode,
   normalizeLearningChatroomTranscriptDatabase,
   type LearningChatroomTranscriptDatabase,
   type LearningChatroomTranscriptRepository,
   type LearningChatroomTranscriptStorageDescriptor,
 } from "@/lib/server/learning-chatroom-transcript-store";
+import { snapshotContentionReasonCode } from "./optimistic-write-retry";
 
 // Chatroom transcripts on the core database.
 //
@@ -96,6 +98,9 @@ export function createUaisLearningChatroomTranscriptPostgresRepository(input: {
         }
         const row = rows[0] as { database?: unknown; revision?: unknown };
         const revision = typeof row.revision === "string" ? row.revision.trim() : "";
+        if (!isValidSnapshotRevision(revision)) {
+          throw snapshotRevisionRequiredError();
+        }
         return {
           database: normalizeLearningChatroomTranscriptDatabase(row.database),
           ...(revision ? { revision } : {}),
@@ -133,13 +138,25 @@ export function createUaisLearningChatroomTranscriptPostgresRepository(input: {
           `;
           const currentRevision =
             typeof rows[0]?.revision === "string" ? rows[0].revision.trim() : undefined;
+          if (rows.length > 0 && !isValidSnapshotRevision(currentRevision)) {
+            throw snapshotRevisionRequiredError();
+          }
           // Strict equality, not "both sides present": a writer that read no row
           // and then finds one has been overtaken by whoever created the room,
           // and overwriting it would silently drop that member's first message.
-          if (rows.length > 0 && currentRevision !== expectedRevision) {
+          // A missing row is a meaningful CAS state.  A writer that read an
+          // existing revision must never recreate that row after it vanished;
+          // treating absence as an implicit empty snapshot would permit a stale
+          // request to resurrect data.  Only an initial write with no handed
+          // revision may create the row.
+          if (
+            (rows.length === 0 && expectedRevision !== undefined) ||
+            (rows.length > 0 && currentRevision !== expectedRevision)
+          ) {
             throw new LearningChatroomTranscriptStoreError(
               409,
               "Postgres learning chatroom transcript snapshot changed; retry required.",
+              snapshotContentionReasonCode,
             );
           }
 
@@ -175,6 +192,7 @@ export function createUaisLearningChatroomTranscriptPostgresRepository(input: {
             throw new LearningChatroomTranscriptStoreError(
               409,
               "Postgres learning chatroom transcript snapshot changed; retry required.",
+              snapshotContentionReasonCode,
             );
           }
         });
@@ -198,6 +216,21 @@ function selectRoomDatabase(
   roomKey: string,
 ): LearningChatroomTranscriptDatabase {
   const normalized = normalizeLearningChatroomTranscriptDatabase(database);
+  // The empty envelope is valid for a first write, and a full corpus is valid
+  // for callers that predate the per-room adapter.  But a non-empty envelope
+  // with no requested room is almost certainly a snapshot/key mix-up; silently
+  // narrowing it to [] would overwrite/create the wrong room.  Keep the error
+  // machine-readable so the append loop does not turn it into a generic retry.
+  if (
+    normalized.transcripts.length > 0 &&
+    !normalized.transcripts.some((transcript) => transcript.transcriptId === roomKey)
+  ) {
+    throw new LearningChatroomTranscriptStoreError(
+      409,
+      "Postgres learning chatroom transcript write snapshot room key does not match the request.",
+      learningChatroomTranscriptRoomKeyMismatchReasonCode,
+    );
+  }
   return {
     ...normalized,
     transcripts: normalized.transcripts.filter(
@@ -229,4 +262,22 @@ function readRoomKey(value: string | undefined) {
 
 function createSnapshotRevision(database: LearningChatroomTranscriptDatabase) {
   return `rev-${createHash("sha256").update(JSON.stringify(database)).digest("hex").slice(0, 24)}`;
+}
+
+function isValidSnapshotRevision(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    value.length > 0 &&
+    value.length <= 120 &&
+    value !== "rev-empty" &&
+    /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(value)
+  );
+}
+
+function snapshotRevisionRequiredError() {
+  return new LearningChatroomTranscriptStoreError(
+    503,
+    "Postgres learning chatroom transcript snapshot revision is missing or invalid.",
+    "transcript-snapshot-revision-required",
+  );
 }

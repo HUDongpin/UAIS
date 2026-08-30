@@ -7,7 +7,7 @@
 // cap.
 //
 // Backend contract this mirrors (Phase 2, do not change):
-// - GET /api/learning/chatroom?courseId=&classId=&groupId= replays one room and
+// - GET /api/learning/chatroom/history?courseId=&classId=&groupId= replays one room and
 //   adds a `transcript` receipt describing whether the store could be read.
 // - POST /api/learning/chatroom answers the round AND reports, in the same 200,
 //   whether the round was persisted.
@@ -148,7 +148,7 @@ export function createLocalChatMessageId() {
   return `local-${unique}-${localChatMessageSequence}`;
 }
 
-// GET /api/learning/chatroom response contract: the room's stored transcript,
+// GET /api/learning/chatroom/history response contract: the room's stored transcript,
 // plus the group roster for a group room.
 type ChatroomHistoryMessage = {
   id?: unknown;
@@ -217,7 +217,7 @@ export async function fetchChatroomHistory(input: {
   }
 
   try {
-    const response = await fetch(`/api/learning/chatroom?${query.toString()}`, {
+    const response = await fetch(`/api/learning/chatroom/history?${query.toString()}`, {
       headers: { accept: "application/json" },
     });
     if (response.status === 429) {

@@ -32,6 +32,18 @@ export type UaisDurableSnapshotBackendSelection = "postgres" | "external" | "loc
 export const UAIS_DURABLE_SNAPSHOT_BACKEND_ENV_NAME =
   "UAIS_TEACHING_COURSE_MANAGEMENT_BACKEND";
 
+export const uaisStagingLocalJsonDisallowedReasonCode =
+  "staging-local-json-disallowed";
+
+export class UaisDurableSnapshotBackendError extends Error {
+  readonly status = 503;
+
+  constructor(readonly reasonCode: string, message: string) {
+    super(message);
+    this.name = "UaisDurableSnapshotBackendError";
+  }
+}
+
 export function selectUaisDurableSnapshotBackend(
   env: Record<string, string | undefined>,
 ): UaisDurableSnapshotBackendSelection {
@@ -60,7 +72,17 @@ export function resolveUaisDurableSnapshotBackend<TRepository>(input: {
   if (selection === "external") {
     return input.createExternalRepository();
   }
-  // `undefined` is the local-JSON answer, which is allowed outside production
-  // and refused inside it by the caller's own assertion.
+  if (isUaisStagingRuntime(input.env)) {
+    throw new UaisDurableSnapshotBackendError(
+      uaisStagingLocalJsonDisallowedReasonCode,
+      "Staging durable snapshot persistence requires Postgres or external storage.",
+    );
+  }
+  // `undefined` is the local-JSON answer, which is allowed outside staging and
+  // production and refused inside those deployed runtimes by their guards.
   return undefined;
+}
+
+function isUaisStagingRuntime(env: Record<string, string | undefined>) {
+  return env.UAIS_DEPLOYMENT_ENV === "staging" || env.VERCEL_ENV === "preview";
 }

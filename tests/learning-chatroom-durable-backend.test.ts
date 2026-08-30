@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { selectLearningChatroomDurableBackend } from "@/lib/server/learning-chatroom-durable-backend";
+import {
+  resolveLearningChatroomDurableBackend,
+  selectLearningChatroomDurableBackend,
+} from "@/lib/server/learning-chatroom-durable-backend";
+import {
+  uaisStagingLocalJsonDisallowedReasonCode,
+} from "@/lib/server/uais-durable-snapshot-backend";
 import { createUaisTeachingCourseManagementRepository } from "@/lib/server/teaching-course-management-external-store";
 
 // Closes blocker B2 at the code level. Chatroom stores refuse local JSON in a
@@ -14,6 +20,14 @@ import { createUaisTeachingCourseManagementRepository } from "@/lib/server/teach
 
 const coreDatabase = { UAIS_CORE_DATABASE_URL: "postgres://user:pass@db/uais" };
 const production = { UAIS_DEPLOYMENT_ENV: "production" };
+
+function resolveBackend(env: Record<string, string | undefined>) {
+  return resolveLearningChatroomDurableBackend({
+    env,
+    createPostgresRepository: () => "postgres",
+    createExternalRepository: () => "external",
+  });
+}
 
 describe("learning chatroom durable backend selection", () => {
   it("uses Postgres in production when only the core database is configured", () => {
@@ -55,6 +69,41 @@ describe("learning chatroom durable backend selection", () => {
     // storage, the caller's own guard must still refuse rather than write to a
     // filesystem that disappears between requests.
     expect(selectLearningChatroomDurableBackend({ ...production })).toBe("local-json");
+  });
+
+  it("fails closed before resolving local JSON for staging without a durable selector", () => {
+    expect(() => resolveBackend({ UAIS_DEPLOYMENT_ENV: "staging" })).toThrowError(
+      expect.objectContaining({
+        name: "UaisDurableSnapshotBackendError",
+        reasonCode: uaisStagingLocalJsonDisallowedReasonCode,
+        status: 503,
+      }),
+    );
+  });
+
+  it("fails closed for a Vercel preview staging runtime without a core database", () => {
+    expect(() => resolveBackend({ VERCEL_ENV: "preview" })).toThrowError(
+      expect.objectContaining({
+        name: "UaisDurableSnapshotBackendError",
+        reasonCode: uaisStagingLocalJsonDisallowedReasonCode,
+        status: 503,
+      }),
+    );
+  });
+
+  it("keeps local JSON available for unmarked local development", () => {
+    expect(resolveBackend({})).toBeUndefined();
+  });
+
+  it("does not alter explicit durable backend selection in staging", () => {
+    expect(resolveBackend({
+      UAIS_DEPLOYMENT_ENV: "staging",
+      UAIS_TEACHING_COURSE_MANAGEMENT_BACKEND: "postgres",
+    })).toBe("postgres");
+    expect(resolveBackend({
+      VERCEL_ENV: "preview",
+      UAIS_TEACHING_COURSE_MANAGEMENT_BACKEND: "external",
+    })).toBe("external");
   });
 
   it("treats every production marker the stores treat as production", () => {

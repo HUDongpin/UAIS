@@ -113,6 +113,22 @@ export type LearningChatroomTranscriptDatabase = {
 export type LearningChatroomTranscriptRepositorySnapshot = {
   database: LearningChatroomTranscriptDatabase;
   revision?: string;
+  // Present when this snapshot was read for one request's room.  Keeping the
+  // key beside the payload makes a request-local snapshot a capability for
+  // exactly one room rather than an anonymous blob that a later caller could
+  // accidentally reuse for another room.
+  transcriptId?: string;
+};
+
+// A write must carry the room key and the revision that belonged to the read
+// which produced it.  The key is intentionally required here even though the
+// repository's historical read type still permits a corpus-wide snapshot.
+// Callers may keep this value in request-local state only; it is never a shared
+// cache or a cross-request authorization decision.
+export type LearningChatroomTranscriptWriteSnapshot = {
+  transcriptId: string;
+  database: LearningChatroomTranscriptDatabase;
+  revision?: string;
 };
 
 // Which room a repository call is about. A backend that keeps the whole corpus
@@ -251,6 +267,46 @@ export class LearningChatroomTranscriptStoreError extends Error {
     super(message);
     this.name = "LearningChatroomTranscriptStoreError";
   }
+}
+
+export const learningChatroomTranscriptRoomKeyMismatchReasonCode =
+  "transcript-room-key-mismatch";
+
+// Convert a repository read into an explicit write handoff.  This is the one
+// place where a caller can turn the anonymous legacy read shape into a write
+// snapshot, and it fails closed if a snapshot labelled for another room is
+// handed to this request.  We deliberately retain the complete database for
+// external/local repositories; the Postgres adapter narrows it to the room
+// row at its own boundary.
+export function createLearningChatroomTranscriptWriteSnapshot(input: {
+  transcriptId: string;
+  snapshot: LearningChatroomTranscriptRepositorySnapshot;
+}): LearningChatroomTranscriptWriteSnapshot {
+  const transcriptId = requireSafeId(input.transcriptId, "transcript id");
+  if (
+    input.snapshot.transcriptId !== undefined &&
+    input.snapshot.transcriptId !== transcriptId
+  ) {
+    throw new LearningChatroomTranscriptStoreError(
+      409,
+      "Learning chatroom transcript write snapshot room key does not match the request.",
+      learningChatroomTranscriptRoomKeyMismatchReasonCode,
+    );
+  }
+
+  if (input.snapshot.revision !== undefined) {
+    assertLearningChatroomTranscriptSnapshotRevision(input.snapshot.revision);
+  }
+
+  const database = normalizeLearningChatroomTranscriptDatabase(input.snapshot.database);
+
+  return {
+    transcriptId,
+    database,
+    ...(input.snapshot.revision !== undefined
+      ? { revision: input.snapshot.revision }
+      : {}),
+  };
 }
 
 export function assertLearningChatroomTranscriptLocalJsonRuntimeAllowed(
@@ -630,6 +686,10 @@ function createModerationReceipt(input: {
 export async function appendLearningChatroomTranscriptMessages(input: {
   dataDir?: string;
   repository?: LearningChatroomTranscriptRepository;
+  // The authenticated principal's role is supplied by the route, never by the
+  // request body.  Missing role information fails closed as a student: only an
+  // explicitly authenticated teacher may append to a frozen room.
+  actorRole?: "student" | "teacher";
   courseId: string;
   classId?: string;
   studentId: string;
@@ -651,6 +711,18 @@ export async function appendLearningChatroomTranscriptMessages(input: {
   // route's own race remains the single deadline authority - it only stops the
   // loop from starting another attempt the caller is no longer waiting for.
   retryBudgetMs?: number;
+  // A read performed earlier in this same request.  It is consumed only for the
+  // first attempt; after a 409 the loop must obtain a new snapshot from the
+  // repository, never reuse this potentially stale value.
+  snapshot?: LearningChatroomTranscriptWriteSnapshot;
+  // Runtime-facing alias for the request-local handoff.  It remains the
+  // repository read shape so the runtime can keep room identity in its own
+  // wrapper; createLearningChatroomTranscriptWriteSnapshot binds that payload
+  // to this append's derived key before use.
+  initialSnapshot?: LearningChatroomTranscriptRepositorySnapshot;
+  // Runtime-facing name for the authenticated writer role.  `actorRole` is
+  // retained for lower-level callers and the two are intentionally equivalent.
+  writerRole?: "student" | "teacher";
 }): Promise<LearningChatroomTranscriptAppendReceipt> {
   const storage = input.repository?.storage ?? localLearningChatroomTranscriptStorage;
   const now = input.now ?? new Date().toISOString();
@@ -670,6 +742,29 @@ export async function appendLearningChatroomTranscriptMessages(input: {
   const incoming = normalizeIncomingMessages(input.messages, now);
   const maxMessages = resolveLearningChatroomTranscriptMaxMessages(groupId);
 
+  // The key is part of the write capability.  Do this before any append work so
+  // a snapshot from another request/room cannot be used merely because its
+  // database envelope happens to be valid.
+  if (input.snapshot && input.initialSnapshot) {
+    throw new LearningChatroomTranscriptStoreError(
+      400,
+      "Learning chatroom transcript write snapshot was supplied more than once.",
+      "snapshot-duplicate",
+    );
+  }
+  const handedSnapshot = input.snapshot
+    ? createLearningChatroomTranscriptWriteSnapshot({
+        transcriptId,
+        snapshot: input.snapshot,
+      })
+    : input.initialSnapshot
+      ? createLearningChatroomTranscriptWriteSnapshot({
+          transcriptId,
+          snapshot: input.initialSnapshot,
+        })
+      : undefined;
+  const writerRole = input.actorRole ?? input.writerRole ?? "student";
+
   // A repository-backed write races other writers of the same snapshot, so the
   // read-modify-write is retried against a fresh revision. A per-student room has
   // one writer and retries once; a group room has one writer per member and
@@ -683,14 +778,39 @@ export async function appendLearningChatroomTranscriptMessages(input: {
   const retryBudgetStartedAtMs = Date.now();
   let retryDelayMs = 0;
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-    const snapshot = await readLearningChatroomTranscriptSnapshot({
-      dataDir: input.dataDir,
-      repository: input.repository,
-      transcriptId,
-    });
+    const snapshot =
+      attempt === 0 && handedSnapshot
+        ? handedSnapshot
+        : await readLearningChatroomTranscriptSnapshot({
+            dataDir: input.dataDir,
+            repository: input.repository,
+            transcriptId,
+          });
+    if (
+      snapshot.transcriptId !== undefined &&
+      snapshot.transcriptId !== transcriptId
+    ) {
+      throw new LearningChatroomTranscriptStoreError(
+        409,
+        "Learning chatroom transcript write snapshot room key does not match the request.",
+        learningChatroomTranscriptRoomKeyMismatchReasonCode,
+      );
+    }
     const existing = snapshot.database.transcripts.find(
       (item) => item.transcriptId === transcriptId,
     );
+    // This check is deliberately inside the retry loop.  If a teacher freezes
+    // the room after the first read wins the race, the repository CAS returns
+    // 409, the next attempt reads the fresh moderation block, and a student's
+    // append becomes a fail-closed 423 instead of being written after freeze.
+    // Teacher appends remain allowed and retain the moderation block below.
+    if (writerRole === "student" && existing?.moderation?.status === "frozen") {
+      throw new LearningChatroomTranscriptStoreError(
+        423,
+        "UAIS learning chatroom room is frozen by the course teacher.",
+        "chatroom-room-frozen",
+      );
+    }
     // The learner UI posts its whole visible transcript every round, so an
     // append is idempotent per message id: only ids the room has never stored
     // are added, in the order they arrived.
@@ -714,6 +834,7 @@ export async function appendLearningChatroomTranscriptMessages(input: {
       // `createdAt` just below.
       studentId: existing?.studentId ?? studentId,
       messages,
+      ...(existing?.moderation ? { moderation: existing.moderation } : {}),
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
       storagePolicy: storage.transcriptStoragePolicy,
@@ -811,20 +932,43 @@ export async function readLearningChatroomTranscriptSnapshot(input: {
   // read one room instead of all of them.
   transcriptId?: string;
 }): Promise<LearningChatroomTranscriptRepositorySnapshot> {
+  const transcriptId = input.transcriptId
+    ? requireSafeId(input.transcriptId, "transcript id")
+    : undefined;
   if (input.repository) {
     const snapshot = await input.repository.read(
-      input.transcriptId ? { transcriptId: input.transcriptId } : undefined,
+      transcriptId ? { transcriptId } : undefined,
     );
+    // Preserve a repository-supplied label so the write handoff can detect a
+    // backend that answered for the wrong room.  Only an unlabeled legacy
+    // repository result may inherit the requested key; overwriting a present
+    // label here would make the strict room-key check vacuous.
+    const database = normalizeLearningChatroomTranscriptDatabase(snapshot.database);
+    if (snapshot.revision !== undefined) {
+      assertLearningChatroomTranscriptSnapshotRevision(snapshot.revision);
+    }
+    if (
+      transcriptId &&
+      input.repository.storage.storageWritePolicy !== "atomic-json-file-replace" &&
+      database.transcripts.some((item) => item.transcriptId === transcriptId)
+    ) {
+      assertLearningChatroomTranscriptSnapshotRevision(snapshot.revision);
+    }
+    const snapshotTranscriptId = snapshot.transcriptId !== undefined
+      ? requireSafeId(snapshot.transcriptId, "snapshot transcript id")
+      : transcriptId;
     return {
-      database: normalizeLearningChatroomTranscriptDatabase(snapshot.database),
-      ...(snapshot.revision
-        ? { revision: requireSafeId(snapshot.revision, "revision") }
+      database,
+      ...(snapshot.revision !== undefined
+        ? { revision: snapshot.revision }
         : {}),
+      ...(snapshotTranscriptId ? { transcriptId: snapshotTranscriptId } : {}),
     };
   }
 
   return {
     database: await readLearningChatroomTranscriptDatabase({ dataDir: input.dataDir }),
+    ...(transcriptId ? { transcriptId } : {}),
   };
 }
 
@@ -863,7 +1007,9 @@ async function writeLearningChatroomTranscriptSnapshot(input: {
     await input.repository.write({
       database: normalizeLearningChatroomTranscriptDatabase(input.database),
       ...(input.transcriptId ? { transcriptId: input.transcriptId } : {}),
-      ...(input.expectedRevision ? { expectedRevision: input.expectedRevision } : {}),
+      ...(input.expectedRevision !== undefined
+        ? { expectedRevision: input.expectedRevision }
+        : {}),
     });
     return;
   }
@@ -1105,7 +1251,16 @@ function normalizeTranscriptStorageWritePolicy(
 }
 
 function isLearningChatroomTranscriptSnapshotConflict(error: unknown) {
-  return error instanceof LearningChatroomTranscriptStoreError && error.status === 409;
+  if (!(error instanceof LearningChatroomTranscriptStoreError) || error.status !== 409) {
+    return false;
+  }
+  // Only a backend's optimistic-contention response is retryable.  In
+  // particular, a room-key mismatch is a request bug and must retain its own
+  // reason code instead of being swallowed by the generic retry ladder.
+  return (
+    error.reasonCode === undefined ||
+    error.reasonCode === snapshotContentionReasonCode
+  );
 }
 
 // Exported because the window is no longer only an internal trimming rule: the
@@ -1230,6 +1385,21 @@ function requireSafeId(value: unknown, label: string) {
     throw new Error(`Invalid ${label}.`);
   }
   return value;
+}
+
+function assertLearningChatroomTranscriptSnapshotRevision(value: unknown): asserts value is string {
+  if (
+    typeof value !== "string" ||
+    value.length < 1 ||
+    value.length > 120 ||
+    !/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(value)
+  ) {
+    throw new LearningChatroomTranscriptStoreError(
+      503,
+      "Learning chatroom transcript snapshot revision is missing or invalid.",
+      "transcript-snapshot-revision-required",
+    );
+  }
 }
 
 // Course ids, class ids, accounts and message bodies are learner-authored and

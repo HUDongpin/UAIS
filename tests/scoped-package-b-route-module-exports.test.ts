@@ -38,6 +38,11 @@ const scopedRouteModules: ScopedRouteModule[] = [
     expectedExports: ["GET", "POST", "dynamic", "maxDuration"],
   },
   {
+    name: "learning chatroom history",
+    load: () => import("@/app/api/learning/chatroom/history/route"),
+    expectedExports: ["GET", "dynamic", "maxDuration"],
+  },
+  {
     name: "learning chatroom share mint",
     load: () => import("@/app/api/learning/chatroom/share/route"),
     expectedExports: ["POST", "dynamic"],

@@ -3,7 +3,7 @@
 // real-course resolution via GET /api/teaching/courses (URL hint, picker,
 // course switching, demo fallback, load failure, malformed body), composer
 // gating before a course resolves, prior-transcript restore via
-// GET /api/learning/chatroom, seed-transcript rules, request shape, rendered
+// GET /api/learning/chatroom/history, seed-transcript rules, request shape, rendered
 // agent turns, pending state, stale-round discard on course switch, the
 // 4000-char draft guard, and localized failures.
 // Runs in the shared jsdom environment configured in vitest.config.mts.
@@ -99,8 +99,8 @@ function storedTranscriptResponse(messages: StoredTranscriptMessage[]) {
 
 type StubOptions = {
   chatroom?: () => Promise<Response> | Response;
-  // GET /api/learning/chatroom: the room's stored transcript. Shares the round
-  // endpoint's path, so the stub routes the two apart by method; the requested
+  // GET /api/learning/chatroom/history: the room's stored transcript. It shares
+  // the chatroom prefix, so the stub routes the two apart by method; the requested
   // url is passed through so a test can answer per room.
   chatroomHistory?: (url: string) => Promise<Response> | Response;
   teachingCourses?: () => Promise<Response> | Response;
@@ -149,17 +149,19 @@ function stubFetch(options: StubOptions = {}) {
   return { fetchMock, calls };
 }
 
-// Rounds only: the transcript restore shares the endpoint path and is asserted
-// through `chatroomHistoryCalls`.
+// Rounds only: transcript restore uses the dedicated history child path and is
+// asserted through `chatroomHistoryCalls`.
 function chatroomCalls(calls: FetchCall[]) {
   return calls.filter(
-    (call) => call.url.includes("/api/learning/chatroom") && call.method === "POST",
+    (call) =>
+      call.url.endsWith("/api/learning/chatroom") && call.method === "POST",
   );
 }
 
 function chatroomHistoryCalls(calls: FetchCall[]) {
   return calls.filter(
-    (call) => call.url.includes("/api/learning/chatroom") && call.method === "GET",
+    (call) =>
+      call.url.includes("/api/learning/chatroom/history?") && call.method === "GET",
   );
 }
 

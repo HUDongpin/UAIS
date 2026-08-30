@@ -23,7 +23,6 @@ import {
   createAuditEvent,
   createClassInvitationCode,
   createReceipt,
-  isTeachingCourseManagementProductionRuntime,
   normalizeClassDraft,
   normalizeClassUniqueValue,
   normalizeCourseDraft,
@@ -49,6 +48,7 @@ import {
 export { normalizeTeachingCourseManagementDatabase };
 export { readTeachingCourseManagementSnapshot, resolveTeachingCourseManagementDataDir };
 export { readTeachingCourseManagementDatabase } from "./teaching-course-management-io";
+export { assertTeachingCourseManagementLocalJsonRuntimeAllowed } from "./teaching-course-management-runtime-guard";
 // Grading handlers moved to their own module; re-exported so the routes keep
 // importing them from the store unchanged (Phase 3 decomposition).
 export {
@@ -186,19 +186,6 @@ export type {
   TeachingStudentRosterSyncRecord,
 } from "@/lib/server/teaching-course-management-types";
 
-
-export function assertTeachingCourseManagementLocalJsonRuntimeAllowed(
-  env: Record<string, string | undefined>,
-) {
-  if (!isTeachingCourseManagementProductionRuntime(env)) {
-    return;
-  }
-
-  throw new TeachingCourseManagementStoreError(
-    503,
-    "Production teaching course management persistence requires external storage.",
-  );
-}
 
 export async function createTeachingCourseRecord(input: {
   dataDir?: string;

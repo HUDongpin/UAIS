@@ -16,6 +16,8 @@ import {
   createExternalStorageTeachingCourseManagementBackupRestoreDrillPostHandler,
   createExternalStorageTeachingCourseManagementDatabaseGetHandler,
   createExternalStorageTeachingCourseManagementDatabasePutHandler,
+  createExternalStorageLearningChatroomTranscriptsDatabaseGetHandler,
+  createExternalStorageLearningChatroomTranscriptsDatabasePutHandler,
   createExternalStorageTeachingOperationAuditAlertsGetHandler,
   createExternalStorageTeachingOperationAuditAlertNotificationsGetHandler,
   createExternalStorageTeachingOperationAuditAlertNotificationsPostHandler,
@@ -75,6 +77,27 @@ function authorizedRequest(url: string, init: RequestInit = {}) {
   });
 }
 
+function deferredAuthorizedRequest(url: string, body: unknown) {
+  let releaseBody!: () => void;
+  const bodyReady = new Promise<void>((resolve) => {
+    releaseBody = resolve;
+  });
+  const request = authorizedRequest(url, {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const readBody = request.text.bind(request);
+  Object.defineProperty(request, "text", {
+    configurable: true,
+    value: async () => {
+      await bodyReady;
+      return readBody();
+    },
+  });
+  return { request, releaseBody };
+}
+
 function expectSafeResponseBody(value: unknown, dataDir: string) {
   const serialized = JSON.stringify(value);
   expect(serialized).not.toContain(accessToken);
@@ -91,6 +114,101 @@ function restoreProcessEnvValue(name: string, value: string | undefined) {
 }
 
 describe("Next-hosted external storage route service", () => {
+  it("uses a transcript-only compare-and-swap lock for concurrent freeze and append writes", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "uais-next-transcript-cas-storage-"));
+    const env = createEnv(dataDir);
+    const putTranscripts =
+      createExternalStorageLearningChatroomTranscriptsDatabasePutHandler({ env });
+    const getTranscripts =
+      createExternalStorageLearningChatroomTranscriptsDatabaseGetHandler({ env });
+    const endpoint =
+      "https://www.uais.top/api/external-storage/learning-chatroom-transcripts/database";
+    const baseTranscript = {
+      transcriptId: "chatroom-transcript-cas-room",
+      courseId: "course-cas",
+      studentId: "student-cas",
+      messages: [],
+      createdAt: "2026-06-22T11:20:00.000Z",
+      updatedAt: "2026-06-22T11:20:00.000Z",
+      storagePolicy: "external-redacted-learning-chatroom-transcripts",
+      storageWritePolicy: "external-optimistic-snapshot-replace",
+      responsibleSession: "S12",
+      redaction: { secrets: "omitted", localFiles: "omitted", assets: "ids-only" },
+    };
+    const frozenDatabase = {
+      schemaVersion: "uais-learning-chatroom-transcripts-v2",
+      updatedAt: "2026-06-22T11:20:01.000Z",
+      transcripts: [
+        {
+          ...baseTranscript,
+          moderation: {
+            status: "frozen",
+            actorId: "teacher-cas",
+            actedAt: "2026-06-22T11:20:01.000Z",
+          },
+        },
+      ],
+    };
+    const appendedDatabase = {
+      schemaVersion: "uais-learning-chatroom-transcripts-v2",
+      updatedAt: "2026-06-22T11:20:02.000Z",
+      transcripts: [
+        {
+          ...baseTranscript,
+          messages: [
+            {
+              messageId: "message-cas-append",
+              role: "student",
+              content: "append wins only if its CAS wins",
+              createdAt: "2026-06-22T11:20:02.000Z",
+            },
+          ],
+        },
+      ],
+    };
+
+    try {
+      const initialResponse = await getTranscripts(authorizedRequest(endpoint));
+      expect(initialResponse.status).toBe(200);
+      const initial = await initialResponse.json();
+      expect(initial.revision).toBe("rev-empty");
+
+      const freeze = deferredAuthorizedRequest(endpoint, {
+        action: "replace-learning-chatroom-transcripts-database",
+        expectedRevision: initial.revision,
+        database: frozenDatabase,
+      });
+      const append = deferredAuthorizedRequest(endpoint, {
+        action: "replace-learning-chatroom-transcripts-database",
+        expectedRevision: initial.revision,
+        database: appendedDatabase,
+      });
+      const freezeResult = putTranscripts(freeze.request);
+      const appendResult = putTranscripts(append.request);
+      freeze.releaseBody();
+      append.releaseBody();
+
+      const responses = await Promise.all([freezeResult, appendResult]);
+      const bodies = await Promise.all(responses.map((response) => response.json()));
+      expect(responses.filter((response) => response.status === 200)).toHaveLength(1);
+      expect(responses.filter((response) => response.status === 409)).toHaveLength(1);
+      expect(bodies.filter((body) => body.error?.includes("revision mismatch"))).toHaveLength(1);
+
+      const persistedResponse = await getTranscripts(authorizedRequest(endpoint));
+      const persisted = await persistedResponse.json();
+      expect(persistedResponse.status).toBe(200);
+      const persistedTranscript = persisted.database.transcripts[0];
+      expect(persistedTranscript.transcriptId).toBe("chatroom-transcript-cas-room");
+      expect(
+        Boolean(persistedTranscript.moderation) !==
+          (persistedTranscript.messages.length > 0),
+      ).toBe(true);
+      expectSafeResponseBody(persisted, dataDir);
+    } finally {
+      await rm(dataDir, { recursive: true, force: true });
+    }
+  });
+
   it("persists course-management snapshots with optimistic revisions", async () => {
     const dataDir = await mkdtemp(join(tmpdir(), "uais-next-course-management-storage-"));
     const env = createEnv(dataDir);

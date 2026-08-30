@@ -30,12 +30,14 @@ import {
   appendLearningChatroomHistory,
   createLearningChatroomAgentMessageId,
   readLearningChatroomHistory,
+  readLearningChatroomTranscriptWriteSnapshot,
   type LearningChatroomHistoryResult,
   type LearningChatroomTranscriptRoomKey,
+  type LearningChatroomTranscriptWriteSnapshot,
   type LearningChatroomTranscriptWriteResult,
 } from "@/lib/server/learning-chatroom-transcript-runtime";
-import { resolveLearningChatroomTranscriptMaxMessages } from "@/lib/server/learning-chatroom-transcript-store";
 import { TeachingCourseManagementStoreError } from "@/lib/server/teaching-course-management-store";
+import { LearningChatroomTranscriptStoreError } from "@/lib/server/learning-chatroom-transcript-store";
 import { getUaisAppSessionUserFromCookieString } from "@/lib/server/uais-app-session";
 import type { Locale } from "@/i18n/copy";
 import type {
@@ -222,6 +224,7 @@ const learningChatroomHistoryDefaultRateLimitPerMinute = 30;
 const learningChatroomHistoryDefaultRateLimitPerDay = 2000;
 const learningChatroomHistoryRateLimitMessage =
   "Learning chatroom history rate limit exceeded. Please wait before reloading the transcript.";
+const learningChatroomPostTimingNames = ["entry", "session", "rate", "backend", "pool", "authorization", "transcript", "projection", "total"] as const;
 
 // Ids must stay aligned with `aiAgents` in `src/data/uais.ts` so learner-facing
 // chatroom cards and server orchestration name the same agent.
@@ -304,6 +307,7 @@ export function createLearningChatroomHistoryGetHandler(
 ) {
   const env = deps.env ?? process.env;
   const now = deps.now ?? Date.now;
+  const readPendingTranscript = createPendingLearningChatroomHistoryRead();
   // One limiter per handler instance, on its own env names and its own counts:
   // POST guards provider spend, GET guards the store reads a polling room makes,
   // so one budget must never consume the other's.
@@ -392,13 +396,20 @@ export function createLearningChatroomHistoryGetHandler(
         studentId: appSession.account,
       });
 
-      const history = await readLearningChatroomHistory({
-        env,
-        fetch: deps.fetch,
-        repository: deps.transcriptRepository,
-        ...transcriptRoom,
-        onError: createLearningChatroomTranscriptErrorLogger(traceId, room.courseId),
-      });
+      const history = await readPendingTranscript(transcriptRoom, () =>
+        readLearningChatroomHistory({
+          env,
+          fetch: deps.fetch,
+          repository: deps.transcriptRepository,
+          ...transcriptRoom,
+        }),
+      );
+      if (history.status === "unavailable") {
+        createLearningChatroomTranscriptErrorLogger(traceId, room.courseId)({
+          phase: "transcript-read",
+          error: new Error("Learning chatroom transcript storage is unavailable."),
+        });
+      }
 
       return learningChatroomJsonResponse(
         200,
@@ -471,14 +482,20 @@ export function createLearningChatroomPostHandler(
   return async function POST(request: Request) {
     // Anchored before the body read and the course authorization so that
     // pre-round time is subtracted from the provider budget rather than ignored.
-    const requestDeadlineMs = now() + learningChatroomRequestBudgetMs;
+    const requestStartedAtMs = now();
+    const requestDeadlineMs = requestStartedAtMs + learningChatroomRequestBudgetMs;
+    const respond = (response: Response) =>
+      finalizeLearningChatroomPostResponse(response, requestStartedAtMs, now);
     const traceId = readSafeLearningChatroomTraceId(request);
     let courseId: string | undefined;
     // Set once the round is authorized, so the error path can still persist the
     // learner's own message without ever persisting an unauthorized one.
     let transcriptRoom: LearningChatroomTranscriptRoomKey | undefined;
+    let transcriptWriteSnapshot: LearningChatroomTranscriptWriteSnapshot | undefined;
+    let transcriptWriterRole: "student" | "teacher" = "student";
     let transcriptRequestMessages: LearningChatroomTranscriptWriteMessage[] = [];
     let transcriptWritten = false;
+    let transcriptWriteAttempted = false;
     try {
       const appSession = getUaisAppSessionUserFromCookieString(
         request.headers.get("cookie"),
@@ -490,6 +507,7 @@ export function createLearningChatroomPostHandler(
           401,
         );
       }
+      transcriptWriterRole = appSession.role === "teacher" ? "teacher" : "student";
 
       const body = parseLearningChatroomRequest(await readLearningChatroomJson(request));
       courseId = body.courseId;
@@ -497,7 +515,7 @@ export function createLearningChatroomPostHandler(
         const access = createLearningAiGuideCourseContextRequiredAccessDecision({
           appSession,
         });
-        return createLearningAiGuideAccessDeniedResponse({ access, traceId });
+        return respond(createLearningAiGuideAccessDeniedResponse({ access, traceId }));
       }
 
       // Does this message actually address an agent?
@@ -582,14 +600,14 @@ export function createLearningChatroomPostHandler(
       }
 
       if (body.groupId && !isLearningChatroomGroupsEnabled(env)) {
-        return createLearningAiGuideAccessDeniedResponse({
+        return respond(createLearningAiGuideAccessDeniedResponse({
           access: createLearningChatroomGroupsDisabledAccessDecision({
             appSession,
             courseId: body.courseId,
             groupId: body.groupId,
           }),
           traceId,
-        });
+        }));
       }
 
       const access = await authorizeLearningAiGuideCourseAccess({
@@ -600,7 +618,7 @@ export function createLearningChatroomPostHandler(
         ...(body.groupId ? { groupId: body.groupId } : {}),
       });
       if (access.status === "denied") {
-        return createLearningAiGuideAccessDeniedResponse({ access, traceId });
+        return respond(createLearningAiGuideAccessDeniedResponse({ access, traceId }));
       }
 
       const group = access.group;
@@ -614,24 +632,19 @@ export function createLearningChatroomPostHandler(
         traceId,
         body.courseId,
       );
-      // One read, two jobs. It carries the room's moderation state, which the
-      // freeze gate below needs on EVERY post; and it is the only history the
-      // provider round is allowed to see, because it is the only history this
-      // server wrote (see `createLearningChatroomProviderHistory`).
-      //
-      // Metered against the wall like the append is. A read that cannot confirm
-      // in time degrades to "no stored history": the freeze gate then fails open
-      // and the round runs on the client's own unstored student rows, which is a
-      // round with less context - never a round that leaked forged agent turns,
-      // because the fallback carries no agent rows at all.
-      const roomHistory = await raceLearningChatroomBudget({
+      // One request-local snapshot carries both the moderation decision and the
+      // optimistic revision through the append.  POST must not use GET's
+      // best-effort empty-history fallback: an unreadable snapshot cannot prove
+      // that a student room is open, so it fails closed before any provider call
+      // or write is started.
+      const roomWriteSnapshot = await raceLearningChatroomBudget({
         budgetMs: Math.min(
           learningChatroomRoomReadBudgetMs,
           requestDeadlineMs - now(),
         ),
-        timedOut: createUnavailableLearningChatroomHistory(room.groupId),
+        timedOut: undefined as LearningChatroomTranscriptWriteSnapshot | undefined,
         run: () =>
-          readLearningChatroomHistory({
+          readLearningChatroomTranscriptWriteSnapshot({
             env,
             fetch: deps.fetch,
             repository: deps.transcriptRepository,
@@ -639,15 +652,21 @@ export function createLearningChatroomPostHandler(
             onError: logTranscriptError,
           }),
       });
+      if (!roomWriteSnapshot) {
+        throw new PublicLearningChatroomError(
+          "Learning chatroom transcript storage is unavailable.",
+          503,
+          { reasonCode: "chatroom-transcript-read-unavailable" },
+        );
+      }
+      const roomHistory = roomWriteSnapshot.history;
+      transcriptWriteSnapshot = roomWriteSnapshot;
 
       // A frozen room refuses student writes and keeps taking the teacher's, so
       // an instructor can quiet a room and still speak into it. The check sits
       // before `transcriptRoom` is set, so the error path below cannot persist
       // the refused message as a consolation.
       //
-      // Deliberately fail-open when the transcript could not be read at all: a
-      // storage outage must not silently mute a whole class, and a message that
-      // gets through will report its own `unavailable` receipt anyway.
       if (
         roomHistory.moderation?.status === "frozen" &&
         appSession.role !== "teacher"
@@ -692,6 +711,7 @@ export function createLearningChatroomPostHandler(
       // which the client already handles as a cue-user round: `turns: []`
       // renders nothing and clears the thinking indicator.
       if (!agentRoundRequested) {
+        transcriptWriteAttempted = true;
         const transcript = await persistLearningChatroomHistoryWithinBudget({
           budgetMs: requestDeadlineMs + learningChatroomPersistBudgetMs - now(),
           append: (retryBudgetMs) =>
@@ -703,12 +723,14 @@ export function createLearningChatroomPostHandler(
               messages: transcriptRequestMessages,
               now: new Date(now()).toISOString(),
               retryBudgetMs,
+              initialSnapshot: transcriptWriteSnapshot,
+              writerRole: transcriptWriterRole,
               onError: logTranscriptError,
             }),
         });
         transcriptWritten = true;
 
-        return learningChatroomJsonResponse(
+        return respond(learningChatroomJsonResponse(
           200,
           {
             status: "cue-user",
@@ -726,7 +748,7 @@ export function createLearningChatroomPostHandler(
             redaction: createLearningChatroomRedaction(),
           },
           traceId,
-        );
+        ));
       }
 
       // One completer per configured provider role. A round needs at least one;
@@ -949,6 +971,7 @@ export function createLearningChatroomPostHandler(
       // next visit, never the conversation the learner is having now. The same
       // reasoning bounds how long it may take - see
       // `persistLearningChatroomHistoryWithinBudget`.
+      transcriptWriteAttempted = true;
       const transcript = await persistLearningChatroomHistoryWithinBudget({
         budgetMs: requestDeadlineMs + learningChatroomPersistBudgetMs - now(),
         append: (retryBudgetMs) =>
@@ -968,12 +991,14 @@ export function createLearningChatroomPostHandler(
             ],
             now: new Date(roundStampMs).toISOString(),
             retryBudgetMs,
+            initialSnapshot: transcriptWriteSnapshot,
+            writerRole: transcriptWriterRole,
             onError: logTranscriptError,
           }),
       });
       transcriptWritten = true;
 
-      return learningChatroomJsonResponse(200, {
+      return respond(learningChatroomJsonResponse(200, {
         status: result.status,
         turns,
         ...(turnErrors.length > 0 ? { turnErrors } : {}),
@@ -985,7 +1010,7 @@ export function createLearningChatroomPostHandler(
           runtimeEvents: result.runtimeEvents,
         },
         redaction: createLearningChatroomRedaction(),
-      }, traceId);
+      }, traceId));
     } catch (error) {
       // The round is lost, but the learner's own message must still survive a
       // refresh, so an authorized request history is persisted best-effort
@@ -993,27 +1018,54 @@ export function createLearningChatroomPostHandler(
       // past validation, throttling or course authorization. This append is
       // deadline-bounded exactly like the success path's: a hung store must not
       // swallow the contractual 502/504/500 body the client is owed.
-      if (transcriptRoom && !transcriptWritten && transcriptRequestMessages.length > 0) {
+      let transcriptFallbackError: unknown;
+      if (
+        transcriptRoom &&
+        !transcriptWritten &&
+        !transcriptWriteAttempted &&
+        transcriptRequestMessages.length > 0
+      ) {
         const failedRoom = transcriptRoom;
-        await persistLearningChatroomHistoryWithinBudget({
-          budgetMs: requestDeadlineMs + learningChatroomPersistBudgetMs - now(),
-          append: (retryBudgetMs) =>
-            appendLearningChatroomHistory({
-              env,
-              fetch: deps.fetch,
-              repository: deps.transcriptRepository,
-              ...failedRoom,
-              messages: transcriptRequestMessages,
-              now: new Date(now()).toISOString(),
-              retryBudgetMs,
-              onError: createLearningChatroomTranscriptErrorLogger(
-                traceId,
-                failedRoom.courseId,
-              ),
-            }),
-        });
+        try {
+          await persistLearningChatroomHistoryWithinBudget({
+            budgetMs: requestDeadlineMs + learningChatroomPersistBudgetMs - now(),
+            append: (retryBudgetMs) =>
+              appendLearningChatroomHistory({
+                env,
+                fetch: deps.fetch,
+                repository: deps.transcriptRepository,
+                ...failedRoom,
+                messages: transcriptRequestMessages,
+                now: new Date(now()).toISOString(),
+                retryBudgetMs,
+                initialSnapshot: transcriptWriteSnapshot,
+                writerRole: transcriptWriterRole,
+                onError: createLearningChatroomTranscriptErrorLogger(
+                  traceId,
+                  failedRoom.courseId,
+                ),
+              }),
+          });
+        } catch (error) {
+          transcriptFallbackError = error;
+        }
       }
-      return createLearningChatroomErrorResponse({ error, traceId, courseId });
+      // A freeze or optimistic conflict is a control decision that must win
+      // over the original provider failure. Otherwise a failed provider round
+      // could use its catch-path append to bypass the room freeze and still
+      // return a misleading 502/unavailable response.
+      return respond(
+        createLearningChatroomErrorResponse({
+          error:
+            isLearningChatroomTranscriptControlError(transcriptFallbackError) &&
+            (transcriptFallbackError.status === 409 ||
+              transcriptFallbackError.status === 423)
+              ? transcriptFallbackError
+              : error,
+          traceId,
+          courseId,
+        }),
+      );
     }
   };
 }
@@ -1078,26 +1130,6 @@ async function raceLearningChatroomBudget<T>(input: {
   }
 }
 
-function createUnavailableLearningChatroomHistory(
-  groupId: string | undefined,
-): LearningChatroomHistoryResult {
-  return {
-    status: "unavailable",
-    messages: [],
-    hiddenMessageCount: 0,
-    // A read that timed out knows of no moderation decision, so it claims none.
-    // The round it degrades into carries the client's own unstored student rows,
-    // which is a round with less context - never one that smuggles agent turns.
-    hiddenMessageIds: [],
-    // A read that never confirmed knows nothing about the window either, so it
-    // reports the cap it would have been trimmed to and claims no eviction.
-    window: {
-      maxMessages: resolveLearningChatroomTranscriptMaxMessages(groupId),
-      atCapacity: false,
-    },
-  };
-}
-
 // Shared by both handlers: a public error keeps its status and message, anything
 // else answers 500 and is logged (never returned) with the round's trace id.
 function createLearningChatroomErrorResponse(input: {
@@ -1148,6 +1180,25 @@ function learningChatroomJsonResponse(
       ...extraHeaders,
     },
   });
+}
+
+// Keep POST timing intentionally fixed and redacted.  The header names are a
+// stable allow-list for diagnostics; no trace id, account id, provider name,
+// secret, DSN, or raw query detail may enter Server-Timing.  Detailed provider
+// spans remain an internal evidence concern and are not exposed to learners.
+function finalizeLearningChatroomPostResponse(
+  response: Response,
+  startedAtMs: number,
+  now: () => number,
+) {
+  const total = boundLearningChatroomDuration(now() - startedAtMs);
+  response.headers.set("server-timing", learningChatroomPostTimingNames.map((name) => `${name};dur=${name === "total" ? total : 0}`).join(", "));
+  return response;
+}
+
+function boundLearningChatroomDuration(value: number) {
+  if (!Number.isFinite(value) || value <= 0) return 0;
+  return Math.min(60_000, Math.round(value * 100) / 100);
 }
 
 // Reads the spend guard from env at handler construction. Every value has a
@@ -1546,6 +1597,31 @@ function createLearningChatroomTranscriptRoom(input: {
   };
 }
 
+function createPendingLearningChatroomHistoryRead() {
+  const pending = new Map<string, Promise<LearningChatroomHistoryResult>>();
+  return (
+    room: LearningChatroomTranscriptRoomKey,
+    read: () => Promise<LearningChatroomHistoryResult>,
+  ) => {
+    const key = JSON.stringify([
+      room.courseId,
+      room.classId ?? "",
+      room.groupId ?? "",
+      room.groupId ? "shared-group-room" : room.studentId,
+    ]);
+    const existing = pending.get(key);
+    if (existing) return existing;
+
+    const current = Promise.resolve().then(read);
+    pending.set(key, current);
+    const clearPendingRead = () => {
+      if (pending.get(key) === current) pending.delete(key);
+    };
+    void current.then(clearPendingRead, clearPendingRead);
+    return current;
+  };
+}
+
 // Attribution comes from the verified session, never from the request body: a
 // member who posted `authorRole: "teacher"` would otherwise have their message
 // rendered as instructor guidance to the whole room and to signed-out share
@@ -1813,6 +1889,11 @@ function createPublicLearningChatroomError(error: unknown) {
   if (error instanceof TeachingCourseManagementStoreError) {
     return new PublicLearningChatroomError(error.message, error.status);
   }
+  if (isLearningChatroomTranscriptControlError(error)) {
+    return new PublicLearningChatroomError(error.message, error.status, {
+      ...(error.reasonCode ? { reasonCode: error.reasonCode } : {}),
+    });
+  }
   if (error instanceof Error && error.message === learningChatroomEmptyContentMessage) {
     return new PublicLearningChatroomError(error.message, 502);
   }
@@ -1826,6 +1907,21 @@ function createPublicLearningChatroomError(error: unknown) {
     return new PublicLearningChatroomError(error.message, 503);
   }
   return undefined;
+}
+
+function isLearningChatroomTranscriptControlError(
+  error: unknown,
+): error is LearningChatroomTranscriptStoreError {
+  // The explicit instanceof covers normal route execution.  The structural
+  // fallback keeps control errors stable when a test/runtime loads the shared
+  // store through two module graphs (a possible App Router/Vitest boundary).
+  return (
+    error instanceof LearningChatroomTranscriptStoreError ||
+    (error instanceof Error &&
+      error.name === "LearningChatroomTranscriptStoreError" &&
+      (error as { status?: unknown }).status !== undefined &&
+      (error as { reasonCode?: unknown }).reasonCode !== undefined)
+  );
 }
 
 function readSafeLearningChatroomTraceId(request: Request) {

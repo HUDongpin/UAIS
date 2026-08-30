@@ -4,16 +4,21 @@ import { resolveLearningChatroomDurableBackend } from "@/lib/server/learning-cha
 import {
   appendLearningChatroomTranscriptMessages,
   assertLearningChatroomTranscriptLocalJsonRuntimeAllowed,
+  createLearningChatroomTranscriptId,
+  normalizeLearningChatroomTranscriptDatabase,
+  readLearningChatroomTranscriptSnapshot,
   readLearningChatroomTranscript,
   resolveLearningChatroomTranscriptDataDir,
   resolveLearningChatroomTranscriptMaxMessages,
   setLearningChatroomTranscriptMessageModeration,
   setLearningChatroomTranscriptRoomModeration,
+  LearningChatroomTranscriptStoreError,
   type LearningChatroomTranscriptMessage,
   type LearningChatroomTranscriptModerationResult,
   type LearningChatroomTranscriptRepository,
   type LearningChatroomTranscriptRoomModeration,
   type LearningChatroomTranscriptStoragePolicy,
+  type LearningChatroomTranscriptRepositorySnapshot,
 } from "@/lib/server/learning-chatroom-transcript-store";
 
 // Route-facing wrapper around the chatroom transcript store. Persistence is a
@@ -70,6 +75,30 @@ export type LearningChatroomTranscriptWriteResult = {
   storagePolicy?: LearningChatroomTranscriptStoragePolicy;
 };
 
+// A POST must carry the exact room snapshot it authorized through the eventual
+// append.  Unlike `LearningChatroomHistoryResult`, this value keeps the
+// optimistic revision and the room identity used by the repository write.  It
+// is request-local by construction: callers create one after authorization and
+// never cache or share it between requests.
+export type LearningChatroomTranscriptWriteSnapshot = {
+  room: LearningChatroomTranscriptRoomKey;
+  transcriptId: string;
+  snapshot: LearningChatroomTranscriptRepositorySnapshot;
+  history: LearningChatroomHistoryResult;
+};
+
+// A repository-backed POST must never turn an unknown optimistic-write state
+// into an unguarded append.  Keep this classification in the route-facing
+// runtime so malformed provider data is mapped before a model client or write
+// path is constructed, without exposing the provider's raw response/error.
+export const learningChatroomTranscriptSnapshotRevisionRequiredReasonCode =
+  "transcript-snapshot-revision-required";
+
+const postgresLearningChatroomTranscriptStoragePolicy =
+  "postgres-learning-chatroom-transcripts";
+const externalLearningChatroomTranscriptStoragePolicy =
+  "external-redacted-learning-chatroom-transcripts";
+
 type LearningChatroomTranscriptRuntimeDeps = {
   env: Record<string, string | undefined>;
   fetch?: typeof fetch;
@@ -122,6 +151,149 @@ export async function readLearningChatroomHistory(
       }),
     };
   }
+}
+
+// Strict counterpart used by POST.  The ordinary history reader deliberately
+// degrades storage failures to an empty transcript for polling; doing that for
+// a write would turn an unknown moderation state into an apparently open room.
+// This function therefore lets the store error propagate.  A caller may safely
+// expose only its mapped public status, never the underlying error details.
+export async function readLearningChatroomTranscriptWriteSnapshot(
+  input: LearningChatroomTranscriptRuntimeDeps & LearningChatroomTranscriptRoomKey,
+): Promise<LearningChatroomTranscriptWriteSnapshot> {
+  try {
+    const { dataDir, repository } = resolveLearningChatroomTranscriptBackend(input);
+    const transcriptId = createLearningChatroomTranscriptId(input);
+    // The shared helper intentionally binds the requested id onto its return
+    // value for ordinary callers.  POST must inspect the repository's original
+    // label before that binding, otherwise a backend that ignores the scoped
+    // read could return another room and be mistaken for an empty snapshot.
+    const snapshot = repository
+      ? await repository.read({ transcriptId })
+      : await readLearningChatroomTranscriptSnapshot({ dataDir, transcriptId });
+    if (
+      repository &&
+      snapshot.transcriptId !== undefined &&
+      snapshot.transcriptId !== transcriptId
+    ) {
+      throw new LearningChatroomTranscriptStoreError(
+        409,
+        "Learning chatroom transcript write snapshot room key does not match the request.",
+        "transcript-room-key-mismatch",
+      );
+    }
+    const database = normalizeLearningChatroomTranscriptDatabase(snapshot.database);
+    const record = database.transcripts.find((item) => item.transcriptId === transcriptId);
+    assertLearningChatroomTranscriptWriteSnapshotRevision({
+      snapshot,
+      database,
+      hasRoomRecord: Boolean(record),
+      storagePolicy: repository?.storage.transcriptStoragePolicy,
+    });
+    const storedMessages = record?.messages ?? [];
+    const visibleMessages = storedMessages.filter(
+      (message) => message.moderation?.status !== "hidden",
+    );
+    const history: LearningChatroomHistoryResult = {
+      status: "loaded",
+      messages: visibleMessages,
+      hiddenMessageCount: storedMessages.length - visibleMessages.length,
+      hiddenMessageIds: storedMessages
+        .filter((message) => message.moderation?.status === "hidden")
+        .map((message) => message.messageId),
+      ...(record?.moderation ? { moderation: record.moderation } : {}),
+      window: createLearningChatroomTranscriptWindow({
+        groupId: input.groupId,
+        storedMessageCount: storedMessages.length,
+      }),
+      ...(record?.storagePolicy ? { storagePolicy: record.storagePolicy } : {}),
+    };
+    return { room: { ...input }, transcriptId, snapshot, history };
+  } catch (error) {
+    reportLearningChatroomTranscriptError(input, "transcript-read", error);
+    if (error instanceof LearningChatroomTranscriptStoreError) {
+      throw error;
+    }
+    // Do not expose backend/provider details and do not let an arbitrary
+    // repository error become a generic 500.  POST needs a stable 503 so the
+    // caller can distinguish an unreadable authorization snapshot from an
+    // application bug, while the original error remains only in the redacted
+    // server-side logger.
+    throw new LearningChatroomTranscriptStoreError(
+      503,
+      "Learning chatroom transcript storage is unavailable.",
+      "transcript-read-unavailable",
+    );
+  }
+}
+
+function assertLearningChatroomTranscriptWriteSnapshotRevision(input: {
+  snapshot: LearningChatroomTranscriptRepositorySnapshot;
+  database: ReturnType<typeof normalizeLearningChatroomTranscriptDatabase>;
+  hasRoomRecord: boolean;
+  storagePolicy?: LearningChatroomTranscriptStoragePolicy;
+}) {
+  const revision = input.snapshot.revision;
+  const hasValidRevision = isLearningChatroomTranscriptSnapshotRevision(revision);
+
+  // The local JSON implementation has atomic file replacement rather than an
+  // optimistic revision contract, and therefore legitimately has no revision.
+  // If a repository advertises one of the CAS-backed policies, however, a
+  // malformed revision must fail closed even in staging/test environments.
+  if (
+    revision !== undefined &&
+    !hasValidRevision
+  ) {
+    throwLearningChatroomTranscriptSnapshotRevisionRequired();
+  }
+
+  if (input.storagePolicy === postgresLearningChatroomTranscriptStoragePolicy) {
+    // A missing Postgres row is the one legal no-revision initial state.  Once
+    // the room exists, the handed revision is the CAS guard and is mandatory.
+    const isInitialEmptyPostgresSnapshot =
+      !input.hasRoomRecord && input.database.transcripts.length === 0;
+    if (
+      (!isInitialEmptyPostgresSnapshot && !hasValidRevision) ||
+      revision === "rev-empty"
+    ) {
+      throwLearningChatroomTranscriptSnapshotRevisionRequired();
+    }
+    return;
+  }
+
+  if (input.storagePolicy === externalLearningChatroomTranscriptStoragePolicy) {
+    // External storage has a resource revision even for a 404/empty resource;
+    // `rev-empty` is its explicit first-write sentinel.  It is not valid for a
+    // non-empty snapshot, where accepting it would erase the distinction
+    // between an absent resource and a previously written resource.
+    const isEmptySnapshot = input.database.transcripts.length === 0;
+    if (
+      !hasValidRevision ||
+      (isEmptySnapshot && revision !== "rev-empty") ||
+      (!isEmptySnapshot && revision === "rev-empty")
+    ) {
+      throwLearningChatroomTranscriptSnapshotRevisionRequired();
+    }
+  }
+}
+
+function isLearningChatroomTranscriptSnapshotRevision(
+  value: unknown,
+): value is string {
+  return (
+    typeof value === "string" &&
+    value.length >= 1 &&
+    value.length <= 120 &&
+    /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(value)
+  );
+}
+
+function throwLearningChatroomTranscriptSnapshotRevisionRequired(): never {
+  throw new LearningChatroomTranscriptStoreError(
+    503,
+    "Learning chatroom transcript snapshot revision is unavailable.",
+    learningChatroomTranscriptSnapshotRevisionRequiredReasonCode,
+  );
 }
 
 // `atCapacity` is deliberately "the window is full", not "something was
@@ -205,6 +377,8 @@ export async function appendLearningChatroomHistory(
       }>;
       now: string;
       retryBudgetMs?: number;
+      initialSnapshot?: LearningChatroomTranscriptWriteSnapshot;
+      writerRole?: "student" | "teacher";
     },
 ): Promise<LearningChatroomTranscriptWriteResult> {
   if (input.messages.length === 0) {
@@ -213,6 +387,16 @@ export async function appendLearningChatroomHistory(
 
   try {
     const { dataDir, repository } = resolveLearningChatroomTranscriptBackend(input);
+    if (
+      input.initialSnapshot &&
+      !isLearningChatroomTranscriptWriteSnapshotForRoom(input.initialSnapshot, input)
+    ) {
+      throw new LearningChatroomTranscriptStoreError(
+        409,
+        "Learning chatroom transcript room changed; fresh snapshot required.",
+        "chatroom-room-mismatch",
+      );
+    }
     const receipt = await appendLearningChatroomTranscriptMessages({
       dataDir,
       repository,
@@ -225,6 +409,8 @@ export async function appendLearningChatroomHistory(
       ...(input.retryBudgetMs === undefined
         ? {}
         : { retryBudgetMs: input.retryBudgetMs }),
+      ...(input.initialSnapshot ? { initialSnapshot: input.initialSnapshot.snapshot } : {}),
+      ...(input.writerRole ? { writerRole: input.writerRole } : {}),
     });
     return {
       status: "persisted",
@@ -234,8 +420,30 @@ export async function appendLearningChatroomHistory(
     };
   } catch (error) {
     reportLearningChatroomTranscriptError(input, "transcript-write", error);
+    // These are control-flow outcomes, not an unavailable best-effort write.
+    // Let the route preserve the freeze/conflict status so a provider failure
+    // cannot fall through to a second append that silently reports success.
+    if (
+      error instanceof LearningChatroomTranscriptStoreError &&
+      (error.status === 409 || error.status === 423)
+    ) {
+      throw error;
+    }
     return { status: "unavailable" };
   }
+}
+
+function isLearningChatroomTranscriptWriteSnapshotForRoom(
+  snapshot: LearningChatroomTranscriptWriteSnapshot,
+  room: LearningChatroomTranscriptRoomKey,
+) {
+  return (
+    snapshot.transcriptId === createLearningChatroomTranscriptId(room) &&
+    snapshot.room.courseId === room.courseId &&
+    (snapshot.room.classId ?? "") === (room.classId ?? "") &&
+    (snapshot.room.groupId ?? "") === (room.groupId ?? "") &&
+    snapshot.room.studentId === room.studentId
+  );
 }
 
 // Message ids are minted server-side and echoed back to the client so the next

@@ -14,12 +14,12 @@ import {
   createEmptyDatabase,
   normalizeTeachingCourseManagementDatabase,
 } from "@/lib/server/teaching-course-management-database-normalizer";
-import {
-  TeachingCourseManagementStoreError,
-  type TeachingCourseManagementDatabase,
-  type TeachingCourseManagementRepository,
-  type TeachingCourseManagementStorageDescriptor,
-} from "@/lib/server/teaching-course-management-store";
+import { TeachingCourseManagementStoreError } from "@/lib/server/teaching-course-management-error";
+import type {
+  TeachingCourseManagementDatabase,
+  TeachingCourseManagementRepository,
+  TeachingCourseManagementStorageDescriptor,
+} from "@/lib/server/teaching-course-management-types";
 
 // Course management on the core database, ONE ROW PER COURSE.
 //
@@ -83,6 +83,11 @@ const postgresTeachingCourseManagementStorage: TeachingCourseManagementStorageDe
 export function createUaisTeachingCourseManagementPostgresRepository(input: {
   env: Record<string, string | undefined>;
   createDatabase?: TeachingCourseManagementPostgresClientFactory;
+  timingNow?: () => number;
+  onTiming?: (span: {
+    name: "backend" | "pool";
+    durationMs: number;
+  }) => void;
 }): TeachingCourseManagementRepository {
   const readiness = getUaisCoreDatabaseReadiness(input.env);
   if (readiness.status !== "ready") {
@@ -99,7 +104,13 @@ export function createUaisTeachingCourseManagementPostgresRepository(input: {
     storage: postgresTeachingCourseManagementStorage,
     read: async (scope) => {
       const courseKey = readCourseKey(scope?.courseId);
+      const timingNow = input.timingNow ?? defaultTimingNow;
+      const poolStartedAt = timingNow();
       const client = (input.createDatabase ?? getUaisCoreDatabasePool)({ env: input.env });
+      input.onTiming?.({
+        name: "pool",
+        durationMs: elapsedMilliseconds(poolStartedAt, timingNow()),
+      });
       try {
         // An unnamed course means "every course", which is how the course list,
         // the invite-code lookup and the operations exports still work after the
@@ -235,6 +246,15 @@ export function createUaisTeachingCourseManagementPostgresRepository(input: {
       }
     },
   };
+}
+
+function defaultTimingNow() {
+  return globalThis.performance?.now() ?? Date.now();
+}
+
+function elapsedMilliseconds(startedAt: number, finishedAt: number) {
+  const duration = finishedAt - startedAt;
+  return Number.isFinite(duration) && duration > 0 ? duration : 0;
 }
 
 // The one invariant the re-key cannot express as a row: an invite code is

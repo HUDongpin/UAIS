@@ -1,10 +1,10 @@
 import { createUaisTeachingCourseManagementRepository } from "@/lib/server/teaching-course-management-external-store";
+import { assertTeachingCourseManagementLocalJsonRuntimeAllowed } from "@/lib/server/teaching-course-management-runtime-guard";
 import {
-  assertTeachingCourseManagementLocalJsonRuntimeAllowed,
   readTeachingCourseManagementSnapshot,
   resolveTeachingCourseManagementDataDir,
-  type TeachingCourseManagementRepository,
-} from "@/lib/server/teaching-course-management-store";
+} from "@/lib/server/teaching-course-management-io";
+import type { TeachingCourseManagementRepository } from "@/lib/server/teaching-course-management-types";
 import { isPublishedDemoTeacherCourseAccess } from "@/lib/server/published-demo-course-access";
 
 type LearningAiGuideCourseAccessReason =
@@ -86,6 +86,11 @@ export async function authorizeLearningAiGuideCourseAccess(input: {
   groupId?: string;
   fetch?: typeof fetch;
   repository?: TeachingCourseManagementRepository;
+  timingNow?: () => number;
+  onTiming?: (span: {
+    name: "backend" | "pool";
+    durationMs: number;
+  }) => void;
 }): Promise<LearningAiGuideCourseAccessDecision> {
   const actor = {
     actorId: input.appSession.account,
@@ -125,6 +130,8 @@ export async function authorizeLearningAiGuideCourseAccess(input: {
     createUaisTeachingCourseManagementRepository({
       env: input.env,
       fetch: input.fetch,
+      timingNow: input.timingNow,
+      onTiming: input.onTiming,
     });
 
   if (!repository) {
@@ -136,7 +143,9 @@ export async function authorizeLearningAiGuideCourseAccess(input: {
   // class, membership, group and audit event - to answer a question about one
   // course. Since the per-course re-key it reads one row.
   const { database } = await readTeachingCourseManagementSnapshot({
-    dataDir: resolveTeachingCourseManagementDataDir(input.env.UAIS_TEACHING_COURSES_DATA_DIR),
+    dataDir: resolveTeachingCourseManagementDataDir(
+      input.env.UAIS_TEACHING_COURSES_DATA_DIR,
+    ),
     repository,
     courseId: input.courseId,
   });

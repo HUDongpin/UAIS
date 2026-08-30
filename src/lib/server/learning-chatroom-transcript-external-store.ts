@@ -7,11 +7,13 @@ import {
 import {
   createEmptyLearningChatroomTranscriptDatabase,
   LearningChatroomTranscriptStoreError,
+  learningChatroomTranscriptRoomKeyMismatchReasonCode,
   normalizeLearningChatroomTranscriptDatabase,
   type LearningChatroomTranscriptDatabase,
   type LearningChatroomTranscriptRepository,
   type LearningChatroomTranscriptStorageDescriptor,
 } from "@/lib/server/learning-chatroom-transcript-store";
+import { snapshotContentionReasonCode } from "./optimistic-write-retry";
 import {
   isUaisProductionDatabaseAdapterEvidence,
   isUaisProductionRuntime,
@@ -63,7 +65,7 @@ export function createUaisLearningChatroomTranscriptRepository(input: {
 
   return {
     storage: externalLearningChatroomTranscriptStorage,
-    read: async () => {
+    read: async (scope) => {
       const response = await fetchImpl(databaseUrl, {
         method: "GET",
         headers: {
@@ -80,7 +82,14 @@ export function createUaisLearningChatroomTranscriptRepository(input: {
             "External learning chatroom transcript read acknowledgement is missing production database adapter evidence.",
           );
         }
-        return { database: createEmptyLearningChatroomTranscriptDatabase() };
+        return {
+          database: createEmptyLearningChatroomTranscriptDatabase(),
+          // The external CAS endpoint defines the empty resource's revision as
+          // `rev-empty`; handing it forward lets a legitimate first PUT carry
+          // a guard instead of falling back to an unguarded create.
+          revision: "rev-empty",
+          ...(scope?.transcriptId ? { transcriptId: scope.transcriptId } : {}),
+        };
       }
       if (!response.ok) {
         throw new LearningChatroomTranscriptStoreError(
@@ -104,21 +113,68 @@ export function createUaisLearningChatroomTranscriptRepository(input: {
         );
       }
       const revision = typeof body.revision === "string" ? body.revision.trim() : "";
-      if (isUaisProductionRuntime(input.env) && !revision) {
+      const hasRevisionField = Object.prototype.hasOwnProperty.call(body, "revision");
+      const database = body.database
+        ? normalizeLearningChatroomTranscriptDatabase(body.database)
+        : createEmptyLearningChatroomTranscriptDatabase();
+      const effectiveRevision =
+        !hasRevisionField &&
+        database.updatedAt === "1970-01-01T00:00:00.000Z" &&
+        database.transcripts.length === 0
+          ? "rev-empty"
+          : revision;
+      if (
+        !isValidSnapshotRevision(effectiveRevision) ||
+        (database.transcripts.length > 0 && effectiveRevision === "rev-empty")
+      ) {
         throw new LearningChatroomTranscriptStoreError(
-          502,
-          "External learning chatroom transcript read acknowledgement is missing snapshot revision.",
+          503,
+          "External learning chatroom transcript read acknowledgement is missing or invalid snapshot revision.",
+          "transcript-snapshot-revision-required",
         );
       }
 
       return {
-        database: body.database
-          ? normalizeLearningChatroomTranscriptDatabase(body.database)
-          : createEmptyLearningChatroomTranscriptDatabase(),
-        ...(revision ? { revision } : {}),
+        database,
+        ...(effectiveRevision ? { revision: effectiveRevision } : {}),
+        ...(scope?.transcriptId ? { transcriptId: scope.transcriptId } : {}),
       };
     },
-    write: async ({ database, expectedRevision }) => {
+    write: async ({ database, expectedRevision, transcriptId }) => {
+      const normalizedDatabase = normalizeLearningChatroomTranscriptDatabase(database);
+      if (
+        transcriptId &&
+        normalizedDatabase.transcripts.length > 0 &&
+        !normalizedDatabase.transcripts.some(
+          (transcript) => transcript.transcriptId === transcriptId,
+        )
+      ) {
+        throw new LearningChatroomTranscriptStoreError(
+          409,
+          "External learning chatroom transcript write snapshot room key does not match the request.",
+          learningChatroomTranscriptRoomKeyMismatchReasonCode,
+        );
+      }
+      // The external endpoint is a compare-and-swap API.  A first PUT must
+      // carry the revision handed back by the request-local GET (normally
+      // `rev-empty`), never omit the guard and accidentally create over a
+      // concurrent first writer.  A missing revision is therefore a local
+      // protocol failure, not a blind write that can be retried.
+      if (!expectedRevision?.trim()) {
+        throw new LearningChatroomTranscriptStoreError(
+          503,
+          "External learning chatroom transcript write requires the handed snapshot revision.",
+          "transcript-snapshot-revision-required",
+        );
+      }
+      const handedRevision = expectedRevision.trim();
+      if (!isValidSnapshotRevision(handedRevision)) {
+        throw new LearningChatroomTranscriptStoreError(
+          503,
+          "External learning chatroom transcript write requires a valid snapshot revision.",
+          "transcript-snapshot-revision-required",
+        );
+      }
       const response = await fetchImpl(databaseUrl, {
         method: "PUT",
         headers: {
@@ -128,8 +184,8 @@ export function createUaisLearningChatroomTranscriptRepository(input: {
         },
         body: JSON.stringify({
           action: "replace-learning-chatroom-transcripts-database",
-          ...(expectedRevision ? { expectedRevision } : {}),
-          database,
+          expectedRevision: handedRevision,
+          database: normalizedDatabase,
         }),
         signal: AbortSignal.timeout(10_000),
       });
@@ -138,6 +194,7 @@ export function createUaisLearningChatroomTranscriptRepository(input: {
         throw new LearningChatroomTranscriptStoreError(
           409,
           "External learning chatroom transcript snapshot changed; retry required.",
+          snapshotContentionReasonCode,
         );
       }
       if (!response.ok) {
@@ -172,6 +229,15 @@ export function createUaisLearningChatroomTranscriptRepository(input: {
       }
     },
   };
+}
+
+function isValidSnapshotRevision(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    value.length > 0 &&
+    value.length <= 120 &&
+    /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(value)
+  );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

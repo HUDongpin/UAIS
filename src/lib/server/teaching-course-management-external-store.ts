@@ -4,12 +4,12 @@ import {
   isLocalJsonFileStorageBackendContract,
   resolveUaisStorageBackendContract,
 } from "@/lib/ai/storage-backend-contract";
-import {
-  TeachingCourseManagementStoreError,
-  type TeachingCourseManagementDatabase,
-  type TeachingCourseManagementRepository,
-  type TeachingCourseManagementStorageDescriptor,
-} from "@/lib/server/teaching-course-management-store";
+import { TeachingCourseManagementStoreError } from "@/lib/server/teaching-course-management-error";
+import type {
+  TeachingCourseManagementDatabase,
+  TeachingCourseManagementRepository,
+  TeachingCourseManagementStorageDescriptor,
+} from "@/lib/server/teaching-course-management-types";
 import {
   isUaisProductionDatabaseAdapterEvidence,
   isUaisProductionRuntime,
@@ -26,6 +26,11 @@ const externalTeachingCourseManagementStorage: TeachingCourseManagementStorageDe
 export function createUaisTeachingCourseManagementRepository(input: {
   env: Record<string, string | undefined>;
   fetch?: typeof fetch;
+  timingNow?: () => number;
+  onTiming?: (span: {
+    name: "backend" | "pool";
+    durationMs: number;
+  }) => void;
 }): TeachingCourseManagementRepository | undefined {
   // Shared with the chatroom stores, which is the point: an unset selector used
   // to leave the chatroom on Postgres (it had gained a production auto-default)
@@ -33,9 +38,19 @@ export function createUaisTeachingCourseManagementRepository(input: {
   // invite join, approval and group routes then all answered 503 on a
   // deployment the readiness script reported as ready. One selection function
   // means the two can no longer disagree.
+  const timingNow = input.timingNow ?? defaultTimingNow;
+  const selectionStartedAt = timingNow();
   const selection = selectUaisDurableSnapshotBackend(input.env);
+  input.onTiming?.({
+    name: "backend",
+    durationMs: elapsedMilliseconds(selectionStartedAt, timingNow()),
+  });
   if (selection === "postgres") {
-    return createUaisTeachingCourseManagementPostgresRepository({ env: input.env });
+    return createUaisTeachingCourseManagementPostgresRepository({
+      env: input.env,
+      timingNow,
+      onTiming: input.onTiming,
+    });
   }
   if (selection === "local-json") {
     // Allowed outside production; the caller's own production guard refuses it
@@ -191,6 +206,15 @@ export function createUaisTeachingCourseManagementRepository(input: {
       }
     },
   };
+}
+
+function defaultTimingNow() {
+  return globalThis.performance?.now() ?? Date.now();
+}
+
+function elapsedMilliseconds(startedAt: number, finishedAt: number) {
+  const duration = finishedAt - startedAt;
+  return Number.isFinite(duration) && duration > 0 ? duration : 0;
 }
 
 function createEmptyDatabase(): TeachingCourseManagementDatabase {

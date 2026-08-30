@@ -6,6 +6,8 @@ import {
   appendLearningChatroomTranscriptMessages,
   createEmptyLearningChatroomTranscriptDatabase,
   createLearningChatroomTranscriptId,
+  LearningChatroomTranscriptStoreError,
+  normalizeLearningChatroomTranscriptDatabase,
   nextLearningChatroomTranscriptRetryDelayMs,
   type LearningChatroomTranscriptDatabase,
 } from "@/lib/server/learning-chatroom-transcript-store";
@@ -147,6 +149,39 @@ function createRoomAwareClient() {
 }
 
 describe("learning chatroom transcript postgres store", () => {
+  it.each([[undefined], [null], ["  "], ["rev/invalid"]])(
+    "fails closed when an existing room row has an invalid revision (%s)",
+    async (revision) => {
+      const client = createRecordingClient({
+        rows: [[{ database: createEmptyLearningChatroomTranscriptDatabase(), revision }]],
+      });
+      const repository = createUaisLearningChatroomTranscriptPostgresRepository({
+        env,
+        createDatabase: client.factory,
+      });
+
+      await expect(repository.read({ transcriptId: groupOneKey })).rejects.toMatchObject({
+        status: 503,
+        reasonCode: "transcript-snapshot-revision-required",
+      } satisfies Partial<LearningChatroomTranscriptStoreError>);
+    },
+  );
+
+  it("rejects rev-empty on an existing Postgres room row", async () => {
+    const client = createRecordingClient({
+      rows: [[{ database: createEmptyLearningChatroomTranscriptDatabase(), revision: "rev-empty" }]],
+    });
+    const repository = createUaisLearningChatroomTranscriptPostgresRepository({
+      env,
+      createDatabase: client.factory,
+    });
+
+    await expect(repository.read({ transcriptId: groupOneKey })).rejects.toMatchObject({
+      status: 503,
+      reasonCode: "transcript-snapshot-revision-required",
+    });
+  });
+
   it("returns an empty database when the room's row does not exist yet", async () => {
     const client = createRecordingClient({ rows: [[]] });
     const repository = createUaisLearningChatroomTranscriptPostgresRepository({
@@ -184,6 +219,49 @@ describe("learning chatroom transcript postgres store", () => {
 
     expect(snapshot.database.schemaVersion).toBe("uais-learning-chatroom-transcripts-v2");
     expect(snapshot.revision).toBe("rev-abc");
+  });
+
+  it("hands a frozen room and its exact revision to the caller", async () => {
+    const frozen = {
+      ...createEmptyLearningChatroomTranscriptDatabase(),
+      transcripts: [
+        {
+          transcriptId: groupOneKey,
+          courseId: groupOne.courseId,
+          classId: groupOne.classId,
+          groupId: groupOne.groupId,
+          studentId: groupOne.studentId,
+          messages: [],
+          moderation: {
+            status: "frozen" as const,
+            actorId: "teacher-kang",
+            actedAt: "2026-08-30T00:00:00.000Z",
+          },
+          createdAt: "2026-08-30T00:00:00.000Z",
+          updatedAt: "2026-08-30T00:00:00.000Z",
+          storagePolicy: "postgres-learning-chatroom-transcripts" as const,
+          storageWritePolicy: "postgres-transactional-snapshot-replace" as const,
+          responsibleSession: "S12" as const,
+          redaction: { secrets: "omitted" as const, localFiles: "omitted" as const, assets: "ids-only" as const },
+        },
+      ],
+    };
+    const client = createRecordingClient({
+      rows: [[{ database: frozen, revision: "  rev-frozen-room  " }]],
+    });
+    const repository = createUaisLearningChatroomTranscriptPostgresRepository({
+      env,
+      createDatabase: client.factory,
+    });
+
+    const snapshot = await repository.read({ transcriptId: groupOneKey });
+
+    expect(snapshot.revision).toBe("rev-frozen-room");
+    expect(snapshot.database.transcripts[0]?.moderation).toEqual({
+      status: "frozen",
+      actorId: "teacher-kang",
+      actedAt: "2026-08-30T00:00:00.000Z",
+    });
   });
 
   it("writes the snapshot as text cast to jsonb, inside a transaction", async () => {
@@ -256,6 +334,82 @@ describe("learning chatroom transcript postgres store", () => {
     expect(client.ended).toBe(1);
   });
 
+  it.each([[undefined], [null], ["  "], ["rev/invalid"]])(
+    "fails closed before INSERT when an existing room row has an invalid revision (%s)",
+    async (revision) => {
+      const client = createRecordingClient({
+        rows: [[{ revision }]],
+      });
+      const repository = createUaisLearningChatroomTranscriptPostgresRepository({
+        env,
+        createDatabase: client.factory,
+      });
+
+      await expect(
+        repository.write({
+          database: createEmptyLearningChatroomTranscriptDatabase(),
+          transcriptId: groupOneKey,
+          expectedRevision: "rev-current",
+        }),
+      ).rejects.toMatchObject({
+        status: 503,
+        reasonCode: "transcript-snapshot-revision-required",
+      });
+      expect(client.queries.some((query) => query.text.includes("INSERT"))).toBe(false);
+    },
+  );
+
+  it("refuses a handed revision when the room row has since disappeared", async () => {
+    const client = createRecordingClient({ rows: [[]] });
+    const repository = createUaisLearningChatroomTranscriptPostgresRepository({
+      env,
+      createDatabase: client.factory,
+    });
+
+    await expect(
+      repository.write({
+        database: createEmptyLearningChatroomTranscriptDatabase(),
+        transcriptId: groupOneKey,
+        expectedRevision: "rev-before-delete",
+      }),
+    ).rejects.toThrow(/retry required/);
+
+    expect(client.queries.some((query) => query.text.includes("INSERT"))).toBe(false);
+    expect(client.ended).toBe(1);
+  });
+
+  it("refuses a database whose handed room key does not match the write key", async () => {
+    const client = createRecordingClient({ rows: [[]] });
+    const repository = createUaisLearningChatroomTranscriptPostgresRepository({
+      env,
+      createDatabase: client.factory,
+    });
+    const wrongRoom = {
+      ...createEmptyLearningChatroomTranscriptDatabase(),
+      transcripts: [
+        {
+          transcriptId: groupTwoKey,
+          courseId: groupTwo.courseId,
+          classId: groupTwo.classId,
+          groupId: groupTwo.groupId,
+          studentId: groupTwo.studentId,
+          messages: [],
+          createdAt: "2026-08-30T00:00:00.000Z",
+          updatedAt: "2026-08-30T00:00:00.000Z",
+          storagePolicy: "postgres-learning-chatroom-transcripts" as const,
+          storageWritePolicy: "postgres-transactional-snapshot-replace" as const,
+          responsibleSession: "S12" as const,
+          redaction: { secrets: "omitted" as const, localFiles: "omitted" as const, assets: "ids-only" as const },
+        },
+      ],
+    };
+
+    await expect(
+      repository.write({ database: wrongRoom, transcriptId: groupOneKey }),
+    ).rejects.toThrow(/room|transcript/i);
+    expect(client.queries.some((query) => query.text.includes("INSERT"))).toBe(false);
+  });
+
   it("never names the retired 'default' row", async () => {
     const client = createRoomAwareClient();
     const repository = createUaisLearningChatroomTranscriptPostgresRepository({
@@ -274,6 +428,125 @@ describe("learning chatroom transcript postgres store", () => {
       expect(query.values).not.toContain("default");
       expect(query.text).not.toContain("'default'");
     }
+  });
+
+  it("uses a request-local initial snapshot without issuing a second room read", async () => {
+    const client = createRoomAwareClient();
+    const repository = createUaisLearningChatroomTranscriptPostgresRepository({
+      env,
+      createDatabase: client.factory,
+    });
+    const initialSnapshot = {
+      transcriptId: groupOneKey,
+      database: createEmptyLearningChatroomTranscriptDatabase(),
+      revision: undefined,
+    };
+
+    await appendLearningChatroomTranscriptMessages({
+      repository,
+      ...groupOne,
+      messages: [{ messageId: "request-local-1", role: "student" as const, content: "请求内快照" }],
+      initialSnapshot,
+      writerRole: "student",
+      now: "2026-08-30T00:00:00.000Z",
+    });
+
+    // The repository still performs its transactional CAS SELECT, but the
+    // append did not perform a separate SELECT database, revision read after
+    // the handler had already handed it the request-local snapshot.
+    expect(client.statements("SELECT database, revision")).toHaveLength(0);
+    expect(client.rowKeys()).toEqual([groupOneKey]);
+  });
+
+  it("rejects a request-local snapshot labelled for another room before any write", async () => {
+    const client = createRoomAwareClient();
+    const repository = createUaisLearningChatroomTranscriptPostgresRepository({
+      env,
+      createDatabase: client.factory,
+    });
+
+    await expect(
+      appendLearningChatroomTranscriptMessages({
+        repository,
+        ...groupOne,
+        messages: [{ messageId: "wrong-room-1", role: "student" as const, content: "不应写入" }],
+        initialSnapshot: {
+          transcriptId: groupTwoKey,
+          database: createEmptyLearningChatroomTranscriptDatabase(),
+        },
+      }),
+    ).rejects.toMatchObject({
+      status: 409,
+      reasonCode: "transcript-room-key-mismatch",
+    });
+    expect(client.queries).toHaveLength(0);
+  });
+
+  it("checks the fresh frozen policy before a retry and lets a teacher append while preserving moderation", async () => {
+    const frozenDatabase = normalizeLearningChatroomTranscriptDatabase({
+      ...createEmptyLearningChatroomTranscriptDatabase(),
+      updatedAt: "2026-08-30T00:00:00.000Z",
+      transcripts: [
+        {
+          transcriptId: groupOneKey,
+          courseId: groupOne.courseId,
+          classId: groupOne.classId,
+          groupId: groupOne.groupId,
+          studentId: groupOne.studentId,
+          messages: [],
+          moderation: {
+            status: "frozen",
+            actorId: "teacher-kang",
+            actedAt: "2026-08-30T00:00:00.000Z",
+          },
+          createdAt: "2026-08-30T00:00:00.000Z",
+          updatedAt: "2026-08-30T00:00:00.000Z",
+          storagePolicy: "postgres-learning-chatroom-transcripts",
+          storageWritePolicy: "postgres-transactional-snapshot-replace",
+          responsibleSession: "S12",
+          redaction: { secrets: "omitted", localFiles: "omitted", assets: "ids-only" },
+        },
+      ],
+    });
+    const writes: Array<{ database: LearningChatroomTranscriptDatabase }> = [];
+    const repository: LearningChatroomTranscriptRepository = {
+      storage: {
+        transcriptStoragePolicy: "postgres-learning-chatroom-transcripts",
+        storageWritePolicy: "postgres-transactional-snapshot-replace",
+      },
+      read: async () => ({ database: frozenDatabase, revision: "rev-frozen" }),
+      write: async ({ database }) => {
+        writes.push({ database });
+      },
+    };
+    const initialSnapshot = {
+      transcriptId: groupOneKey,
+      database: frozenDatabase,
+      revision: "rev-frozen",
+    };
+
+    await expect(
+      appendLearningChatroomTranscriptMessages({
+        repository,
+        ...groupOne,
+        messages: [{ messageId: "student-frozen-1", role: "student" as const, content: "学生写入" }],
+        initialSnapshot,
+        writerRole: "student",
+      }),
+    ).rejects.toMatchObject({ status: 423, reasonCode: "chatroom-room-frozen" });
+    expect(writes).toHaveLength(0);
+
+    await appendLearningChatroomTranscriptMessages({
+      repository,
+      ...groupOne,
+      messages: [{ messageId: "teacher-frozen-1", role: "student" as const, content: "教师代发" }],
+      initialSnapshot,
+      writerRole: "teacher",
+    });
+    expect(writes).toHaveLength(1);
+    expect(writes[0]?.database.transcripts[0]?.moderation).toEqual(
+      frozenDatabase.transcripts[0]?.moderation,
+    );
   });
 
   it("keeps two rooms appending at the same time out of each other's way", async () => {

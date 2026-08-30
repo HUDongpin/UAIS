@@ -157,7 +157,8 @@ function stubFetch(options: StubOptions = {}) {
 
 function historyCalls(calls: FetchCall[]) {
   return calls.filter(
-    (call) => call.url.includes("/api/learning/chatroom") && call.method === "GET",
+    (call) =>
+      call.url.includes("/api/learning/chatroom/history?") && call.method === "GET",
   );
 }
 

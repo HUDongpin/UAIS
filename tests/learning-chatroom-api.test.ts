@@ -10,7 +10,10 @@ import { maxDuration } from "@/app/api/learning/chatroom/route";
 import { createLearningChatroomModerationPostHandler } from "@/app/api/learning/chatroom/moderation/handler";
 import type { UaisAppSessionUser } from "@/lib/auth/uais-app-session";
 import { createUaisAppSessionCookie } from "@/lib/server/uais-app-session";
-import { createEmptyLearningChatroomTranscriptDatabase } from "@/lib/server/learning-chatroom-transcript-store";
+import {
+  createEmptyLearningChatroomTranscriptDatabase,
+  createLearningChatroomTranscriptId,
+} from "@/lib/server/learning-chatroom-transcript-store";
 import type { LearningChatroomTranscriptRepository } from "@/lib/server/learning-chatroom-transcript-store";
 import type {
   DeepSeekCompleteInput,
@@ -286,10 +289,11 @@ function createSlowChatroomRequest(
 // files. `hangOnRead` models the case the budget exists for: a store that is
 // reachable but slower than the wall the round has left.
 function createChatroomTranscriptRepositoryDouble(
-  options: { hangOnRead?: boolean } = {},
+  options: { hangOnRead?: boolean; hangOnWrite?: boolean } = {},
 ) {
   const calls = { read: 0, write: 0 };
   let database = createEmptyLearningChatroomTranscriptDatabase();
+  let revision = "rev-empty";
   const repository: LearningChatroomTranscriptRepository = {
     storage: {
       transcriptStoragePolicy: "external-redacted-learning-chatroom-transcripts",
@@ -300,11 +304,15 @@ function createChatroomTranscriptRepositoryDouble(
       if (options.hangOnRead) {
         return new Promise<never>(() => {});
       }
-      return { database };
+      return { database, revision };
     },
     write: async (input) => {
       calls.write += 1;
+      if (options.hangOnWrite) {
+        return new Promise<never>(() => {});
+      }
       database = input.database;
+      revision = `rev-${calls.write}`;
     },
   };
 
@@ -2068,6 +2076,51 @@ describe("UAIS learning chatroom transcript persistence", () => {
     expectNoCredentialValues(history);
   });
 
+  it("emits the exact redacted Server-Timing allowlist on POST", async () => {
+    const fixture = await createChatroomCourseAccessFixture();
+    const deepSeek = createRecordingDeepSeekClientFactory(() => "研究助教的回答");
+    const postChatroom = createLearningChatroomPostHandler({
+      env: { ...fixture.env, DEEPSEEK_API_KEY: deepSeekApiKey },
+      createDeepSeekTextClient: deepSeek.factory,
+    });
+
+    const response = await postChatroom(
+      createChatroomRequest(
+        {
+          locale: "zh-CN",
+          courseId: fixture.courseId,
+          messages: [{ id: "timed-1", role: "student", content: "@研究助教 计时契约" }],
+        },
+        fixture.cookie,
+      ),
+    );
+    const timing = response.headers.get("server-timing") ?? "";
+    const entries = timing.split(", ");
+    const names = entries.map((entry) => entry.split(";")[0]);
+    const expectedNames = [
+      "entry",
+      "session",
+      "rate",
+      "backend",
+      "pool",
+      "authorization",
+      "transcript",
+      "projection",
+      "total",
+    ];
+
+    expect(response.status).toBe(200);
+    expect(names).toEqual(expectedNames);
+    expect(entries.every((entry) => /^[a-z]+;dur=\d+(?:\.\d{1,2})?$/.test(entry))).toBe(
+      true,
+    );
+    expect(timing).not.toContain(fixture.courseId);
+    expect(timing).not.toContain(appSessionSigningSecret);
+    expect(timing).not.toContain(deepSeekApiKey);
+    expect(timing).not.toMatch(/Bearer|postgres(?:ql)?:\/\//i);
+    expect(timing.length).toBeLessThan(512);
+  });
+
   it("does not duplicate stored messages when the client re-posts its visible transcript", async () => {
     const fixture = await createChatroomCourseAccessFixture();
     const { postChatroom, getHistory } = createPersistedChatroom(fixture);
@@ -2241,33 +2294,35 @@ describe("UAIS learning chatroom transcript persistence", () => {
     ).rejects.toMatchObject({ code: "ENOENT" });
   });
 
-  it("answers the round even when transcript storage fails, and reports it", async () => {
+  it("fails closed before the provider when the initial transcript read is unavailable", async () => {
     const consoleError = spyOnLearningChatroomConsoleError();
     const fixture = await createChatroomCourseAccessFixture();
     const deepSeek = createRecordingDeepSeekClientFactory(() => "研究助教的回答");
+    let providerFactories = 0;
+    const calls = { read: 0, write: 0 };
     const failingRepository = {
       storage: {
         transcriptStoragePolicy: "external-redacted-learning-chatroom-transcripts" as const,
         storageWritePolicy: "external-optimistic-snapshot-replace" as const,
       },
       read: async () => {
+        calls.read += 1;
         throw new Error("External learning chatroom transcript read failed.");
       },
       write: async () => {
+        calls.write += 1;
         throw new Error("External learning chatroom transcript persistence failed.");
       },
     };
     const env = { ...fixture.env, DEEPSEEK_API_KEY: deepSeekApiKey };
     const postChatroom = createLearningChatroomPostHandler({
       env,
-      createDeepSeekTextClient: deepSeek.factory,
+      createDeepSeekTextClient: (options) => {
+        providerFactories += 1;
+        return deepSeek.factory(options);
+      },
       transcriptRepository: failingRepository,
     });
-    const getHistory = createLearningChatroomHistoryGetHandler({
-      env,
-      transcriptRepository: failingRepository,
-    });
-
     const response = await postChatroom(
       createChatroomRequest(
         {
@@ -2280,30 +2335,168 @@ describe("UAIS learning chatroom transcript persistence", () => {
     );
     const body = await response.json();
 
-    // The conversation is what the learner came for: a storage outage costs the
-    // room its history, never the answered round.
-    expect(response.status).toBe(200);
-    expect(body.turns[0].content).toBe("研究助教的回答");
-    expect(body.transcript).toEqual({ status: "unavailable" });
+    // A POST cannot safely authorize a frozen-room decision or append against a
+    // transcript snapshot it failed to read. Refuse before constructing a
+    // provider client and before the catch path can write a partial student row.
+    expect(response.status).toBe(503);
+    expect(body.error).toContain("transcript");
+    expect(providerFactories).toBe(0);
+    expect(deepSeek.requests).toHaveLength(0);
+    expect(calls).toEqual({ read: 1, write: 0 });
     expect(consoleError).toHaveBeenCalledWith(
       "[learning-chatroom]",
       expect.objectContaining({
-        phase: "transcript-write",
+        phase: "transcript-read",
         courseId: fixture.courseId,
       }),
     );
-
-    const history = await readHistoryBody(
-      getHistory,
-      { courseId: fixture.courseId },
-      fixture.cookie,
-    );
-
-    // An unreadable transcript degrades to an empty room rather than an error.
-    expect(history.messages).toEqual([]);
-    expect(history.transcript.status).toBe("unavailable");
     expectNoCredentialValues(body);
   });
+
+  it("rejects a repository snapshot labelled for another room before provider or append", async () => {
+    const fixture = await createChatroomCourseAccessFixture();
+    const deepSeek = createRecordingDeepSeekClientFactory(() => "不应调用");
+    let providerFactories = 0;
+    let providerRequests = 0;
+    let reads = 0;
+    let writes = 0;
+    const maliciousRepository: LearningChatroomTranscriptRepository = {
+      storage: {
+        transcriptStoragePolicy: "external-redacted-learning-chatroom-transcripts",
+        storageWritePolicy: "external-optimistic-snapshot-replace",
+      },
+      read: async () => {
+        reads += 1;
+        // Deliberately lie about which room this snapshot belongs to. The
+        // runtime must validate the label instead of replacing it with the
+        // caller's requested key.
+        return {
+          database: createEmptyLearningChatroomTranscriptDatabase(),
+          revision: "rev-malicious-room",
+          transcriptId: "chatroom-transcript-another-room",
+        } as never;
+      },
+      write: async () => {
+        writes += 1;
+      },
+    };
+    const postChatroom = createLearningChatroomPostHandler({
+      env: { ...fixture.env, DEEPSEEK_API_KEY: deepSeekApiKey },
+      createDeepSeekTextClient: (options) => {
+        providerFactories += 1;
+        const client = deepSeek.factory(options);
+        return {
+          complete: async (input) => {
+            providerRequests += 1;
+            return client.complete(input);
+          },
+        };
+      },
+      transcriptRepository: maliciousRepository,
+    });
+
+    const response = await postChatroom(
+      createChatroomRequest(
+        {
+          locale: "zh-CN",
+          courseId: fixture.courseId,
+          messages: [{ id: "wrong-room-1", role: "student", content: "@研究助教 不应执行" }],
+        },
+        fixture.cookie,
+      ),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(409);
+    expect(body.reasonCode).toBe("transcript-room-key-mismatch");
+    expect(providerFactories).toBe(0);
+    expect(providerRequests).toBe(0);
+    expect(reads).toBe(1);
+    expect(writes).toBe(0);
+    expectNoCredentialValues(body);
+  });
+
+  it.each([
+    ["missing", undefined],
+    ["malformed", "rev/contains-a-slash"],
+  ] as const)(
+    "fails closed when an existing external snapshot has a %s revision",
+    async (_label, revision) => {
+      const fixture = await createChatroomCourseAccessFixture();
+      const transcriptId = createLearningChatroomTranscriptId({
+        courseId: fixture.courseId,
+        studentId: studentAppSessionUser.account,
+      });
+      const database = createEmptyLearningChatroomTranscriptDatabase();
+      database.transcripts.push({
+        transcriptId,
+        courseId: fixture.courseId,
+        studentId: studentAppSessionUser.account,
+        messages: [],
+        createdAt: "2026-08-30T00:00:00.000Z",
+        updatedAt: "2026-08-30T00:00:00.000Z",
+        storagePolicy: "external-redacted-learning-chatroom-transcripts",
+        storageWritePolicy: "external-optimistic-snapshot-replace",
+        responsibleSession: "S12",
+        redaction: { secrets: "omitted", localFiles: "omitted", assets: "ids-only" },
+      });
+      let providerFactories = 0;
+      let providerRequests = 0;
+      let reads = 0;
+      let writes = 0;
+      const repository: LearningChatroomTranscriptRepository = {
+        storage: {
+          transcriptStoragePolicy: "external-redacted-learning-chatroom-transcripts",
+          storageWritePolicy: "external-optimistic-snapshot-replace",
+        },
+        read: async () => {
+          reads += 1;
+          return {
+            database,
+            ...(revision === undefined ? {} : { revision }),
+          };
+        },
+        write: async () => {
+          writes += 1;
+        },
+      };
+      const deepSeek = createRecordingDeepSeekClientFactory(() => "不应调用");
+      const postChatroom = createLearningChatroomPostHandler({
+        env: { ...fixture.env, DEEPSEEK_API_KEY: deepSeekApiKey },
+        createDeepSeekTextClient: (options) => {
+          providerFactories += 1;
+          const client = deepSeek.factory(options);
+          return {
+            complete: async (input) => {
+              providerRequests += 1;
+              return client.complete(input);
+            },
+          };
+        },
+        transcriptRepository: repository,
+      });
+
+      const response = await postChatroom(
+        createChatroomRequest(
+          {
+            locale: "zh-CN",
+            courseId: fixture.courseId,
+            messages: [{ id: `bad-revision-${_label}`, role: "student", content: "@研究助教 不应执行" }],
+          },
+          fixture.cookie,
+        ),
+      );
+      const body = await response.json();
+
+      expect(response.status).toBe(503);
+      expect(body.reasonCode).toBe("transcript-snapshot-revision-required");
+      expect(providerFactories).toBe(0);
+      expect(providerRequests).toBe(0);
+      expect(reads).toBe(1);
+      expect(writes).toBe(0);
+      expectNoCredentialValues(body);
+    },
+  );
 
   it("caps a stored room at its most recent 200 messages", async () => {
     const fixture = await createChatroomCourseAccessFixture();
@@ -2444,14 +2637,15 @@ describe("UAIS learning chatroom transcript append budget", () => {
       messageCount: 2,
       storagePolicy: "external-redacted-learning-chatroom-transcripts",
     });
-    // Two reads: the pre-round room read, then the append's own read-modify-write.
-    expect(transcript.calls).toEqual({ read: 2, write: 1 });
+    // The append consumes the request-local snapshot handed by the pre-round
+    // read, so no second read is needed on the uncontended path.
+    expect(transcript.calls).toEqual({ read: 1, write: 1 });
     expectNoCredentialValues(body);
   });
 
   it("answers the round when the append outruns its budget", async () => {
     const fixture = await createChatroomCourseAccessFixture();
-    const transcript = createChatroomTranscriptRepositoryDouble({ hangOnRead: true });
+    const transcript = createChatroomTranscriptRepositoryDouble({ hangOnWrite: true });
     const { postChatroom } = createBudgetedChatroom({
       fixture,
       repository: transcript.repository,
@@ -2475,11 +2669,9 @@ describe("UAIS learning chatroom transcript append budget", () => {
       expect(response.status).toBe(200);
       expect(body.turns[0].content).toBe("研究助教的回答");
       expect(body.transcript).toEqual({ status: "unavailable" });
-      // The response did not wait on either hung read - the pre-round room read
-      // or the append's - and the write the second would have led to never
-      // happened. A hung store costs the round its context and its history, not
-      // the round.
-      expect(transcript.calls).toEqual({ read: 2, write: 0 });
+      // The response did not wait on the hung append write. The initial room
+      // read was confirmed and handed through the request, but no write landed.
+      expect(transcript.calls).toEqual({ read: 1, write: 1 });
       expectNoCredentialValues(body);
     } finally {
       vi.useRealTimers();
@@ -2489,7 +2681,7 @@ describe("UAIS learning chatroom transcript append budget", () => {
   it("answers the contractual failure body when the best-effort append outruns its budget", async () => {
     spyOnLearningChatroomConsoleError();
     const fixture = await createChatroomCourseAccessFixture();
-    const transcript = createChatroomTranscriptRepositoryDouble({ hangOnRead: true });
+    const transcript = createChatroomTranscriptRepositoryDouble({ hangOnWrite: true });
     const { postChatroom } = createBudgetedChatroom({
       fixture,
       repository: transcript.repository,
@@ -2518,9 +2710,9 @@ describe("UAIS learning chatroom transcript append budget", () => {
       expect(response.headers.get("x-uais-trace-id")).toBe(
         "trace-chatroom-catch-path-budget",
       );
-      // The pre-round room read and the best-effort append's read, both
-      // abandoned at their cutoffs.
-      expect(transcript.calls).toEqual({ read: 2, write: 0 });
+      // The initial room read was confirmed; the best-effort append write was
+      // abandoned at its cutoff and never completed.
+      expect(transcript.calls).toEqual({ read: 1, write: 1 });
       expectNoCredentialValues(body);
     } finally {
       vi.useRealTimers();

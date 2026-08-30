@@ -6,6 +6,7 @@ import {
   createLearningChatroomHistoryGetHandler,
   createLearningChatroomPostHandler,
 } from "@/app/api/learning/chatroom/handler";
+import { createLearningChatroomModerationPostHandler } from "@/app/api/learning/chatroom/moderation/handler";
 import {
   createExternalStorageLearningChatroomTranscriptsDatabaseGetHandler,
   createExternalStorageLearningChatroomTranscriptsDatabasePutHandler,
@@ -286,6 +287,83 @@ function createGroupChatroom(
         : {}),
     }),
   };
+}
+
+function createDeferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
+
+function createConcurrentFreezeTranscriptRepository() {
+  let database = createEmptyLearningChatroomTranscriptDatabase();
+  let revision = "rev-empty";
+  let writeCalls = 0;
+  let committedWrites = 0;
+  const repository: LearningChatroomTranscriptRepository = {
+    storage: {
+      transcriptStoragePolicy: "external-redacted-learning-chatroom-transcripts",
+      storageWritePolicy: "external-optimistic-snapshot-replace",
+    },
+    read: async (scope) => {
+      const transcripts = scope?.transcriptId
+        ? database.transcripts.filter((item) => item.transcriptId === scope.transcriptId)
+        : database.transcripts;
+      return {
+        database: { ...database, transcripts },
+        revision,
+      };
+    },
+    write: async ({ database: nextDatabase, transcriptId, expectedRevision }) => {
+      writeCalls += 1;
+      const nextTranscript = transcriptId
+        ? nextDatabase.transcripts.find((item) => item.transcriptId === transcriptId)
+        : undefined;
+      const currentTranscript = transcriptId
+        ? database.transcripts.find((item) => item.transcriptId === transcriptId)
+        : undefined;
+      if (expectedRevision !== revision) {
+        throw new LearningChatroomTranscriptStoreError(
+          409,
+          "External learning chatroom transcript snapshot changed; retry required.",
+          "snapshot-contention",
+        );
+      }
+      // This is the provider-independent atomic guard: a stale student append
+      // cannot replace a room after a teacher froze it. A teacher append keeps
+      // the frozen block and is allowed to commit.
+      if (
+        currentTranscript?.moderation?.status === "frozen" &&
+        nextTranscript?.moderation?.status !== "frozen"
+      ) {
+        throw new LearningChatroomTranscriptStoreError(
+          423,
+          "UAIS learning chatroom room is frozen by the course teacher.",
+        );
+      }
+      database = nextDatabase;
+      revision = `rev-${committedWrites + 1}`;
+      committedWrites += 1;
+    },
+  };
+  return {
+    repository,
+    writeCalls: () => writeCalls,
+    committedWrites: () => committedWrites,
+    database: () => database,
+  };
+}
+
+function createGroupModerationRequest(body: unknown, cookie: string) {
+  return new Request("http://localhost/api/learning/chatroom/moderation", {
+    method: "POST",
+    headers: { cookie, "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
 }
 
 function createGroupChatroomRequest(
@@ -1270,6 +1348,72 @@ describe("UAIS learning chatroom transcript identity and schema", () => {
     expectNoCredentialValues(v2Replay);
   });
 
+  it("rejects a stale external PUT and preserves the fresh GET revision", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "uais-external-chatroom-revision-"));
+    groupFixtureDirs.push(dataDir);
+    const env = {
+      UAIS_EXTERNAL_STORAGE_ACCESS_TOKEN: externalStorageAccessToken,
+      UAIS_EXTERNAL_STORAGE_SERVICE_DATA_DIR: dataDir,
+    };
+    const getDatabase = createExternalStorageLearningChatroomTranscriptsDatabaseGetHandler(
+      { env },
+    );
+    const putDatabase = createExternalStorageLearningChatroomTranscriptsDatabasePutHandler(
+      { env },
+    );
+    const url =
+      "https://www.uais.top/api/external-storage/learning-chatroom-transcripts/database";
+    const authorized = (init: RequestInit = {}) =>
+      new Request(url, {
+        ...init,
+        headers: {
+          authorization: `Bearer ${externalStorageAccessToken}`,
+          ...(init.headers ?? {}),
+        },
+      });
+
+    const initial = await (await getDatabase(authorized())).json();
+    const firstDatabase = createLegacyTranscriptDatabase();
+    const firstResponse = await putDatabase(
+      authorized({
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          action: "replace-learning-chatroom-transcripts-database",
+          expectedRevision: initial.revision,
+          database: firstDatabase,
+        }),
+      }),
+    );
+    const first = await firstResponse.json();
+    expect(firstResponse.status).toBe(200);
+    expect(first.revision).toEqual(expect.any(String));
+    expect(first.revision).not.toBe(initial.revision);
+
+    const staleResponse = await putDatabase(
+      authorized({
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          action: "replace-learning-chatroom-transcripts-database",
+          expectedRevision: initial.revision,
+          database: createLegacyTranscriptDatabase({ studentId: "stale-writer" }),
+        }),
+      }),
+    );
+    const stale = await staleResponse.json();
+
+    expect(staleResponse.status).toBe(409);
+    expect(stale.error).toMatch(/revision|snapshot/i);
+
+    const freshResponse = await getDatabase(authorized());
+    const fresh = await freshResponse.json();
+    expect(freshResponse.status).toBe(200);
+    expect(fresh.revision).toBe(first.revision);
+    expect(fresh.database.transcripts[0]?.studentId).toBe("Peter");
+    expectNoCredentialValues(fresh);
+  });
+
   it("bounds a stored author name to 120 characters", async () => {
     const longDisplayName = "长".repeat(200);
     const fixture = await createChatroomGroupFixture({
@@ -1411,10 +1555,11 @@ describe("UAIS learning chatroom group room windows and contention", () => {
     expect(groupBody.transcript.status).toBe("persisted");
     expect(groupStore.writes()).toBe(4);
 
-    // The round is still answered when the append loses the race; only the
-    // history is lost, and the receipt says so.
-    expect(soloRound.status).toBe(200);
-    expect(soloBody.transcript).toEqual({ status: "unavailable" });
+    // A snapshot contention is a control decision, not an unavailable best-
+    // effort write: surfacing 409 prevents the catch path from presenting a
+    // stale round as successfully persisted.
+    expect(soloRound.status).toBe(409);
+    expect(soloBody.reasonCode).toBe("snapshot-contention");
     expect(soloStore.writes()).toBe(2);
 
     expect(forgivingSoloRound.status).toBe(200);
@@ -1595,6 +1740,103 @@ describe("UAIS learning chatroom group room windows and contention", () => {
   });
 });
 
+describe("UAIS learning chatroom atomic freeze handoff", () => {
+  it("rejects a stale student append after a concurrent freeze and still lets the teacher speak", async () => {
+    const fixture = await createChatroomGroupFixture({ groupsMode: "on" });
+    const transcript = createConcurrentFreezeTranscriptRepository();
+    const providerStarted = createDeferred<void>();
+    const providerResult = createDeferred<DeepSeekCompleteResult>();
+    const providerRequests: DeepSeekCompleteInput[] = [];
+    const env = { ...fixture.env, DEEPSEEK_API_KEY: deepSeekApiKey };
+    const createDeepSeekTextClient = () => ({
+      complete: async (input: DeepSeekCompleteInput) => {
+        providerRequests.push(input);
+        providerStarted.resolve();
+        return providerResult.promise;
+      },
+    });
+    const postChatroom = createLearningChatroomPostHandler({
+      env,
+      createDeepSeekTextClient,
+      transcriptRepository: transcript.repository,
+    });
+    const moderate = createLearningChatroomModerationPostHandler({
+      env,
+      transcriptRepository: transcript.repository,
+      now: () => Date.parse("2026-08-30T00:00:00.000Z"),
+    });
+    const teacherCookie = fixture.cookieFor(owningTeacher, "teacher");
+    const studentRequest = postChatroom(
+      createGroupChatroomRequest(
+        {
+          courseId: fixture.courseId,
+          classId: fixture.classId,
+          groupId: fixture.groupId,
+          messages: [{ id: "stale-student-1", role: "student", content: "@研究助教 旧问题" }],
+        },
+        fixture.cookieFor(groupMemberOne),
+      ),
+    );
+
+    await providerStarted.promise;
+    const frozen = await moderate(
+      createGroupModerationRequest(
+        {
+          action: "freeze-room",
+          courseId: fixture.courseId,
+          classId: fixture.classId,
+          groupId: fixture.groupId,
+          studentId: owningTeacher.account,
+          messageId: "not-used-for-freeze",
+        },
+        teacherCookie,
+      ),
+    );
+    expect(frozen.status, JSON.stringify(await frozen.clone().json())).toBe(200);
+
+    providerResult.resolve({
+      provider: "deepseek",
+      model: "deepseek-test",
+      content: "回答不应写入冻结学生请求",
+    });
+    const refused = await studentRequest;
+    const refusedBody = await refused.json();
+
+    expect(refused.status).toBe(423);
+    expect(refusedBody.reasonCode).toBe("chatroom-room-frozen");
+    expect(providerRequests).toHaveLength(1);
+    // Only the teacher's freeze write committed; the stale student append did
+    // not get a second persistence attempt after the room changed, nor did its
+    // control error trigger a catch-path retry.
+    expect(transcript.writeCalls()).toBe(2);
+    expect(transcript.committedWrites()).toBe(1);
+
+    const teacherPost = await postChatroom(
+      createGroupChatroomRequest(
+        {
+          courseId: fixture.courseId,
+          classId: fixture.classId,
+          groupId: fixture.groupId,
+          messages: [{ id: "teacher-override-1", role: "student", content: "老师说明" }],
+        },
+        teacherCookie,
+      ),
+    );
+
+    expect(teacherPost.status).toBe(200);
+    expect(transcript.writeCalls()).toBe(3);
+    expect(transcript.committedWrites()).toBe(2);
+    const stored = transcript.database().transcripts[0];
+    expect(stored?.moderation?.status).toBe("frozen");
+    expect(stored?.messages.map((message) => message.messageId)).toContain(
+      "teacher-override-1",
+    );
+    expect(stored?.messages.map((message) => message.messageId)).not.toContain(
+      "stale-student-1",
+    );
+  });
+});
+
 // A repository double that answers a fresh revision on every read and rejects
 // the first `conflicts` writes with the store's own optimistic-conflict error.
 function createConflictingTranscriptRepository(conflicts: number) {
@@ -1605,13 +1847,17 @@ function createConflictingTranscriptRepository(conflicts: number) {
       transcriptStoragePolicy: "external-redacted-learning-chatroom-transcripts",
       storageWritePolicy: "external-optimistic-snapshot-replace",
     },
-    read: async () => ({ database, revision: `rev-${writes}` }),
+    read: async () => ({
+      database,
+      revision: writes === 0 ? "rev-empty" : `rev-${writes}`,
+    }),
     write: async (input) => {
       writes += 1;
       if (writes <= conflicts) {
         throw new LearningChatroomTranscriptStoreError(
           409,
           "External learning chatroom transcript snapshot changed; retry required.",
+          "snapshot-contention",
         );
       }
       database = input.database;
