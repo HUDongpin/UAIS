@@ -41,6 +41,31 @@ const baseUrl = (
 ).replace(/\/+$/, "");
 const account = process.env.UAIS_SMOKE_ACCOUNT ?? "Phoebe";
 const password = process.env.UAIS_SMOKE_PASSWORD ?? "12345";
+const protectionBypassSecret = process.env.VERCEL_AUTOMATION_BYPASS_SECRET?.trim() ?? "";
+
+function requestHeaders(headers = {}) {
+  let hostname = "";
+  let protocol = "";
+  try {
+    const target = new URL(baseUrl);
+    hostname = target.hostname;
+    protocol = target.protocol;
+  } catch {
+    return headers;
+  }
+
+  const isUaisImmutableVercelHost =
+    protocol === "https:" &&
+    /^uais-[a-z0-9-]+-peter-dongpin-hu-s-projects\.vercel\.app$/.test(hostname);
+  const isValidBypassSecret =
+    protectionBypassSecret.length >= 16 &&
+    protectionBypassSecret.length <= 1_024 &&
+    !/[\r\n]/.test(protectionBypassSecret);
+
+  return isUaisImmutableVercelHost && isValidBypassSecret
+    ? { ...headers, "x-vercel-protection-bypass": protectionBypassSecret }
+    : headers;
+}
 
 // Forged-cookie rejection only applies where the proxy is configured to verify
 // signatures (UAIS_APP_SESSION_SIGNING_SECRET set — every deployed target). On a
@@ -98,7 +123,10 @@ async function run() {
 
   // Journey 1: auth gate — unauthenticated protected route redirects to /login.
   try {
-    const gate = await fetch(`${baseUrl}/teaching`, { redirect: "manual" });
+    const gate = await fetch(`${baseUrl}/teaching`, {
+      headers: requestHeaders(),
+      redirect: "manual",
+    });
     record(
       "auth-gate: unauthenticated /teaching redirects to /login",
       isRedirectToLogin(gate),
@@ -114,7 +142,7 @@ async function run() {
   try {
     const login = await fetch(`${baseUrl}/api/auth/app-session`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: requestHeaders({ "content-type": "application/json" }),
       body: JSON.stringify({ account, password }),
       redirect: "manual",
     });
@@ -145,7 +173,7 @@ async function run() {
     for (const path of ["/courses", "/learning", ownRoleRoute]) {
       try {
         const res = await fetch(`${baseUrl}${path}`, {
-          headers: { cookie: cookieHeader },
+          headers: requestHeaders({ cookie: cookieHeader }),
           redirect: "manual",
         });
         record(`authenticated GET ${path} -> 200`, res.status === 200, `status ${res.status}`);
@@ -159,7 +187,7 @@ async function run() {
     // hardening into the promotion gate.
     try {
       const crossRole = await fetch(`${baseUrl}${crossRoleRoute}`, {
-        headers: { cookie: cookieHeader },
+        headers: requestHeaders({ cookie: cookieHeader }),
         redirect: "manual",
       });
       const location = crossRole.headers.get("location") ?? "";
@@ -202,7 +230,9 @@ async function run() {
         "utf8",
       ).toString("base64url");
       const forged = await fetch(`${baseUrl}/teaching`, {
-        headers: { cookie: `${SESSION_COOKIE}=${forgedClaims}; ${SIGNATURE_COOKIE}=invalidsignature` },
+        headers: requestHeaders({
+          cookie: `${SESSION_COOKIE}=${forgedClaims}; ${SIGNATURE_COOKIE}=invalidsignature`,
+        }),
         redirect: "manual",
       });
       record(
@@ -219,6 +249,7 @@ async function run() {
   try {
     const signOut = await fetch(`${baseUrl}/api/auth/app-session`, {
       method: "DELETE",
+      headers: requestHeaders(),
       redirect: "manual",
     });
     record("sign-out: DELETE /api/auth/app-session -> 200", signOut.status === 200, `status ${signOut.status}`);

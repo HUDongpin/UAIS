@@ -59,4 +59,5 @@ jobs:
         env:
           UAIS_SMOKE_ACCOUNT: ${{ secrets.UAIS_SMOKE_ACCOUNT }}
           UAIS_SMOKE_PASSWORD: ${{ secrets.UAIS_SMOKE_PASSWORD }}
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
         run: npm run journey:smoke -- --base-url "${{ steps.target.outputs.url }}" --signed-gate true
