@@ -86,7 +86,9 @@ describe("root quality-gate worktree isolation", () => {
 
     expect(config.test?.exclude).toEqual(
       expect.arrayContaining([
+        "**/.tmp/**",
         "**/.scratch/**",
+        "**/.scratch-p2-final.*/**",
         "**/coverage/**",
         "**/output/**",
         "**/playwright-report/**",

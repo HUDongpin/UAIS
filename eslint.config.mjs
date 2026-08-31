@@ -46,6 +46,7 @@ const eslintConfig = defineConfig([
     // Generated evidence scratch directories can appear below coordination/
     // as well as at the repository root.
     "**/.scratch/**",
+    ".scratch-p2-final.*/**",
     "**/coverage/**",
     "**/output/**",
     "**/playwright-report/**",
