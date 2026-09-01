@@ -61,6 +61,7 @@ type UaisHealthGetHandlerDeps = {
   now?: () => Date;
   env?: Record<string, string | undefined>;
   compiledStagingContentSha?: string;
+  databaseProbeTimeoutMs?: number;
   probeDatabase?: (input: {
     env: Record<string, string | undefined>;
   }) => Promise<UaisHealthProbeResult>;
@@ -68,17 +69,26 @@ type UaisHealthGetHandlerDeps = {
 
 // A health check that hangs is worse than one that fails: the monitor times out
 // with no classification, and on a serverless platform the invocation is billed
-// for the full duration. Well above a warm round trip, well below any sensible
-// monitor timeout. It is one deadline for the whole probe, not one per query, so
-// adding the currency check did not double the endpoint's worst case.
-const databaseProbeTimeoutMs = 3000;
+// for the full duration. Eight seconds remains below the database client's own
+// ten-second connect timeout and below the external monitor budget, while giving
+// a sleeping managed-Postgres compute enough time to wake. The former three-
+// second deadline cut off observed Neon cold starts at roughly 3.4 seconds; the
+// same connection then made the immediate retry pass, creating false 503 alerts.
+// It is one deadline for the whole probe, not one per query, so adding the
+// currency check does not double the endpoint's worst case.
+const defaultDatabaseProbeTimeoutMs = 8000;
 
 export function createUaisHealthGetHandler(deps: UaisHealthGetHandlerDeps = {}) {
   const env = deps.env ?? process.env;
   const probeDatabase = deps.probeDatabase ?? probeUaisCoreDatabase;
+  const databaseProbeTimeoutMs =
+    deps.databaseProbeTimeoutMs ?? defaultDatabaseProbeTimeoutMs;
 
   return async function GET() {
-    const probe = await withProbeTimeout(() => probeDatabase({ env }));
+    const probe = await withProbeTimeout(
+      () => probeDatabase({ env }),
+      databaseProbeTimeoutMs,
+    );
     const configurationOptional = !isUaisProductionRuntime(env);
     const healthy =
       (probe.database === "ok" ||
@@ -191,6 +201,7 @@ function isNonEmptyText(value: unknown): value is string {
 
 async function withProbeTimeout(
   run: () => Promise<UaisHealthProbeResult>,
+  timeoutMs: number,
 ): Promise<UaisHealthProbeResult> {
   const timedOut: UaisHealthProbeResult = {
     database: "unreachable",
@@ -202,7 +213,7 @@ async function withProbeTimeout(
     return await Promise.race([
       run(),
       new Promise<UaisHealthProbeResult>((resolve) => {
-        timer = setTimeout(() => resolve(timedOut), databaseProbeTimeoutMs);
+        timer = setTimeout(() => resolve(timedOut), timeoutMs);
       }),
     ]);
   } catch {

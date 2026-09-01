@@ -148,6 +148,7 @@ describe("UAIS app health endpoint", () => {
     const getHealth = createUaisHealthGetHandler({
       now: checkedAt,
       env: coreDatabase,
+      databaseProbeTimeoutMs: 25,
       probeDatabase: () => new Promise(() => {}),
     });
 
@@ -163,6 +164,25 @@ describe("UAIS app health endpoint", () => {
     expect(body.checks.database).toBe("unreachable");
     expect(body.checks.migrations).toBe("unknown");
     expect(body.migrationCurrency).toBeUndefined();
+  }, 10000);
+
+  it("allows a managed Postgres cold start that finishes inside the uptime monitor budget", async () => {
+    const getHealth = createUaisHealthGetHandler({
+      now: checkedAt,
+      env: coreDatabase,
+      probeDatabase: () =>
+        new Promise((resolve) => {
+          setTimeout(() => resolve(currentDatabase()), 3500);
+        }),
+    });
+
+    const response = await getHealth();
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.status).toBe("ok");
+    expect(body.checks.database).toBe("ok");
+    expect(body.checks.migrations).toBe("ok");
   }, 10000);
 
   // Migration currency. `apply-core-migrations.mjs --deploy` skips when the BUILD
