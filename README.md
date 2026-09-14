@@ -17,11 +17,18 @@ ClosedMAIC screenshots, internal identities, proprietary assets, or copied MAIC 
 
 ## Routes
 
-- `/courses` - 课程广场, with exactly two course cards: 大学研究方法 and 数学教学法.
+Unauthenticated visitors hitting `/` or other protected app routes are redirected to
+`/login?from=…` by the navigation gate in `src/proxy.ts`. After login, `/` still redirects
+to `/courses` via `src/app/page.tsx`.
+
+- `/login` - sign-in; already-authenticated users are sent to their role home.
+- `/courses` - 课程广场, with course cards such as 大学研究方法 and 数学教学法.
 - `/learning` - 我的学习, with enrolled courses, playback-style learning panel, and a chatroom entry button.
 - `/learning/chatroom` - full 人机协作聊天室 interface for group messages, AI agents, PDF export, and sharing.
+- `/student-dashboard` - student dashboard surface.
 - `/teaching` - 我的教学, with teacher course cards and management entry points.
-- `/` - redirects to `/courses`.
+- `/terms`, `/privacy` - user agreement and privacy policy.
+- `/` - redirects to `/courses` once past the auth gate.
 
 ## Project Structure
 
@@ -31,6 +38,7 @@ ClosedMAIC screenshots, internal identities, proprietary assets, or copied MAIC 
 - `src/components/providers/app-preferences.tsx` - language and light/dark theme state.
 - `src/components/layout/` - app shell and top navigation.
 - `src/components/pages/` - page-level UI for the three teaching areas.
+- `src/proxy.ts` - Next.js navigation proxy / auth gate for protected routes.
 - `tests/uais-data.test.ts` - acceptance checks for the brief-critical data contract.
 
 ## Extending
@@ -78,6 +86,7 @@ themselves unless `UAIS_CORE_DATABASE_URL` points at a reachable Postgres. See
   promotion contract.
 - `docs/runbooks/pre-deploy-checklist.md` - checks before promoting a deployment.
 - `docs/runbooks/production-rollback.md` - two-minute rollback procedure.
+- GitHub Issues - production QA / teacher-blocker tracking for follow-up work.
 
 ## Database
 
