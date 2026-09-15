@@ -111,7 +111,6 @@ import {
   TEACHING_OPERATION_ALERT_PENDING_MESSAGE,
   TEACHING_OPERATION_AUDIT_FAILED_MESSAGE,
   TEACHING_OPERATION_AUDIT_PENDING_MESSAGE,
-  TEACHING_OPERATION_COURSE_REQUIRED_MESSAGE,
   TEACHING_OPERATION_RECEIPT_MISMATCH_MESSAGE,
   TEACHING_OPERATION_ROLLBACK_FAILED_MESSAGE,
   TEACHING_OPERATION_SAVE_FAILED_MESSAGE,
@@ -525,30 +524,21 @@ export function useTeachingWorkspace() {
     // course id, so an unset course used to become "whatever sorted first" and
     // the receipt came back looking entirely successful.
     const selectedCourseId = selectedCourseAction?.courseId;
-    if (!selectedCourseId) {
-      setInlineWorkspaceStatuses((s) => ({
-        ...s,
-        [operationId]: localizedText(TEACHING_OPERATION_COURSE_REQUIRED_MESSAGE, locale),
-      }));
-      return;
-    }
-    const blockedWrite = readInlineWorkspaceWriteBlockMessage({
-      selectedCourseId, writableCourseIds,
-    });
+    const blockedWrite = readInlineWorkspaceWriteBlockMessage({ selectedCourseId, writableCourseIds });
     if (blockedWrite) {
       setInlineWorkspaceStatuses((s) => ({ ...s, [operationId]: localizedText(blockedWrite, locale) }));
       return;
     }
+    if (!selectedCourseId) return;
 
     const attemptId = createInlineWorkspaceAttemptId(operationId);
     if (operationId === "students" && actionSlot === "secondary") {
-      const courseId = selectedCourseId;
       // A new generation attempt invalidates the earlier proposal immediately.
       // If the new receipt or audit later fails, no stale partition remains
       // available for the teacher to mistake for the current result.
       setPendingGroupSuggestionsByCourse((currentSuggestions) => {
         const nextSuggestions = { ...currentSuggestions };
-        delete nextSuggestions[courseId];
+        delete nextSuggestions[selectedCourseId];
         return nextSuggestions;
       });
     }
@@ -582,7 +572,7 @@ export function useTeachingWorkspace() {
       const courseId = selectedCourseId;
       const sourceAction = "inline-teaching-workspace";
       const courseSettingsPatch =
-        operationId === "course-settings" && actionSlot === "primary" && courseId
+        operationId === "course-settings" && actionSlot === "primary"
           ? createCourseSettingsPatch(courseId)
           : undefined;
       const response = await fetch("/api/teaching/operations", {
