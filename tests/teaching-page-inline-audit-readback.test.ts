@@ -3,6 +3,7 @@ import {
   createTeachingOperationAuditReadbackRequestInit,
   isMissingSavedTeachingOperationAuditRecord,
   isMissingSavedTeachingOperationAuditTrace,
+  resolveInlineTeachingOperationAuditMatch,
 } from "@/components/pages/teaching-page-inline-audit-readback";
 import {
   isCourseSettingsPrimarySave,
@@ -96,5 +97,26 @@ describe("inline teaching operation audit readback helpers", () => {
     expect(isCourseSettingsPrimarySave("course-settings", "primary")).toBe(true);
     expect(isCourseSettingsPrimarySave("course-settings", "secondary")).toBe(false);
     expect(isCourseSettingsPrimarySave("invite-code", "primary")).toBe(false);
+  });
+
+  it("marks an empty unscoped audit list as incomplete rather than a matched save", () => {
+    expect(
+      resolveInlineTeachingOperationAuditMatch({
+        audit: {
+          auditEvents: [],
+          records: [],
+          domainProjections: [],
+        },
+        traceId: "trace-owned-course-settings-save",
+        courseId: "teacher-course-uais-qa-test-owned-20260915-140423",
+        recordId: "operation-record-course-settings-primary",
+        operationId: "course-settings",
+        actionSlot: "primary",
+        verifiedReceiptAuthSession: signedSession,
+      }),
+    ).toEqual({
+      status: "incomplete",
+      reason: "missing-event",
+    });
   });
 });

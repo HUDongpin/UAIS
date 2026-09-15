@@ -1,3 +1,20 @@
+import type { TeachingOperationId } from "@/components/teaching/teaching-operation-data";
+import type { CourseSettingsPatchPayload } from "@/lib/teaching/course-readback";
+import { resolveVerifiedInlineAuditAuthSession } from "./teaching-page-inline-receipt-guards";
+import {
+  doesInlineCourseSettingsProjectionMatchPatch,
+  doesInlineDomainReadbackMatchBusinessSemantics,
+  findMatchingInlineDomainProjection,
+  findMatchingInlineDomainProjections,
+} from "./teaching-page-projection-verifiers";
+import type {
+  InlineTeachingOperationAuditAuthSession,
+  InlineTeachingOperationAuditEvent,
+  InlineTeachingOperationAuditReadbackResponse,
+  InlineTeachingOperationDomainProjection,
+  InlineTeachingOperationRecord,
+} from "./teaching-page-types";
+
 export const TEACHING_OPERATION_AUDIT_READBACK_MAX_ATTEMPTS = 3;
 export const TEACHING_OPERATION_AUDIT_READBACK_RETRY_DELAY_MS = 50;
 
@@ -106,4 +123,138 @@ export async function fetchTeachingOperationAuditReadbackWithRetry<
     await waitForTeachingOperationAuditReadbackRetry();
   }
   return payload;
+}
+
+export function isInlineAuditRecordForAction(
+  record: InlineTeachingOperationRecord,
+  input: {
+    courseId?: string;
+    operationId: TeachingOperationId;
+    actionSlot: "primary" | "secondary";
+  },
+) {
+  if (input.courseId && record.courseId !== input.courseId) {
+    return false;
+  }
+  if (record.operationId && record.operationId !== input.operationId) {
+    return false;
+  }
+  if (record.actionSlot && record.actionSlot !== input.actionSlot) {
+    return false;
+  }
+  return true;
+}
+
+export type InlineTeachingOperationAuditMatchReason =
+  | "missing-event"
+  | "missing-record"
+  | "missing-projection"
+  | "patch-mismatch"
+  | "semantic-mismatch"
+  | "missing-session";
+
+export type InlineTeachingOperationAuditMatch =
+  | {
+      status: "matched";
+      matchingAuditEvent: InlineTeachingOperationAuditEvent;
+      matchingRecord?: InlineTeachingOperationRecord;
+      matchingDomainProjection: InlineTeachingOperationDomainProjection;
+      matchingDomainProjections: InlineTeachingOperationDomainProjection[];
+      verifiedAuthSession: InlineTeachingOperationAuditAuthSession & {
+        sessionId: string;
+        authenticatedAt: string;
+        expiresAt: string;
+      };
+    }
+  | {
+      status: "incomplete";
+      reason: InlineTeachingOperationAuditMatchReason;
+    };
+
+export function resolveInlineTeachingOperationAuditMatch(input: {
+  audit: InlineTeachingOperationAuditReadbackResponse;
+  traceId: string;
+  courseId?: string;
+  recordId: string;
+  operationId: TeachingOperationId;
+  actionSlot: "primary" | "secondary";
+  courseSettingsPatch?: CourseSettingsPatchPayload;
+  verifiedReceiptAuthSession?: InlineTeachingOperationAuditAuthSession;
+}): InlineTeachingOperationAuditMatch {
+  const matchingAuditEvent = input.audit.auditEvents?.find((event) => {
+    if (event.traceId !== input.traceId) {
+      return false;
+    }
+    return input.courseId ? event.courseId === input.courseId : true;
+  });
+  const matchingRecord = input.recordId
+    ? input.audit.records?.find((record) => {
+        if (record.recordId !== input.recordId) {
+          return false;
+        }
+        return isInlineAuditRecordForAction(record, {
+          courseId: input.courseId,
+          operationId: input.operationId,
+          actionSlot: input.actionSlot,
+        });
+      })
+    : undefined;
+  if (!matchingAuditEvent) {
+    return { status: "incomplete", reason: "missing-event" };
+  }
+  if (input.recordId && !matchingRecord) {
+    return { status: "incomplete", reason: "missing-record" };
+  }
+  const matchingDomainProjection = findMatchingInlineDomainProjection(
+    input.audit.domainProjections,
+    {
+      courseId: input.courseId,
+      operationId: input.operationId,
+      actionSlot: input.actionSlot,
+      recordId: input.recordId,
+    },
+  );
+  if (!matchingDomainProjection?.objectId || !matchingDomainProjection.objectType) {
+    return { status: "incomplete", reason: "missing-projection" };
+  }
+  const matchingDomainProjections = findMatchingInlineDomainProjections(
+    input.audit.domainProjections,
+    {
+      courseId: input.courseId,
+      operationId: input.operationId,
+      actionSlot: input.actionSlot,
+      recordId: input.recordId,
+    },
+  );
+  if (
+    !doesInlineCourseSettingsProjectionMatchPatch(
+      matchingDomainProjection,
+      input.courseSettingsPatch,
+    )
+  ) {
+    return { status: "incomplete", reason: "patch-mismatch" };
+  }
+  if (
+    !doesInlineDomainReadbackMatchBusinessSemantics(matchingDomainProjections, {
+      operationId: input.operationId,
+      actionSlot: input.actionSlot,
+    })
+  ) {
+    return { status: "incomplete", reason: "semantic-mismatch" };
+  }
+  const verifiedAuthSession = resolveVerifiedInlineAuditAuthSession(
+    matchingAuditEvent.authSession,
+    input.verifiedReceiptAuthSession,
+  );
+  if (!verifiedAuthSession) {
+    return { status: "incomplete", reason: "missing-session" };
+  }
+  return {
+    status: "matched",
+    matchingAuditEvent,
+    matchingRecord,
+    matchingDomainProjection,
+    matchingDomainProjections,
+    verifiedAuthSession,
+  };
 }

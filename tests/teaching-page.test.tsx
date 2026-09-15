@@ -4862,7 +4862,9 @@ describe("TeachingPage", () => {
     await waitFor(() => {
       expect(screen.getByText("课程设置已由服务端持久化。")).toBeTruthy();
     });
-    expect(auditReads).toBeGreaterThanOrEqual(2);
+    await waitFor(() => {
+      expect(auditReads).toBeGreaterThanOrEqual(2);
+    });
     expect(screen.queryByText("审计读回未完成，请稍后刷新。")).toBeNull();
   });
 
