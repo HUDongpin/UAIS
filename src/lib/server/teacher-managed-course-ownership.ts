@@ -11,6 +11,35 @@ export type ReadManagedTeachingCourseOwnership = (input: {
   courseId: string;
 }) => Promise<boolean>;
 
+export async function expandOwnedCourseIdsWithManagedOwnership(input: {
+  actorId: string;
+  ownedCourseIds: Iterable<string>;
+  candidateCourseIds: Iterable<string>;
+  readManagedCourseOwnership?: ReadManagedTeachingCourseOwnership;
+}): Promise<string[]> {
+  const ownedCourseIds = new Set(
+    [...input.ownedCourseIds].filter((courseId) => courseId.trim().length > 0),
+  );
+  if (!input.readManagedCourseOwnership) {
+    return [...ownedCourseIds].sort();
+  }
+
+  const candidates = [...new Set(input.candidateCourseIds)]
+    .filter((courseId) => courseId.trim().length > 0 && !ownedCourseIds.has(courseId))
+    .sort();
+  for (const courseId of candidates) {
+    if (
+      await input.readManagedCourseOwnership({
+        actorId: input.actorId,
+        courseId,
+      })
+    ) {
+      ownedCourseIds.add(courseId);
+    }
+  }
+  return [...ownedCourseIds].sort();
+}
+
 // Canonical course ACL: the teaching-course-management snapshot's
 // `ownerTeacherId`, the same source GET /api/teaching/courses uses to list a
 // teacher's workbench. Teaching-operation AI-ownership rows are a derived

@@ -55,6 +55,9 @@ export type TeacherCourse = {
   status: LocalizedText;
   students: number;
   currentFocus: LocalizedText;
+  // Owned-course settings persist this separately from `currentFocus`, which
+  // catalog demo cards use for unit-progress copy rather than course description.
+  description?: LocalizedText;
 };
 
 export type TeacherDashboardItem = {

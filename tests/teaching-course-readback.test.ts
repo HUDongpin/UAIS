@@ -114,6 +114,10 @@ describe("B-14 teaching course readback helpers", () => {
         "zh-CN": "Updated focus",
         "en-US": "Updated focus",
       },
+      description: {
+        "zh-CN": "Updated focus",
+        "en-US": "Updated focus",
+      },
     });
   });
 
@@ -162,8 +166,8 @@ describe("B-14 teaching course readback helpers", () => {
       description: "",
     });
 
-    // Description has no persisted baseline, so any non-empty value is an edit, and
-    // a cleared field stays cleared instead of snapping back to the persisted value.
+    // Catalog demo cards have no persisted description, so any non-empty value is
+    // an edit, and a cleared field stays cleared instead of snapping back.
     expect(
       createCourseSettingsPatchFromDraft(course, {
         description: typedIn("Draft focus", "zh-CN"),
@@ -306,6 +310,28 @@ describe("B-14 teaching course readback helpers", () => {
       students: 24,
       currentFocus: {
         "en-US": "Teacher · Department · Unit",
+      },
+    });
+    expect(
+      createTeacherCourseFromPersistedCourse({
+        courseId: "teacher-course-uais-qa-test-owned",
+        courseName: "UAIS-QA-TEST-owned",
+        instructor: "Phoebe",
+        department: "QA",
+        unit: "Teaching",
+        semester: "2026",
+        description: " Owned course description ",
+        students: 0,
+      }),
+    ).toMatchObject({
+      id: "teacher-course-uais-qa-test-owned",
+      currentFocus: {
+        "zh-CN": "Owned course description",
+        "en-US": "Owned course description",
+      },
+      description: {
+        "zh-CN": "Owned course description",
+        "en-US": "Owned course description",
       },
     });
 
@@ -568,6 +594,33 @@ describe("B-14 teaching course readback helpers", () => {
       courses: [defaultSemesterCourse],
       writableCourseIds: [],
       catalogDemo: true,
+    });
+  });
+
+  it("round-trips a persisted owned-course description through the settings form", () => {
+    const persistedCourse = createTeacherCourseFromPersistedCourse({
+      courseId: "teacher-course-uais-qa-test-owned",
+      courseName: "UAIS-QA-TEST-owned",
+      semester: "2026",
+      description: "Owned course description",
+    });
+    expect(persistedCourse).toBeDefined();
+    expect(resolveCourseSettingsDraftValues(persistedCourse!, undefined, "zh-CN")).toEqual({
+      courseName: "UAIS-QA-TEST-owned",
+      semester: "2026",
+      description: "Owned course description",
+    });
+    expect(
+      createCourseSettingsPatchFromDraft(persistedCourse!, {
+        description: typedIn("Owned course description", "zh-CN"),
+      }),
+    ).toBeUndefined();
+    expect(
+      createCourseSettingsPatchFromDraft(persistedCourse!, {
+        description: typedIn("Updated owned description", "zh-CN"),
+      }),
+    ).toEqual({
+      description: "Updated owned description",
     });
   });
 
