@@ -88,8 +88,20 @@ describe("normalizeTeachingOperationAuditEvent authSession round-trip", () => {
   });
 
   it("selects persisted events that omit courseId for missing-context alerts", () => {
-    const { courseId: _courseId, ...withoutCourseId } = persistedAuditEvent;
-    const event = normalizeTeachingOperationAuditEvent(withoutCourseId);
+    const event = normalizeTeachingOperationAuditEvent({
+      auditId: persistedAuditEvent.auditId,
+      traceId: persistedAuditEvent.traceId,
+      eventType: persistedAuditEvent.eventType,
+      actorId: persistedAuditEvent.actorId,
+      actorRole: persistedAuditEvent.actorRole,
+      authMode: persistedAuditEvent.authMode,
+      operationId: persistedAuditEvent.operationId,
+      actionSlot: persistedAuditEvent.actionSlot,
+      actionId: persistedAuditEvent.actionId,
+      requestSource: persistedAuditEvent.requestSource,
+      createdAt: persistedAuditEvent.createdAt,
+      redaction: persistedAuditEvent.redaction,
+    });
 
     expect(event.eventType).toBe("teaching-operation.persisted");
     expect(event).toEqual(
