@@ -16,6 +16,7 @@ import {
   type TeachingLearningGroupRecord,
 } from "@/lib/server/teaching-course-management-store";
 import { createUaisTeachingCourseManagementRepository } from "@/lib/server/teaching-course-management-external-store";
+import { isSameTeachingActorId } from "@/lib/server/teaching-actor-id";
 import {
   assertTeachingCourseAssetsLocalJsonRuntimeAllowed,
   readTeachingCourseAssetsSnapshot,
@@ -383,13 +384,13 @@ export function createTeachingCourseGetHandler(deps: TeachingCourseGetHandlerDep
         }, traceId);
       }
 
-      const courses = database.courses.filter(
-        (course) => course.ownerTeacherId === teacher.actorId,
+      const courses = database.courses.filter((course) =>
+        isSameTeachingActorId(course.ownerTeacherId, teacher.actorId),
       );
       const courseIds = new Set(courses.map((course) => course.courseId));
       const classes = database.classes.filter(
         (classItem) =>
-          classItem.ownerTeacherId === teacher.actorId &&
+          isSameTeachingActorId(classItem.ownerTeacherId, teacher.actorId) &&
           courseIds.has(classItem.courseId),
       );
       const classIds = new Set(classes.map((classItem) => classItem.classId));
@@ -404,7 +405,8 @@ export function createTeachingCourseGetHandler(deps: TeachingCourseGetHandlerDep
       // `features` field, not an empty list, that hides the workspace panel.
       const learningGroups = (database.learningGroups ?? []).filter(
         (group) =>
-          group.ownerTeacherId === teacher.actorId && courseIds.has(group.courseId),
+          isSameTeachingActorId(group.ownerTeacherId, teacher.actorId) &&
+          courseIds.has(group.courseId),
       );
 
       return jsonResponse(200, {

@@ -51,6 +51,14 @@ describe("teaching course management delegated authorization", () => {
         requiredCapability: "course.settings.manage",
       }),
     ).toBe(true);
+    expect(
+      isTeachingCourseManagementActorAuthorized({
+        ownerTeacherId: "Phoebe",
+        actorId: "phoebe",
+        courseId,
+        requiredCapability: "course.settings.manage",
+      }),
+    ).toBe(true);
   });
 
   it.each([

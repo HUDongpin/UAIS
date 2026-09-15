@@ -1,5 +1,6 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import type { TeachingCourseCapabilityDecision } from "@/lib/server/teaching-course-collaborator-access";
+import { isSameTeachingActorId } from "@/lib/server/teaching-actor-id";
 import {
   isTeachingCourseCollaboratorPublicId,
   isTeachingCourseCollaboratorUuid,
@@ -60,7 +61,7 @@ export function isTeachingCourseManagementActorAuthorized(input: {
   requiredCapability: TeachingCourseDelegatableCapability;
   authorization?: unknown;
 }) {
-  if (input.ownerTeacherId === input.actorId) {
+  if (isSameTeachingActorId(input.ownerTeacherId, input.actorId)) {
     return true;
   }
   const activeAuthorization =

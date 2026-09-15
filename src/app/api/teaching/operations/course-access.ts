@@ -1,9 +1,14 @@
 import { getUaisCoreDatabaseReadiness } from "@/lib/db/core-database";
 import type { TeachingCourseCapabilityDecision } from "@/lib/server/teaching-course-collaborator-access";
-import { createTeachingCourseCollaboratorPostgresStore } from "@/lib/server/teaching-course-collaborator-postgres-store";
+import {
+  TeachingCourseCollaboratorStoreError,
+  createTeachingCourseCollaboratorPostgresStore,
+} from "@/lib/server/teaching-course-collaborator-postgres-store";
 import {
   createTeachingCourseManagementDelegatedAuthorization,
 } from "@/lib/server/teaching-course-management-authorization";
+import { isSameTeachingActorId } from "@/lib/server/teaching-actor-id";
+import { type ReadManagedTeachingCourseOwnership } from "@/lib/server/teacher-managed-course-ownership";
 import { resolveTeachingOperationCollaboratorCapability } from "@/lib/server/teaching-operation-collaborator-policy";
 import {
   createUaisTeacherAiOwnershipAdapter,
@@ -44,6 +49,8 @@ export type ReadTeachingCourseCapability = (input: {
   courseId: string;
   capability: unknown;
 }) => Promise<TeachingCourseCapabilityDecision>;
+
+export type { ReadManagedTeachingCourseOwnership };
 
 type TeachingCourseCapabilityDeniedReason = Extract<
   TeachingCourseCapabilityDecision,
@@ -115,7 +122,10 @@ export async function authorizeTeachingOperationCourseAccess(input: {
   courseId?: string;
   operationId: unknown;
   actionSlot: unknown;
+  env?: Record<string, string | undefined>;
+  fetch?: typeof fetch;
   getTeachingOperationCourseOwnership?: GetTeachingOperationCourseOwnership;
+  readManagedCourseOwnership?: ReadManagedTeachingCourseOwnership;
   readTeachingCourseCapability?: ReadTeachingCourseCapability;
 }) {
   const actor = {
@@ -129,40 +139,22 @@ export async function authorizeTeachingOperationCourseAccess(input: {
     return createDeniedAccess("course-id-invalid", actor);
   }
   const resource = { courseId: input.courseId };
-  let ownerDeniedReason: Extract<
-    TeachingOperationAccessDeniedReason,
-    | "teacher-course-ownership-required"
-    | "teacher-course-ownership-check-failed"
-    | "course-scope-denied"
-  > = "teacher-course-ownership-required";
-
-  if (input.getTeachingOperationCourseOwnership) {
-    try {
-      const ownership = await input.getTeachingOperationCourseOwnership({
-        request: input.request,
-        authenticatedTeacher: input.authenticatedTeacher,
-      });
-      if (
-        ownership?.teacherId === input.authenticatedTeacher.actorId &&
-        new Set(ownership.courseIds ?? []).has(input.courseId)
-      ) {
-        return {
-          status: "authorized" as const,
-          reasonCode: "course-owner-implicit" as const,
-          responsibleSession: "S12" as const,
-          actor,
-          resource,
-          redaction: createRedaction(),
-        };
-      }
-      ownerDeniedReason =
-        ownership?.teacherId === input.authenticatedTeacher.actorId
-          ? "course-scope-denied"
-          : "teacher-course-ownership-required";
-    } catch {
-      ownerDeniedReason = "teacher-course-ownership-check-failed";
-    }
+  const ownerAccess = await resolveTeachingOperationOwnerAccess({
+    request: input.request,
+    authenticatedTeacher: input.authenticatedTeacher,
+    courseId: input.courseId,
+    actor,
+    resource,
+    getTeachingOperationCourseOwnership: input.getTeachingOperationCourseOwnership,
+    readManagedCourseOwnership: input.readManagedCourseOwnership,
+  });
+  if (ownerAccess.status === "authorized") {
+    return ownerAccess;
   }
+  if (ownerAccess.reasonCode === "teacher-course-ownership-check-failed") {
+    return ownerAccess;
+  }
+  const ownerDeniedReason = ownerAccess.reasonCode;
 
   const capability = resolveTeachingOperationCollaboratorCapability({
     operationId: input.operationId,
@@ -179,7 +171,13 @@ export async function authorizeTeachingOperationCourseAccess(input: {
       courseId: input.courseId,
       capability,
     });
-  } catch {
+  } catch (error) {
+    if (
+      error instanceof TeachingCourseCollaboratorStoreError &&
+      error.status < 500
+    ) {
+      return createDeniedAccess(ownerDeniedReason, actor, resource);
+    }
     return createDeniedAccess(
       "teacher-course-capability-check-failed",
       actor,
@@ -244,6 +242,86 @@ export function getTeachingOperationAccessDeniedError(
     return "UAIS teaching operation course capability is required.";
   }
   return "UAIS teaching operation course ownership is required.";
+}
+
+type TeachingOperationOwnerDeniedReason = Extract<
+  TeachingOperationAccessDeniedReason,
+  | "teacher-course-ownership-required"
+  | "teacher-course-ownership-check-failed"
+  | "course-scope-denied"
+>;
+
+async function resolveTeachingOperationOwnerAccess(input: {
+  request: Request;
+  authenticatedTeacher: TeachingOperationAuthenticatedTeacher;
+  courseId: string;
+  actor: { actorId: string; role: "teacher" };
+  resource: { courseId: string };
+  getTeachingOperationCourseOwnership?: GetTeachingOperationCourseOwnership;
+  readManagedCourseOwnership?: ReadManagedTeachingCourseOwnership;
+}) {
+  const authorizedOwner = {
+    status: "authorized" as const,
+    reasonCode: "course-owner-implicit" as const,
+    responsibleSession: "S12" as const,
+    actor: input.actor,
+    resource: input.resource,
+    redaction: createRedaction(),
+  };
+  // Snapshot ownership is wired by the operations handler for the default
+  // production path. Tests that inject `getTeachingOperationCourseOwnership`
+  // omit this adapter so they do not hit a real course-management store.
+  const readManagedCourseOwnership = input.readManagedCourseOwnership;
+
+  if (readManagedCourseOwnership) {
+    try {
+      if (
+        await readManagedCourseOwnership({
+          actorId: input.authenticatedTeacher.actorId,
+          courseId: input.courseId,
+        })
+      ) {
+        return authorizedOwner;
+      }
+    } catch {
+      // Snapshot ownership is the canonical ACL. A transport failure here must
+      // not skip to a collaborator lookup that can 503 as "capability check
+      // failed" while the teacher actually owns the course.
+      return createDeniedAccess(
+        "teacher-course-ownership-check-failed",
+        input.actor,
+        input.resource,
+      );
+    }
+  }
+
+  let ownerDeniedReason: TeachingOperationOwnerDeniedReason =
+    "teacher-course-ownership-required";
+  if (input.getTeachingOperationCourseOwnership) {
+    try {
+      const ownership = await input.getTeachingOperationCourseOwnership({
+        request: input.request,
+        authenticatedTeacher: input.authenticatedTeacher,
+      });
+      const ownedCourseIds = new Set(ownership?.courseIds ?? []);
+      if (
+        ownership &&
+        isSameTeachingActorId(ownership.teacherId, input.authenticatedTeacher.actorId) &&
+        ownedCourseIds.has(input.courseId)
+      ) {
+        return authorizedOwner;
+      }
+      ownerDeniedReason =
+        ownership &&
+        isSameTeachingActorId(ownership.teacherId, input.authenticatedTeacher.actorId)
+          ? "course-scope-denied"
+          : "teacher-course-ownership-required";
+    } catch {
+      ownerDeniedReason = "teacher-course-ownership-check-failed";
+    }
+  }
+
+  return createDeniedAccess(ownerDeniedReason, input.actor, input.resource);
 }
 
 export function createDeniedAccess(

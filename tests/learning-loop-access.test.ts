@@ -94,6 +94,32 @@ describe("P1 learning-loop teacher access", () => {
     expect(mismatch).toMatchObject({ status: "denied", reasonCode: "teacher-session-identity-mismatch" });
     expect(readCourseScope).not.toHaveBeenCalled();
   });
+
+  it("accepts dual sessions when the teacher actor id differs only by case", async () => {
+    const readCourseScope = vi.fn(async () => ({
+      course: { externalId: "course-1", title: "Course one" },
+      classes: [{ externalId: "class-1", name: "Class one" }],
+    }));
+
+    await expect(
+      authorizeLearningLoopTeacherCourse({
+        request: new Request("http://localhost/api/teaching/courses/course-1/activities", {
+          headers: { cookie: cookies("Teacher-1") },
+        }),
+        env,
+        now,
+        courseId: "course-1",
+        readCourseScope,
+      }),
+    ).resolves.toMatchObject({
+      status: "authorized",
+      teacherAccount: "teacher-1",
+      course: { externalId: "course-1" },
+    });
+    expect(readCourseScope).toHaveBeenCalledWith(
+      expect.objectContaining({ teacherAccount: "teacher-1", courseId: "course-1" }),
+    );
+  });
 });
 
 describe("P1 learning-loop student dashboard access", () => {

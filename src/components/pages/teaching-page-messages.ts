@@ -74,6 +74,16 @@ export const TEACHING_COURSE_LOAD_FAILED_MESSAGE: LocalizedText = {
   "en-US":
     "Server course data was not read back. Local demo courses remain visible; sign in again or check course access.",
 };
+export const TEACHING_CATALOG_DEMO_READ_ONLY_MESSAGE: LocalizedText = {
+  "zh-CN":
+    "当前显示的是演示课程卡片，未绑定本账号的授课所有权。保存、同步、生成等写入操作已关闭；请创建课程或打开已保存在你名下的课程。",
+  "en-US":
+    "These are demo course cards and are not owned by this account. Save, sync, and generate actions are disabled. Create a course or open one saved under your account.",
+};
+export const TEACHING_OPERATION_COURSE_NOT_OWNED_MESSAGE: LocalizedText = {
+  "zh-CN": "当前账号不是这门课程的授课教师，写入操作已关闭。",
+  "en-US": "This account is not the course owner, so write actions are disabled.",
+};
 export const TEACHING_COURSE_COVER_TEACHER_READBACK_REQUIRED_MESSAGE: LocalizedText = {
   "zh-CN": "教师身份未读回，请重新登录或等待课程数据读回后再生成封面。",
   "en-US":

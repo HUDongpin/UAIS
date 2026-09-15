@@ -9,11 +9,12 @@ import { getTeachingOperationHref } from "@/components/teaching/teaching-operati
 import type { TeachingOperationId } from "@/components/teaching/teaching-operation-data";
 import { localizedText } from "@/components/ui/localized-text";
 import type { Locale, LocalizedText } from "@/i18n/copy";
-import type {
-  TeacherClassItem,
-  TeachingClassCreateResponse,
-  TeachingClassMembershipApproveResponse,
-  TeachingCourseCreateResponse,
+import {
+  isWritableTeacherCourseId,
+  type TeacherClassItem,
+  type TeachingClassCreateResponse,
+  type TeachingClassMembershipApproveResponse,
+  type TeachingCourseCreateResponse,
 } from "@/lib/teaching/course-readback";
 import {
   MEMBERSHIP_APPROVAL_FAILED_MESSAGE,
@@ -23,6 +24,8 @@ import {
   TEACHING_COURSE_CREATE_OWNERSHIP_EVIDENCE_MISSING_MESSAGE,
   TEACHING_COURSE_CREATE_RECEIPT_MISSING_MESSAGE,
   TEACHING_OPERATION_ALERT_NOTIFICATION_FAILED_MESSAGE,
+  TEACHING_OPERATION_COURSE_NOT_OWNED_MESSAGE,
+  TEACHING_OPERATION_COURSE_REQUIRED_MESSAGE,
   TEACHING_OPERATION_ROLLBACK_FAILED_MESSAGE,
   TEACHING_OPERATION_SAVE_FAILED_MESSAGE,
 } from "./teaching-page-messages";
@@ -727,6 +730,19 @@ export function createInvitePartialFailureStatus(
     };
   }
 
+  return undefined;
+}
+
+export function readInlineWorkspaceWriteBlockMessage(input: {
+  selectedCourseId: string | undefined;
+  writableCourseIds: ReadonlySet<string> | undefined;
+}) {
+  if (!input.selectedCourseId) {
+    return TEACHING_OPERATION_COURSE_REQUIRED_MESSAGE;
+  }
+  if (!isWritableTeacherCourseId(input.writableCourseIds, input.selectedCourseId)) {
+    return TEACHING_OPERATION_COURSE_NOT_OWNED_MESSAGE;
+  }
   return undefined;
 }
 

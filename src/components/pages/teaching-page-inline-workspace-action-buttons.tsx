@@ -23,6 +23,7 @@ type InlineWorkspaceActionButtonsProps = {
   locale: Locale;
   inlineWorkspaceStatuses: Partial<Record<TeachingOperationId, string>>;
   isCourseChosen: boolean;
+  isCourseWritable?: boolean;
   selectedCourseId?: string;
   runInlineWorkspaceAction: (
     operationId: TeachingOperationId,
@@ -35,6 +36,7 @@ export function InlineWorkspaceActionButtons({
   locale,
   inlineWorkspaceStatuses,
   isCourseChosen,
+  isCourseWritable = true,
   selectedCourseId,
   runInlineWorkspaceAction,
 }: InlineWorkspaceActionButtonsProps) {
@@ -42,13 +44,14 @@ export function InlineWorkspaceActionButtons({
     const isSaving =
       inlineWorkspaceStatuses[operationId] ===
       localizedText(TEACHING_OPERATION_SAVE_PENDING_MESSAGE, locale);
-    const isDisabled = isSaving || !isCourseChosen;
+    const isDisabled = isSaving || !isCourseChosen || !isCourseWritable;
 
     return (
       <div
         className="flex flex-wrap gap-2"
         data-uais-inline-workspace-actions={operationId}
         data-uais-inline-workspace-course-chosen={isCourseChosen ? "true" : "false"}
+        data-uais-inline-workspace-course-writable={isCourseWritable ? "true" : "false"}
       >
         <button
           type="button"

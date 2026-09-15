@@ -35,10 +35,9 @@ import {
   isPersistedInvitePublicationReceipt,
   isPersistedTeachingClassCreateReceipt,
   isPersistedTeachingCourseCreateReceipt,
+  readInlineWorkspaceWriteBlockMessage,
   readJsonPayload,
 } from "./teaching-page-helpers";
-import {
-} from "./teaching-page-dialogs";
 import {
   createKangXiaPptSlideScripts,
 } from "./teacher-ppt-narration-workflow-format";
@@ -54,6 +53,7 @@ import {
 } from "@/components/teaching/teaching-operation-data";
 import { useTeachingClassMembershipLifecycle } from "@/components/teaching/use-teaching-class-membership-lifecycle";
 import { useTeachingInviteTargeting } from "@/components/teaching/use-teaching-invite-targeting";
+import { useTeachingWorkbenchWriteAccess } from "./use-teaching-workbench-write-access";
 import { localizedText } from "@/components/ui/localized-text";
 import { teacherCourses, teacherSidebarItems } from "@/data/uais";
 import type { TeacherCourse } from "@/data/uais";
@@ -74,7 +74,6 @@ import {
   createTeacherMembershipsByClassFromPersistedMemberships,
   extractCourseSemester,
   mergeTeacherClassesByCourseId,
-  mergeTeacherCoursesById,
   mergeTeacherMembershipsByClassId,
   readTeachingCourseListTeacherActorId,
   resolveCourseSettingsDraftValues,
@@ -112,7 +111,6 @@ import {
   TEACHING_OPERATION_ALERT_PENDING_MESSAGE,
   TEACHING_OPERATION_AUDIT_FAILED_MESSAGE,
   TEACHING_OPERATION_AUDIT_PENDING_MESSAGE,
-  TEACHING_OPERATION_COURSE_REQUIRED_MESSAGE,
   TEACHING_OPERATION_RECEIPT_MISMATCH_MESSAGE,
   TEACHING_OPERATION_ROLLBACK_FAILED_MESSAGE,
   TEACHING_OPERATION_SAVE_FAILED_MESSAGE,
@@ -182,6 +180,9 @@ export function useTeachingWorkspace() {
   >({});
   const [authenticatedTeacherActorId, setAuthenticatedTeacherActorId] =
     useState<string>();
+  const {
+    writableCourseIds, catalogDemoCoursesVisible, applyWorkbenchCourses, markCatalogDemoReadOnly,
+  } = useTeachingWorkbenchWriteAccess();
   // Chatroom-groups feature gate (plan D9). Starts false so a workspace that has
   // not heard from the server — or a deployment with the flag off — shows no
   // group surface at all.
@@ -281,11 +282,9 @@ export function useTeachingWorkspace() {
       if (readback.authenticatedTeacherActorId) {
         setAuthenticatedTeacherActorId(readback.authenticatedTeacherActorId);
       }
-      if (readback.courses.length > 0) {
-        setCourseCards((currentCourses) =>
-          mergeTeacherCoursesById(readback.courses, currentCourses),
-        );
-      }
+      setCourseCards(applyWorkbenchCourses({
+        persistedCourses: readback.courses, catalogCourses: teacherCourses,
+      }));
       if (Object.keys(readback.classesByCourse).length > 0) {
         setCourseClasses((currentClasses) =>
           mergeTeacherClassesByCourseId(readback.classesByCourse, currentClasses),
@@ -297,7 +296,7 @@ export function useTeachingWorkspace() {
         );
       }
     },
-    [],
+    [applyWorkbenchCourses],
   );
 
   const membershipLifecycle = useTeachingClassMembershipLifecycle({
@@ -328,6 +327,7 @@ export function useTeachingWorkspace() {
               ? error.message
               : createPersistedCourseLoadErrorMessage(undefined, locale),
           );
+          markCatalogDemoReadOnly();
         }
       }
     }
@@ -337,7 +337,7 @@ export function useTeachingWorkspace() {
     return () => {
       isCancelled = true;
     };
-  }, [applyPersistedTeachingCourseReadback, locale, readPersistedTeachingCourseState]);
+  }, [applyPersistedTeachingCourseReadback, locale, markCatalogDemoReadOnly, readPersistedTeachingCourseState]);
 
   async function createCourseFromDraft(draft: NewCourseDraft) {
     const courseName = draft.name.trim();
@@ -523,11 +523,11 @@ export function useTeachingWorkspace() {
     // Plan E9: refuse rather than guess. The operations route authorizes on the
     // course id, so an unset course used to become "whatever sorted first" and
     // the receipt came back looking entirely successful.
-    if (!selectedCourseAction?.courseId) {
-      setInlineWorkspaceStatuses((currentStatuses) => ({
-        ...currentStatuses,
-        [operationId]: localizedText(TEACHING_OPERATION_COURSE_REQUIRED_MESSAGE, locale),
-      }));
+    const blockedWrite = readInlineWorkspaceWriteBlockMessage({
+      selectedCourseId: selectedCourseAction?.courseId, writableCourseIds,
+    });
+    if (blockedWrite) {
+      setInlineWorkspaceStatuses((s) => ({ ...s, [operationId]: localizedText(blockedWrite, locale) }));
       return;
     }
 
@@ -1546,6 +1546,8 @@ export function useTeachingWorkspace() {
     setClassMemberships,
     authenticatedTeacherActorId,
     setAuthenticatedTeacherActorId,
+    writableCourseIds,
+    catalogDemoCoursesVisible,
     learningChatroomGroupsEnabled,
     persistedCourseLoadError,
     setPersistedCourseLoadError,

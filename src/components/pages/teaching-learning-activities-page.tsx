@@ -13,6 +13,7 @@ import {
   parseHongKongDateTimeInput,
 } from "@/lib/learning-loop/hong-kong-time";
 import { TeachingLearningActivityForm } from "./teaching-learning-activity-form";
+import { resolveFailureReasonText } from "@/i18n/failure-reason-copy";
 import type {
   LearningInsights,
   TeacherCourseClass,
@@ -124,6 +125,8 @@ export function TeachingLearningActivitiesPage({ courseId }: { courseId: string 
     }
   }
 
+  const ownershipBlocked = error === "teacher-course-ownership-required";
+
   if (signedOut) {
     return <CenteredNotice><p>{zh ? "教师会话已过期。" : "Your teacher session expired."}</p><Link className="font-semibold text-[var(--accent)] underline" href={createLoginHandoffHref(`/teaching/courses/${courseId}/activities`)}>{zh ? "重新登录并返回" : "Sign in and return"}</Link></CenteredNotice>;
   }
@@ -141,20 +144,32 @@ export function TeachingLearningActivitiesPage({ courseId }: { courseId: string 
       </header>
 
       {loading ? <p className="text-sm text-[var(--muted)]">{zh ? "正在读取真实任务…" : "Loading real activities…"}</p> : null}
-      {error ? <div role="alert" className="rounded-xl border border-[var(--danger)] p-4 text-sm"><p>{zh ? `工作台暂不可用：${error}` : `Workspace unavailable: ${error}`}</p><button type="button" onClick={() => void loadWorkspace()} className="mt-2 font-semibold text-[var(--accent)]">{zh ? "重试" : "Retry"}</button></div> : null}
-      {!lessonKey && !loading ? <div className="rounded-xl border border-[var(--warning)] bg-[var(--surface)] p-4 text-sm leading-6 text-[var(--muted)]">{zh ? "该课程尚无可绑定的已发布课件单元。新的 P1 课件必须在发布清单中显式提供 lessonKey 和 position。" : "This course has no published lesson identity to bind. New P1 manifests must provide lessonKey and position explicitly."}</div> : null}
-      {classes.length === 0 && !loading ? <div className="rounded-xl border border-[var(--warning)] bg-[var(--surface)] p-4 text-sm text-[var(--muted)]">{zh ? "该课程尚无真实班级；任务不能发布到虚构班级。" : "This course has no real class, so an activity cannot target an invented class."}</div> : null}
+      {ownershipBlocked ? (
+        <div role="alert" className="rounded-xl border border-[var(--danger)] p-4 text-sm leading-6">
+          <p className="font-semibold">{zh ? "工作台只读：当前账号不是这门课程的授课教师。" : "Workbench is read-only: this account is not the course owner."}</p>
+          <p className="mt-2 text-[var(--muted)]">
+            {resolveFailureReasonText(error, locale) ??
+              (zh
+                ? "演示课程卡片不能保存学习任务。请打开你名下已保存的课程，或先创建课程。"
+                : "Demo course cards cannot save learning activities. Open a course saved under your account, or create one first.")}
+          </p>
+          <button type="button" onClick={() => void loadWorkspace()} className="mt-2 font-semibold text-[var(--accent)]">{zh ? "重新检查所有权" : "Recheck ownership"}</button>
+        </div>
+      ) : null}
+      {error && !ownershipBlocked ? <div role="alert" className="rounded-xl border border-[var(--danger)] p-4 text-sm"><p>{zh ? `工作台暂不可用：${error}` : `Workspace unavailable: ${error}`}</p><button type="button" onClick={() => void loadWorkspace()} className="mt-2 font-semibold text-[var(--accent)]">{zh ? "重试" : "Retry"}</button></div> : null}
+      {!ownershipBlocked && !lessonKey && !loading ? <div className="rounded-xl border border-[var(--warning)] bg-[var(--surface)] p-4 text-sm leading-6 text-[var(--muted)]">{zh ? "该课程尚无可绑定的已发布课件单元。新的 P1 课件必须在发布清单中显式提供 lessonKey 和 position。" : "This course has no published lesson identity to bind. New P1 manifests must provide lessonKey and position explicitly."}</div> : null}
+      {!ownershipBlocked && classes.length === 0 && !loading ? <div className="rounded-xl border border-[var(--warning)] bg-[var(--surface)] p-4 text-sm text-[var(--muted)]">{zh ? "该课程尚无真实班级；任务不能发布到虚构班级。" : "This course has no real class, so an activity cannot target an invented class."}</div> : null}
 
       {insights ? <InsightsPanel insights={insights} locale={locale} /> : null}
 
       <section className="space-y-3">
         <div className="flex flex-wrap items-end justify-between gap-3"><div><h2 className="text-xl font-semibold">{zh ? "数据库中的任务" : "Activities in the database"}</h2><p className="mt-1 text-sm text-[var(--muted)]">{zh ? `${activities.length} 个真实任务版本` : `${activities.length} real activity versions`}</p></div>{editor.intent !== "create" ? <button type="button" onClick={() => setEditor({ intent: "create", key: `create-${crypto.randomUUID()}` })} className="rounded-full border border-[var(--accent)] px-4 py-2 text-sm font-semibold text-[var(--accent)]">{zh ? "新建独立任务" : "Create separate activity"}</button> : null}</div>
-        {activities.length === 0 && !loading ? <p className="rounded-xl border border-dashed border-[var(--border)] p-5 text-sm text-[var(--muted)]">{zh ? "还没有真实任务。请在下方创建第一项任务草稿。" : "No real activities yet. Create the first draft below."}</p> : null}
+        {activities.length === 0 && !loading && !ownershipBlocked ? <p className="rounded-xl border border-dashed border-[var(--border)] p-5 text-sm text-[var(--muted)]">{zh ? "还没有真实任务。请在下方创建第一项任务草稿。" : "No real activities yet. Create the first draft below."}</p> : null}
         <div className="grid gap-4 lg:grid-cols-2">{activities.map((activity) => <ActivityCard key={activity.id} activity={activity} locale={locale} busy={actionBusy} onEdit={(source, intent) => setEditor({ source, intent, key: `${intent}-${source.id}-${source.editRevision}` })} onOperation={runActivityOperation} />)}</div>
       </section>
 
       {actionMessage ? <p aria-live="polite" className="rounded-xl bg-[var(--surface-elevated)] p-3 text-sm font-medium">{actionMessage}</p> : null}
-      <TeachingLearningActivityForm key={editor.key} locale={locale} lessonKey={editor.source?.lessonKey ?? lessonKey} classes={classes} intent={editor.intent} source={editor.source} onSubmit={saveEditorDraft} onCancel={editor.intent === "create" ? undefined : () => setEditor({ intent: "create", key: `create-${crypto.randomUUID()}` })} />
+      {ownershipBlocked ? null : <TeachingLearningActivityForm key={editor.key} locale={locale} lessonKey={editor.source?.lessonKey ?? lessonKey} classes={classes} intent={editor.intent} source={editor.source} onSubmit={saveEditorDraft} onCancel={editor.intent === "create" ? undefined : () => setEditor({ intent: "create", key: `create-${crypto.randomUUID()}` })} />}
     </div>
   );
 }
