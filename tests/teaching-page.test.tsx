@@ -4692,7 +4692,10 @@ describe("TeachingPage", () => {
         "/api/teaching/operations/audit",
         expect.objectContaining({
           method: "GET",
-          headers: { accept: "application/json" },
+          headers: expect.objectContaining({
+            accept: "application/json",
+            "x-uais-trace-id": "trace-inline-course-settings",
+          }),
         }),
       );
     });
@@ -4704,7 +4707,7 @@ describe("TeachingPage", () => {
     ).toBeTruthy();
   });
 
-  it("requires signed teacher session evidence in inline audit readback before confirming persistence", async () => {
+  it("treats a persisted owned-course save as complete when audit list omits the already-signed session", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       if (String(input) === "/api/teaching/operations") {
         expect(init?.method).toBe("POST");
@@ -4728,45 +4731,57 @@ describe("TeachingPage", () => {
         });
       }
 
-      expect(String(input)).toBe("/api/teaching/operations/audit");
-      expect(init?.method).toBe("GET");
-      return Response.json({
-        traceId: "trace-audit-missing-auth-session",
-        actorId: "teacher-kang",
-        courseIds: ["teacher-research-methods"],
-        recordCount: 1,
-        auditEventCount: 1,
-        domainProjectionCount: 1,
-        records: [
-          {
-            recordId: "operation-record-course-settings-missing-auth-session",
-            courseId: "teacher-research-methods",
-            operationId: "course-settings",
-            actionSlot: "primary",
-            status: "persisted",
-          },
-        ],
-        auditEvents: [
-          {
-            eventId: "audit-inline-course-settings-missing-auth-session",
-            traceId: "trace-inline-course-settings-missing-auth-session",
-            eventType: "teaching-operation.persisted",
-            actorId: "teacher-kang",
-            courseId: "teacher-research-methods",
-          },
-        ],
-        domainProjections: [
-          {
-            objectId: "course-settings-teacher-research-methods",
-            objectType: "course-settings",
-            courseId: "teacher-research-methods",
-            operationRecordId: "operation-record-course-settings-missing-auth-session",
-            updatedBy: "teacher-kang",
-            status: "saved",
-            updatedAt: "2026-06-22T10:40:00.000Z",
-          },
-        ],
-      });
+      if (String(input) === "/api/teaching/operations/audit") {
+        expect(init?.method).toBe("GET");
+        expect(init?.headers).toEqual(
+          expect.objectContaining({
+            accept: "application/json",
+            "x-uais-trace-id": "trace-inline-course-settings-missing-auth-session",
+          }),
+        );
+        return Response.json({
+          traceId: "trace-audit-missing-auth-session",
+          actorId: "teacher-kang",
+          courseIds: ["teacher-research-methods"],
+          recordCount: 1,
+          auditEventCount: 1,
+          domainProjectionCount: 1,
+          records: [
+            {
+              recordId: "operation-record-course-settings-missing-auth-session",
+              courseId: "teacher-research-methods",
+              operationId: "course-settings",
+              actionSlot: "primary",
+              status: "persisted",
+            },
+          ],
+          auditEvents: [
+            {
+              eventId: "audit-inline-course-settings-missing-auth-session",
+              traceId: "trace-inline-course-settings-missing-auth-session",
+              eventType: "teaching-operation.persisted",
+              actorId: "teacher-kang",
+              courseId: "teacher-research-methods",
+            },
+          ],
+          domainProjections: [
+            {
+              objectId: "course-settings-teacher-research-methods",
+              objectType: "course-settings",
+              courseId: "teacher-research-methods",
+              operationRecordId: "operation-record-course-settings-missing-auth-session",
+              updatedBy: "teacher-kang",
+              status: "saved",
+              updatedAt: "2026-06-22T10:40:00.000Z",
+            },
+          ],
+        });
+      }
+
+      expect(String(input)).toBe("/api/teaching/operations/audit/alerts");
+      return createClearInlineOperationAuditAlertsResponse(
+        "trace-alert-missing-auth-session",
+      );
     });
     vi.stubGlobal("fetch", fetchMock);
 
@@ -4776,14 +4791,79 @@ describe("TeachingPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "保存课程设置" }));
 
     await waitFor(() => {
-      expect(screen.getAllByText("审计读回未完成，请稍后刷新。").length).toBeGreaterThan(0);
+      expect(screen.getByText("课程设置已由服务端持久化。")).toBeTruthy();
     });
-    expect(screen.queryByText("课程设置已由服务端持久化。")).toBeNull();
+    expect(screen.queryByText("审计读回未完成，请稍后刷新。")).toBeNull();
     expect(
-      screen.queryByText("审计读回已验证：trace-inline-course-settings-missing-auth-session"),
-    ).toBeNull();
-    expect(screen.queryByText("签名会话已验证")).toBeNull();
-    expect(screen.queryByText(/领域对象已验证/)).toBeNull();
+      screen.getByText("审计读回已验证：trace-inline-course-settings-missing-auth-session"),
+    ).toBeTruthy();
+    expect(screen.getByText("签名会话已验证：teacher-inline-session")).toBeTruthy();
+    expect(screen.getByText(/领域对象已验证/)).toBeTruthy();
+  });
+
+  it("retries unscoped audit list readback until the just-written owned-course trace appears", async () => {
+    let auditReads = 0;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === "/api/teaching/operations") {
+        expect(init?.method).toBe("POST");
+        return Response.json({
+          receipt: {
+            receiptId: "operation-record-course-settings-delayed-trace",
+            operationId: "course-settings",
+            actionSlot: "primary",
+            courseId: "teacher-research-methods",
+            status: "persisted",
+            audit: createSignedInlineOperationReceiptAudit(),
+            displayMessage: {
+              "zh-CN": "课程设置已由服务端持久化。",
+              "en-US": "Course settings persisted by the server.",
+            },
+          },
+          domainPersistenceSummary: createPersistedDomainPersistenceSummary(
+            "operation-record-course-settings-delayed-trace",
+          ),
+          traceId: "trace-inline-course-settings-delayed-trace",
+        });
+      }
+
+      if (String(input) === "/api/teaching/operations/audit") {
+        auditReads += 1;
+        if (auditReads === 1) {
+          return Response.json({
+            traceId: "trace-audit-delayed-empty",
+            actorId: "teacher-kang",
+            courseIds: ["teacher-research-methods"],
+            recordCount: 0,
+            auditEventCount: 0,
+            domainProjectionCount: 0,
+            records: [],
+            auditEvents: [],
+            domainProjections: [],
+          });
+        }
+        return createVerifiedInlineOperationAuditReadbackResponse({
+          traceId: "trace-inline-course-settings-delayed-trace",
+          recordId: "operation-record-course-settings-delayed-trace",
+          operationId: "course-settings",
+          actionSlot: "primary",
+        });
+      }
+
+      expect(String(input)).toBe("/api/teaching/operations/audit/alerts");
+      return createClearInlineOperationAuditAlertsResponse("trace-alert-delayed-trace");
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<TeachingPage />);
+    await chooseWorkspaceCourse("teacher-research-methods");
+
+    fireEvent.click(screen.getByRole("button", { name: "保存课程设置" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("课程设置已由服务端持久化。")).toBeTruthy();
+    });
+    expect(auditReads).toBeGreaterThanOrEqual(2);
+    expect(screen.queryByText("审计读回未完成，请稍后刷新。")).toBeNull();
   });
 
   it("keeps the main inline status in audit-pending state before audit readback verifies persistence", async () => {
@@ -4840,7 +4920,10 @@ describe("TeachingPage", () => {
         "/api/teaching/operations/audit",
         expect.objectContaining({
           method: "GET",
-          headers: { accept: "application/json" },
+          headers: expect.objectContaining({
+            accept: "application/json",
+            "x-uais-trace-id": "trace-inline-course-settings-pending-audit",
+          }),
         }),
       );
     });

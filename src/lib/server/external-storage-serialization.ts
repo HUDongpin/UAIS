@@ -506,11 +506,36 @@ export function normalizeArtifactValue(value: unknown): unknown {
   throw new HttpError(400, "Teaching operation artifact contains unsupported data.");
 }
 
+function readOptionalTeachingOperationAuditAuthSession(value: unknown) {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+  const sessionId =
+    typeof value.sessionId === "string" &&
+    /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(value.sessionId.trim())
+      ? value.sessionId.trim()
+      : undefined;
+  const authenticatedAt =
+    typeof value.authenticatedAt === "string" &&
+    Number.isFinite(Date.parse(value.authenticatedAt))
+      ? new Date(Date.parse(value.authenticatedAt)).toISOString()
+      : undefined;
+  const expiresAt =
+    typeof value.expiresAt === "string" && Number.isFinite(Date.parse(value.expiresAt))
+      ? new Date(Date.parse(value.expiresAt)).toISOString()
+      : undefined;
+  if (!sessionId || !authenticatedAt || !expiresAt) {
+    return undefined;
+  }
+  return { sessionId, authenticatedAt, expiresAt };
+}
+
 export function normalizeTeachingOperationAuditEvent(value: unknown) {
   if (!isRecord(value)) {
     throw new HttpError(400, "Teaching operation audit event must be an object.");
   }
   requireRecord(value.requestSource, "teaching operation audit request source");
+  const authSession = readOptionalTeachingOperationAuditAuthSession(value.authSession);
   if (
     (value.eventType === "teaching-gradebook-update.released" ||
       value.eventType === "teaching-gradebook-update.release-rolled-back") &&
@@ -525,6 +550,7 @@ export function normalizeTeachingOperationAuditEvent(value: unknown) {
       actorId: requireSafeId(value.actorId, "actor id"),
       actorRole: "teacher" as const,
       authMode: "signed-teacher-session" as const,
+      ...(authSession ? { authSession } : {}),
       courseId: requireSafeId(value.courseId, "course id"),
       gradebookUpdateId: requireSafeId(value.gradebookUpdateId, "gradebook update id"),
       requestSource: {
@@ -554,6 +580,7 @@ export function normalizeTeachingOperationAuditEvent(value: unknown) {
       actorId: requireSafeId(value.actorId, "actor id"),
       actorRole: "teacher" as const,
       authMode: "signed-teacher-session" as const,
+      ...(authSession ? { authSession } : {}),
       courseId: requireSafeId(value.courseId, "course id"),
       targetRecordId: requireSafeId(value.targetRecordId, "target record id"),
       operationId: requireSafeId(value.operationId, "teaching operation id"),
@@ -587,6 +614,7 @@ export function normalizeTeachingOperationAuditEvent(value: unknown) {
     actorId: requireSafeId(value.actorId, "actor id"),
     actorRole: "teacher" as const,
     authMode: "signed-teacher-session" as const,
+    ...(authSession ? { authSession } : {}),
     operationId: requireSafeId(value.operationId, "teaching operation id"),
     actionSlot: requireTeachingOperationActionSlot(value.actionSlot),
     actionId: requireSafeId(value.actionId, "teaching operation action id"),

@@ -18,6 +18,7 @@ import { localizedText } from "@/components/ui/localized-text";
 import { teacherCourses, teacherSidebarItems } from "@/data/uais";
 import type { LocalizedText, Locale } from "@/i18n/copy";
 import { createTeachingOperationIdempotencyKey } from "@/lib/teaching-operation-idempotency";
+import { fetchTeachingOperationAuditReadbackWithRetry } from "@/components/pages/teaching-page-inline-audit-readback";
 import { defaultExportManifest } from "@/components/teaching/teaching-operation-page-data";
 import { useOwnedTeachingCourseAccess } from "@/components/teaching/use-owned-teaching-course";
 import {
@@ -75,6 +76,14 @@ type TeachingOperationBackendReceipt = {
   courseId?: string;
   displayMessage?: LocalizedText;
   artifacts?: TeachingOperationBackendArtifact[];
+  audit?: {
+    authMode?: string;
+    authSession?: {
+      sessionId?: string;
+      authenticatedAt?: string;
+      expiresAt?: string;
+    };
+  };
 };
 
 type TeachingOperationDomainPersistenceSummary = {
@@ -485,6 +494,7 @@ export function TeachingOperationPage({
           actionSlot,
           verifiedStatusMessage,
           artifacts: verifiedArtifacts,
+          verifiedReceiptAuthSession: receipt.audit?.authSession,
           ...(knowledgeResource
             ? {
                 knowledgeResource: {
@@ -515,6 +525,11 @@ export function TeachingOperationPage({
     verifiedStatusMessage?: string;
     artifacts?: VerifiedOperationArtifacts;
     knowledgeResource?: KnowledgeResourceAuditExpectation;
+    verifiedReceiptAuthSession?: {
+      sessionId?: string;
+      authenticatedAt?: string;
+      expiresAt?: string;
+    };
   }) {
     setAuditStatus({
       status: "pending",
@@ -522,14 +537,16 @@ export function TeachingOperationPage({
     });
 
     try {
-      const response = await fetch("/api/teaching/operations/audit", {
-        method: "GET",
-        headers: { accept: "application/json" },
+      const audit = await fetchTeachingOperationAuditReadbackWithRetry<
+        TeachingOperationAuditReadbackResponse
+      >({
+        traceId: input.traceId,
+        courseId: input.courseId,
+        recordId: input.recordId,
       });
-      if (!response.ok) {
+      if (!audit) {
         throw new Error("Teaching operation audit readback failed.");
       }
-      const audit = (await response.json()) as TeachingOperationAuditReadbackResponse;
       const matchingRecord = audit.records?.find((record) => {
         if (record.recordId !== input.recordId) {
           return false;
@@ -548,12 +565,21 @@ export function TeachingOperationPage({
         }
         return input.courseId ? projection.courseId === input.courseId : true;
       });
+      const verifiedAuthSession = isVerifiedOperationAuditAuthSession(
+        matchingAuditEvent?.authSession,
+      )
+        ? matchingAuditEvent.authSession
+        : isVerifiedOperationAuditAuthSession(input.verifiedReceiptAuthSession)
+          ? input.verifiedReceiptAuthSession
+          : undefined;
       if (
         !matchingRecord ||
         !matchingAuditEvent ||
         !matchingDomainProjection?.objectId ||
         !matchingDomainProjection.objectType ||
-        !isVerifiedOperationAuditAuthSession(matchingAuditEvent.authSession) ||
+        (!isVerifiedOperationAuditAuthSession(matchingAuditEvent.authSession) &&
+          !isVerifiedOperationAuditAuthSession(input.verifiedReceiptAuthSession)) ||
+        !verifiedAuthSession ||
         !doesOperationPageDomainProjectionMatchBusinessSemantics(matchingDomainProjection, {
           operationId: safeOperationId,
           actionSlot: input.actionSlot,
@@ -569,9 +595,9 @@ export function TeachingOperationPage({
         actorId: matchingAuditEvent.actorId ?? audit.actorId,
         auditEventCount: audit.auditEventCount,
         authSession: {
-          sessionId: matchingAuditEvent.authSession.sessionId,
-          authenticatedAt: matchingAuditEvent.authSession.authenticatedAt,
-          expiresAt: matchingAuditEvent.authSession.expiresAt,
+          sessionId: verifiedAuthSession.sessionId,
+          authenticatedAt: verifiedAuthSession.authenticatedAt,
+          expiresAt: verifiedAuthSession.expiresAt,
         },
         domainProjection: {
           objectId: matchingDomainProjection.objectId,

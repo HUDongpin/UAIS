@@ -1,11 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { fetchTeachingOperationAuditReadbackWithRetry } from "./teaching-page-inline-audit-readback";
 import {
-  hasCompleteInlineTeachingAuthSession,
   hasSignedInlineTeachingOperationReceiptAudit,
   isMismatchedOrIncompleteInlineTeachingOperationReceipt,
   isPersistedInlineTeachingOperationReceipt,
+  resolveVerifiedInlineAuditAuthSession,
 } from "./teaching-page-inline-receipt-guards";
 import {
   createInlineWorkspaceActionConfig,
@@ -734,6 +735,7 @@ export function useTeachingWorkspace() {
           actionSlot,
           courseSettingsPatch,
           pendingGroupSuggestion,
+          verifiedReceiptAuthSession: payload.receipt?.audit?.authSession,
         });
       } else {
         if (
@@ -778,6 +780,7 @@ export function useTeachingWorkspace() {
     actionSlot: "primary" | "secondary";
     courseSettingsPatch?: CourseSettingsPatchPayload;
     pendingGroupSuggestion?: TeacherGroupSuggestionDraft;
+    verifiedReceiptAuthSession?: InlineTeachingOperationAuditAuthSession;
   }) {
     if (!isCurrentInlineWorkspaceAttempt(input.operationId, input.attemptId)) {
       return;
@@ -791,17 +794,16 @@ export function useTeachingWorkspace() {
     }));
 
     try {
-      const response = await fetch("/api/teaching/operations/audit", {
-        method: "GET",
-        headers: { accept: "application/json" },
+      const audit = await fetchTeachingOperationAuditReadbackWithRetry<
+        InlineTeachingOperationAuditReadbackResponse
+      >({
+        traceId: input.traceId,
+        courseId: input.courseId,
+        recordId: input.recordId,
+        isCurrentAttempt: () =>
+          isCurrentInlineWorkspaceAttempt(input.operationId, input.attemptId),
       });
-      if (!response.ok) {
-        throw new Error("Teaching operation audit readback failed.");
-      }
-      const audit = (await response.json()) as InlineTeachingOperationAuditReadbackResponse;
-      if (!isCurrentInlineWorkspaceAttempt(input.operationId, input.attemptId)) {
-        return;
-      }
+      if (!audit) return;
       const matchingAuditEvent = audit.auditEvents?.find((event) => {
         if (event.traceId !== input.traceId) {
           return false;
@@ -894,7 +896,11 @@ export function useTeachingWorkspace() {
         }));
         return;
       }
-      if (!isVerifiedInlineAuditAuthSession(matchingAuditEvent.authSession)) {
+      const verifiedAuthSession = resolveVerifiedInlineAuditAuthSession(
+        matchingAuditEvent.authSession,
+        input.verifiedReceiptAuthSession,
+      );
+      if (!verifiedAuthSession) {
         throw new Error(
           "Teaching operation audit readback did not include the signed teacher session.",
         );
@@ -916,7 +922,7 @@ export function useTeachingWorkspace() {
           status: "verified",
           traceId: input.traceId,
           actorId: matchingAuditEvent.actorId ?? audit.actorId,
-          authSession: matchingAuditEvent.authSession,
+          authSession: verifiedAuthSession,
           auditEventCount: audit.auditEventCount,
           recordId: matchingRecord?.recordId,
           courseId: matchingRecord?.courseId ?? input.courseId,
@@ -1061,12 +1067,6 @@ export function useTeachingWorkspace() {
       return false;
     }
     return true;
-  }
-
-  function isVerifiedInlineAuditAuthSession(
-    authSession: InlineTeachingOperationAuditAuthSession | undefined,
-  ) {
-    return hasCompleteInlineTeachingAuthSession(authSession);
   }
 
   function removePendingGroupSuggestion(courseId: string, suggestionKey: string) {
@@ -1601,7 +1601,6 @@ export function useTeachingWorkspace() {
     createInlineWorkspaceAttemptId,
     isCurrentInlineWorkspaceAttempt,
     isInlineAuditRecordForAction,
-    isVerifiedInlineAuditAuthSession,
     removePendingGroupSuggestion,
     queueInlineWorkspaceAuditAlertNotifications,
     runInlineWorkspaceRollback,

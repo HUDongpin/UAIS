@@ -1296,6 +1296,11 @@ describe("Next-hosted external storage route service", () => {
                 actorId: "teacher-kang",
                 actorRole: "teacher",
                 authMode: "signed-teacher-session",
+                authSession: {
+                  sessionId: "teacher-next-ops-session",
+                  authenticatedAt: "2026-06-22T10:30:00.000Z",
+                  expiresAt: "2026-06-22T12:00:00.000Z",
+                },
                 operationId: "course-settings",
                 actionSlot: "primary",
                 actionId: "save-course-settings",
@@ -1384,6 +1389,11 @@ describe("Next-hosted external storage route service", () => {
           actorRole: "teacher",
           authMode: "signed-teacher-session",
           courseId: "elementary-math-research",
+          authSession: {
+            sessionId: "teacher-next-ops-session",
+            authenticatedAt: "2026-06-22T10:30:00.000Z",
+            expiresAt: "2026-06-22T12:00:00.000Z",
+          },
         }),
       ]);
       expect(teachingAudit.domainProjections).toEqual([
