@@ -71,6 +71,7 @@ import {
   normalizeTeachingCourseManagementRestoreDrill,
   normalizeTeachingOperationAlertNotification,
   normalizeTeachingOperationAlertWebhookDelivery,
+  isPersistedTeachingOperationAuditEventWithoutCourseId,
   normalizeTeachingOperationAuditEvent,
   normalizeTeachingOperationAuditLedgerEntry,
   normalizeTeachingOperationBackup,
@@ -1200,7 +1201,7 @@ export async function summarizeTeachingOperationAuditAlerts(
 ) {
   const audit = await listTeachingOperationAuditEvents(dataDir, teacherId);
   const alerts = audit.events
-    .filter((event) => event.eventType === "teaching-operation.persisted" && !event.courseId)
+    .filter(isPersistedTeachingOperationAuditEventWithoutCourseId)
     .map((event) => {
       if (!event.operationId || !event.actionSlot || !event.actionId) {
         throw new HttpError(400, "Teaching operation audit alert source is invalid.");
