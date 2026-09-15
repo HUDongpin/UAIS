@@ -154,7 +154,12 @@ export async function authorizeTeachingOperationCourseAccess(input: {
   if (ownerAccess.reasonCode === "teacher-course-ownership-check-failed") {
     return ownerAccess;
   }
-  const ownerDeniedReason = ownerAccess.reasonCode;
+  // `course-owner-implicit` is an authorized-owner reason, not a denial. After
+  // the authorized and ownership-check-failed returns above, only owner denials
+  // that may still fall through to collaborator capability remain.
+  const ownerDeniedReason = readCollaboratorFallthroughOwnerDeniedReason(
+    ownerAccess.reasonCode,
+  );
 
   const capability = resolveTeachingOperationCollaboratorCapability({
     operationId: input.operationId,
@@ -251,6 +256,40 @@ type TeachingOperationOwnerDeniedReason = Extract<
   | "course-scope-denied"
 >;
 
+type TeachingOperationCollaboratorFallthroughOwnerDeniedReason = Extract<
+  TeachingOperationOwnerDeniedReason,
+  "teacher-course-ownership-required" | "course-scope-denied"
+>;
+
+type TeachingOperationDeniedAccess = {
+  status: "denied";
+  reasonCode: TeachingOperationAccessDeniedReason;
+  responsibleSession: "S12";
+  actor?: { actorId: string; role: "teacher" };
+  resource?: { courseId: string };
+  redaction: ReturnType<typeof createRedaction>;
+};
+
+type TeachingOperationOwnerAccess =
+  | {
+      status: "authorized";
+      reasonCode: "course-owner-implicit";
+      responsibleSession: "S12";
+      actor: { actorId: string; role: "teacher" };
+      resource: { courseId: string };
+      redaction: ReturnType<typeof createRedaction>;
+    }
+  | TeachingOperationDeniedAccess;
+
+function readCollaboratorFallthroughOwnerDeniedReason(
+  reasonCode: TeachingOperationAccessDeniedReason | "course-owner-implicit",
+): TeachingOperationCollaboratorFallthroughOwnerDeniedReason {
+  if (reasonCode === "course-scope-denied") {
+    return "course-scope-denied";
+  }
+  return "teacher-course-ownership-required";
+}
+
 async function resolveTeachingOperationOwnerAccess(input: {
   request: Request;
   authenticatedTeacher: TeachingOperationAuthenticatedTeacher;
@@ -259,7 +298,7 @@ async function resolveTeachingOperationOwnerAccess(input: {
   resource: { courseId: string };
   getTeachingOperationCourseOwnership?: GetTeachingOperationCourseOwnership;
   readManagedCourseOwnership?: ReadManagedTeachingCourseOwnership;
-}) {
+}): Promise<TeachingOperationOwnerAccess> {
   const authorizedOwner = {
     status: "authorized" as const,
     reasonCode: "course-owner-implicit" as const,
@@ -328,7 +367,7 @@ export function createDeniedAccess(
   reasonCode: TeachingOperationAccessDeniedReason,
   actor?: { actorId: string; role: "teacher" },
   resource?: { courseId: string },
-) {
+): TeachingOperationDeniedAccess {
   return {
     status: "denied",
     reasonCode,

@@ -111,6 +111,7 @@ import {
   TEACHING_OPERATION_ALERT_PENDING_MESSAGE,
   TEACHING_OPERATION_AUDIT_FAILED_MESSAGE,
   TEACHING_OPERATION_AUDIT_PENDING_MESSAGE,
+  TEACHING_OPERATION_COURSE_REQUIRED_MESSAGE,
   TEACHING_OPERATION_RECEIPT_MISMATCH_MESSAGE,
   TEACHING_OPERATION_ROLLBACK_FAILED_MESSAGE,
   TEACHING_OPERATION_SAVE_FAILED_MESSAGE,
@@ -523,8 +524,16 @@ export function useTeachingWorkspace() {
     // Plan E9: refuse rather than guess. The operations route authorizes on the
     // course id, so an unset course used to become "whatever sorted first" and
     // the receipt came back looking entirely successful.
+    const selectedCourseId = selectedCourseAction?.courseId;
+    if (!selectedCourseId) {
+      setInlineWorkspaceStatuses((s) => ({
+        ...s,
+        [operationId]: localizedText(TEACHING_OPERATION_COURSE_REQUIRED_MESSAGE, locale),
+      }));
+      return;
+    }
     const blockedWrite = readInlineWorkspaceWriteBlockMessage({
-      selectedCourseId: selectedCourseAction?.courseId, writableCourseIds,
+      selectedCourseId, writableCourseIds,
     });
     if (blockedWrite) {
       setInlineWorkspaceStatuses((s) => ({ ...s, [operationId]: localizedText(blockedWrite, locale) }));
@@ -533,7 +542,7 @@ export function useTeachingWorkspace() {
 
     const attemptId = createInlineWorkspaceAttemptId(operationId);
     if (operationId === "students" && actionSlot === "secondary") {
-      const courseId = selectedCourseAction.courseId;
+      const courseId = selectedCourseId;
       // A new generation attempt invalidates the earlier proposal immediately.
       // If the new receipt or audit later fails, no stale partition remains
       // available for the teacher to mistake for the current result.
@@ -570,7 +579,7 @@ export function useTeachingWorkspace() {
     });
 
     try {
-      const courseId = selectedCourseAction.courseId;
+      const courseId = selectedCourseId;
       const sourceAction = "inline-teaching-workspace";
       const courseSettingsPatch =
         operationId === "course-settings" && actionSlot === "primary" && courseId
