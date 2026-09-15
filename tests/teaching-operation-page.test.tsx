@@ -512,7 +512,12 @@ describe("TeachingOperationPage", () => {
 
       expect(String(input)).toBe("/api/teaching/operations/audit");
       expect(init?.method).toBe("GET");
-      expect(init?.headers).toEqual({ accept: "application/json" });
+      expect(init?.headers).toEqual(
+        expect.objectContaining({
+          accept: "application/json",
+          "x-uais-trace-id": "trace-operation-page-course-settings",
+        }),
+      );
       return Response.json({
         traceId: "trace-audit-operation-page-readback",
         actorId: "teacher-kang",
@@ -575,7 +580,10 @@ describe("TeachingOperationPage", () => {
         "/api/teaching/operations/audit",
         expect.objectContaining({
           method: "GET",
-          headers: { accept: "application/json" },
+          headers: expect.objectContaining({
+            accept: "application/json",
+            "x-uais-trace-id": "trace-operation-page-course-settings",
+          }),
         }),
       );
       expect(screen.getByText("课程设置已由服务端持久化。")).toBeTruthy();
@@ -782,6 +790,98 @@ describe("TeachingOperationPage", () => {
         screen.queryByText("审计读回已验证：trace-operation-page-course-settings-weak-session"),
       ).toBeNull();
       expect(screen.queryByText("签名会话已验证：weak-operation-page-session")).toBeNull();
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
+
+  it("treats operation page save as complete when audit list omits the already-signed session", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      if (String(input) === "/api/teaching/courses") {
+        return ownedTeachingCourseListResponse();
+      }
+      if (String(input) === "/api/teaching/operations") {
+        return Response.json({
+          receipt: {
+            receiptId: "operation-page-course-settings-redacted-session",
+            operationId: "course-settings",
+            actionSlot: "primary",
+            courseId: "teacher-research-methods",
+            status: "persisted",
+            audit: {
+              authMode: "signed-teacher-session",
+              authSession: createOperationAuditAuthSession(),
+            },
+            displayMessage: {
+              "zh-CN": "课程设置已由服务端持久化。",
+              "en-US": "Course settings persisted by the server.",
+            },
+          },
+          domainPersistenceSummary: createPersistedDomainSummary({
+            operationId: "course-settings",
+            actionSlot: "primary",
+            receiptId: "operation-page-course-settings-redacted-session",
+            objectType: "course-settings",
+          }),
+          traceId: "trace-operation-page-course-settings-redacted-session",
+        });
+      }
+
+      return Response.json({
+        traceId: "trace-audit-operation-page-redacted-session",
+        actorId: "teacher-kang",
+        auditEventCount: 1,
+        records: [
+          {
+            recordId: "operation-page-course-settings-redacted-session",
+            courseId: "teacher-research-methods",
+            operationId: "course-settings",
+            actionSlot: "primary",
+            status: "persisted",
+          },
+        ],
+        auditEvents: [
+          {
+            auditId: "audit-operation-page-course-settings-redacted-session",
+            traceId: "trace-operation-page-course-settings-redacted-session",
+            eventType: "teaching-operation.persisted",
+            actorId: "teacher-kang",
+            courseId: "teacher-research-methods",
+          },
+        ],
+        domainProjections: [
+          {
+            objectId: "course-settings-teacher-research-methods",
+            objectType: "course-settings",
+            courseId: "teacher-research-methods",
+            operationRecordId: "operation-page-course-settings-redacted-session",
+            updatedBy: "teacher-kang",
+            status: "saved",
+            updatedAt: "2026-06-24T10:00:00.000Z",
+          },
+        ],
+      });
+    });
+
+    try {
+      render(
+        <TeachingOperationPage
+          action="manage"
+          operationId="course-settings"
+          selectedCourseId="teacher-research-methods"
+        />,
+      );
+
+      fireEvent.click(screen.getByRole("button", { name: "保存课程设置" }));
+
+      await waitFor(() => {
+        expect(screen.getByText("课程设置已由服务端持久化。")).toBeTruthy();
+      });
+      expect(screen.queryByText("审计读回未完成，请稍后刷新。")).toBeNull();
+      expect(
+        screen.getByText("审计读回已验证：trace-operation-page-course-settings-redacted-session"),
+      ).toBeTruthy();
+      expect(screen.getByText("签名会话已验证：teacher-operation-page-session")).toBeTruthy();
     } finally {
       fetchSpy.mockRestore();
     }

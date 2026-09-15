@@ -3,12 +3,13 @@ import { getUaisCoreDatabaseReadiness } from "@/lib/db/core-database";
 import {
   normalizeExternalTeachingOperationAuditReadbackRecord,
   isTeachingOperationProductionDatabaseAdapterEvidence,
+  loadTeachingOperationDatabase,
   normalizeTeachingOperationAuditReadbackDomainProjection,
   normalizeTeachingOperationAuditReadbackEvent,
-  readTeachingOperationDatabase,
   resolveTeachingOperationDataDir,
   TeachingOperationStoreError,
   type TeachingOperationAuditEvent,
+  type TeachingOperationDatabase,
   type TeachingOperationDomainProjection,
   type TeachingOperationProductionDatabaseAdapterEvidence,
   type TeachingOperationRecord,
@@ -42,6 +43,10 @@ type TeachingOperationAuditGetHandlerDeps = {
   readManagedCourseOwnership?: ReadManagedTeachingCourseOwnership;
   readTeachingCourseCapability?: ReadTeachingCourseCapability;
   readExternalTeachingOperationAudit?: TeachingOperationExternalAuditAdapter;
+  readSnapshotTeachingOperationDatabase?: (input: {
+    dataDir?: string;
+    env?: Record<string, string | undefined>;
+  }) => Promise<TeachingOperationDatabase>;
 };
 
 type AuthenticatedTeacher = {
@@ -251,8 +256,11 @@ export function createTeachingOperationAuditGetHandler(
           teacherId: authenticatedTeacher.actorId,
         });
       } else {
-        const database = await readTeachingOperationDatabase({
+        const readSnapshotTeachingOperationDatabase =
+          deps.readSnapshotTeachingOperationDatabase ?? loadTeachingOperationDatabase;
+        const database = await readSnapshotTeachingOperationDatabase({
           dataDir: resolveTeachingOperationDataDir(env.UAIS_TEACHING_OPERATIONS_DATA_DIR),
+          env,
         });
         auditSource = {
           events: database.auditEvents,
