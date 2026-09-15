@@ -4,6 +4,7 @@ import { type FormEvent, useId, useRef, useState } from "react";
 import { localizedText } from "@/components/ui/localized-text";
 import type { TeacherCourse } from "@/data/uais";
 import { copy, type Locale } from "@/i18n/copy";
+import { TEACHING_OPERATION_COURSE_NOT_OWNED_MESSAGE } from "@/components/pages/teaching-page-messages";
 import {
   TEACHING_COURSE_COLLABORATOR_ROLE_CEILINGS,
   TEACHING_COURSE_COLLABORATOR_ROLES,
@@ -43,9 +44,11 @@ class CollaboratorRequestError extends Error {
 export function CourseCollaboratorManager({
   course,
   locale,
+  writesEnabled = true,
 }: {
   course: TeacherCourse;
   locale: Locale;
+  writesEnabled?: boolean;
 }) {
   const t = copy[locale].teaching;
   const courseTitle = localizedText(course.title, locale);
@@ -118,7 +121,7 @@ export function CourseCollaboratorManager({
 
   async function grantCollaborator(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (pendingAction) return;
+    if (!writesEnabled || pendingAction) return;
     const normalizedEmail = recipientEmail.trim();
     if (!normalizedEmail) {
       setNotice({ tone: "error", message: t.collaboratorRecipientInvalid });
@@ -204,7 +207,7 @@ export function CourseCollaboratorManager({
   }
 
   async function revokeCollaborator(grantId: string) {
-    if (pendingAction) return;
+    if (!writesEnabled || pendingAction) return;
     const existingKey = revokeRetryKeys.current.get(grantId);
     const idempotencyKey =
       existingKey ?? createRequestId("ui-collaborator-revoke");
@@ -296,6 +299,11 @@ export function CourseCollaboratorManager({
           className="mt-4 space-y-4 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4"
           data-uais-course-collaborator-panel={course.id}
         >
+          {writesEnabled ? null : (
+            <p role="status" className="text-sm font-semibold text-[var(--danger)]">
+              {localizedText(TEACHING_OPERATION_COURSE_NOT_OWNED_MESSAGE, locale)}
+            </p>
+          )}
           {loadState === "loading" ? (
             <p role="status" className="text-sm text-[var(--muted)]">
               {t.collaboratorLoading}
@@ -392,7 +400,7 @@ export function CourseCollaboratorManager({
                           ) : (
                             <button
                               type="button"
-                              disabled={Boolean(pendingAction)}
+                              disabled={Boolean(pendingAction) || !writesEnabled}
                               className="min-h-11 rounded-full border border-[var(--danger)]/40 bg-[var(--surface)] px-4 text-sm font-semibold text-[var(--danger)] outline-none transition hover:bg-[var(--surface-soft)] focus-visible:ring-2 focus-visible:ring-[var(--danger)] disabled:cursor-not-allowed disabled:opacity-60"
                               onClick={() =>
                                 setConfirmRevokeGrantId(grant.grantId)
@@ -414,8 +422,12 @@ export function CourseCollaboratorManager({
             )
           ) : null}
 
+          <fieldset
+            disabled={!writesEnabled}
+            className="space-y-4 border-t border-[var(--border)] pt-4 disabled:opacity-60"
+          >
           <form
-            className="space-y-4 border-t border-[var(--border)] pt-4"
+            className="space-y-4"
             onSubmit={grantCollaborator}
           >
             <div>
@@ -525,6 +537,7 @@ export function CourseCollaboratorManager({
               type="submit"
               disabled={
                 Boolean(pendingAction) ||
+                !writesEnabled ||
                 !recipientEmail.trim() ||
                 scopes.length === 0
               }
@@ -535,6 +548,7 @@ export function CourseCollaboratorManager({
                 : t.collaboratorGrantAction}
             </button>
           </form>
+          </fieldset>
 
           {notice ? (
             <p

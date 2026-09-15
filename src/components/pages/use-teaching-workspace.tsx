@@ -73,6 +73,7 @@ import {
   createTeacherCourseFromPersistedCourse,
   createTeacherMembershipsByClassFromPersistedMemberships,
   extractCourseSemester,
+  isWritableTeacherCourseId,
   mergeTeacherClassesByCourseId,
   mergeTeacherMembershipsByClassId,
   readTeachingCourseListTeacherActorId,
@@ -115,6 +116,7 @@ import {
   TEACHING_OPERATION_ROLLBACK_FAILED_MESSAGE,
   TEACHING_OPERATION_SAVE_FAILED_MESSAGE,
   TEACHING_OPERATION_SAVE_PENDING_MESSAGE,
+  TEACHING_OPERATION_COURSE_NOT_OWNED_MESSAGE,
 } from "./teaching-page-messages";
 import {
   type InlineInviteBackendArtifact,
@@ -397,6 +399,9 @@ export function useTeachingWorkspace() {
     const trimmedClassName = className.trim();
     if (!course || !trimmedClassName) {
       return;
+    }
+    if (!isWritableTeacherCourseId(writableCourseIds, courseId)) {
+      throw new Error(localizedText(TEACHING_OPERATION_COURSE_NOT_OWNED_MESSAGE, locale));
     }
 
     const semester = extractCourseSemester(course, locale);
@@ -1250,6 +1255,14 @@ export function useTeachingWorkspace() {
     // of the first course and reported it as a success.
     if (!courseId || !targetClassId || inviteTargeting.invitePolicyDraftError) {
       setInviteWorkspaceStatus(INVITE_TARGET_REQUIRED_MESSAGE);
+      return;
+    }
+    const blockedWrite = readInlineWorkspaceWriteBlockMessage({
+      selectedCourseId: courseId,
+      writableCourseIds,
+    });
+    if (blockedWrite) {
+      setInviteWorkspaceStatus(blockedWrite);
       return;
     }
 

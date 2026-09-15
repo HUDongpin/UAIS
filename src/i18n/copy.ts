@@ -31,6 +31,14 @@ export const copy = {
       menu: "打开导航菜单",
       menuClose: "关闭导航菜单",
       menuTitle: "导航",
+      calendar: "日历",
+      notifications: "通知",
+      calendarComingSoonTitle: "日历即将推出",
+      calendarComingSoonBody:
+        "课程日历尚未开放。当前没有可查看的日程面板或页面。",
+      notificationsComingSoonTitle: "通知即将推出",
+      notificationsComingSoonBody:
+        "通知中心尚未开放。当前没有可查看的通知抽屉或页面。",
     },
     // Shared by every auth dead-end: the playback stage, the chatroom notices
     // and the student dashboard all have to send an expired session to /login
@@ -378,6 +386,14 @@ export const copy = {
       menu: "Open navigation menu",
       menuClose: "Close navigation menu",
       menuTitle: "Navigation",
+      calendar: "Calendar",
+      notifications: "Notifications",
+      calendarComingSoonTitle: "Calendar coming soon",
+      calendarComingSoonBody:
+        "The course calendar is not available yet. There is no schedule panel or page to open.",
+      notificationsComingSoonTitle: "Notifications coming soon",
+      notificationsComingSoonBody:
+        "The notification center is not available yet. There is no inbox, drawer, or page to open.",
     },
     auth: {
       signIn: "Sign in again",

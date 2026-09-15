@@ -130,6 +130,7 @@ export function TeachingPage() {
           selectedCourseActionLabel={selectedCourseActionLabel}
           selectedCourseAction={selectedCourseAction}
           isSelectedCourseWritable={isSelectedCourseWritable}
+          writableCourseIds={writableCourseIds}
           onSelectCourseAction={selectWorkspaceCourse}
           setIsNewCourseOpen={setIsNewCourseOpen}
           setNewClassCourseId={setNewClassCourseId}

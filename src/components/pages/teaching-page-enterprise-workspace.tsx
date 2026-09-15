@@ -164,6 +164,7 @@ export function EnterpriseWorkspace({
             selectedCourseAction={selectedCourseAction}
             selectedActionCourse={selectedActionCourse}
             selectedCourseActionLabel={selectedCourseActionLabel}
+            isCourseWritable={isSelectedCourseWritable}
             onSelectCourse={onSelectCourseAction}
           />}
           </div>
@@ -254,6 +255,7 @@ export function EnterpriseWorkspace({
               onUpdateInvitePolicyDraft={onUpdateInvitePolicyDraft}
               copyInviteWorkspaceValue={copyInviteWorkspaceValue}
               runInviteWorkspaceAction={runInviteWorkspaceAction}
+              isCourseWritable={isSelectedCourseWritable}
             /> : null}
         </section>
 

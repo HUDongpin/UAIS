@@ -34,6 +34,7 @@ export function ClassMembershipRoster({
   pendingMembershipIds,
   isBulkApprovalPending,
   locale,
+  writesEnabled = true,
   onApproveMembership,
   onApproveAllPendingMemberships,
   onRejectMembership,
@@ -47,6 +48,7 @@ export function ClassMembershipRoster({
   pendingMembershipIds: string[];
   isBulkApprovalPending: boolean;
   locale: Locale;
+  writesEnabled?: boolean;
   onApproveMembership: (
     classItem: TeacherClassItem,
     membership: TeacherClassMembershipItem,
@@ -160,7 +162,7 @@ export function ClassMembershipRoster({
           {pendingMemberships.length > 0 ? (
             <button
               type="button"
-              disabled={isBulkApprovalPending}
+              disabled={isBulkApprovalPending || !writesEnabled}
               aria-label={
                 locale === "zh-CN"
                   ? `批准${classItem.name}的全部 ${pendingMemberships.length} 条待审批申请`
@@ -242,7 +244,7 @@ export function ClassMembershipRoster({
                         ? `审批${membership.studentDisplayName}加入${classItem.name}`
                         : `Approve ${membership.studentDisplayName} for ${classItem.name}`
                     }
-                    disabled={pendingMembershipIds.includes(membership.id)}
+                    disabled={pendingMembershipIds.includes(membership.id) || !writesEnabled}
                     className="inline-flex h-11 items-center justify-center rounded-full bg-[#2f7cff] px-4 text-sm font-semibold text-white outline-none transition hover:bg-[#2364d9] focus-visible:ring-2 focus-visible:ring-[#2f7cff] disabled:cursor-not-allowed disabled:opacity-70"
                     onClick={() => onApproveMembership(classItem, membership)}
                   >
@@ -255,7 +257,7 @@ export function ClassMembershipRoster({
                         ? `拒绝${membership.studentDisplayName}加入${classItem.name}`
                         : `Reject ${membership.studentDisplayName} for ${classItem.name}`
                     }
-                    disabled={pendingMembershipIds.includes(membership.id)}
+                    disabled={pendingMembershipIds.includes(membership.id) || !writesEnabled}
                     className="inline-flex h-11 items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-4 text-sm font-semibold text-rose-700 outline-none transition hover:bg-rose-100 focus-visible:ring-2 focus-visible:ring-rose-400 disabled:cursor-not-allowed disabled:opacity-70 dark:border-rose-900 dark:bg-rose-950 dark:text-rose-200"
                     onClick={() => onRejectMembership(classItem, membership)}
                   >
@@ -328,7 +330,7 @@ export function ClassMembershipRoster({
                         ? `将${membership.studentDisplayName}移出${classItem.name}`
                         : `Remove ${membership.studentDisplayName} from ${classItem.name}`
                     }
-                    disabled={pendingMembershipIds.includes(membership.id)}
+                    disabled={pendingMembershipIds.includes(membership.id) || !writesEnabled}
                     className="inline-flex h-11 shrink-0 items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-4 text-sm font-semibold text-rose-700 outline-none transition hover:bg-rose-100 focus-visible:ring-2 focus-visible:ring-rose-400 disabled:cursor-not-allowed disabled:opacity-70 dark:border-rose-900 dark:bg-rose-950 dark:text-rose-200"
                     onClick={() => setPendingRemovalMembershipId(membership.id)}
                   >

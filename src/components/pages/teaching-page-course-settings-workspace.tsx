@@ -23,11 +23,12 @@ import { teacherSidebarItems } from "@/data/uais";
 import type { TeacherCourse } from "@/data/uais";
 import { copy } from "@/i18n/copy";
 import type { Locale } from "@/i18n/copy";
-import type {
-  CourseSettingsDraftFieldInput,
-  CourseSettingsDraftValues,
-  TeacherClassItem,
-  TeacherClassMembershipItem,
+import {
+  isWritableTeacherCourseId,
+  type CourseSettingsDraftFieldInput,
+  type CourseSettingsDraftValues,
+  type TeacherClassItem,
+  type TeacherClassMembershipItem,
 } from "@/lib/teaching/course-readback";
 import { CourseClassManager } from "./teaching-page-dialogs";
 import { InlineWorkspaceActionButtons } from "./teaching-page-inline-workspace-action-buttons";
@@ -73,6 +74,7 @@ type CourseSettingsWorkspaceProps = {
   selectedCourseActionLabel: string | undefined;
   selectedCourseAction: { courseId: string; action: TeacherCourseAction } | undefined;
   isSelectedCourseWritable?: boolean;
+  writableCourseIds?: ReadonlySet<string>;
   onSelectCourseAction: (courseId: string) => void;
   setIsNewCourseOpen: Dispatch<SetStateAction<boolean>>;
   setNewClassCourseId: Dispatch<SetStateAction<string | undefined>>;
@@ -136,6 +138,7 @@ export function CourseSettingsWorkspace({
   selectedCourseActionLabel,
   selectedCourseAction,
   isSelectedCourseWritable = true,
+  writableCourseIds,
   onSelectCourseAction,
   setIsNewCourseOpen,
   setNewClassCourseId,
@@ -213,6 +216,7 @@ export function CourseSettingsWorkspace({
             selectedCourseAction={selectedCourseAction}
             selectedActionCourse={selectedActionCourse}
             selectedCourseActionLabel={selectedCourseActionLabel}
+            isCourseWritable={isSelectedCourseWritable}
             onSelectCourse={onSelectCourseAction}
           />}
           {activeCourseSettingsCourse && activeCourseSettingsDraft ? (
@@ -231,7 +235,8 @@ export function CourseSettingsWorkspace({
                   <input
                     id={`course-settings-name-${activeCourseSettingsCourse.id}`}
                     value={activeCourseSettingsDraft.courseName}
-                    className="mt-2 h-11 w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 text-sm font-medium text-[var(--foreground)] outline-none transition focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent)]/20"
+                    disabled={!isSelectedCourseWritable}
+                    className="mt-2 h-11 w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 text-sm font-medium text-[var(--foreground)] outline-none transition focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent)]/20 disabled:cursor-not-allowed disabled:opacity-60"
                     onChange={(event) =>
                       updateCourseSettingsDraft(activeCourseSettingsCourse, {
                         courseName: event.target.value,
@@ -249,7 +254,8 @@ export function CourseSettingsWorkspace({
                   <input
                     id={`course-settings-semester-${activeCourseSettingsCourse.id}`}
                     value={activeCourseSettingsDraft.semester}
-                    className="mt-2 h-11 w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 text-sm font-medium text-[var(--foreground)] outline-none transition focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent)]/20"
+                    disabled={!isSelectedCourseWritable}
+                    className="mt-2 h-11 w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 text-sm font-medium text-[var(--foreground)] outline-none transition focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent)]/20 disabled:cursor-not-allowed disabled:opacity-60"
                     onChange={(event) =>
                       updateCourseSettingsDraft(activeCourseSettingsCourse, {
                         semester: event.target.value,
@@ -268,7 +274,8 @@ export function CourseSettingsWorkspace({
                     id={`course-settings-description-${activeCourseSettingsCourse.id}`}
                     value={activeCourseSettingsDraft.description}
                     rows={3}
-                    className="mt-2 w-full resize-none rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm font-medium leading-6 text-[var(--foreground)] outline-none transition focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent)]/20"
+                    disabled={!isSelectedCourseWritable}
+                    className="mt-2 w-full resize-none rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm font-medium leading-6 text-[var(--foreground)] outline-none transition focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent)]/20 disabled:cursor-not-allowed disabled:opacity-60"
                     onChange={(event) =>
                       updateCourseSettingsDraft(activeCourseSettingsCourse, {
                         description: event.target.value,
@@ -343,7 +350,11 @@ export function CourseSettingsWorkspace({
                     {locale === "zh-CN" ? "学习任务" : "Learning Activities"}
                   </Link>
                 </div>
-                <CourseCollaboratorManager course={course} locale={locale} />
+                <CourseCollaboratorManager
+                  course={course}
+                  locale={locale}
+                  writesEnabled={isWritableTeacherCourseId(writableCourseIds, course.id)}
+                />
                 <CourseClassManager
                   classes={courseClasses[course.id] ?? []}
                   membershipsByClass={classMemberships}
@@ -354,6 +365,7 @@ export function CourseSettingsWorkspace({
                   pendingBulkApprovalClassIds={pendingBulkApprovalClassIds}
                   course={course}
                   locale={locale}
+                  writesEnabled={isWritableTeacherCourseId(writableCourseIds, course.id)}
                   onApproveMembership={approveClassMembership}
                   onApproveAllPendingMemberships={approveAllPendingMemberships}
                   onRejectMembership={rejectMembership}
@@ -383,6 +395,7 @@ export function CourseSettingsWorkspace({
                     }
                     onDeleteGroup={(groupId) => deleteLearningGroup(course.id, groupId)}
                     onAutoSplitGroups={(input) => autoSplitLearningGroups(course.id, input)}
+                    writesEnabled={isWritableTeacherCourseId(writableCourseIds, course.id)}
                     pendingSuggestion={pendingGroupSuggestionsByCourse[course.id]}
                     onSuggestionApplied={(suggestionKey) =>
                       removePendingGroupSuggestion(course.id, suggestionKey)

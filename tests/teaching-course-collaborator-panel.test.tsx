@@ -66,8 +66,9 @@ describe("teaching-course collaborator panel", () => {
       'import { CourseCollaboratorManager } from "@/components/teaching/course-collaborator-manager";',
     );
     expect(source).toContain(
-      "<CourseCollaboratorManager course={course} locale={locale} />",
+      "<CourseCollaboratorManager",
     );
+    expect(source).toContain("writesEnabled={isWritableTeacherCourseId(writableCourseIds, course.id)}");
   });
 
   it("loads only after expansion and renders an address-free grant", async () => {

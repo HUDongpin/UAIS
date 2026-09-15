@@ -27,6 +27,7 @@ import { localizedText } from "@/components/ui/localized-text";
 import type { TeacherCourse } from "@/data/uais";
 import { copy } from "@/i18n/copy";
 import type { Locale } from "@/i18n/copy";
+import { TEACHING_OPERATION_COURSE_NOT_OWNED_MESSAGE } from "@/components/pages/teaching-page-messages";
 import type {
   TeacherClassItem,
   TeacherClassMembershipItem,
@@ -108,6 +109,7 @@ export function LearningGroupManager({
   onUpdateGroup,
   onDeleteGroup,
   onAutoSplitGroups,
+  writesEnabled = true,
   pendingSuggestion,
   onSuggestionApplied,
 }: {
@@ -123,6 +125,7 @@ export function LearningGroupManager({
   onUpdateGroup: (groupId: string, patch: TeachingLearningGroupPatch) => Promise<void>;
   onDeleteGroup: (groupId: string) => Promise<void>;
   onAutoSplitGroups: (input: { groupSize: number }) => Promise<void>;
+  writesEnabled?: boolean;
   pendingSuggestion?: TeacherGroupSuggestionDraft;
   onSuggestionApplied?: (suggestionKey: string) => void;
 }) {
@@ -172,7 +175,7 @@ export function LearningGroupManager({
       : [];
 
   async function runAutoSplit() {
-    if (!isAutoSplitSizeValid || isAutoSplitting) {
+    if (!writesEnabled || !isAutoSplitSizeValid || isAutoSplitting) {
       return;
     }
     setIsAutoSplitting(true);
@@ -187,6 +190,9 @@ export function LearningGroupManager({
   }
 
   async function confirmDeleteGroup(groupId: string) {
+    if (!writesEnabled) {
+      return;
+    }
     setDeleteError(undefined);
     try {
       await onDeleteGroup(groupId);
@@ -268,7 +274,7 @@ export function LearningGroupManager({
                 </div>
                 <button
                   type="button"
-                  disabled={suggestion.unavailableMemberCount > 0}
+                  disabled={suggestion.unavailableMemberCount > 0 || !writesEnabled}
                   aria-label={
                     suggestion.unavailableMemberCount > 0
                       ? locale === "zh-CN"
@@ -300,10 +306,15 @@ export function LearningGroupManager({
               {status}
             </p>
           ) : null}
+          {writesEnabled ? null : (
+            <p role="status" className="text-sm font-semibold text-[var(--danger)]">
+              {localizedText(TEACHING_OPERATION_COURSE_NOT_OWNED_MESSAGE, locale)}
+            </p>
+          )}
 
           <button
             type="button"
-            disabled={approvedMembers.length < learningGroupMinMembers}
+            disabled={approvedMembers.length < learningGroupMinMembers || !writesEnabled}
             aria-label={
               locale === "zh-CN"
                 ? `为${courseTitle}新建小组`
@@ -343,13 +354,15 @@ export function LearningGroupManager({
                   min={learningGroupMinMembers}
                   max={learningGroupMaxMembers}
                   value={autoSplitSize}
-                  className="mt-2 h-11 w-28 rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] px-3 text-sm font-medium text-[var(--foreground)] outline-none transition focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent)]/20"
+                  disabled={!writesEnabled}
+                  className="mt-2 h-11 w-28 rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] px-3 text-sm font-medium text-[var(--foreground)] outline-none transition focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent)]/20 disabled:cursor-not-allowed disabled:opacity-60"
                   onChange={(event) => setAutoSplitSize(event.target.value)}
                 />
               </div>
               <button
                 type="button"
                 disabled={
+                  !writesEnabled ||
                   !isAutoSplitSizeValid ||
                   isAutoSplitting ||
                   ungroupedMemberCount < learningGroupMinMembers
@@ -414,7 +427,8 @@ export function LearningGroupManager({
                             ? `编辑${group.groupName}`
                             : `Edit ${group.groupName}`
                         }
-                        className="inline-flex h-11 items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface-soft)] px-3 text-sm font-semibold text-[var(--foreground)] outline-none transition hover:bg-[var(--surface-elevated)] focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+                        className="inline-flex h-11 items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface-soft)] px-3 text-sm font-semibold text-[var(--foreground)] outline-none transition hover:bg-[var(--surface-elevated)] focus-visible:ring-2 focus-visible:ring-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-60"
+                        disabled={!writesEnabled}
                         onClick={() => setDialogState({ mode: "edit", group })}
                       >
                         <PencilSimple size={16} weight="bold" />
@@ -427,7 +441,8 @@ export function LearningGroupManager({
                             ? `删除${group.groupName}`
                             : `Delete ${group.groupName}`
                         }
-                        className="inline-flex h-11 items-center gap-2 rounded-full border border-rose-200 bg-rose-50 px-3 text-sm font-semibold text-rose-700 outline-none transition hover:bg-rose-100 focus-visible:ring-2 focus-visible:ring-rose-400 dark:border-rose-900 dark:bg-rose-950 dark:text-rose-200"
+                        className="inline-flex h-11 items-center gap-2 rounded-full border border-rose-200 bg-rose-50 px-3 text-sm font-semibold text-rose-700 outline-none transition hover:bg-rose-100 focus-visible:ring-2 focus-visible:ring-rose-400 disabled:cursor-not-allowed disabled:opacity-60 dark:border-rose-900 dark:bg-rose-950 dark:text-rose-200"
+                        disabled={!writesEnabled}
                         onClick={() => {
                           setDeleteError(undefined);
                           setPendingDeleteGroupId(group.groupId);

@@ -1187,8 +1187,9 @@ export function TeachingOperationPage({
                       type="text"
                       value={knowledgeResourceTitle}
                       maxLength={160}
+                      disabled={!isSelectedCourseWritable}
                       onChange={(event) => setKnowledgeResourceTitle(event.target.value)}
-                      className="h-11 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 text-sm font-normal text-[var(--foreground)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+                      className="h-11 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 text-sm font-normal text-[var(--foreground)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-60"
                     />
                   </label>
                   <label className="grid gap-2 text-sm font-semibold text-[var(--foreground)]">
@@ -1200,20 +1201,22 @@ export function TeachingOperationPage({
                       value={knowledgeResourceUrl}
                       maxLength={2048}
                       aria-describedby="knowledge-resource-url-help"
+                      disabled={!isSelectedCourseWritable}
                       onChange={(event) => setKnowledgeResourceUrl(event.target.value)}
-                      className="h-11 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 text-sm font-normal text-[var(--foreground)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+                      className="h-11 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 text-sm font-normal text-[var(--foreground)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-60"
                     />
                   </label>
                   <label className="grid gap-2 text-sm font-semibold text-[var(--foreground)]">
                     {locale === "zh-CN" ? "权利依据" : "Rights basis"}
                     <select
                       value={knowledgeResourceRightsBasis}
+                      disabled={!isSelectedCourseWritable}
                       onChange={(event) =>
                         setKnowledgeResourceRightsBasis(
                           event.target.value as KnowledgeResourceRightsBasis,
                         )
                       }
-                      className="h-11 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 text-sm font-normal text-[var(--foreground)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+                      className="h-11 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 text-sm font-normal text-[var(--foreground)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       <option value="">{locale === "zh-CN" ? "请选择" : "Select one"}</option>
                       <option value="owner-created">{locale === "zh-CN" ? "教师原创" : "Owner-created"}</option>

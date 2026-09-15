@@ -17,6 +17,7 @@ import { Sun } from "@phosphor-icons/react/dist/ssr/Sun";
 import { Translate } from "@phosphor-icons/react/dist/ssr/Translate";
 import { UserCircle } from "@phosphor-icons/react/dist/ssr/UserCircle";
 import { UsersThree } from "@phosphor-icons/react/dist/ssr/UsersThree";
+import { HeaderComingSoonControl } from "@/components/layout/header-coming-soon-control";
 import { HeaderMobileMenu } from "@/components/layout/header-mobile-menu";
 import { useAppPreferences } from "@/components/providers/app-preferences";
 import { getTeachingOperationHref } from "@/components/teaching/teaching-operation-data";
@@ -238,21 +239,21 @@ export function Header({
         ) : null}
 
         <div className="flex shrink-0 items-center gap-2 text-[var(--foreground)]">
-          <button
-            type="button"
-            className="hidden h-11 items-center gap-2 rounded-full px-3 text-sm font-medium outline-none transition hover:bg-[var(--surface-soft)] focus-visible:ring-2 focus-visible:ring-[var(--accent)] lg:inline-flex"
-            aria-label={locale === "zh-CN" ? "日历" : "Calendar"}
-          >
-            <CalendarBlank size={19} weight="duotone" />
-            <span className="hidden 2xl:inline">{locale === "zh-CN" ? "日历" : "Calendar"}</span>
-          </button>
-          <button
-            type="button"
-            className="hidden size-11 items-center justify-center rounded-full outline-none transition hover:bg-[var(--surface-soft)] focus-visible:ring-2 focus-visible:ring-[var(--accent)] md:inline-flex"
-            aria-label={locale === "zh-CN" ? "通知" : "Notifications"}
-          >
-            <Bell size={19} weight="duotone" />
-          </button>
+          <HeaderComingSoonControl
+            label={t.controls.calendar}
+            title={t.controls.calendarComingSoonTitle}
+            body={t.controls.calendarComingSoonBody}
+            icon={<CalendarBlank size={19} weight="duotone" />}
+            showLabel
+            buttonClassName="hidden h-11 items-center gap-2 rounded-full px-3 text-sm font-medium outline-none transition hover:bg-[var(--surface-soft)] focus-visible:ring-2 focus-visible:ring-[var(--accent)] lg:inline-flex"
+          />
+          <HeaderComingSoonControl
+            label={t.controls.notifications}
+            title={t.controls.notificationsComingSoonTitle}
+            body={t.controls.notificationsComingSoonBody}
+            icon={<Bell size={19} weight="duotone" />}
+            buttonClassName="hidden size-11 items-center justify-center rounded-full outline-none transition hover:bg-[var(--surface-soft)] focus-visible:ring-2 focus-visible:ring-[var(--accent)] md:inline-flex"
+          />
           <button
             type="button"
             onClick={toggleLocale}
