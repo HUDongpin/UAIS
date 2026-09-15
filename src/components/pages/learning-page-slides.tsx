@@ -26,7 +26,6 @@ import type {
 import { copy, type Locale } from "@/i18n/copy";
 import {
   getPublishedPlaybackStageCopy,
-  getPublishedPlaybackErrorLabel,
   type PublishedPlaybackError,
   type StudyAction,
 } from "./learning-page-helpers";
@@ -332,9 +331,25 @@ export function PptStage({
   }
 
   const stageCopy = getPublishedPlaybackStageCopy(locale, publishedPlaybackError);
-  const showCornerError =
-    publishedPlaybackError === "auth-required" ||
-    publishedPlaybackError === "unavailable";
+  const cornerAction =
+    publishedPlaybackError === "auth-required" && signInHref ? (
+      <Link
+        href={signInHref}
+        data-uais-learning-ppt-sign-in="true"
+        className="inline-flex h-11 items-center gap-1 rounded-full bg-[var(--accent)] px-2.5 text-xs font-semibold text-white outline-none transition hover:bg-[var(--accent-strong)] focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]"
+      >
+        <SignIn size={13} weight="bold" aria-hidden="true" />
+        {copy[locale].auth.signIn}
+      </Link>
+    ) : publishedPlaybackError === "unavailable" && onRetryPublishedPlayback ? (
+      <button
+        type="button"
+        className="inline-flex min-h-11 items-center rounded-full bg-[var(--accent)] px-3 text-xs font-semibold text-white outline-none transition hover:bg-[var(--accent-strong)] focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]"
+        onClick={onRetryPublishedPlayback}
+      >
+        {locale === "zh-CN" ? "重新加载课件" : "Retry loading slides"}
+      </button>
+    ) : null;
 
   return (
     <section
@@ -342,7 +357,7 @@ export function PptStage({
       className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-[0_18px_44px_var(--shadow)]"
     >
       <div className="relative min-h-[470px] p-7 lg:p-9 xl:min-h-[555px]">
-        {showCornerError ? (
+        {cornerAction ? (
           <div
             role="alert"
             data-uais-learning-ppt-error={publishedPlaybackError}
@@ -353,26 +368,7 @@ export function PptStage({
                 : "border-[#fed7aa] bg-[#fff7ed] text-[#c2410c] dark:border-[#7c4a1d] dark:bg-[#3a2410] dark:text-[#fdba74]",
             ].join(" ")}
           >
-            {getPublishedPlaybackErrorLabel(locale, publishedPlaybackError)}
-            {publishedPlaybackError === "auth-required" && signInHref ? (
-              <Link
-                href={signInHref}
-                data-uais-learning-ppt-sign-in="true"
-                className="inline-flex h-11 items-center gap-1 rounded-full bg-[var(--accent)] px-2.5 text-xs font-semibold text-white outline-none transition hover:bg-[var(--accent-strong)] focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]"
-              >
-                <SignIn size={13} weight="bold" aria-hidden="true" />
-                {copy[locale].auth.signIn}
-              </Link>
-            ) : null}
-            {publishedPlaybackError === "unavailable" && onRetryPublishedPlayback ? (
-              <button
-                type="button"
-                className="inline-flex min-h-11 items-center rounded-full bg-[var(--accent)] px-3 text-xs font-semibold text-white outline-none transition hover:bg-[var(--accent-strong)] focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]"
-                onClick={onRetryPublishedPlayback}
-              >
-                {locale === "zh-CN" ? "重新加载课件" : "Retry loading slides"}
-              </button>
-            ) : null}
+            {cornerAction}
           </div>
         ) : isPublishedPlaybackLoading ? (
           <div

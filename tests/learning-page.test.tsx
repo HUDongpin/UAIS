@@ -1928,7 +1928,7 @@ describe("LearningPage", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "关键概念" }));
     expect(screen.getByRole("heading", { name: "关键概念" })).toBeTruthy();
-    expect(screen.getByText("研究问题从哪里来")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "研究问题从哪里来" })).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "导出笔记" }));
     expect(createObjectUrl).toHaveBeenCalledWith(expect.any(Blob));

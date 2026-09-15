@@ -473,7 +473,7 @@ export function useLearningChatroom(): LearningChatroomController {
   const shareExportDisabledReason = demoPreviewOnly
     ? t.learning.chatroomShareRequiresBinding
     : needsGroupChoice
-      ? t.learning.groupPickerLabel
+      ? t.learning.chatroomShareRequiresGroupChoice
       : isInstructor
         ? t.learning.chatroomShareTeacherMemberOnly
         : exportDisabled

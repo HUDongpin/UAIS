@@ -534,7 +534,12 @@ describe("student PPT playback API", () => {
       classOwnerTeacherId: "Phoebe",
     });
     const handler = createLearningPptPlaybackManifestGetHandler({
-      env: fixture.env,
+      env: {
+        ...fixture.env,
+        // Keep the local-demo Phoebe shortcut off so this asserts snapshot
+        // ownership casing, not the published-demo teacher path.
+        UAIS_APP_AUTH_PROVIDER: "database-accounts",
+      },
       readStoredManifest: async () => createStoredKangXiaManifest(),
     });
 
