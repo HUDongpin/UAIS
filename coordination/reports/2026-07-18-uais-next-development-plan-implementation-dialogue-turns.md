@@ -139,7 +139,7 @@ Created this transcript (`20260718_UAIS_Next Development Plan implementation_dia
 
 ## Session artifacts (for reference)
 
-- **Plan / reports:** `20260718_UAIS_Next Development Plan.md`; `coordination/reports/2026-07-18-phase1-postgres-cutover-readiness.md`; `coordination/session-logs/2026-07-18-S10.md`; `docs/auth-contract.md`.
+- **Plan / reports:** `coordination/reports/2026-07-18-uais-next-development-plan.md`; `coordination/reports/2026-07-18-phase1-postgres-cutover-readiness.md`; `coordination/session-logs/2026-07-18-S10.md`; `docs/auth-contract.md`.
 - **Phase 1 cutover code:** `migrations/0002_teaching_operations.sql`; `src/lib/server/teaching-course-management-postgres-store.ts` (bug fix); `teaching-course-management-cutover.ts`; `teaching-operations-postgres-store.ts`; `teaching-operations-cutover.ts`; DB-backed integration tests under `tests/` (skip without `UAIS_CORE_DATABASE_URL`).
 - **Commits:** 17 on `main` this session; **nothing pushed** — all await owner review before any deploy.
 - **Checks:** `tsc` 0, `eslint` 0, `npm run test` 2007 passed + 4 skipped (DB integration tests).

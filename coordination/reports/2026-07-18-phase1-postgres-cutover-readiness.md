@@ -3,7 +3,7 @@
 - **Date:** 2026-07-18
 - **Owning sessions:** S12 (adapters/contracts), S08 (types/invariants), S22 (migration reliability + parity), S19 (redacted env/credentials only)
 - **Status:** **Blocked on owner input** — see §1. This runbook makes the cutover mechanical once the blockers clear.
-- **Companion:** `20260718_UAIS_Next Development Plan.md` (Phase 1), `docs/architecture-map.md` (§Migration Rule), `docs/core-schema-design.md`.
+- **Companion:** `2026-07-18-uais-next-development-plan.md` (Phase 1), `docs/architecture-map.md` (§Migration Rule), `docs/core-schema-design.md`.
 
 ## 0. Verified current state (2026-07-18)
 
