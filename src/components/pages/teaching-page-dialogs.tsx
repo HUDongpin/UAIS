@@ -56,6 +56,7 @@ import {
   INVITE_CODE_COPIED_MESSAGE,
   INVITE_COPY_FAILED_MESSAGE,
   TEACHING_COURSE_COVER_TEACHER_READBACK_REQUIRED_MESSAGE,
+  TEACHING_OPERATION_COURSE_NOT_OWNED_MESSAGE,
   TEACHING_OPERATION_SAVE_FAILED_MESSAGE,
 } from "./teaching-page-messages";
 import type {
@@ -171,6 +172,7 @@ export function CourseClassManager({
   onRemoveMembership,
   onNewClass,
   onOpenInvitation,
+  writesEnabled = true,
 }: {
   course: TeacherCourse;
   classes: TeacherClassItem[];
@@ -181,6 +183,7 @@ export function CourseClassManager({
   pendingMembershipIds: string[];
   pendingBulkApprovalClassIds: string[];
   locale: Locale;
+  writesEnabled?: boolean;
   onApproveMembership: (
     classItem: TeacherClassItem,
     membership: TeacherClassMembershipItem,
@@ -203,18 +206,27 @@ export function CourseClassManager({
   const courseTitle = localizedText(course.title, locale);
 
   return (
-    <div className="mt-5 border-t border-[var(--border)] pt-4">
+    <div
+      className="mt-5 border-t border-[var(--border)] pt-4"
+      data-uais-course-writes-enabled={writesEnabled ? "true" : "false"}
+    >
       <button
         type="button"
         aria-label={
           locale === "zh-CN" ? `为${courseTitle}新建班级` : `New class for ${courseTitle}`
         }
-        className="inline-flex h-11 items-center gap-2 rounded-full bg-gradient-to-r from-[#1557c0] to-[#4338ca] px-5 text-base font-semibold text-white shadow-[0_12px_28px_rgba(83,115,255,0.24)] outline-none transition hover:shadow-[0_16px_34px_rgba(83,115,255,0.32)] active:translate-y-px focus-visible:ring-2 focus-visible:ring-[#1557c0] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface-elevated)]"
+        disabled={!writesEnabled}
+        className="inline-flex h-11 items-center gap-2 rounded-full bg-gradient-to-r from-[#1557c0] to-[#4338ca] px-5 text-base font-semibold text-white shadow-[0_12px_28px_rgba(83,115,255,0.24)] outline-none transition hover:shadow-[0_16px_34px_rgba(83,115,255,0.32)] active:translate-y-px focus-visible:ring-2 focus-visible:ring-[#1557c0] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface-elevated)] disabled:cursor-not-allowed disabled:opacity-60 disabled:shadow-none disabled:hover:shadow-none disabled:active:translate-y-0"
         onClick={onNewClass}
       >
         <Plus size={21} weight="bold" />
         {locale === "zh-CN" ? "新建班级" : "New class"}
       </button>
+      {writesEnabled ? null : (
+        <p role="status" className="mt-3 text-sm font-semibold text-[var(--danger)]">
+          {localizedText(TEACHING_OPERATION_COURSE_NOT_OWNED_MESSAGE, locale)}
+        </p>
+      )}
 
       {classes.length > 0 ? (
         <div className="mt-4 space-y-3">
@@ -298,6 +310,7 @@ export function CourseClassManager({
                   pendingMembershipIds={pendingMembershipIds}
                   isBulkApprovalPending={pendingBulkApprovalClassIds.includes(classItem.id)}
                   locale={locale}
+                  writesEnabled={writesEnabled}
                   onApproveMembership={onApproveMembership}
                   onApproveAllPendingMemberships={onApproveAllPendingMemberships}
                   onRejectMembership={onRejectMembership}

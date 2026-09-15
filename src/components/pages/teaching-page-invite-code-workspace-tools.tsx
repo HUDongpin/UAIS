@@ -38,6 +38,7 @@ import type { TeacherClassItem } from "@/lib/teaching/course-readback";
 import {
   INVITE_CODE_COPIED_MESSAGE,
   INVITE_LINK_COPIED_MESSAGE,
+  TEACHING_OPERATION_COURSE_NOT_OWNED_MESSAGE,
 } from "./teaching-page-messages";
 
 type InviteCodeWorkspaceToolsProps = {
@@ -56,6 +57,7 @@ type InviteCodeWorkspaceToolsProps = {
   onUpdateInvitePolicyDraft: (patch: Partial<InviteCodePolicyDraft>) => void;
   copyInviteWorkspaceValue: (value: string, successMessage: LocalizedText) => void;
   runInviteWorkspaceAction: (actionSlot: "primary" | "secondary") => void;
+  isCourseWritable?: boolean;
 };
 
 export function InviteCodeWorkspaceTools({
@@ -73,13 +75,15 @@ export function InviteCodeWorkspaceTools({
   onUpdateInvitePolicyDraft,
   copyInviteWorkspaceValue,
   runInviteWorkspaceAction,
+  isCourseWritable = true,
 }: InviteCodeWorkspaceToolsProps) {
   const t = copy[locale].teaching;
   const selectedClass = selectedInviteClass;
   // Both halves are required: a class is what an invite code belongs to, and the
   // course is what proves ownership of it.
   const isTargetChosen = Boolean(selectedInviteCourseId && selectedInviteClassId);
-  const isActionDisabled = !isTargetChosen || Boolean(invitePolicyDraftError);
+  const isActionDisabled =
+    !isTargetChosen || Boolean(invitePolicyDraftError) || !isCourseWritable;
   const metadata = [
     {
       label: t.inviteValidityLabel,
@@ -109,7 +113,10 @@ export function InviteCodeWorkspaceTools({
   ];
 
   return (
-    <div className="mt-5 grid gap-4 xl:grid-cols-[minmax(0,1fr)_260px]">
+    <div
+      className="mt-5 grid gap-4 xl:grid-cols-[minmax(0,1fr)_260px]"
+      data-uais-invite-writes-enabled={isCourseWritable ? "true" : "false"}
+    >
       <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-elevated)] p-4">
         <div data-uais-invite-target-selector className="max-w-sm">
           <div className="min-w-0">
@@ -140,6 +147,14 @@ export function InviteCodeWorkspaceTools({
             {t.inviteTargetRequired}
           </p>
         )}
+        {selectedInviteCourseId && !isCourseWritable ? (
+          <p
+            role="status"
+            className="mt-3 text-sm font-semibold text-[var(--danger)]"
+          >
+            {localizedText(TEACHING_OPERATION_COURSE_NOT_OWNED_MESSAGE, locale)}
+          </p>
+        ) : null}
 
         <div className="mt-4 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
@@ -223,7 +238,7 @@ export function InviteCodeWorkspaceTools({
               id="invite-policy-expires-at"
               type="datetime-local"
               value={invitePolicyDraft.expiresAtLocal}
-              disabled={!isTargetChosen}
+              disabled={!isTargetChosen || !isCourseWritable}
               className="mt-2 h-11 w-full rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] px-3 text-sm font-medium text-[var(--foreground)] outline-none transition focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent)]/20 disabled:cursor-not-allowed disabled:opacity-60"
               onChange={(event) =>
                 onUpdateInvitePolicyDraft({ expiresAtLocal: event.target.value })
@@ -243,7 +258,7 @@ export function InviteCodeWorkspaceTools({
               min={1}
               inputMode="numeric"
               value={invitePolicyDraft.maxJoins}
-              disabled={!isTargetChosen}
+              disabled={!isTargetChosen || !isCourseWritable}
               className="mt-2 h-11 w-full rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] px-3 text-sm font-medium text-[var(--foreground)] outline-none transition focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent)]/20 disabled:cursor-not-allowed disabled:opacity-60"
               onChange={(event) => onUpdateInvitePolicyDraft({ maxJoins: event.target.value })}
             />
@@ -256,7 +271,7 @@ export function InviteCodeWorkspaceTools({
               id="invite-policy-disabled"
               type="checkbox"
               checked={invitePolicyDraft.disabled}
-              disabled={!isTargetChosen}
+              disabled={!isTargetChosen || !isCourseWritable}
               className="size-4"
               onChange={(event) => onUpdateInvitePolicyDraft({ disabled: event.target.checked })}
             />

@@ -130,6 +130,7 @@ export function AgentWorkspace({
             selectedCourseAction={selectedCourseAction}
             selectedActionCourse={selectedActionCourse}
             selectedCourseActionLabel={selectedCourseActionLabel}
+            isCourseWritable={isSelectedCourseWritable}
             onSelectCourse={onSelectCourseAction}
           />}
           </div>

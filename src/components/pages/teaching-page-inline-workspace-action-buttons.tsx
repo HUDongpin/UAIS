@@ -62,7 +62,10 @@ export function InlineWorkspaceActionButtons({
           <ClipboardText size={17} weight="bold" />
           {actionConfig.primaryAction}
         </button>
-        {operationId === "knowledge-base" && selectedCourseId && !isSaving ? (
+        {operationId === "knowledge-base" &&
+        selectedCourseId &&
+        !isSaving &&
+        isCourseWritable ? (
           <Link
             href={`/teaching/knowledge-base?${new URLSearchParams({
               course: selectedCourseId,

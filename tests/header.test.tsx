@@ -273,6 +273,23 @@ describe("Header", () => {
     expect(screen.queryByRole("button", { name: "全局搜索" })).toBeNull();
   });
 
+  it("opens a coming-soon panel for calendar and notifications instead of a silent no-op", () => {
+    mockPathname = "/teaching";
+    render(<Header initialSessionUser={teacherSession} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "日历" }));
+    const calendarPanel = screen.getByRole("dialog", { name: "日历即将推出" });
+    expect(calendarPanel.textContent).toContain("课程日历尚未开放");
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("dialog", { name: "日历即将推出" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "通知" }));
+    const notificationsPanel = screen.getByRole("dialog", { name: "通知即将推出" });
+    expect(notificationsPanel.textContent).toContain("通知中心尚未开放");
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("dialog", { name: "通知即将推出" })).toBeNull();
+  });
+
   // E12/PKG-7: the header had 30 hardcoded light hex classes and no dark
   // handling at all, so the dark theme rendered a white bar over a dark page.
   it("paints the header from the shared theme tokens", () => {
