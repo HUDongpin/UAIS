@@ -166,9 +166,58 @@ describe("LearningPage", () => {
       (screen.getByRole("button", { name: "导出笔记" }) as HTMLButtonElement).disabled,
     ).toBe(true);
 
+    expect(screen.queryByText("当前课件")).toBeNull();
+    expect(screen.queryByText(/会围绕当前/)).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "把这页整理成 3 个学习要点" }),
+    ).toBeNull();
+    expect(screen.queryByRole("textbox", { name: "向智能助教提问" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /学习顾问/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: "发送" })).toBeNull();
+    expect(
+      (screen.getByRole("button", { name: /切换语音速度/ }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+    expect(
+      screen.getAllByText("当前账号无权访问此课程课件").length,
+    ).toBeGreaterThan(1);
+
     fireEvent.click(screen.getByRole("button", { name: "课程目录" }));
     expect(screen.queryByText("示例课程目录")).toBeNull();
     expect(screen.queryByText("初等数学研究（2024 春）")).toBeNull();
+  });
+
+  it("does not present Smart Tutor sample lecture chrome for a denied math-pedagogy course", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json(
+          {
+            error: "UAIS learning PPT playback requires teaching course ownership.",
+            access: {
+              status: "denied",
+              reasonCode: "teacher-course-ownership-required",
+            },
+          },
+          { status: 403 },
+        ),
+      ),
+    );
+
+    render(<LearningPage initialCourseId="math-pedagogy-learning" />);
+
+    expect(
+      await screen.findByRole("heading", { name: "当前账号无权访问此课程课件" }),
+    ).toBeTruthy();
+    expect(screen.getByText("当前课程：数学教学法")).toBeTruthy();
+    expect(screen.queryByText("当前课件")).toBeNull();
+    expect(screen.queryByText("把例题变成课堂提问链")).toBeNull();
+    expect(screen.queryByText("这页的关键是把例题拆成连续提问")).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "把这页整理成 3 个学习要点" }),
+    ).toBeNull();
+    expect(screen.queryByRole("textbox", { name: "向智能助教提问" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /学习顾问/ })).toBeNull();
   });
 
   // E12/PKG-7: "sign in again to access the PPT" used to be a label with nowhere
@@ -188,7 +237,9 @@ describe("LearningPage", () => {
       />,
     );
 
-    expect(await screen.findByText("请重新登录后访问课程课件")).toBeTruthy();
+    expect(
+      await screen.findByRole("heading", { name: "请重新登录后访问课程课件" }),
+    ).toBeTruthy();
     const signInLink = container.querySelector<HTMLAnchorElement>(
       '[data-uais-learning-ppt-sign-in="true"]',
     );

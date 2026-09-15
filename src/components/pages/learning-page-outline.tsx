@@ -22,6 +22,25 @@ import {
   type PublishedPlaybackError,
 } from "./learning-page-helpers";
 
+export function PublishedPlaybackAccessNotice({
+  locale,
+  error,
+}: {
+  locale: Locale;
+  error: PublishedPlaybackError;
+}) {
+  const stageCopy = getPublishedPlaybackStageCopy(locale, error);
+  return (
+    <div
+      data-uais-learning-companion-access={error}
+      className="rounded-xl border border-dashed border-[var(--border)] bg-[var(--surface-elevated)] p-4"
+    >
+      <p className="text-sm font-semibold text-[var(--foreground)]">{stageCopy.title}</p>
+      <p className="mt-2 text-sm leading-6 text-[var(--muted)]">{stageCopy.description}</p>
+    </div>
+  );
+}
+
 // The outline tab, which used to be the same demo course for everybody.
 //
 // Whatever deck the learner had open, this panel announced "初等数学研究（2024

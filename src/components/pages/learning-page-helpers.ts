@@ -225,6 +225,12 @@ export function canUseSlideStudyTools(
   return Boolean(publishedPlayback && publishedPlayback.slides.length > 0);
 }
 
+export function isPublishedPlaybackAccessBlocked(
+  error?: PublishedPlaybackError,
+): error is Extract<PublishedPlaybackError, "access-denied" | "auth-required"> {
+  return error === "access-denied" || error === "auth-required";
+}
+
 // Course-neutral on purpose. These three labels are rendered on every course's
 // playback stage, and they used to name the mathematics deck - "此数学课件" /
 // "the mathematics PPT" - to a student whose deck refusal had nothing to do with
