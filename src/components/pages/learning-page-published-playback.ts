@@ -52,7 +52,7 @@ export function usePublishedLearningPlayback({
           return;
         }
         if (!cancelled) {
-          setPublishedPlaybackError("unavailable");
+          setPublishedPlaybackError("not-published");
         }
       } catch {
         if (!cancelled) {

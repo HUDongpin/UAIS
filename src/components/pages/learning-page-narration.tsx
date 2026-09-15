@@ -47,6 +47,7 @@ export function NarrationDock({
   onPreviousPublishedSlide,
   onNextPublishedSlide,
   studyToolsOpen,
+  studyToolsEnabled = true,
   onOpenStudyTools,
   onSlideNarrationPlay,
   onSlideNarrationEnded,
@@ -59,6 +60,7 @@ export function NarrationDock({
   onPreviousPublishedSlide: () => void;
   onNextPublishedSlide: () => void;
   studyToolsOpen: boolean;
+  studyToolsEnabled?: boolean;
   onOpenStudyTools: () => void;
   onSlideNarrationPlay?: (slide: LearningPptPlaybackSlide) => void;
   onSlideNarrationEnded?: (slide: LearningPptPlaybackSlide) => void;
@@ -264,19 +266,17 @@ export function NarrationDock({
                   unoptimized
                   className="h-full w-full object-cover"
                 />
-              ) : (
-                "李"
-              )}
+              ) : null}
             </span>
           </span>
           <div className="min-w-0">
             <p className="truncate text-lg font-semibold text-[var(--foreground)]">
               {publishedPlayback?.teacherName ??
-                (locale === "zh-CN" ? "李明远 教授" : "Prof. Li Mingyuan")}
+                (locale === "zh-CN" ? "暂无课件讲解" : "No published narration")}
             </p>
             <p className="mt-1 truncate text-base text-[var(--muted)]">
               {publishedPlayback?.courseTitle ??
-                (locale === "zh-CN" ? "机器学习导论" : "Machine Learning")}
+                (locale === "zh-CN" ? "发布课件后可在此播放" : "Narration appears after a deck is published")}
             </p>
           </div>
         </div>
@@ -363,20 +363,11 @@ export function NarrationDock({
               </div>
             </div>
           ) : (
-            <>
-              <div className="flex h-16 items-center gap-1 overflow-hidden">
-                {[18, 32, 45, 58, 38, 64, 78, 42, 54, 70, 86, 48, 63, 74, 92, 56, 38, 28, 20, 18, 16, 14].map(
-                  (height, index) => (
-                    <span
-                      key={`${height}-${index}`}
-                      className={index < 15 ? "w-1.5 rounded-full bg-[var(--accent)]" : "w-1.5 rounded-full bg-[var(--border)]"}
-                      style={{ height }}
-                    />
-                  ),
-                )}
-              </div>
-              <p className="text-center text-sm text-[var(--muted)]">{locale === "zh-CN" ? "12:45 / 35:20" : "12:45 / 35:20"}</p>
-            </>
+            <p className="text-sm leading-6 text-[var(--muted)]">
+              {locale === "zh-CN"
+                ? "没有可播放的讲解音频。"
+                : "No narration audio is available."}
+            </p>
           )}
         </div>
 
@@ -427,13 +418,24 @@ export function NarrationDock({
             aria-label={locale === "zh-CN" ? "学习工具" : "Study Tools"}
             aria-controls="learning-tools-panel"
             aria-expanded={studyToolsOpen}
-            title={locale === "zh-CN" ? "学习工具" : "Study Tools"}
+            title={
+              studyToolsEnabled
+                ? locale === "zh-CN"
+                  ? "学习工具"
+                  : "Study Tools"
+                : locale === "zh-CN"
+                  ? "当前没有可访问的课件，无法生成笔记或导出。"
+                  : "There is no accessible courseware, so notes and export stay unavailable."
+            }
+            disabled={!studyToolsEnabled}
             onClick={onOpenStudyTools}
             className={[
               "inline-flex h-11 w-full min-w-0 items-center justify-between gap-2 rounded-lg border px-3 text-left text-sm font-semibold outline-none transition focus-visible:ring-2 focus-visible:ring-[var(--accent)]",
-              studyToolsOpen
-                ? "border-[var(--accent-border)] bg-[var(--accent-soft)] text-[var(--accent)]"
-                : "border-[var(--border)] bg-[var(--surface)] text-[var(--muted)] hover:border-[var(--accent-border)] hover:text-[var(--accent)]",
+              !studyToolsEnabled
+                ? "cursor-not-allowed border-[var(--border)] bg-[var(--surface-elevated)] text-[var(--placeholder)]"
+                : studyToolsOpen
+                  ? "border-[var(--accent-border)] bg-[var(--accent-soft)] text-[var(--accent)]"
+                  : "border-[var(--border)] bg-[var(--surface)] text-[var(--muted)] hover:border-[var(--accent-border)] hover:text-[var(--accent)]",
             ].join(" ")}
           >
             <span className="inline-flex min-w-0 items-center gap-2">

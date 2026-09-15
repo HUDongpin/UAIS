@@ -25,9 +25,7 @@ import type {
 } from "@/lib/learning/ppt-playback-types";
 import { copy, type Locale } from "@/i18n/copy";
 import {
-  getPublishedPlaybackEmptyDescription,
-  getPublishedPlaybackEmptyTitle,
-  getPublishedPlaybackErrorLabel,
+  getPublishedPlaybackStageCopy,
   type PublishedPlaybackError,
   type StudyAction,
 } from "./learning-page-helpers";
@@ -113,6 +111,8 @@ export function PptStage({
   publishedPlaybackError,
   isPublishedPlaybackLoading,
   conceptCount,
+  studyActionsEnabled,
+  studyActionNotice,
   onStudyAction,
   signInHref,
   onRetryPublishedPlayback,
@@ -123,6 +123,8 @@ export function PptStage({
   publishedPlaybackError?: PublishedPlaybackError;
   isPublishedPlaybackLoading?: boolean;
   conceptCount: number;
+  studyActionsEnabled: boolean;
+  studyActionNotice?: string;
   onStudyAction: (action: StudyAction) => void;
   /** Where a signed-out deck refusal sends the learner, with a return path. */
   signInHref?: string;
@@ -320,11 +322,34 @@ export function PptStage({
           locale={locale}
           conceptCount={conceptCount}
           compact
+          enabled={studyActionsEnabled}
+          notice={studyActionNotice}
           onStudyAction={onStudyAction}
         />
       </section>
     );
   }
+
+  const stageCopy = getPublishedPlaybackStageCopy(locale, publishedPlaybackError);
+  const cornerAction =
+    publishedPlaybackError === "auth-required" && signInHref ? (
+      <Link
+        href={signInHref}
+        data-uais-learning-ppt-sign-in="true"
+        className="inline-flex h-11 items-center gap-1 rounded-full bg-[var(--accent)] px-2.5 text-xs font-semibold text-white outline-none transition hover:bg-[var(--accent-strong)] focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]"
+      >
+        <SignIn size={13} weight="bold" aria-hidden="true" />
+        {copy[locale].auth.signIn}
+      </Link>
+    ) : publishedPlaybackError === "unavailable" && onRetryPublishedPlayback ? (
+      <button
+        type="button"
+        className="inline-flex min-h-11 items-center rounded-full bg-[var(--accent)] px-3 text-xs font-semibold text-white outline-none transition hover:bg-[var(--accent-strong)] focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]"
+        onClick={onRetryPublishedPlayback}
+      >
+        {locale === "zh-CN" ? "重新加载课件" : "Retry loading slides"}
+      </button>
+    ) : null;
 
   return (
     <section
@@ -332,7 +357,7 @@ export function PptStage({
       className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-[0_18px_44px_var(--shadow)]"
     >
       <div className="relative min-h-[470px] p-7 lg:p-9 xl:min-h-[555px]">
-        {publishedPlaybackError ? (
+        {cornerAction ? (
           <div
             role="alert"
             data-uais-learning-ppt-error={publishedPlaybackError}
@@ -343,28 +368,7 @@ export function PptStage({
                 : "border-[#fed7aa] bg-[#fff7ed] text-[#c2410c] dark:border-[#7c4a1d] dark:bg-[#3a2410] dark:text-[#fdba74]",
             ].join(" ")}
           >
-            {getPublishedPlaybackErrorLabel(locale, publishedPlaybackError)}
-            {/* "Sign in again to access the PPT" with nowhere to sign in is
-                where this pill used to end. */}
-            {publishedPlaybackError === "auth-required" && signInHref ? (
-              <Link
-                href={signInHref}
-                data-uais-learning-ppt-sign-in="true"
-                className="inline-flex h-11 items-center gap-1 rounded-full bg-[var(--accent)] px-2.5 text-xs font-semibold text-white outline-none transition hover:bg-[var(--accent-strong)] focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]"
-              >
-                <SignIn size={13} weight="bold" aria-hidden="true" />
-                {copy[locale].auth.signIn}
-              </Link>
-            ) : null}
-            {publishedPlaybackError === "unavailable" && onRetryPublishedPlayback ? (
-              <button
-                type="button"
-                className="inline-flex min-h-11 items-center rounded-full bg-[var(--accent)] px-3 text-xs font-semibold text-white outline-none transition hover:bg-[var(--accent-strong)] focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]"
-                onClick={onRetryPublishedPlayback}
-              >
-                {locale === "zh-CN" ? "重新加载课件" : "Retry loading slides"}
-              </button>
-            ) : null}
+            {cornerAction}
           </div>
         ) : isPublishedPlaybackLoading ? (
           <div
@@ -387,13 +391,14 @@ export function PptStage({
         */}
         <div
           data-uais-learning-ppt-empty="true"
+          data-uais-learning-ppt-error={publishedPlaybackError}
           className="flex min-h-[380px] flex-col items-center justify-center gap-3 px-6 text-center xl:min-h-[465px]"
         >
           <h1 className="text-[22px] font-semibold tracking-tight text-[var(--foreground)]">
-            {getPublishedPlaybackEmptyTitle(locale)}
+            {stageCopy.title}
           </h1>
           <p className="max-w-md text-base leading-7 text-[var(--muted)]">
-            {getPublishedPlaybackEmptyDescription(locale)}
+            {stageCopy.description}
           </p>
         </div>
       </div>
@@ -401,6 +406,8 @@ export function PptStage({
       <StudyActionBar
         locale={locale}
         conceptCount={conceptCount}
+        enabled={studyActionsEnabled}
+        notice={studyActionNotice}
         onStudyAction={onStudyAction}
       />
     </section>
@@ -516,11 +523,15 @@ function StudyActionBar({
   locale,
   conceptCount,
   compact = false,
+  enabled = true,
+  notice,
   onStudyAction,
 }: {
   locale: Locale;
   conceptCount: number;
   compact?: boolean;
+  enabled?: boolean;
+  notice?: string;
   onStudyAction: (action: StudyAction) => void;
 }) {
   const zh = locale === "zh-CN";
@@ -536,6 +547,7 @@ function StudyActionBar({
     },
     { action: "export" as const, label: zh ? "导出笔记" : "Export", icon: FilePdf },
   ];
+  const disabledTitle = copy[locale].learning.studyToolsRequireCourseware;
 
   return (
     <div
@@ -552,15 +564,20 @@ function StudyActionBar({
             key={action.action}
             type="button"
             aria-label={action.label}
+            title={enabled ? action.label : disabledTitle}
+            disabled={!enabled}
             onClick={() => onStudyAction(action.action)}
             className={[
-              "relative inline-flex min-w-0 items-center justify-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 text-sm font-semibold text-[var(--foreground)] outline-none transition hover:border-[var(--accent)] hover:text-[var(--accent)] focus-visible:ring-2 focus-visible:ring-[var(--accent)]",
+              "relative inline-flex min-w-0 items-center justify-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 text-sm font-semibold text-[var(--foreground)] outline-none transition focus-visible:ring-2 focus-visible:ring-[var(--accent)]",
               "h-11",
+              enabled
+                ? "hover:border-[var(--accent)] hover:text-[var(--accent)]"
+                : "cursor-not-allowed text-[var(--placeholder)]",
             ].join(" ")}
           >
             <Icon size={17} weight="duotone" />
             {action.label}
-            {action.badge ? (
+            {action.badge && enabled ? (
               <span
                 aria-hidden="true"
                 className="absolute -right-1.5 -top-2 flex size-5 items-center justify-center rounded-full bg-[var(--accent)] text-[11px] text-white"
@@ -571,6 +588,15 @@ function StudyActionBar({
           </button>
         );
       })}
+      {notice ? (
+        <p
+          role="status"
+          data-uais-learning-study-notice="true"
+          className="col-span-full text-sm font-medium text-[var(--accent)]"
+        >
+          {notice}
+        </p>
+      ) : null}
     </div>
   );
 }

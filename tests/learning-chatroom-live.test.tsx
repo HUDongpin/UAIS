@@ -355,6 +355,15 @@ describe("learner chatroom live multi-agent endpoint", () => {
 
     expect(chatroomCalls(calls)).toHaveLength(0);
     expectNoBubbleWithText("老师不能向伪造课程发消息");
+
+    const shareButton = screen.getByRole("button", { name: "生成分享链接" }) as HTMLButtonElement;
+    const exportButton = screen.getByRole("button", { name: "导出文档" }) as HTMLButtonElement;
+    expect(shareButton.disabled).toBe(true);
+    expect(exportButton.disabled).toBe(true);
+    expect(screen.getByText(/当前没有可用的课程或小组，无法生成分享链接/)).toBeTruthy();
+
+    fireEvent.click(shareButton);
+    expect(screen.queryByText("分享链接已生成并复制到剪贴板。")).toBeNull();
   });
 
   it("fails closed without a fabricated demo room for a student with no usable courses", async () => {
@@ -381,6 +390,10 @@ describe("learner chatroom live multi-agent endpoint", () => {
     expect(chatroomCalls(calls)).toHaveLength(0);
     expectNoBubbleWithText("学生想在示例课程里发消息");
     expect(input.value).toBe("学生想在示例课程里发消息");
+
+    const shareButton = screen.getByRole("button", { name: "生成分享链接" }) as HTMLButtonElement;
+    expect(shareButton.disabled).toBe(true);
+    expect(shareButton.getAttribute("title")).toContain("当前没有可用的课程或小组");
   });
 
   it("shows the load-failed copy, not the no-courses copy, when the course fetch answers 500", async () => {

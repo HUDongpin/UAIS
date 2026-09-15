@@ -126,8 +126,8 @@ describe("LearningPage", () => {
     render(<LearningPage initialCourseId="math-pedagogy-learning" />);
 
     expect(screen.getByText("当前课程：数学教学法")).toBeTruthy();
-    expect(screen.getByText("把例题变成课堂提问链")).toBeTruthy();
     expect(screen.queryByText("当前课程：大学研究方法")).toBeNull();
+    expect(screen.queryByText("把例题变成课堂提问链")).toBeNull();
   });
 
   it("explains a published PPT access denial instead of reporting that narration is preparing", async () => {
@@ -152,9 +152,23 @@ describe("LearningPage", () => {
     // E14/PKG-8b: course-neutral. The refusal is about this course's slides,
     // whichever course the learner opened, and it used to name the mathematics
     // deck to every one of them.
-    expect(await screen.findByText("当前账号无权访问此课程课件")).toBeTruthy();
+    expect(
+      await screen.findByRole("heading", { name: "当前账号无权访问此课程课件" }),
+    ).toBeTruthy();
     expect(screen.queryByText(/数学课件/)).toBeNull();
     expect(screen.queryByText("配音资源准备中")).toBeNull();
+    expect(screen.queryByText("本课程暂无已发布课件")).toBeNull();
+    expect(screen.queryByText("把研究问题转化为可观察证据")).toBeNull();
+    expect(
+      (screen.getByRole("button", { name: "生成笔记" }) as HTMLButtonElement).disabled,
+    ).toBe(true);
+    expect(
+      (screen.getByRole("button", { name: "导出笔记" }) as HTMLButtonElement).disabled,
+    ).toBe(true);
+
+    fireEvent.click(screen.getByRole("button", { name: "课程目录" }));
+    expect(screen.queryByText("示例课程目录")).toBeNull();
+    expect(screen.queryByText("初等数学研究（2024 春）")).toBeNull();
   });
 
   // E12/PKG-7: "sign in again to access the PPT" used to be a label with nowhere
@@ -403,23 +417,11 @@ describe("LearningPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "课程目录" }));
     expect(screen.getByText(/第三章/)).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: "学习工具" }));
-    const toolsPanel = screen.getByRole("dialog", { name: "学习工具" });
-    const toolsSwitcher = screen.getByRole("group", { name: "学习工具栏目切换" });
-    expect(toolsPanel.className).toContain("fixed");
-    expect(toolsPanel.className).toContain("bottom-0");
-    expect(toolsPanel.className).toContain("xl:static");
-    expect(toolsSwitcher.querySelectorAll("button").length).toBe(3);
-    expect(screen.getByRole("button", { name: "本页笔记" }).getAttribute("aria-pressed")).toBe(
-      "true",
-    );
-    expect(screen.getByRole("heading", { name: "本页笔记" })).toBeTruthy();
-
-    fireEvent.click(screen.getByRole("button", { name: "检查点" }));
-    expect(screen.getByRole("heading", { name: "学习检查点" })).toBeTruthy();
-
-    fireEvent.click(screen.getByRole("button", { name: "概念卡" }));
-    expect(screen.getByRole("heading", { name: "关键概念" })).toBeTruthy();
+    const dockStudyTools = screen.getByRole("button", { name: "学习工具" }) as HTMLButtonElement;
+    expect(dockStudyTools.disabled).toBe(true);
+    fireEvent.click(dockStudyTools);
+    expect(screen.queryByRole("dialog", { name: "学习工具" })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "本页笔记" })).toBeNull();
   });
 
   it("shows the DOCX course directory with placeholder durations", () => {
@@ -1880,7 +1882,16 @@ describe("LearningPage", () => {
   });
 
   it("runs the five slide study actions from the PPT toolbar", async () => {
-    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => {})));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.startsWith("/api/learning/ppt-playback/")) {
+          return Response.json({ playback: outlineManifest });
+        }
+        return Response.json({});
+      }),
+    );
     const createObjectUrl = vi.fn(() => "blob:uais-study-notes");
     const revokeObjectUrl = vi.fn();
     const anchorClick = vi
@@ -1895,7 +1906,8 @@ describe("LearningPage", () => {
       value: revokeObjectUrl,
     });
 
-    render(<LearningPage />);
+    render(<LearningPage initialCourseId="autumn-2026-research-methods" />);
+    await screen.findByAltText("课件第 1 页：研究问题从哪里来");
 
     fireEvent.click(screen.getByRole("button", { name: "问这页" }));
     const aiInput = screen.getByRole("textbox", { name: "向智能助教提问" }) as HTMLInputElement;
@@ -1907,7 +1919,7 @@ describe("LearningPage", () => {
       "true",
     );
     expect(screen.getByRole("heading", { name: "本页笔记" })).toBeTruthy();
-    expect(screen.getAllByText(/把研究问题转化为可观察证据/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/围绕「研究问题从哪里来」/).length).toBeGreaterThan(0);
 
     fireEvent.click(screen.getByRole("button", { name: "学习检查点" }));
     expect(screen.getByRole("heading", { name: "学习检查点" })).toBeTruthy();
@@ -1916,12 +1928,13 @@ describe("LearningPage", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "关键概念" }));
     expect(screen.getByRole("heading", { name: "关键概念" })).toBeTruthy();
-    expect(screen.getByText("变量关系")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "研究问题从哪里来" })).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "导出笔记" }));
     expect(createObjectUrl).toHaveBeenCalledWith(expect.any(Blob));
     expect(anchorClick).toHaveBeenCalledTimes(1);
     expect(revokeObjectUrl).toHaveBeenCalledWith("blob:uais-study-notes");
+    expect(screen.getByText("笔记已导出为 Markdown 文件。")).toBeTruthy();
   });
 });
 
@@ -1978,6 +1991,7 @@ describe("LearningPage playback routing", () => {
       expect(container.querySelector("[data-uais-learning-ppt-empty]")).toBeTruthy(),
     );
     expect(screen.getByText(/本课程暂无已发布课件/)).toBeTruthy();
+    expect(screen.queryByText("课程课件资源暂时不可用")).toBeNull();
     // The invented machine-learning lesson that used to render here.
     expect(screen.queryByText(/梯度下降算法/)).toBeNull();
     expect(screen.queryByText(/最小二乘法原理/)).toBeNull();

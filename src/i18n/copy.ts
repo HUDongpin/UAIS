@@ -132,6 +132,17 @@ export const copy = {
       chatroomJoinCoursePrompt:
         "暂无可用的真实课程。加入或创建课程后，才能在这里与同学和智能体协作。",
       chatroomCourseLoadFailed: "暂时无法加载你的课程列表，请稍后再试。",
+      chatroomShareRequiresBinding:
+        "当前没有可用的课程或小组，无法生成分享链接。请先加入、创建课程或选择小组。",
+      chatroomExportRequiresBinding:
+        "当前没有可用的课程或小组，无法导出聊天记录。请先加入、创建课程或选择小组。",
+      chatroomShareTeacherMemberOnly:
+        "分享链接由小组成员生成。教师请使用导出或打印。",
+      chatroomShareRequiresGroupChoice:
+        "请先选择小组，再导出或分享聊天记录。",
+      studyToolsRequireCourseware:
+        "当前没有可访问的课件，无法生成笔记或导出。",
+      notesExported: "笔记已导出为 Markdown 文件。",
       groupMembers: "小组成员",
       groupAgents: "智能体",
       groupInstructorRow: "授课教师",
@@ -465,6 +476,17 @@ export const copy = {
         "No real course is available yet. Join or create a course before collaborating with classmates and AI agents here.",
       chatroomCourseLoadFailed:
         "We could not load your courses. Please try again later.",
+      chatroomShareRequiresBinding:
+        "No course or group is available, so a share link cannot be created. Join or create a course, or choose a group first.",
+      chatroomExportRequiresBinding:
+        "No course or group is available, so this transcript cannot be exported. Join or create a course, or choose a group first.",
+      chatroomShareTeacherMemberOnly:
+        "Group members create share links. Teachers can export or print instead.",
+      chatroomShareRequiresGroupChoice:
+        "Choose a group before exporting or sharing this room.",
+      studyToolsRequireCourseware:
+        "There is no accessible courseware, so notes and export stay unavailable.",
+      notesExported: "Notes exported as a Markdown file.",
       groupMembers: "Members",
       groupAgents: "AI Agents",
       groupInstructorRow: "Instructor",
