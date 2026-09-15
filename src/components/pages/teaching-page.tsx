@@ -326,7 +326,7 @@ export function TeachingPage() {
             ) {
               return;
             }
-            void createClassForCourse(newClassCourse.id, className);
+            return createClassForCourse(newClassCourse.id, className);
           }}
         />
       ) : null}
