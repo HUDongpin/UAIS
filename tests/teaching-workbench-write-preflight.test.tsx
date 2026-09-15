@@ -94,8 +94,8 @@ describe("teaching workbench write preflight", () => {
 
     fireEvent.click(screen.getByRole("link", { name: "邀请码" }));
     expect(
-      await screen.findByText("当前账号不是这门课程的授课教师，写入操作已关闭。"),
-    ).toBeTruthy();
+      (await screen.findAllByText("当前账号不是这门课程的授课教师，写入操作已关闭。")).length,
+    ).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: "生成新邀请码" })).toHaveProperty(
       "disabled",
       true,
