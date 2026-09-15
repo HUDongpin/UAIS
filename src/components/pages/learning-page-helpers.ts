@@ -200,7 +200,11 @@ export function exportSlideStudyNotes(content: SlideStudyContent, locale: Locale
   }
 }
 
-export type PublishedPlaybackError = "auth-required" | "access-denied" | "unavailable";
+export type PublishedPlaybackError =
+  | "auth-required"
+  | "access-denied"
+  | "unavailable"
+  | "not-published";
 
 export function getPublishedPlaybackError(status: number): PublishedPlaybackError {
   if (status === 401) {
@@ -209,7 +213,16 @@ export function getPublishedPlaybackError(status: number): PublishedPlaybackErro
   if (status === 403) {
     return "access-denied";
   }
+  if (status === 404) {
+    return "not-published";
+  }
   return "unavailable";
+}
+
+export function canUseSlideStudyTools(
+  publishedPlayback?: { slides: unknown[] } | null,
+) {
+  return Boolean(publishedPlayback && publishedPlayback.slides.length > 0);
 }
 
 // Course-neutral on purpose. These three labels are rendered on every course's
@@ -221,19 +234,66 @@ export function getPublishedPlaybackErrorLabel(
   locale: Locale,
   error: PublishedPlaybackError,
 ) {
-  if (error === "auth-required") {
-    return locale === "zh-CN"
-      ? "请重新登录后访问课程课件"
-      : "Sign in again to access the course slides";
+  switch (error) {
+    case "auth-required":
+      return locale === "zh-CN"
+        ? "请重新登录后访问课程课件"
+        : "Sign in again to access the course slides";
+    case "access-denied":
+      return locale === "zh-CN"
+        ? "当前账号无权访问此课程课件"
+        : "This account cannot access the course slides";
+    case "not-published":
+      return getPublishedPlaybackEmptyTitle(locale);
+    case "unavailable":
+      return locale === "zh-CN"
+        ? "课程课件资源暂时不可用"
+        : "The course slides are temporarily unavailable";
+    default: {
+      const exhaustive: never = error;
+      return exhaustive;
+    }
   }
+}
+
+export function getPublishedPlaybackStageCopy(
+  locale: Locale,
+  error?: PublishedPlaybackError,
+) {
+  const zh = locale === "zh-CN";
   if (error === "access-denied") {
-    return locale === "zh-CN"
-      ? "当前账号无权访问此课程课件"
-      : "This account cannot access the course slides";
+    return {
+      title: getPublishedPlaybackErrorLabel(locale, error),
+      description: zh
+        ? "这门课程的课件只对已加入的学生或授课教师开放。教师登录不会自动解锁示例课件。"
+        : "These slides are available only to approved students or the owning teacher. A teacher login does not unlock demo decks.",
+    };
   }
-  return locale === "zh-CN"
-    ? "课程课件资源暂时不可用"
-    : "The course slides are temporarily unavailable";
+  if (error === "auth-required") {
+    return {
+      title: getPublishedPlaybackErrorLabel(locale, error),
+      description: zh
+        ? "登录后即可按你的课程权限查看课件。"
+        : "Sign in to open the slides this account is allowed to view.",
+    };
+  }
+  if (error === "unavailable") {
+    return {
+      title: getPublishedPlaybackErrorLabel(locale, error),
+      description: zh
+        ? "加载失败时不会改用示例课件。请稍后重试。"
+        : "A load failure does not fall back to sample slides. Please retry.",
+    };
+  }
+  if (error === "not-published" || error === undefined) {
+    return {
+      title: getPublishedPlaybackEmptyTitle(locale),
+      description: getPublishedPlaybackEmptyDescription(locale),
+    };
+  }
+
+  const unexpectedError: never = error;
+  return unexpectedError;
 }
 
 // Per-learner, per-course, per-manifest narration completion, persisted by the

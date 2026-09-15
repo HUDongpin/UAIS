@@ -37,14 +37,17 @@ import {
   type PlaybackContent,
 } from "./learning-page-content";
 import {
+  canUseSlideStudyTools,
   createAskThisSlidePrompt,
   createCompletedNarrationStorageKey,
   createSlideStudyContent,
   exportSlideStudyNotes,
   formatSlideDurationLabel,
   getPlaybackContent,
+  getPublishedPlaybackStageCopy,
   readCompletedNarrationSlideIds,
   resolveLearningEventCourseId,
+  type PublishedPlaybackError,
   type SlideStudyContent,
   type StudyAction,
   type StudyToolView,
@@ -272,7 +275,9 @@ export function LearningPage({ initialCourseId, initialClassId }: LearningPagePr
   const [studyToolsOpen, setStudyToolsOpen] = useState(false);
   const [guideDraft, setGuideDraft] = useState("");
   const [guideFocusSequence, setGuideFocusSequence] = useState(0);
+  const [studyActionNotice, setStudyActionNotice] = useState("");
   const completedNarrationSlideIdsRef = useRef(new Set<string>());
+  const studyToolsEnabled = canUseSlideStudyTools(publishedPlayback);
   const studyContent = useMemo(
     () =>
       createSlideStudyContent({
@@ -296,8 +301,14 @@ export function LearningPage({ initialCourseId, initialClassId }: LearningPagePr
   }
 
   function handleStudyAction(action: StudyAction) {
+    if (!studyToolsEnabled) {
+      setStudyActionNotice(t.learning.studyToolsRequireCourseware);
+      return;
+    }
+
     if (action === "export") {
       exportSlideStudyNotes(studyContent, locale);
+      setStudyActionNotice(t.learning.notesExported);
       const eventCourseId = resolveLearningEventCourseId({
         publishedPlaybackCourseId: publishedPlayback?.courseId,
         selectedCourseId,
@@ -339,6 +350,10 @@ export function LearningPage({ initialCourseId, initialClassId }: LearningPagePr
   }
 
   function openStudyToolsFromDock() {
+    if (!studyToolsEnabled) {
+      setStudyActionNotice(t.learning.studyToolsRequireCourseware);
+      return;
+    }
     setActiveCompanionView(getSelectedStudyToolView(activeCompanionView));
     setStudyToolsOpen(true);
   }
@@ -530,7 +545,7 @@ export function LearningPage({ initialCourseId, initialClassId }: LearningPagePr
   const visibleCourseContextTitle = publishedPlayback
     ? `${locale === "zh-CN" ? "当前课程：" : "Current course: "}${publishedPlayback.courseTitle}`
     : playback.liveHint;
-  const visibleCourseContextSlideTitle = activePublishedSlide?.slideTitle ?? playback.slideTitle;
+  const visibleCourseContextSlideTitle = activePublishedSlide?.slideTitle;
   // A 401 on the deck used to render as a dead label. The return path is built
   // from the route's own props rather than `window.location`, so the href is the
   // same string on the server render and on the first client render.
@@ -545,8 +560,12 @@ export function LearningPage({ initialCourseId, initialClassId }: LearningPagePr
         className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1 px-1 text-sm font-semibold text-[var(--foreground)]"
       >
         <span>{visibleCourseContextTitle}</span>
-        <span className="text-[var(--placeholder)]">/</span>
-        <span className="text-[var(--muted)]">{visibleCourseContextSlideTitle}</span>
+        {visibleCourseContextSlideTitle ? (
+          <>
+            <span className="text-[var(--placeholder)]">/</span>
+            <span className="text-[var(--muted)]">{visibleCourseContextSlideTitle}</span>
+          </>
+        ) : null}
         {visibleApprovedInviteLearningContext ? (
           <>
             <span className="text-[var(--placeholder)]">/</span>
@@ -611,6 +630,8 @@ export function LearningPage({ initialCourseId, initialClassId }: LearningPagePr
             publishedPlaybackError={publishedPlaybackError}
             isPublishedPlaybackLoading={isPublishedPlaybackLoading}
             conceptCount={studyContent.concepts.length}
+            studyActionsEnabled={studyToolsEnabled}
+            studyActionNotice={studyActionNotice}
             onStudyAction={handleStudyAction}
             signInHref={playbackSignInHref}
             onRetryPublishedPlayback={retryPublishedPlayback}
@@ -624,6 +645,7 @@ export function LearningPage({ initialCourseId, initialClassId }: LearningPagePr
             onPreviousPublishedSlide={showPreviousPublishedSlide}
             onNextPublishedSlide={showNextPublishedSlide}
             studyToolsOpen={studyToolsOpen}
+            studyToolsEnabled={studyToolsEnabled}
             onOpenStudyTools={openStudyToolsFromDock}
             onSlideNarrationPlay={handleSlideNarrationPlay}
             onSlideNarrationEnded={handleSlideNarrationEnded}
@@ -635,6 +657,7 @@ export function LearningPage({ initialCourseId, initialClassId }: LearningPagePr
           approvedInviteContext={visibleApprovedInviteLearningContext}
           playback={playback}
           publishedPlayback={publishedPlayback}
+          publishedPlaybackError={publishedPlaybackError}
           activePublishedSlide={activePublishedSlide}
           onSelectPublishedSlide={setActivePublishedSlideIndex}
           studyContent={studyContent}
@@ -658,6 +681,7 @@ function LearningCompanionPanel({
   approvedInviteContext,
   playback,
   publishedPlayback,
+  publishedPlaybackError,
   activePublishedSlide,
   onSelectPublishedSlide,
   studyContent,
@@ -675,6 +699,7 @@ function LearningCompanionPanel({
   approvedInviteContext?: { courseId: string; classId: string };
   playback: PlaybackContent;
   publishedPlayback?: LearningPptPlaybackManifest;
+  publishedPlaybackError?: PublishedPlaybackError;
   activePublishedSlide?: LearningPptPlaybackSlide;
   onSelectPublishedSlide: (index: number) => void;
   studyContent: SlideStudyContent;
@@ -1281,6 +1306,7 @@ function LearningCompanionPanel({
               locale={locale}
               learnerAccount={learnerAccount}
               publishedPlayback={publishedPlayback}
+              publishedPlaybackError={publishedPlaybackError}
               activePublishedSlide={activePublishedSlide}
               onSelectPublishedSlide={onSelectPublishedSlide}
             />
@@ -1310,7 +1336,13 @@ function getAiGuideCopy(
   const courseTitle =
     publishedPlayback?.courseTitle ??
     playback.liveHint.replace(locale === "zh-CN" ? "当前课程：" : "Current course: ", "");
-  const slideTitle = activePublishedSlide?.slideTitle ?? playback.slideTitle;
+  const slideTitle =
+    activePublishedSlide?.slideTitle ??
+    (publishedPlayback
+      ? playback.slideTitle
+      : locale === "zh-CN"
+        ? "当前课件"
+        : "the current slides");
   const slidePosition = activePublishedSlide
     ? locale === "zh-CN"
       ? `第 ${activePublishedSlide.slideNumber} 页`
@@ -1421,12 +1453,14 @@ function CourseDirectoryView({
   locale,
   learnerAccount,
   publishedPlayback,
+  publishedPlaybackError,
   activePublishedSlide,
   onSelectPublishedSlide,
 }: {
   locale: Locale;
   learnerAccount?: string;
   publishedPlayback?: LearningPptPlaybackManifest;
+  publishedPlaybackError?: PublishedPlaybackError;
   activePublishedSlide?: LearningPptPlaybackSlide;
   onSelectPublishedSlide: (index: number) => void;
 }) {
@@ -1550,6 +1584,21 @@ function CourseDirectoryView({
               })}
             </div>
           </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (
+    publishedPlaybackError === "access-denied" ||
+    publishedPlaybackError === "auth-required"
+  ) {
+    const stageCopy = getPublishedPlaybackStageCopy(locale, publishedPlaybackError);
+    return (
+      <div data-uais-learning-outline="unavailable">
+        <div className="rounded-xl border border-dashed border-[var(--border)] bg-[var(--surface-elevated)] p-4">
+          <p className="text-sm font-semibold text-[var(--foreground)]">{stageCopy.title}</p>
+          <p className="mt-2 text-sm leading-6 text-[var(--muted)]">{stageCopy.description}</p>
         </div>
       </div>
     );

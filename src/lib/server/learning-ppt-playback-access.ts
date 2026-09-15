@@ -9,6 +9,7 @@ import {
   getUaisAppSessionUserFromCookieString,
 } from "@/lib/server/uais-app-session";
 import { isPublishedDemoTeacherCourseAccess } from "@/lib/server/published-demo-course-access";
+import { teachingActorOwnsCourse } from "@/lib/server/teaching-actor-id";
 
 type LearningPptPlaybackAccessReason =
   | "student-session-required"
@@ -114,8 +115,15 @@ export async function authorizeLearningPptPlaybackAccess(input: {
   });
 
   if (actor.role === "teacher") {
-    const course = database.courses.find((item) => item.courseId === input.courseId);
-    if (!course || course.ownerTeacherId !== actor.actorId) {
+    const course = database.courses.find((item) =>
+      teachingActorOwnsCourse({
+        ownerTeacherId: item.ownerTeacherId,
+        actorId: actor.actorId,
+        courseId: input.courseId,
+        candidateCourseId: item.courseId,
+      }),
+    );
+    if (!course) {
       return createDeniedAccess("teacher-course-ownership-required", resource, actor);
     }
 

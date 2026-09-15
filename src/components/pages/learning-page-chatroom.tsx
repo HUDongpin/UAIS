@@ -457,8 +457,14 @@ function RoomHeader({
           <button
             type="button"
             onClick={room.handleExport}
-            title={t.learning.exportPrintHint}
-            className="inline-flex h-11 items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface-elevated)] px-4 text-sm font-semibold text-[var(--foreground)] outline-none transition hover:bg-[var(--surface-soft)] active:translate-y-px focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+            disabled={room.exportDisabled}
+            title={
+              room.exportDisabled
+                ? (room.shareExportDisabledReason ?? t.learning.chatroomExportRequiresBinding)
+                : t.learning.exportPrintHint
+            }
+            data-uais-chatroom-export={room.exportDisabled ? "disabled" : "ready"}
+            className="inline-flex h-11 items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface-elevated)] px-4 text-sm font-semibold text-[var(--foreground)] outline-none transition hover:bg-[var(--surface-soft)] active:translate-y-px focus-visible:ring-2 focus-visible:ring-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-60"
           >
             <FilePdf size={17} weight="duotone" aria-hidden="true" />
             {t.learning.exportPdf}
@@ -468,7 +474,14 @@ function RoomHeader({
             onClick={() => {
               void room.handleShare();
             }}
-            className="inline-flex h-11 items-center gap-2 rounded-full bg-[var(--accent)] px-4 text-sm font-semibold text-white outline-none transition hover:bg-[var(--accent-strong)] active:translate-y-px focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]"
+            disabled={room.shareDisabled}
+            title={
+              room.shareDisabled
+                ? (room.shareExportDisabledReason ?? t.learning.chatroomShareRequiresBinding)
+                : t.learning.shareLink
+            }
+            data-uais-chatroom-share={room.shareDisabled ? "disabled" : "ready"}
+            className="inline-flex h-11 items-center gap-2 rounded-full bg-[var(--accent)] px-4 text-sm font-semibold text-white outline-none transition hover:bg-[var(--accent-strong)] active:translate-y-px focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)] disabled:cursor-not-allowed disabled:opacity-60"
           >
             <LinkSimple size={17} weight="bold" aria-hidden="true" />
             {t.learning.shareLink}
@@ -478,6 +491,14 @@ function RoomHeader({
         <p className="hidden text-xs leading-5 text-[var(--muted)] sm:block">
           {t.learning.exportPrintHint}
         </p>
+        {room.shareExportDisabledReason ? (
+          <p
+            data-uais-chatroom-share-disabled-reason="true"
+            className="max-w-xs text-xs leading-5 text-[var(--muted)] lg:text-right"
+          >
+            {room.shareExportDisabledReason}
+          </p>
+        ) : null}
         {room.moderation.canModerate ? (
           <p
             data-uais-chatroom-moderation-state="true"

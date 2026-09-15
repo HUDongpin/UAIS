@@ -162,6 +162,9 @@ export type LearningChatroomController = {
    */
   agentsPending: boolean;
   composerDisabled: boolean;
+  exportDisabled: boolean;
+  shareDisabled: boolean;
+  shareExportDisabledReason: string | null;
   /** Teacher-only hide/freeze controls for the open room. */
   moderation: LearningChatroomModerationController;
   /** The last minted share link, so the room can show its expiry beside it. */
@@ -413,16 +416,18 @@ export function useLearningChatroom(): LearningChatroomController {
       ? groupOptions.find((group) => group.groupId === groupSelection.groupId)
       : undefined;
 
-  // Students auto-enter their only group; a teacher enters a group room only
-  // through an explicit `?groupId=` deep link (Phase 4 generates those), so
-  // opening the chatroom never silently drops a teacher into observation.
+  // Students auto-enter their only group. A teacher with groups must pick one
+  // instead of landing in a course-level room that looks empty. Opening the
+  // chatroom still never silently drops a teacher into a group.
   const autoGroup =
     !groupSelection && sessionUser?.role === "student" && groupOptions.length === 1
       ? groupOptions[0]
       : undefined;
   const activeGroup = selectedGroup ?? autoGroup ?? null;
   const needsGroupChoice =
-    !activeGroup && sessionUser?.role === "student" && groupOptions.length > 1;
+    !activeGroup &&
+    ((sessionUser?.role === "student" && groupOptions.length > 1) ||
+      (sessionUser?.role === "teacher" && groupOptions.length > 0));
 
   // Groups are live for this caller (they hold at least one) but not in the room
   // they landed in — or a deep link named a group they cannot see. With no group
@@ -462,6 +467,18 @@ export function useLearningChatroom(): LearningChatroomController {
     needsGroupChoice ||
     roomAccessNotice !== null ||
     frozenForViewer;
+  const roomUnbound = demoPreviewOnly || needsGroupChoice || resolution.status !== "ready" || !activeCourse;
+  const exportDisabled = roomUnbound || roomAccessNotice !== null;
+  const shareDisabled = exportDisabled || isInstructor;
+  const shareExportDisabledReason = demoPreviewOnly
+    ? t.learning.chatroomShareRequiresBinding
+    : needsGroupChoice
+      ? t.learning.groupPickerLabel
+      : isInstructor
+        ? t.learning.chatroomShareTeacherMemberOnly
+        : exportDisabled
+          ? t.learning.chatroomExportRequiresBinding
+          : null;
   const fallbackNotice =
     fallbackReason === "load-failed"
       ? t.learning.chatroomCourseLoadFailed
@@ -1101,18 +1118,16 @@ export function useLearningChatroom(): LearningChatroomController {
   // a download: the browser's print dialog is the PDF generator, so there is no
   // service, no credential and no server render to wait for.
   function handleExport() {
-    // The print view enforces the same room access the chatroom does, so a
-    // reader the route could only refuse is told here instead of being sent to a
-    // page that refuses them. Every export/share outcome - success or not - is
-    // written to `notice`, because that is the line the room header renders next
-    // to these two buttons; `error` belongs to the composer and would put an
-    // export failure under the wrong control.
     if (!sessionUser) {
       setNotice(t.learning.exportSignInRequired);
       return;
     }
-    if (!activeCourse || demoPreviewOnly) {
-      setNotice(t.learning.exportAccessDenied);
+    if (exportDisabled || !activeCourse) {
+      setNotice(
+        demoPreviewOnly || needsGroupChoice
+          ? t.learning.chatroomExportRequiresBinding
+          : t.learning.exportAccessDenied,
+      );
       return;
     }
 
@@ -1139,8 +1154,12 @@ export function useLearningChatroom(): LearningChatroomController {
       setNotice(t.learning.shareSignInRequired);
       return;
     }
-    if (!activeCourse || demoPreviewOnly) {
-      setNotice(t.learning.exportAccessDenied);
+    if (shareDisabled || !activeCourse) {
+      setNotice(
+        isInstructor && !exportDisabled
+          ? t.learning.chatroomShareTeacherMemberOnly
+          : t.learning.chatroomShareRequiresBinding,
+      );
       return;
     }
 
@@ -1293,6 +1312,9 @@ export function useLearningChatroom(): LearningChatroomController {
     frozenNotice: frozenForViewer ? t.learning.chatroomFrozenNotice : null,
     agentsPending,
     composerDisabled,
+    exportDisabled,
+    shareDisabled,
+    shareExportDisabledReason,
     moderation,
     shareLink,
     shareRevokeConfirming,
