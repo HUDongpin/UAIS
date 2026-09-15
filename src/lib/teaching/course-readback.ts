@@ -651,6 +651,40 @@ export function mergeTeacherCoursesById(
   ];
 }
 
+// Workbench cards must not keep catalog demo IDs as writable courses after a
+// successful server list. Those catalog IDs are the two-course visual template;
+// teaching writes authorize against snapshot `ownerTeacherId`.
+export function resolveTeacherWorkbenchCourses(input: {
+  persistedCourses: TeacherCourse[];
+  catalogCourses: TeacherCourse[];
+}) {
+  if (input.persistedCourses.length > 0) {
+    return {
+      courses: input.persistedCourses,
+      writableCourseIds: input.persistedCourses.map((course) => course.id),
+      catalogDemo: false,
+    };
+  }
+  return {
+    courses: input.catalogCourses,
+    writableCourseIds: [] as string[],
+    catalogDemo: true,
+  };
+}
+
+export function isWritableTeacherCourseId(
+  writableCourseIds: ReadonlySet<string> | undefined,
+  courseId: string | undefined,
+) {
+  if (!courseId) {
+    return false;
+  }
+  if (!writableCourseIds) {
+    return true;
+  }
+  return writableCourseIds.has(courseId);
+}
+
 export function mergeTeacherClassesByCourseId(
   persistedClasses: Record<string, TeacherClassItem[]>,
   currentClasses: Record<string, TeacherClassItem[]>,

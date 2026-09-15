@@ -3887,4 +3887,46 @@ describe("TeachingOperationPage", () => {
       fetchSpy.mockRestore();
     }
   });
+
+  it("disables writes up front when the course list does not include the selected catalog course", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      const method = (init as RequestInit | undefined)?.method ?? "GET";
+      if (url.includes("/api/teaching/courses") && method !== "POST") {
+        return new Response(JSON.stringify({ courses: [] }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      return new Response(JSON.stringify({ error: "unexpected-write" }), {
+        status: 500,
+        headers: { "content-type": "application/json" },
+      });
+    });
+
+    try {
+      render(
+        <TeachingOperationPage
+          operationId="course-settings"
+          selectedCourseId="teacher-research-methods"
+        />,
+      );
+
+      expect(
+        await screen.findByText(/当前账号不是这门课程的授课教师/),
+      ).toBeTruthy();
+      expect(screen.getByRole("button", { name: "保存课程设置" })).toHaveProperty(
+        "disabled",
+        true,
+      );
+
+      fireEvent.click(screen.getByRole("button", { name: "保存课程设置" }));
+      expect(fetchSpy).not.toHaveBeenCalledWith(
+        expect.stringContaining("/api/teaching/operations"),
+        expect.objectContaining({ method: "POST" }),
+      );
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
 });

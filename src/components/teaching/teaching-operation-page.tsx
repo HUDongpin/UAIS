@@ -19,6 +19,7 @@ import { teacherCourses, teacherSidebarItems } from "@/data/uais";
 import type { LocalizedText, Locale } from "@/i18n/copy";
 import { createTeachingOperationIdempotencyKey } from "@/lib/teaching-operation-idempotency";
 import { defaultExportManifest } from "@/components/teaching/teaching-operation-page-data";
+import { useOwnedTeachingCourseAccess } from "@/components/teaching/use-owned-teaching-course";
 import {
   formatCourseAction,
   OperationSpecificPreview,
@@ -280,9 +281,11 @@ const TEACHING_OPERATION_RECEIPT_MISMATCH_MESSAGE: LocalizedText = {
 // course: the fix is to re-enter from a course card, not to sign in again. The
 // wording matches the inline workspace's `course-id-required` detail so both
 // teaching surfaces name the same condition the same way.
-const TEACHING_OPERATION_COURSE_CONTEXT_MISSING_MESSAGE: LocalizedText = {
-  "zh-CN": "未保存到服务器：缺少课程上下文，请从课程卡片进入。",
-  "en-US": "Not saved to the server: course context is missing. Please enter from a course card.",
+const TEACHING_OPERATION_COURSE_NOT_OWNED_MESSAGE: LocalizedText = {
+  "zh-CN":
+    "当前账号不是这门课程的授课教师。演示课程卡片不能保存到服务器；请从已保存在你名下的课程进入，或先创建课程。",
+  "en-US":
+    "This account is not the course owner. Demo course cards cannot be saved. Open a course saved under your account, or create one first.",
 };
 
 export function TeachingOperationPage({
@@ -298,6 +301,8 @@ export function TeachingOperationPage({
   const title = operation ? localizedText(operation.title, locale) : safeOperationId;
   const description = operation ? localizedText(operation.description, locale) : "";
   const selectedCourse = teacherCourses.find((course) => course.id === selectedCourseId);
+  const ownedCourseAccess = useOwnedTeachingCourseAccess(selectedCourseId);
+  const isSelectedCourseWritable = ownedCourseAccess !== "unowned";
   const [statusMessage, setStatusMessage] = useState(localizedText(config.readyMessage, locale));
   const [manifestReady, setManifestReady] = useState(false);
   const [exportManifest, setExportManifest] =
@@ -312,7 +317,8 @@ export function TeachingOperationPage({
   const actionPendingRef = useRef(false);
   const isStatusFailure = isTeachingOperationFailureStatus(statusMessage, locale);
   const isAuditPending = auditStatus?.status === "pending";
-  const areActionButtonsDisabled = isActionPending || isAuditPending;
+  const areActionButtonsDisabled =
+    isActionPending || isAuditPending || !isSelectedCourseWritable;
   const isKnowledgeResourceRegistrationReady = Boolean(
     selectedCourseId &&
       knowledgeResourceTitle.trim() &&
@@ -321,14 +327,14 @@ export function TeachingOperationPage({
   );
 
   function runPrimaryAction() {
-    if (actionPendingRef.current || isAuditPending) {
+    if (actionPendingRef.current || isAuditPending || !isSelectedCourseWritable) {
       return;
     }
     void persistTeachingOperationAction("primary");
   }
 
   function runSecondaryAction() {
-    if (actionPendingRef.current || isAuditPending) {
+    if (actionPendingRef.current || isAuditPending || !isSelectedCourseWritable) {
       return;
     }
     if (safeOperationId === "knowledge-base" && !isKnowledgeResourceRegistrationReady) {
@@ -349,7 +355,10 @@ export function TeachingOperationPage({
   }
 
   async function persistTeachingOperationAction(actionSlot: "primary" | "secondary") {
-    if (actionPendingRef.current || isAuditPending) {
+    if (actionPendingRef.current || isAuditPending || !isSelectedCourseWritable) {
+      if (!isSelectedCourseWritable) {
+        setStatusMessage(localizedText(TEACHING_OPERATION_COURSE_NOT_OWNED_MESSAGE, locale));
+      }
       return;
     }
 
@@ -1136,6 +1145,11 @@ export function TeachingOperationPage({
                   the url and a teacher should be able to see that the click they
                   made carried it. Rendered as the id because the static catalog
                   has no class titles to resolve against. */}
+              {ownedCourseAccess === "unowned" ? (
+                <p className="mt-2 text-sm leading-6 text-[var(--danger)]">
+                  {localizedText(TEACHING_OPERATION_COURSE_NOT_OWNED_MESSAGE, locale)}
+                </p>
+              ) : null}
               {selectedClassId ? (
                 <p
                   data-uais-operation-selected-class={selectedClassId}

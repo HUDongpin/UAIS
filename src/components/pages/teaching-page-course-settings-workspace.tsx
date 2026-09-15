@@ -72,6 +72,7 @@ type CourseSettingsWorkspaceProps = {
   selectedActionCourse: TeacherCourse | undefined;
   selectedCourseActionLabel: string | undefined;
   selectedCourseAction: { courseId: string; action: TeacherCourseAction } | undefined;
+  isSelectedCourseWritable?: boolean;
   onSelectCourseAction: (courseId: string) => void;
   setIsNewCourseOpen: Dispatch<SetStateAction<boolean>>;
   setNewClassCourseId: Dispatch<SetStateAction<string | undefined>>;
@@ -134,6 +135,7 @@ export function CourseSettingsWorkspace({
   selectedActionCourse,
   selectedCourseActionLabel,
   selectedCourseAction,
+  isSelectedCourseWritable = true,
   onSelectCourseAction,
   setIsNewCourseOpen,
   setNewClassCourseId,
@@ -197,6 +199,7 @@ export function CourseSettingsWorkspace({
               locale={locale}
               inlineWorkspaceStatuses={inlineWorkspaceStatuses}
               isCourseChosen={Boolean(selectedCourseAction?.courseId)}
+              isCourseWritable={isSelectedCourseWritable}
               selectedCourseId={selectedCourseAction?.courseId}
               runInlineWorkspaceAction={runInlineWorkspaceAction}
             />}

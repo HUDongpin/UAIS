@@ -74,10 +74,11 @@ import {
   createTeacherMembershipsByClassFromPersistedMemberships,
   extractCourseSemester,
   mergeTeacherClassesByCourseId,
-  mergeTeacherCoursesById,
   mergeTeacherMembershipsByClassId,
+  isWritableTeacherCourseId,
   readTeachingCourseListTeacherActorId,
   resolveCourseSettingsDraftValues,
+  resolveTeacherWorkbenchCourses,
   shouldLoadPersistedTeachingCourses,
   type CourseSettingsDraft,
   type CourseSettingsDraftFieldInput,
@@ -112,6 +113,7 @@ import {
   TEACHING_OPERATION_ALERT_PENDING_MESSAGE,
   TEACHING_OPERATION_AUDIT_FAILED_MESSAGE,
   TEACHING_OPERATION_AUDIT_PENDING_MESSAGE,
+  TEACHING_OPERATION_COURSE_NOT_OWNED_MESSAGE,
   TEACHING_OPERATION_COURSE_REQUIRED_MESSAGE,
   TEACHING_OPERATION_RECEIPT_MISMATCH_MESSAGE,
   TEACHING_OPERATION_ROLLBACK_FAILED_MESSAGE,
@@ -182,6 +184,8 @@ export function useTeachingWorkspace() {
   >({});
   const [authenticatedTeacherActorId, setAuthenticatedTeacherActorId] =
     useState<string>();
+  const [writableCourseIds, setWritableCourseIds] = useState<Set<string>>();
+  const [catalogDemoCoursesVisible, setCatalogDemoCoursesVisible] = useState(false);
   // Chatroom-groups feature gate (plan D9). Starts false so a workspace that has
   // not heard from the server — or a deployment with the flag off — shows no
   // group surface at all.
@@ -281,11 +285,13 @@ export function useTeachingWorkspace() {
       if (readback.authenticatedTeacherActorId) {
         setAuthenticatedTeacherActorId(readback.authenticatedTeacherActorId);
       }
-      if (readback.courses.length > 0) {
-        setCourseCards((currentCourses) =>
-          mergeTeacherCoursesById(readback.courses, currentCourses),
-        );
-      }
+      const workbench = resolveTeacherWorkbenchCourses({
+        persistedCourses: readback.courses,
+        catalogCourses: teacherCourses,
+      });
+      setCourseCards(workbench.courses);
+      setWritableCourseIds(new Set(workbench.writableCourseIds));
+      setCatalogDemoCoursesVisible(workbench.catalogDemo);
       if (Object.keys(readback.classesByCourse).length > 0) {
         setCourseClasses((currentClasses) =>
           mergeTeacherClassesByCourseId(readback.classesByCourse, currentClasses),
@@ -328,6 +334,8 @@ export function useTeachingWorkspace() {
               ? error.message
               : createPersistedCourseLoadErrorMessage(undefined, locale),
           );
+          setWritableCourseIds(new Set());
+          setCatalogDemoCoursesVisible(true);
         }
       }
     }
@@ -527,6 +535,13 @@ export function useTeachingWorkspace() {
       setInlineWorkspaceStatuses((currentStatuses) => ({
         ...currentStatuses,
         [operationId]: localizedText(TEACHING_OPERATION_COURSE_REQUIRED_MESSAGE, locale),
+      }));
+      return;
+    }
+    if (!isWritableTeacherCourseId(writableCourseIds, selectedCourseAction.courseId)) {
+      setInlineWorkspaceStatuses((currentStatuses) => ({
+        ...currentStatuses,
+        [operationId]: localizedText(TEACHING_OPERATION_COURSE_NOT_OWNED_MESSAGE, locale),
       }));
       return;
     }
@@ -1546,6 +1561,8 @@ export function useTeachingWorkspace() {
     setClassMemberships,
     authenticatedTeacherActorId,
     setAuthenticatedTeacherActorId,
+    writableCourseIds,
+    catalogDemoCoursesVisible,
     learningChatroomGroupsEnabled,
     persistedCourseLoadError,
     setPersistedCourseLoadError,

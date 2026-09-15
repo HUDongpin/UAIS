@@ -50,6 +50,7 @@ type AgentWorkspaceProps = {
   selectedActionCourse: TeacherCourse | undefined;
   selectedCourseActionLabel: string | undefined;
   selectedCourseAction: { courseId: string; action: TeacherCourseAction } | undefined;
+  isSelectedCourseWritable?: boolean;
   courseCards: TeacherCourse[];
   onSelectCourseAction: (courseId: string) => void;
   t: (typeof copy)[Locale];
@@ -84,6 +85,7 @@ export function AgentWorkspace({
   selectedActionCourse,
   selectedCourseActionLabel,
   selectedCourseAction,
+  isSelectedCourseWritable = true,
   courseCards,
   onSelectCourseAction,
   t,
@@ -114,6 +116,7 @@ export function AgentWorkspace({
               locale={locale}
               inlineWorkspaceStatuses={inlineWorkspaceStatuses}
               isCourseChosen={Boolean(selectedCourseAction?.courseId)}
+              isCourseWritable={isSelectedCourseWritable}
               selectedCourseId={selectedCourseAction?.courseId}
               runInlineWorkspaceAction={runInlineWorkspaceAction}
             />}

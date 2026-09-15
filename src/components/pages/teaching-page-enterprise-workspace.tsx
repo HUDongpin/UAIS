@@ -54,6 +54,7 @@ type EnterpriseWorkspaceProps = {
   onSelectInviteClass: (classId: string) => void;
   onUpdateInvitePolicyDraft: (patch: Partial<InviteCodePolicyDraft>) => void;
   selectedCourseAction: { courseId: string; action: TeacherCourseAction } | undefined;
+  isSelectedCourseWritable?: boolean;
   selectedActionCourse: TeacherCourse | undefined;
   selectedCourseActionLabel: string | undefined;
   onSelectCourseAction: (courseId: string) => void;
@@ -98,6 +99,7 @@ export function EnterpriseWorkspace({
   onSelectInviteClass,
   onUpdateInvitePolicyDraft,
   selectedCourseAction,
+  isSelectedCourseWritable = true,
   selectedActionCourse,
   selectedCourseActionLabel,
   onSelectCourseAction,
@@ -147,6 +149,7 @@ export function EnterpriseWorkspace({
                 locale={locale}
                 inlineWorkspaceStatuses={inlineWorkspaceStatuses}
                 isCourseChosen={Boolean(selectedCourseAction?.courseId)}
+                isCourseWritable={isSelectedCourseWritable}
                 selectedCourseId={selectedCourseAction?.courseId}
                 runInlineWorkspaceAction={runInlineWorkspaceAction}
               />

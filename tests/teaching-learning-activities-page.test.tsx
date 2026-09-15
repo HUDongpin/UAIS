@@ -98,4 +98,27 @@ describe("TeachingLearningActivitiesPage", () => {
     expect(screen.getByText(/尚无真实班级/)).toBeTruthy();
     expect(screen.getByRole("button", { name: "保存任务草稿" })).toHaveProperty("disabled", true);
   });
+
+  it("hides authoring controls when the server reports teacher-course-ownership-required", async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url === "/api/teaching/courses") {
+        return json({ courses: [], classes: [] });
+      }
+      if (url.includes("ppt-playback")) return json({ reasonCode: "published-playback-required" }, 404);
+      if (url.includes("learning-insights")) return json({}, 404);
+      if (url.includes("/activities")) {
+        return json({ reasonCode: "teacher-course-ownership-required" }, 403);
+      }
+      return json({}, 404);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<TeachingLearningActivitiesPage courseId="teacher-research-methods" />);
+
+    expect(await screen.findByRole("alert")).toBeTruthy();
+    expect(screen.getByText("工作台只读：当前账号不是这门课程的授课教师。")).toBeTruthy();
+    expect(screen.getByText(/演示课程卡片未绑定本账号所有权/)).toBeTruthy();
+    expect(screen.queryByText(/工作台暂不可用：teacher-course-ownership-required/)).toBeNull();
+    expect(screen.queryByText(/还没有真实任务。请在下方创建第一项任务草稿/)).toBeNull();
+    expect(screen.queryByRole("button", { name: "保存任务草稿" })).toBeNull();
+  });
 });
