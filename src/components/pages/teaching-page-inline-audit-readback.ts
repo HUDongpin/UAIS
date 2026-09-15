@@ -1,12 +1,17 @@
 export const TEACHING_OPERATION_AUDIT_READBACK_MAX_ATTEMPTS = 3;
 export const TEACHING_OPERATION_AUDIT_READBACK_RETRY_DELAY_MS = 50;
 
-export function createTeachingOperationAuditReadbackRequestInit(traceId: string): RequestInit {
+export function createTeachingOperationAuditReadbackRequestInit(
+  traceId: string,
+  courseId?: string,
+): RequestInit {
+  const trimmedCourseId = courseId?.trim();
   return {
     method: "GET",
     headers: {
       accept: "application/json",
       "x-uais-trace-id": traceId,
+      ...(trimmedCourseId ? { "x-uais-course-id": trimmedCourseId } : {}),
     },
   };
 }
@@ -76,7 +81,7 @@ export async function fetchTeachingOperationAuditReadbackWithRetry<
   ) {
     const response = await fetch(
       "/api/teaching/operations/audit",
-      createTeachingOperationAuditReadbackRequestInit(input.traceId),
+      createTeachingOperationAuditReadbackRequestInit(input.traceId, input.courseId),
     );
     if (!response.ok) {
       throw new Error("Teaching operation audit readback failed.");

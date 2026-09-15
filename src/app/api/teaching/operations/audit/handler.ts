@@ -193,6 +193,7 @@ export function createTeachingOperationAuditGetHandler(
         env,
         now: deps.now,
       });
+      const requestedCourseId = readRequestedAuditCourseId(request);
       if (!authenticatedTeacher) {
         return jsonResponse(401, {
           error: "UAIS teacher authentication is required.",
@@ -279,7 +280,10 @@ export function createTeachingOperationAuditGetHandler(
           ownedCourseIds = await expandOwnedCourseIdsWithManagedOwnership({
             actorId: authenticatedTeacher.actorId,
             ownedCourseIds,
-            candidateCourseIds: collectAuditSourceCourseIds(auditSource),
+            candidateCourseIds: [
+              ...collectAuditSourceCourseIds(auditSource),
+              ...(requestedCourseId ? [requestedCourseId] : []),
+            ],
             readManagedCourseOwnership,
           });
         } catch {
@@ -880,6 +884,22 @@ function readSafeTraceId(request: Request) {
     return headerTraceId;
   }
   return `trace-${randomUUID()}`;
+}
+
+function readRequestedAuditCourseId(request: Request) {
+  const headerCourseId = request.headers.get("x-uais-course-id")?.trim();
+  if (headerCourseId && isSafeTeachingOperationId(headerCourseId)) {
+    return headerCourseId;
+  }
+  try {
+    const queryCourseId = new URL(request.url).searchParams.get("courseId")?.trim();
+    if (queryCourseId && isSafeTeachingOperationId(queryCourseId)) {
+      return queryCourseId;
+    }
+  } catch {
+    return undefined;
+  }
+  return undefined;
 }
 
 function isSafeTeachingOperationId(value: string) {

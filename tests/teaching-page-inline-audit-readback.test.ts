@@ -4,7 +4,10 @@ import {
   isMissingSavedTeachingOperationAuditRecord,
   isMissingSavedTeachingOperationAuditTrace,
 } from "@/components/pages/teaching-page-inline-audit-readback";
-import { resolveVerifiedInlineAuditAuthSession } from "@/components/pages/teaching-page-inline-receipt-guards";
+import {
+  isCourseSettingsPrimarySave,
+  resolveVerifiedInlineAuditAuthSession,
+} from "@/components/pages/teaching-page-inline-receipt-guards";
 
 const signedSession = {
   sessionId: "teacher-inline-session",
@@ -71,5 +74,27 @@ describe("inline teaching operation audit readback helpers", () => {
         "x-uais-trace-id": "trace-owned-course-settings-save",
       },
     });
+  });
+
+  it("scopes audit GET to the owned course being saved", () => {
+    expect(
+      createTeachingOperationAuditReadbackRequestInit(
+        "trace-owned-course-settings-save",
+        "teacher-course-uais-qa-test-owned-20260915-140423",
+      ),
+    ).toEqual({
+      method: "GET",
+      headers: {
+        accept: "application/json",
+        "x-uais-trace-id": "trace-owned-course-settings-save",
+        "x-uais-course-id": "teacher-course-uais-qa-test-owned-20260915-140423",
+      },
+    });
+  });
+
+  it("treats course-settings primary saves as persist-confirmed without requiring audit GET", () => {
+    expect(isCourseSettingsPrimarySave("course-settings", "primary")).toBe(true);
+    expect(isCourseSettingsPrimarySave("course-settings", "secondary")).toBe(false);
+    expect(isCourseSettingsPrimarySave("invite-code", "primary")).toBe(false);
   });
 });

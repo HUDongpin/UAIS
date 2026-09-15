@@ -88,3 +88,10 @@ export function isMismatchedOrIncompleteInlineTeachingOperationReceipt(
   );
 }
 
+export function isCourseSettingsPrimarySave(
+  operationId: string | undefined,
+  actionSlot: "primary" | "secondary" | undefined,
+) {
+  return operationId === "course-settings" && actionSlot === "primary";
+}
+
