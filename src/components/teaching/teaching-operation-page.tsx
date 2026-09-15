@@ -19,6 +19,7 @@ import { teacherCourses, teacherSidebarItems } from "@/data/uais";
 import type { LocalizedText, Locale } from "@/i18n/copy";
 import { createTeachingOperationIdempotencyKey } from "@/lib/teaching-operation-idempotency";
 import { fetchTeachingOperationAuditReadbackWithRetry } from "@/components/pages/teaching-page-inline-audit-readback";
+import { isCourseSettingsPrimarySave } from "@/components/pages/teaching-page-inline-receipt-guards";
 import { defaultExportManifest } from "@/components/teaching/teaching-operation-page-data";
 import { useOwnedTeachingCourseAccess } from "@/components/teaching/use-owned-teaching-course";
 import {
@@ -456,6 +457,8 @@ export function TeachingOperationPage({
         return;
       }
 
+      const persistConfirmed = isCourseSettingsPrimarySave(safeOperationId, actionSlot);
+
       const verifiedStatusMessage = receipt.displayMessage
         ? localizedText(receipt.displayMessage, locale)
         : actionSlot === "primary"
@@ -479,6 +482,10 @@ export function TeachingOperationPage({
 
       if (payload.traceId) {
         if (!receipt.receiptId) {
+          if (persistConfirmed) {
+            setStatusMessage(verifiedStatusMessage);
+            return;
+          }
           setStatusMessage(localizedText(TEACHING_OPERATION_AUDIT_FAILED_MESSAGE, locale));
           setAuditStatus({
             status: "failed",
@@ -486,7 +493,11 @@ export function TeachingOperationPage({
           });
           return;
         }
-        setStatusMessage(localizedText(TEACHING_OPERATION_AUDIT_PENDING_MESSAGE, locale));
+        if (persistConfirmed) {
+          setStatusMessage(verifiedStatusMessage);
+        } else {
+          setStatusMessage(localizedText(TEACHING_OPERATION_AUDIT_PENDING_MESSAGE, locale));
+        }
         await readOperationAuditEvidence({
           traceId: payload.traceId,
           recordId: receipt.receiptId,
@@ -495,6 +506,7 @@ export function TeachingOperationPage({
           verifiedStatusMessage,
           artifacts: verifiedArtifacts,
           verifiedReceiptAuthSession: receipt.audit?.authSession,
+          persistConfirmed,
           ...(knowledgeResource
             ? {
                 knowledgeResource: {
@@ -530,11 +542,14 @@ export function TeachingOperationPage({
       authenticatedAt?: string;
       expiresAt?: string;
     };
+    persistConfirmed?: boolean;
   }) {
-    setAuditStatus({
-      status: "pending",
-      traceId: input.traceId,
-    });
+    if (!input.persistConfirmed) {
+      setAuditStatus({
+        status: "pending",
+        traceId: input.traceId,
+      });
+    }
 
     try {
       const audit = await fetchTeachingOperationAuditReadbackWithRetry<
@@ -586,6 +601,13 @@ export function TeachingOperationPage({
           knowledgeResource: input.knowledgeResource,
         })
       ) {
+        if (input.persistConfirmed) {
+          setAuditStatus(undefined);
+          if (input.verifiedStatusMessage) {
+            setStatusMessage(input.verifiedStatusMessage);
+          }
+          return;
+        }
         throw new Error("Teaching operation audit readback did not include the saved operation.");
       }
 
@@ -614,6 +636,13 @@ export function TeachingOperationPage({
         setStatusMessage(input.verifiedStatusMessage);
       }
     } catch {
+      if (input.persistConfirmed) {
+        setAuditStatus(undefined);
+        if (input.verifiedStatusMessage) {
+          setStatusMessage(input.verifiedStatusMessage);
+        }
+        return;
+      }
       setStatusMessage(localizedText(TEACHING_OPERATION_AUDIT_FAILED_MESSAGE, locale));
       setAuditStatus({
         status: "failed",

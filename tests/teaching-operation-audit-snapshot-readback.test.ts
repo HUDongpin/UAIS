@@ -413,4 +413,114 @@ describe("teaching operation audit snapshot ownership readback", () => {
       await rm(dataDir, { recursive: true, force: true });
     }
   });
+
+  it("authorizes an owned requested course even when the audit source has no events yet", async () => {
+    const dataDir = await mkdtemp(
+      join(tmpdir(), "uais-teaching-audit-empty-source-owned-course-"),
+    );
+    const teacherAuthSecret = "test-teacher-auth-session-signing-secret";
+    const cookie = createUaisTeacherAuthSessionCookieHeader({
+      secret: teacherAuthSecret,
+      claims: {
+        sessionId: "teacher-empty-source-owned-session",
+        actorId: "phoebe",
+        role: "teacher",
+        authenticatedAt: "2026-09-15T14:04:00.000Z",
+        expiresAt: "2026-09-15T15:04:00.000Z",
+      },
+    });
+    const getAudit = createTeachingOperationAuditGetHandler({
+      env: {
+        UAIS_TEACHING_OPERATIONS_DATA_DIR: dataDir,
+        UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET: teacherAuthSecret,
+      },
+      getTeachingOperationCourseOwnership: async () => ({
+        teacherId: "phoebe",
+        courseIds: [],
+      }),
+      readManagedCourseOwnership: async ({ actorId, courseId }) =>
+        actorId === "phoebe" && courseId === ownedCourseId,
+      now: new Date("2026-09-15T14:10:00.000Z"),
+    });
+
+    try {
+      const response = await getAudit(
+        new Request("https://www.uais.top/api/teaching/operations/audit", {
+          method: "GET",
+          headers: {
+            cookie,
+            "x-uais-trace-id": "trace-empty-source-owned-course-audit",
+            "x-uais-course-id": ownedCourseId,
+          },
+        }),
+      );
+      const body = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(body).toEqual(
+        expect.objectContaining({
+          actorId: "phoebe",
+          courseIds: [ownedCourseId],
+          recordCount: 0,
+          auditEventCount: 0,
+          domainProjectionCount: 0,
+        }),
+      );
+      expect(body.records).toEqual([]);
+      expect(body.auditEvents).toEqual([]);
+      expectNoLocalOrSecretValues(body, dataDir);
+    } finally {
+      await rm(dataDir, { recursive: true, force: true });
+    }
+  });
+
+  it("does not add a requested course id that the snapshot owner check rejects", async () => {
+    const dataDir = await mkdtemp(
+      join(tmpdir(), "uais-teaching-audit-requested-unowned-course-"),
+    );
+    const teacherAuthSecret = "test-teacher-auth-session-signing-secret";
+    const cookie = createUaisTeacherAuthSessionCookieHeader({
+      secret: teacherAuthSecret,
+      claims: {
+        sessionId: "teacher-requested-unowned-session",
+        actorId: "phoebe",
+        role: "teacher",
+        authenticatedAt: "2026-09-15T14:04:00.000Z",
+        expiresAt: "2026-09-15T15:04:00.000Z",
+      },
+    });
+    const getAudit = createTeachingOperationAuditGetHandler({
+      env: {
+        UAIS_TEACHING_OPERATIONS_DATA_DIR: dataDir,
+        UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET: teacherAuthSecret,
+      },
+      getTeachingOperationCourseOwnership: async () => ({
+        teacherId: "phoebe",
+        courseIds: [otherOwnedCourseId],
+      }),
+      readManagedCourseOwnership: async () => false,
+      now: new Date("2026-09-15T14:10:00.000Z"),
+    });
+
+    try {
+      const response = await getAudit(
+        new Request("https://www.uais.top/api/teaching/operations/audit", {
+          method: "GET",
+          headers: {
+            cookie,
+            "x-uais-trace-id": "trace-requested-unowned-course-audit",
+            "x-uais-course-id": ownedCourseId,
+          },
+        }),
+      );
+      const body = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(body.courseIds).toEqual([otherOwnedCourseId]);
+      expect(JSON.stringify(body)).not.toContain(ownedCourseId);
+      expectNoLocalOrSecretValues(body, dataDir);
+    } finally {
+      await rm(dataDir, { recursive: true, force: true });
+    }
+  });
 });

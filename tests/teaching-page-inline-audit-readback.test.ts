@@ -3,8 +3,12 @@ import {
   createTeachingOperationAuditReadbackRequestInit,
   isMissingSavedTeachingOperationAuditRecord,
   isMissingSavedTeachingOperationAuditTrace,
+  resolveInlineTeachingOperationAuditMatch,
 } from "@/components/pages/teaching-page-inline-audit-readback";
-import { resolveVerifiedInlineAuditAuthSession } from "@/components/pages/teaching-page-inline-receipt-guards";
+import {
+  isCourseSettingsPrimarySave,
+  resolveVerifiedInlineAuditAuthSession,
+} from "@/components/pages/teaching-page-inline-receipt-guards";
 
 const signedSession = {
   sessionId: "teacher-inline-session",
@@ -70,6 +74,49 @@ describe("inline teaching operation audit readback helpers", () => {
         accept: "application/json",
         "x-uais-trace-id": "trace-owned-course-settings-save",
       },
+    });
+  });
+
+  it("scopes audit GET to the owned course being saved", () => {
+    expect(
+      createTeachingOperationAuditReadbackRequestInit(
+        "trace-owned-course-settings-save",
+        "teacher-course-uais-qa-test-owned-20260915-140423",
+      ),
+    ).toEqual({
+      method: "GET",
+      headers: {
+        accept: "application/json",
+        "x-uais-trace-id": "trace-owned-course-settings-save",
+        "x-uais-course-id": "teacher-course-uais-qa-test-owned-20260915-140423",
+      },
+    });
+  });
+
+  it("treats course-settings primary saves as persist-confirmed without requiring audit GET", () => {
+    expect(isCourseSettingsPrimarySave("course-settings", "primary")).toBe(true);
+    expect(isCourseSettingsPrimarySave("course-settings", "secondary")).toBe(false);
+    expect(isCourseSettingsPrimarySave("invite-code", "primary")).toBe(false);
+  });
+
+  it("marks an empty unscoped audit list as incomplete rather than a matched save", () => {
+    expect(
+      resolveInlineTeachingOperationAuditMatch({
+        audit: {
+          auditEvents: [],
+          records: [],
+          domainProjections: [],
+        },
+        traceId: "trace-owned-course-settings-save",
+        courseId: "teacher-course-uais-qa-test-owned-20260915-140423",
+        recordId: "operation-record-course-settings-primary",
+        operationId: "course-settings",
+        actionSlot: "primary",
+        verifiedReceiptAuthSession: signedSession,
+      }),
+    ).toEqual({
+      status: "incomplete",
+      reason: "missing-event",
     });
   });
 });
