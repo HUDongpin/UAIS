@@ -34,9 +34,11 @@ import { CourseDirectoryView } from "./learning-page-outline";
 import {
   canUseSlideStudyTools,
   createAskThisSlidePrompt,
+  createCompletedNarrationStorageKey,
   createSlideStudyContent,
   exportSlideStudyNotes,
   getPlaybackContent,
+  readCompletedNarrationSlideIds,
   resolveLearningEventCourseId,
   type PublishedPlaybackError,
   type SlideStudyContent,
