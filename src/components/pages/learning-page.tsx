@@ -30,7 +30,7 @@ import {
   publishedLearningPptCourseId,
   type PlaybackContent,
 } from "./learning-page-content";
-import { CourseDirectoryView } from "./learning-page-outline";
+import { CourseDirectoryView, PublishedPlaybackAccessNotice } from "./learning-page-outline";
 import {
   canUseSlideStudyTools,
   createAskThisSlidePrompt,
@@ -38,6 +38,7 @@ import {
   createSlideStudyContent,
   exportSlideStudyNotes,
   getPlaybackContent,
+  isPublishedPlaybackAccessBlocked,
   readCompletedNarrationSlideIds,
   resolveLearningEventCourseId,
   type PublishedPlaybackError,
@@ -271,6 +272,7 @@ export function LearningPage({ initialCourseId, initialClassId }: LearningPagePr
   const [studyActionNotice, setStudyActionNotice] = useState("");
   const completedNarrationSlideIdsRef = useRef(new Set<string>());
   const studyToolsEnabled = canUseSlideStudyTools(publishedPlayback);
+  const studyToolsVisible = studyToolsOpen && studyToolsEnabled;
   const studyContent = useMemo(
     () =>
       createSlideStudyContent({
@@ -633,11 +635,12 @@ export function LearningPage({ initialCourseId, initialClassId }: LearningPagePr
             locale={locale}
             playback={playback}
             publishedPlayback={publishedPlayback}
+            publishedPlaybackError={publishedPlaybackError}
             activePublishedSlide={activePublishedSlide}
             activePublishedSlideIndex={activePublishedSlideIndex}
             onPreviousPublishedSlide={showPreviousPublishedSlide}
             onNextPublishedSlide={showNextPublishedSlide}
-            studyToolsOpen={studyToolsOpen}
+            studyToolsOpen={studyToolsVisible}
             studyToolsEnabled={studyToolsEnabled}
             onOpenStudyTools={openStudyToolsFromDock}
             onSlideNarrationPlay={handleSlideNarrationPlay}
@@ -656,7 +659,7 @@ export function LearningPage({ initialCourseId, initialClassId }: LearningPagePr
           studyContent={studyContent}
           activeView={activeCompanionView}
           onActiveViewChange={setActiveCompanionView}
-          studyToolsOpen={studyToolsOpen}
+          studyToolsOpen={studyToolsVisible}
           onStudyToolsOpenChange={setStudyToolsOpen}
           guideDraft={guideDraft}
           onGuideDraftChange={setGuideDraft}
@@ -730,6 +733,9 @@ function LearningCompanionPanel({
   const guideInputRef = useRef<HTMLInputElement | null>(null);
   const guideTranscriptRef = useRef<HTMLDivElement | null>(null);
   const guideCopy = getAiGuideCopy(locale, playback, publishedPlayback, activePublishedSlide);
+  const coursewareAccessBlocked = isPublishedPlaybackAccessBlocked(
+    publishedPlaybackError,
+  );
   const activeGuideAgent =
     guideCopy.agentCards.find((agent) => agent.id === activeGuideAgentId) ??
     guideCopy.agentCards[0];
@@ -796,6 +802,9 @@ function LearningCompanionPanel({
 
   function handleGuideSend(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (coursewareAccessBlocked) {
+      return;
+    }
     const question = guideDraft.trim();
 
     if (!question) {
@@ -811,6 +820,9 @@ function LearningCompanionPanel({
     question: string,
     mode: "single-agent" | "multi-agent" = "single-agent",
   ) {
+    if (coursewareAccessBlocked) {
+      return;
+    }
     guideRequestCounterRef.current += 1;
     const requestId = String(guideRequestCounterRef.current);
     const assistantMessageId = `guide-assistant-${requestId}`;
@@ -1102,6 +1114,12 @@ function LearningCompanionPanel({
           ) : null}
 
           {!studyToolsOpen && activeView === "ai" ? (
+            coursewareAccessBlocked && publishedPlaybackError ? (
+              <PublishedPlaybackAccessNotice
+                locale={locale}
+                error={publishedPlaybackError}
+              />
+            ) : (
             <div className="flex h-full min-h-0 flex-col">
               <div className="flex gap-3">
                 <span className="grid size-10 shrink-0 place-items-center rounded-full bg-[var(--accent-soft)] text-[var(--accent)]">
@@ -1234,17 +1252,25 @@ function LearningCompanionPanel({
               </p>
               </form>
             </div>
+            )
           ) : null}
 
           {!studyToolsOpen && activeView === "subtitles" ? (
           <div>
             <div className="space-y-4">
               {transcript.length === 0 ? (
+                coursewareAccessBlocked && publishedPlaybackError ? (
+                  <PublishedPlaybackAccessNotice
+                    locale={locale}
+                    error={publishedPlaybackError}
+                  />
+                ) : (
                 <p className="px-2 py-6 text-center text-sm leading-6 text-[var(--muted)]">
                   {locale === "zh-CN"
                     ? "本课程暂无字幕，课件发布后会在这里显示讲解文本。"
                     : "No subtitles yet. Narration text appears here once a lesson is published."}
                 </p>
+                )
               ) : null}
               {/*
                 Every row is now a real published slide, so every row is
@@ -1306,6 +1332,12 @@ function LearningCompanionPanel({
           ) : null}
 
           {!studyToolsOpen && activeView === "practice" ? (
+            coursewareAccessBlocked && publishedPlaybackError ? (
+              <PublishedPlaybackAccessNotice
+                locale={locale}
+                error={publishedPlaybackError}
+              />
+            ) : (
             <LearningPracticePanel
               locale={locale}
               courseId={eventCourseId}
@@ -1313,6 +1345,7 @@ function LearningCompanionPanel({
               lessonKey={publishedPlayback?.learningUnit.lessonKey}
               signInHref={signInHref}
             />
+            )
           ) : null}
         </div>
       </div>

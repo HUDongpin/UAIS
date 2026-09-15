@@ -22,6 +22,11 @@ import type {
 } from "@/lib/learning/ppt-playback-types";
 import type { Locale } from "@/i18n/copy";
 import type { PlaybackContent } from "./learning-page-content";
+import {
+  getPublishedPlaybackStageCopy,
+  isPublishedPlaybackAccessBlocked,
+  type PublishedPlaybackError,
+} from "./learning-page-helpers";
 
 const NARRATION_PLAYBACK_RATES = [1.25, 1, 0.85] as const;
 
@@ -42,6 +47,7 @@ export function NarrationDock({
   locale,
   playback,
   publishedPlayback,
+  publishedPlaybackError,
   activePublishedSlide,
   activePublishedSlideIndex,
   onPreviousPublishedSlide,
@@ -55,6 +61,7 @@ export function NarrationDock({
   locale: Locale;
   playback: PlaybackContent;
   publishedPlayback?: LearningPptPlaybackManifest;
+  publishedPlaybackError?: PublishedPlaybackError;
   activePublishedSlide?: LearningPptPlaybackSlide;
   activePublishedSlideIndex: number;
   onPreviousPublishedSlide: () => void;
@@ -66,11 +73,17 @@ export function NarrationDock({
   onSlideNarrationEnded?: (slide: LearningPptPlaybackSlide) => void;
 }) {
   const publishedSlideCount = publishedPlayback?.slides.length ?? 0;
+  const coursewareAccessBlocked = isPublishedPlaybackAccessBlocked(
+    publishedPlaybackError,
+  );
+  const blockedStageCopy = coursewareAccessBlocked
+    ? getPublishedPlaybackStageCopy(locale, publishedPlaybackError)
+    : undefined;
+  const narrationControlsEnabled = publishedSlideCount > 0;
   const canShowPrevious = publishedSlideCount > 0 && activePublishedSlideIndex > 0;
   const canShowNext =
     publishedSlideCount > 0 && activePublishedSlideIndex < publishedSlideCount - 1;
   const [speakingSlideId, setSpeakingSlideId] = useState<string>();
-  const [isFallbackNarrationPlaying, setIsFallbackNarrationPlaying] = useState(false);
   const [narrationProgress, setNarrationProgress] = useState({
     slideId: "",
     currentTime: 0,
@@ -95,9 +108,7 @@ export function NarrationDock({
   const isPublishedNarrationPlaying = Boolean(
     activePublishedSlide && speakingSlideId === activePublishedSlide.slideId,
   );
-  const isNarrationPlaying = publishedPlayback
-    ? isPublishedNarrationPlaying
-    : isFallbackNarrationPlaying;
+  const isNarrationPlaying = isPublishedNarrationPlaying;
   const isTeacherSpeaking = isPublishedNarrationPlaying;
   const primaryNarrationLabel = isNarrationPlaying
     ? locale === "zh-CN"
@@ -134,7 +145,6 @@ export function NarrationDock({
 
   function handlePrimaryNarrationToggle() {
     if (!publishedPlayback || !activePublishedSlide) {
-      setIsFallbackNarrationPlaying((current) => !current);
       return;
     }
 
@@ -171,6 +181,9 @@ export function NarrationDock({
   }
 
   function handleNarrationSpeedToggle() {
+    if (!narrationControlsEnabled) {
+      return;
+    }
     const nextIndex = (narrationPlaybackRateIndex + 1) % NARRATION_PLAYBACK_RATES.length;
     const nextRate = NARRATION_PLAYBACK_RATES[nextIndex];
     const audio = audioRef.current;
@@ -215,7 +228,11 @@ export function NarrationDock({
       >
         <div
           data-uais-learning-narration-profile={
-            publishedPlayback ? "published-teacher" : "fallback-teacher"
+            publishedPlayback
+              ? "published-teacher"
+              : coursewareAccessBlocked
+                ? "access-blocked"
+                : "fallback-teacher"
           }
           className="flex min-w-0 items-center gap-3"
         >
@@ -272,10 +289,12 @@ export function NarrationDock({
           <div className="min-w-0">
             <p className="truncate text-lg font-semibold text-[var(--foreground)]">
               {publishedPlayback?.teacherName ??
+                blockedStageCopy?.title ??
                 (locale === "zh-CN" ? "暂无课件讲解" : "No published narration")}
             </p>
             <p className="mt-1 truncate text-base text-[var(--muted)]">
               {publishedPlayback?.courseTitle ??
+                blockedStageCopy?.description ??
                 (locale === "zh-CN" ? "发布课件后可在此播放" : "Narration appears after a deck is published")}
             </p>
           </div>
@@ -364,9 +383,10 @@ export function NarrationDock({
             </div>
           ) : (
             <p className="text-sm leading-6 text-[var(--muted)]">
-              {locale === "zh-CN"
-                ? "没有可播放的讲解音频。"
-                : "No narration audio is available."}
+              {blockedStageCopy?.description ??
+                (locale === "zh-CN"
+                  ? "没有可播放的讲解音频。"
+                  : "No narration audio is available.")}
             </p>
           )}
         </div>
@@ -405,9 +425,15 @@ export function NarrationDock({
           </button>
           <span className="h-9 w-px bg-[var(--border)]" />
           <button
-            className="inline-flex h-11 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2 text-sm font-semibold text-[var(--foreground)] outline-none transition hover:border-[var(--accent)] hover:text-[var(--accent)] focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+            className={[
+              "inline-flex h-11 items-center justify-center rounded-lg border px-2 text-sm font-semibold outline-none transition focus-visible:ring-2 focus-visible:ring-[var(--accent)]",
+              narrationControlsEnabled
+                ? "border-[var(--border)] bg-[var(--surface)] text-[var(--foreground)] hover:border-[var(--accent)] hover:text-[var(--accent)]"
+                : "cursor-not-allowed border-[var(--border)] bg-[var(--surface-elevated)] text-[var(--placeholder)]",
+            ].join(" ")}
             type="button"
             onClick={handleNarrationSpeedToggle}
+            disabled={!narrationControlsEnabled}
             aria-label={narrationSpeedTitle}
             title={narrationSpeedTitle}
           >
