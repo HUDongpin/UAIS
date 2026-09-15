@@ -75,6 +75,20 @@ function createOperationAuditAuthSession() {
   };
 }
 
+function ownedTeachingCourseListResponse(courseId = "teacher-research-methods") {
+  return new Response(JSON.stringify({ courses: [{ courseId }] }), {
+    status: 200,
+    headers: { "content-type": "application/json" },
+  });
+}
+
+function teachingOperationsPosts(spy: { mock: { calls: unknown[][] } }) {
+  return spy.mock.calls.filter(([input, init]) => {
+    const method = ((init as RequestInit | undefined)?.method ?? "GET").toUpperCase();
+    return String(input) === "/api/teaching/operations" && method === "POST";
+  });
+}
+
 describe("TeachingOperationPage", () => {
   const operations = [
     ["course-settings", "课程设置"],
@@ -185,8 +199,11 @@ describe("TeachingOperationPage", () => {
   });
 
   it("names the missing course context instead of blaming sign-in or permissions", async () => {
-    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      if (String(input) === "/api/teaching/courses") {
+        return ownedTeachingCourseListResponse();
+      }
+      return new Response(
         JSON.stringify({
           error: "UAIS teaching operation course access is required.",
           traceId: "trace-course-id-required",
@@ -197,8 +214,8 @@ describe("TeachingOperationPage", () => {
           },
         }),
         { status: 400, headers: { "content-type": "application/json" } },
-      ),
-    );
+      );
+    })
 
     try {
       render(<TeachingOperationPage operationId="course-settings" />);
@@ -300,8 +317,11 @@ describe("TeachingOperationPage", () => {
   });
 
   it("implements the OpenMAIC-style data export package page", async () => {
-    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      if (String(input) === "/api/teaching/courses") {
+        return ownedTeachingCourseListResponse();
+      }
+      return new Response(
         JSON.stringify({
           receipt: {
             operationId: "data-export",
@@ -327,8 +347,8 @@ describe("TeachingOperationPage", () => {
           }),
         }),
         { status: 200, headers: { "content-type": "application/json" } },
-      ),
-    );
+      );
+    })
 
     try {
     const { container } = render(<TeachingOperationPage operationId="data-export" />);
@@ -391,8 +411,11 @@ describe("TeachingOperationPage", () => {
   });
 
   it("calls the teaching operation backend when a teacher runs a button action", async () => {
-    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      if (String(input) === "/api/teaching/courses") {
+        return ownedTeachingCourseListResponse();
+      }
+      return new Response(
         JSON.stringify({
           receipt: {
             operationId: "course-settings",
@@ -416,8 +439,8 @@ describe("TeachingOperationPage", () => {
           }),
         }),
         { status: 200, headers: { "content-type": "application/json" } },
-      ),
-    );
+      );
+    })
 
     try {
       render(
@@ -430,8 +453,8 @@ describe("TeachingOperationPage", () => {
 
       fireEvent.click(screen.getByRole("button", { name: "保存课程设置" }));
 
-      await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
-      const [, requestInit] = fetchSpy.mock.calls[0];
+      await waitFor(() => expect(teachingOperationsPosts(fetchSpy)).toHaveLength(1));
+      const [, requestInit] = teachingOperationsPosts(fetchSpy)[0];
       const body = JSON.parse(String(requestInit?.body));
       expect(fetchSpy).toHaveBeenCalledWith(
         "/api/teaching/operations",
@@ -460,6 +483,9 @@ describe("TeachingOperationPage", () => {
 
   it("reads back audit evidence after operation page persistence before closing the trace loop", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      if (String(input) === "/api/teaching/courses") {
+        return ownedTeachingCourseListResponse();
+      }
       if (String(input) === "/api/teaching/operations") {
         expect(init?.method).toBe("POST");
         return Response.json({
@@ -539,7 +565,12 @@ describe("TeachingOperationPage", () => {
 
       fireEvent.click(screen.getByRole("button", { name: "保存课程设置" }));
 
-      await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(2));
+      await waitFor(() =>
+        expect(fetchSpy).toHaveBeenCalledWith(
+          "/api/teaching/operations/audit",
+          expect.anything(),
+        ),
+      );
       expect(fetchSpy).toHaveBeenCalledWith(
         "/api/teaching/operations/audit",
         expect.objectContaining({
@@ -562,6 +593,9 @@ describe("TeachingOperationPage", () => {
   it("keeps operation page success hidden until audit readback verifies the saved trace", async () => {
     let resolveAuditReadback: (response: Response) => void = () => undefined;
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      if (String(input) === "/api/teaching/courses") {
+        return ownedTeachingCourseListResponse();
+      }
       if (String(input) === "/api/teaching/operations") {
         expect(init?.method).toBe("POST");
         return Response.json({
@@ -604,7 +638,12 @@ describe("TeachingOperationPage", () => {
 
       fireEvent.click(screen.getByRole("button", { name: "保存课程设置" }));
 
-      await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(2));
+      await waitFor(() =>
+        expect(fetchSpy).toHaveBeenCalledWith(
+          "/api/teaching/operations/audit",
+          expect.anything(),
+        ),
+      );
       expect(screen.getAllByText("正在读取审计证据。").length).toBeGreaterThan(0);
       expect(screen.queryByText("课程设置已由服务端持久化。")).toBeNull();
 
@@ -659,6 +698,9 @@ describe("TeachingOperationPage", () => {
 
   it("requires a complete signed teacher session before verifying operation page audit readback", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      if (String(input) === "/api/teaching/courses") {
+        return ownedTeachingCourseListResponse();
+      }
       if (String(input) === "/api/teaching/operations") {
         return Response.json({
           receipt: {
@@ -747,6 +789,9 @@ describe("TeachingOperationPage", () => {
 
   it("requires a matching domain projection before verifying operation page audit readback", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      if (String(input) === "/api/teaching/courses") {
+        return ownedTeachingCourseListResponse();
+      }
       if (String(input) === "/api/teaching/operations") {
         return Response.json({
           receipt: {
@@ -808,7 +853,12 @@ describe("TeachingOperationPage", () => {
 
       fireEvent.click(screen.getByRole("button", { name: "保存课程设置" }));
 
-      await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(2));
+      await waitFor(() =>
+        expect(fetchSpy).toHaveBeenCalledWith(
+          "/api/teaching/operations/audit",
+          expect.anything(),
+        ),
+      );
       await waitFor(() => {
         expect(screen.getAllByText("审计读回未完成，请稍后刷新。").length).toBeGreaterThan(0);
       });
@@ -820,6 +870,9 @@ describe("TeachingOperationPage", () => {
 
   it("requires course settings business readback before operation page claims settings save success", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      if (String(input) === "/api/teaching/courses") {
+        return ownedTeachingCourseListResponse();
+      }
       if (String(input) === "/api/teaching/operations") {
         expect(init?.method).toBe("POST");
         return Response.json({
@@ -906,6 +959,9 @@ describe("TeachingOperationPage", () => {
 
   it("requires student preview session business readback before operation page claims preview success", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      if (String(input) === "/api/teaching/courses") {
+        return ownedTeachingCourseListResponse();
+      }
       if (String(input) === "/api/teaching/operations") {
         expect(init?.method).toBe("POST");
         const body = JSON.parse(String(init?.body)) as {
@@ -1006,6 +1062,9 @@ describe("TeachingOperationPage", () => {
 
   it("requires agent plan business readback before operation page claims agent plan save success", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      if (String(input) === "/api/teaching/courses") {
+        return ownedTeachingCourseListResponse();
+      }
       if (String(input) === "/api/teaching/operations") {
         expect(init?.method).toBe("POST");
         const body = JSON.parse(String(init?.body)) as {
@@ -1104,6 +1163,9 @@ describe("TeachingOperationPage", () => {
 
   it("requires permission preflight business readback before operation page claims preflight success", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      if (String(input) === "/api/teaching/courses") {
+        return ownedTeachingCourseListResponse();
+      }
       if (String(input) === "/api/teaching/operations") {
         expect(init?.method).toBe("POST");
         const body = JSON.parse(String(init?.body)) as {
@@ -1204,6 +1266,9 @@ describe("TeachingOperationPage", () => {
 
   it("requires knowledge index business readback before operation page claims knowledge sync success", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      if (String(input) === "/api/teaching/courses") {
+        return ownedTeachingCourseListResponse();
+      }
       if (String(input) === "/api/teaching/operations") {
         expect(init?.method).toBe("POST");
         const body = JSON.parse(String(init?.body)) as {
@@ -1302,6 +1367,9 @@ describe("TeachingOperationPage", () => {
 
   it("submits a complete knowledge-source registration and rejects incomplete review evidence", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      if (String(input) === "/api/teaching/courses") {
+        return ownedTeachingCourseListResponse();
+      }
       if (String(input) === "/api/teaching/operations") {
         expect(init?.method).toBe("POST");
         const body = JSON.parse(String(init?.body)) as {
@@ -1426,6 +1494,9 @@ describe("TeachingOperationPage", () => {
 
   it("verifies registered knowledge-source evidence and clears the submitted URL", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      if (String(input) === "/api/teaching/courses") {
+        return ownedTeachingCourseListResponse();
+      }
       if (String(input) === "/api/teaching/operations") {
         const body = JSON.parse(String(init?.body)) as {
           knowledgeResource?: Record<string, unknown>;
@@ -1541,6 +1612,9 @@ describe("TeachingOperationPage", () => {
 
   it("requires course content business readback before operation page claims content publish success", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      if (String(input) === "/api/teaching/courses") {
+        return ownedTeachingCourseListResponse();
+      }
       if (String(input) === "/api/teaching/operations") {
         expect(init?.method).toBe("POST");
         const body = JSON.parse(String(init?.body)) as {
@@ -1639,6 +1713,9 @@ describe("TeachingOperationPage", () => {
 
   it("requires unit draft business readback before operation page claims draft generation success", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      if (String(input) === "/api/teaching/courses") {
+        return ownedTeachingCourseListResponse();
+      }
       if (String(input) === "/api/teaching/operations") {
         expect(init?.method).toBe("POST");
         const body = JSON.parse(String(init?.body)) as {
@@ -1737,6 +1814,9 @@ describe("TeachingOperationPage", () => {
 
   it("requires admin settings business readback before operation page claims admin settings save success", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      if (String(input) === "/api/teaching/courses") {
+        return ownedTeachingCourseListResponse();
+      }
       if (String(input) === "/api/teaching/operations") {
         expect(init?.method).toBe("POST");
         const body = JSON.parse(String(init?.body)) as {
@@ -1835,6 +1915,9 @@ describe("TeachingOperationPage", () => {
 
   it("requires email notification business readback before operation page claims collaboration invite success", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      if (String(input) === "/api/teaching/courses") {
+        return ownedTeachingCourseListResponse();
+      }
       if (String(input) === "/api/teaching/operations") {
         expect(init?.method).toBe("POST");
         const body = JSON.parse(String(init?.body)) as {
@@ -1935,6 +2018,9 @@ describe("TeachingOperationPage", () => {
 
   it("requires student roster business readback before operation page claims roster sync success", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      if (String(input) === "/api/teaching/courses") {
+        return ownedTeachingCourseListResponse();
+      }
       if (String(input) === "/api/teaching/operations") {
         expect(init?.method).toBe("POST");
         const body = JSON.parse(String(init?.body)) as {
@@ -2033,6 +2119,9 @@ describe("TeachingOperationPage", () => {
 
   it("requires group suggestions business readback before operation page claims suggestions generation success", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      if (String(input) === "/api/teaching/courses") {
+        return ownedTeachingCourseListResponse();
+      }
       if (String(input) === "/api/teaching/operations") {
         expect(init?.method).toBe("POST");
         const body = JSON.parse(String(init?.body)) as {
@@ -2133,6 +2222,9 @@ describe("TeachingOperationPage", () => {
 
   it("requires export manifest business readback before operation page claims export manifest success", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      if (String(input) === "/api/teaching/courses") {
+        return ownedTeachingCourseListResponse();
+      }
       if (String(input) === "/api/teaching/operations") {
         expect(init?.method).toBe("POST");
         const body = JSON.parse(String(init?.body)) as {
@@ -2240,6 +2332,9 @@ describe("TeachingOperationPage", () => {
 
   it("requires redaction validation business readback before operation page claims redaction success", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      if (String(input) === "/api/teaching/courses") {
+        return ownedTeachingCourseListResponse();
+      }
       if (String(input) === "/api/teaching/operations") {
         expect(init?.method).toBe("POST");
         const body = JSON.parse(String(init?.body)) as {
@@ -2340,6 +2435,9 @@ describe("TeachingOperationPage", () => {
 
   it("requires dashboard state business readback before operation page claims dashboard refresh success", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      if (String(input) === "/api/teaching/courses") {
+        return ownedTeachingCourseListResponse();
+      }
       if (String(input) === "/api/teaching/operations") {
         expect(init?.method).toBe("POST");
         const body = JSON.parse(String(init?.body)) as {
@@ -2438,6 +2536,9 @@ describe("TeachingOperationPage", () => {
 
   it("requires dashboard snapshot business readback before operation page claims snapshot lock success", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      if (String(input) === "/api/teaching/courses") {
+        return ownedTeachingCourseListResponse();
+      }
       if (String(input) === "/api/teaching/operations") {
         expect(init?.method).toBe("POST");
         const body = JSON.parse(String(init?.body)) as {
@@ -2538,6 +2639,9 @@ describe("TeachingOperationPage", () => {
 
   it("requires quiz board state business readback before operation page claims quiz board refresh success", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      if (String(input) === "/api/teaching/courses") {
+        return ownedTeachingCourseListResponse();
+      }
       if (String(input) === "/api/teaching/operations") {
         expect(init?.method).toBe("POST");
         const body = JSON.parse(String(init?.body)) as {
@@ -2638,6 +2742,9 @@ describe("TeachingOperationPage", () => {
 
   it("requires quiz item review business readback before operation page claims low-quality item flag success", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      if (String(input) === "/api/teaching/courses") {
+        return ownedTeachingCourseListResponse();
+      }
       if (String(input) === "/api/teaching/operations") {
         expect(init?.method).toBe("POST");
         const body = JSON.parse(String(init?.body)) as {
@@ -2738,6 +2845,9 @@ describe("TeachingOperationPage", () => {
 
   it("requires grading queue business readback before operation page claims review queue save success", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      if (String(input) === "/api/teaching/courses") {
+        return ownedTeachingCourseListResponse();
+      }
       if (String(input) === "/api/teaching/operations") {
         expect(init?.method).toBe("POST");
         const body = JSON.parse(String(init?.body)) as {
@@ -2836,6 +2946,9 @@ describe("TeachingOperationPage", () => {
 
   it("requires ai feedback draft business readback before operation page claims feedback generation success", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      if (String(input) === "/api/teaching/courses") {
+        return ownedTeachingCourseListResponse();
+      }
       if (String(input) === "/api/teaching/operations") {
         expect(init?.method).toBe("POST");
         const body = JSON.parse(String(init?.body)) as {
@@ -2936,6 +3049,9 @@ describe("TeachingOperationPage", () => {
 
   it("requires invite code draft business readback before operation page claims invite generation success", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      if (String(input) === "/api/teaching/courses") {
+        return ownedTeachingCourseListResponse();
+      }
       if (String(input) === "/api/teaching/operations") {
         expect(init?.method).toBe("POST");
         const body = JSON.parse(String(init?.body)) as {
@@ -3047,6 +3163,9 @@ describe("TeachingOperationPage", () => {
 
   it("requires enrollment access business readback before operation page claims invite publication success", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      if (String(input) === "/api/teaching/courses") {
+        return ownedTeachingCourseListResponse();
+      }
       if (String(input) === "/api/teaching/operations") {
         expect(init?.method).toBe("POST");
         const body = JSON.parse(String(init?.body)) as {
@@ -3156,8 +3275,11 @@ describe("TeachingOperationPage", () => {
   });
 
   it("does not claim operation page success when domain persistence evidence is omitted", async () => {
-    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      Response.json({
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      if (String(input) === "/api/teaching/courses") {
+        return ownedTeachingCourseListResponse();
+      }
+      return Response.json({
         receipt: {
           receiptId: "operation-page-course-settings-domain-summary-omitted",
           operationId: "course-settings",
@@ -3170,8 +3292,8 @@ describe("TeachingOperationPage", () => {
           },
         },
         traceId: "trace-operation-page-domain-summary-omitted",
-      }),
-    );
+      });
+    })
 
     try {
       render(
@@ -3195,8 +3317,11 @@ describe("TeachingOperationPage", () => {
   });
 
   it("does not claim operation page success when the backend receipt identifies a different operation", async () => {
-    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      Response.json({
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      if (String(input) === "/api/teaching/courses") {
+        return ownedTeachingCourseListResponse();
+      }
+      return Response.json({
         receipt: {
           receiptId: "operation-page-course-settings-wrong-operation",
           operationId: "course-settings",
@@ -3214,8 +3339,8 @@ describe("TeachingOperationPage", () => {
           receiptId: "operation-page-course-settings-wrong-operation",
           objectType: "course-settings",
         }),
-      }),
-    );
+      });
+    })
 
     try {
       render(
@@ -3239,12 +3364,14 @@ describe("TeachingOperationPage", () => {
 
   it("prevents duplicate operation page submissions while a save is pending", async () => {
     let resolveSave: (response: Response) => void = () => undefined;
-    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(
-      () =>
-        new Promise<Response>((resolve) => {
-          resolveSave = resolve;
-        }),
-    );
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
+      if (String(input) === "/api/teaching/courses") {
+        return Promise.resolve(ownedTeachingCourseListResponse());
+      }
+      return new Promise<Response>((resolve) => {
+        resolveSave = resolve;
+      });
+    });
 
     try {
       render(
@@ -3264,13 +3391,13 @@ describe("TeachingOperationPage", () => {
 
       fireEvent.click(primaryButton);
 
-      await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
+      await waitFor(() => expect(teachingOperationsPosts(fetchSpy)).toHaveLength(1));
       expect(primaryButton.disabled).toBe(true);
       expect(secondaryButton.disabled).toBe(true);
 
       fireEvent.click(primaryButton);
       fireEvent.click(secondaryButton);
-      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      expect(teachingOperationsPosts(fetchSpy)).toHaveLength(1);
 
       resolveSave(
         Response.json({
@@ -3302,8 +3429,11 @@ describe("TeachingOperationPage", () => {
   });
 
   it("uses a fresh idempotency key for separate completed operation button submissions", async () => {
-    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      Response.json({
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      if (String(input) === "/api/teaching/courses") {
+        return ownedTeachingCourseListResponse();
+      }
+      return Response.json({
         receipt: {
           operationId: "course-settings",
           actionSlot: "primary",
@@ -3319,8 +3449,8 @@ describe("TeachingOperationPage", () => {
           actionSlot: "primary",
           objectType: "course-settings",
         }),
-      }),
-    );
+      });
+    })
 
     try {
       render(
@@ -3332,14 +3462,15 @@ describe("TeachingOperationPage", () => {
       );
 
       fireEvent.click(screen.getByRole("button", { name: "保存课程设置" }));
-      await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
+      await waitFor(() => expect(teachingOperationsPosts(fetchSpy)).toHaveLength(1));
       await waitFor(() => expect(screen.getByText("课程设置已由服务端持久化。")).toBeTruthy());
 
       fireEvent.click(screen.getByRole("button", { name: "保存课程设置" }));
-      await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(2));
+      await waitFor(() => expect(teachingOperationsPosts(fetchSpy)).toHaveLength(2));
 
-      const firstBody = JSON.parse(String(fetchSpy.mock.calls[0][1]?.body));
-      const secondBody = JSON.parse(String(fetchSpy.mock.calls[1][1]?.body));
+      const posts = teachingOperationsPosts(fetchSpy);
+      const firstBody = JSON.parse(String((posts[0]?.[1] as RequestInit | undefined)?.body));
+      const secondBody = JSON.parse(String((posts[1]?.[1] as RequestInit | undefined)?.body));
       expect(firstBody.idempotencyKey).toEqual(expect.any(String));
       expect(secondBody.idempotencyKey).toEqual(expect.any(String));
       expect(secondBody.idempotencyKey).not.toBe(firstBody.idempotencyKey);
@@ -3349,8 +3480,11 @@ describe("TeachingOperationPage", () => {
   });
 
   it("surfaces backend authorization failures instead of keeping local success feedback", async () => {
-    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      if (String(input) === "/api/teaching/courses") {
+        return ownedTeachingCourseListResponse();
+      }
+      return new Response(
         JSON.stringify({
           error: "UAIS teaching operation course ownership is required.",
           access: {
@@ -3360,8 +3494,8 @@ describe("TeachingOperationPage", () => {
           },
         }),
         { status: 403, headers: { "content-type": "application/json" } },
-      ),
-    );
+      );
+    })
 
     try {
       render(
@@ -3374,7 +3508,7 @@ describe("TeachingOperationPage", () => {
 
       fireEvent.click(screen.getByRole("button", { name: "保存课程设置" }));
 
-      await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
+      await waitFor(() => expect(teachingOperationsPosts(fetchSpy)).toHaveLength(1));
       await waitFor(() => {
         expect(screen.getByText("未保存到服务器，请重新登录或检查课程权限。")).toBeTruthy();
       });
@@ -3386,8 +3520,11 @@ describe("TeachingOperationPage", () => {
   });
 
   it("does not leave a generated export manifest visible when backend persistence fails", async () => {
-    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      if (String(input) === "/api/teaching/courses") {
+        return ownedTeachingCourseListResponse();
+      }
+      return new Response(
         JSON.stringify({
           error: "UAIS teacher authentication is required.",
           access: {
@@ -3397,8 +3534,8 @@ describe("TeachingOperationPage", () => {
           },
         }),
         { status: 401, headers: { "content-type": "application/json" } },
-      ),
-    );
+      );
+    })
 
     try {
       render(
@@ -3411,7 +3548,7 @@ describe("TeachingOperationPage", () => {
 
       fireEvent.click(screen.getByRole("button", { name: "生成导出清单" }));
 
-      await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
+      await waitFor(() => expect(teachingOperationsPosts(fetchSpy)).toHaveLength(1));
       await waitFor(() => {
         expect(screen.getByText("未保存到服务器，请重新登录或检查课程权限。")).toBeTruthy();
       });
@@ -3424,7 +3561,10 @@ describe("TeachingOperationPage", () => {
 
   it("clears a stale operation page export manifest before a retried export save fails", async () => {
     let requestCount = 0;
-    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      if (String(input) === "/api/teaching/courses") {
+        return ownedTeachingCourseListResponse();
+      }
       requestCount += 1;
 
       if (requestCount === 1) {
@@ -3486,7 +3626,7 @@ describe("TeachingOperationPage", () => {
 
       fireEvent.click(screen.getByRole("button", { name: "生成导出清单" }));
 
-      await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(2));
+      await waitFor(() => expect(teachingOperationsPosts(fetchSpy)).toHaveLength(2));
       await waitFor(() => {
         expect(screen.getByText("未保存到服务器，请重新登录或检查课程权限。")).toBeTruthy();
       });
@@ -3498,8 +3638,11 @@ describe("TeachingOperationPage", () => {
   });
 
   it("does not leave a locally incremented invite code visible when backend persistence fails", async () => {
-    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      if (String(input) === "/api/teaching/courses") {
+        return ownedTeachingCourseListResponse();
+      }
+      return new Response(
         JSON.stringify({
           error: "UAIS teaching operation course ownership is required.",
           access: {
@@ -3509,8 +3652,8 @@ describe("TeachingOperationPage", () => {
           },
         }),
         { status: 403, headers: { "content-type": "application/json" } },
-      ),
-    );
+      );
+    })
 
     try {
       render(
@@ -3523,7 +3666,7 @@ describe("TeachingOperationPage", () => {
 
       fireEvent.click(screen.getByRole("button", { name: "生成新邀请码" }));
 
-      await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
+      await waitFor(() => expect(teachingOperationsPosts(fetchSpy)).toHaveLength(1));
       await waitFor(() => {
         expect(screen.getByText("未保存到服务器，请重新登录或检查课程权限。")).toBeTruthy();
       });
@@ -3536,7 +3679,10 @@ describe("TeachingOperationPage", () => {
 
   it("clears a stale operation page invite code before a retried invite generation fails", async () => {
     let requestCount = 0;
-    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      if (String(input) === "/api/teaching/courses") {
+        return ownedTeachingCourseListResponse();
+      }
       requestCount += 1;
 
       if (requestCount === 1) {
@@ -3598,7 +3744,7 @@ describe("TeachingOperationPage", () => {
 
       fireEvent.click(screen.getByRole("button", { name: "生成新邀请码" }));
 
-      await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(2));
+      await waitFor(() => expect(teachingOperationsPosts(fetchSpy)).toHaveLength(2));
       await waitFor(() => {
         expect(screen.getByText("未保存到服务器，请重新登录或检查课程权限。")).toBeTruthy();
       });
@@ -3612,6 +3758,9 @@ describe("TeachingOperationPage", () => {
   it("keeps operation page invite artifacts hidden until audit readback verifies persistence", async () => {
     let resolveAudit: (response: Response) => void = () => undefined;
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      if (String(input) === "/api/teaching/courses") {
+        return ownedTeachingCourseListResponse();
+      }
       if (String(input) === "/api/teaching/operations/audit") {
         return new Promise<Response>((resolve) => {
           resolveAudit = resolve;
@@ -3771,7 +3920,7 @@ describe("TeachingOperationPage", () => {
 
       fireEvent.click(screen.getByRole("button", { name: "确认发布邀请码" }));
 
-      await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
+      await waitFor(() => expect(teachingOperationsPosts(fetchSpy)).toHaveLength(1));
       await waitFor(() => {
         expect(
           screen.getByText(

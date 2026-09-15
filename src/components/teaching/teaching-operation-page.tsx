@@ -281,6 +281,11 @@ const TEACHING_OPERATION_RECEIPT_MISMATCH_MESSAGE: LocalizedText = {
 // course: the fix is to re-enter from a course card, not to sign in again. The
 // wording matches the inline workspace's `course-id-required` detail so both
 // teaching surfaces name the same condition the same way.
+const TEACHING_OPERATION_COURSE_CONTEXT_MISSING_MESSAGE: LocalizedText = {
+  "zh-CN": "未保存到服务器：缺少课程上下文，请从课程卡片进入。",
+  "en-US": "Not saved to the server: course context is missing. Please enter from a course card.",
+};
+
 const TEACHING_OPERATION_COURSE_NOT_OWNED_MESSAGE: LocalizedText = {
   "zh-CN":
     "当前账号不是这门课程的授课教师。演示课程卡片不能保存到服务器；请从已保存在你名下的课程进入，或先创建课程。",

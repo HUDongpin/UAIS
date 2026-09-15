@@ -8,13 +8,17 @@ type TeachingCourseListBody = {
   courses?: Array<{ courseId?: string }>;
 };
 
+type ListedCourses = {
+  forCourseId: string;
+  courseIds: string[] | "unknown";
+};
+
 export function useOwnedTeachingCourseAccess(courseId: string | undefined) {
-  const [access, setAccess] = useState<OwnedTeachingCourseAccess>("unknown");
+  const selectedCourseId = courseId?.trim() ?? "";
+  const [listed, setListed] = useState<ListedCourses | undefined>(undefined);
 
   useEffect(() => {
-    const selectedCourseId = courseId?.trim();
     if (!selectedCourseId || typeof fetch !== "function") {
-      setAccess("unknown");
       return;
     }
 
@@ -33,16 +37,18 @@ export function useOwnedTeachingCourseAccess(courseId: string | undefined) {
         if (!response.ok || !body || !Array.isArray(body.courses)) {
           // Operation-page tests mock fetch for POST receipts. A 200 without a
           // course list is not proof of non-ownership; keep writes enabled.
-          setAccess("unknown");
+          setListed({ forCourseId: selectedCourseId, courseIds: "unknown" });
           return;
         }
-        const owned = body.courses.some(
-          (course) => course.courseId?.trim() === selectedCourseId,
-        );
-        setAccess(owned ? "owned" : "unowned");
+        setListed({
+          forCourseId: selectedCourseId,
+          courseIds: body.courses
+            .map((course) => course.courseId?.trim())
+            .filter((id): id is string => Boolean(id)),
+        });
       } catch {
         if (!cancelled) {
-          setAccess("unknown");
+          setListed({ forCourseId: selectedCourseId, courseIds: "unknown" });
         }
       }
     }
@@ -51,7 +57,16 @@ export function useOwnedTeachingCourseAccess(courseId: string | undefined) {
     return () => {
       cancelled = true;
     };
-  }, [courseId]);
+  }, [selectedCourseId]);
 
-  return access;
+  if (!selectedCourseId) {
+    return "unknown";
+  }
+  if (!listed || listed.forCourseId !== selectedCourseId) {
+    return "unknown";
+  }
+  if (listed.courseIds === "unknown") {
+    return "unknown";
+  }
+  return listed.courseIds.includes(selectedCourseId) ? "owned" : "unowned";
 }
