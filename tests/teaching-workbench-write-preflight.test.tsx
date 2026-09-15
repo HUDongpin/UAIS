@@ -113,6 +113,27 @@ describe("teaching workbench write preflight", () => {
     );
   });
 
+  it("keeps catalog new-class disabled until the owned-course list resolves", () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => new Promise(() => {})),
+    );
+    window.history.replaceState(null, "", "/teaching");
+
+    render(<TeachingPage />);
+
+    const newClassButton = screen.getByRole("button", {
+      name: "为大学研究方法新建班级",
+    });
+    expect(newClassButton).toHaveProperty("disabled", true);
+    expect(
+      screen.queryByText("当前账号不是这门课程的授课教师，写入操作已关闭。"),
+    ).toBeNull();
+
+    fireEvent.click(newClassButton);
+    expect(screen.queryByRole("dialog", { name: "新建班级" })).toBeNull();
+  });
+
   it("keeps new-class writes enabled for a course returned by the server list", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       if (String(input) === "/api/teaching/courses") {

@@ -685,6 +685,16 @@ export function isWritableTeacherCourseId(
   return writableCourseIds.has(courseId);
 }
 
+export function isConfirmedWritableTeacherCourseId(
+  writableCourseIds: ReadonlySet<string> | undefined,
+  courseId: string | undefined,
+) {
+  if (!writableCourseIds) {
+    return false;
+  }
+  return isWritableTeacherCourseId(writableCourseIds, courseId);
+}
+
 export function mergeTeacherClassesByCourseId(
   persistedClasses: Record<string, TeacherClassItem[]>,
   currentClasses: Record<string, TeacherClassItem[]>,

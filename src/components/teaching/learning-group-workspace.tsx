@@ -110,6 +110,7 @@ export function LearningGroupManager({
   onDeleteGroup,
   onAutoSplitGroups,
   writesEnabled = true,
+  ownershipResolved = true,
   pendingSuggestion,
   onSuggestionApplied,
 }: {
@@ -126,6 +127,7 @@ export function LearningGroupManager({
   onDeleteGroup: (groupId: string) => Promise<void>;
   onAutoSplitGroups: (input: { groupSize: number }) => Promise<void>;
   writesEnabled?: boolean;
+  ownershipResolved?: boolean;
   pendingSuggestion?: TeacherGroupSuggestionDraft;
   onSuggestionApplied?: (suggestionKey: string) => void;
 }) {
@@ -306,7 +308,7 @@ export function LearningGroupManager({
               {status}
             </p>
           ) : null}
-          {writesEnabled ? null : (
+          {writesEnabled || !ownershipResolved ? null : (
             <p role="status" className="text-sm font-semibold text-[var(--danger)]">
               {localizedText(TEACHING_OPERATION_COURSE_NOT_OWNED_MESSAGE, locale)}
             </p>

@@ -45,6 +45,9 @@ export function Header({
   const t = copy[locale];
   const accountMenuRef = useRef<HTMLDivElement>(null);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+  const [openComingSoon, setOpenComingSoon] = useState<
+    "calendar" | "notifications" | null
+  >(null);
   // Read straight from the prop instead of being frozen in `useState` at first
   // render: a server-provided change (a fresh RSC payload for the root layout)
   // now reaches the header instead of being outlived by a stale snapshot. The
@@ -152,6 +155,16 @@ export function Header({
       }
     }
 
+    function handleDocumentFocusIn(event: FocusEvent) {
+      if (
+        accountMenuRef.current &&
+        event.target instanceof Node &&
+        !accountMenuRef.current.contains(event.target)
+      ) {
+        setAccountMenuOpen(false);
+      }
+    }
+
     function handleDocumentKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
         setAccountMenuOpen(false);
@@ -159,10 +172,12 @@ export function Header({
     }
 
     document.addEventListener("mousedown", handleDocumentPointerDown);
+    document.addEventListener("focusin", handleDocumentFocusIn);
     document.addEventListener("keydown", handleDocumentKeyDown);
 
     return () => {
       document.removeEventListener("mousedown", handleDocumentPointerDown);
+      document.removeEventListener("focusin", handleDocumentFocusIn);
       document.removeEventListener("keydown", handleDocumentKeyDown);
     };
   }, [accountMenuOpen]);
@@ -245,6 +260,16 @@ export function Header({
             body={t.controls.calendarComingSoonBody}
             icon={<CalendarBlank size={19} weight="duotone" />}
             showLabel
+            open={openComingSoon === "calendar"}
+            onOpenChange={(open) => {
+              setAccountMenuOpen(false);
+              setOpenComingSoon((current) => {
+                if (open) {
+                  return "calendar";
+                }
+                return current === "calendar" ? null : current;
+              });
+            }}
             buttonClassName="hidden h-11 items-center gap-2 rounded-full px-3 text-sm font-medium outline-none transition hover:bg-[var(--surface-soft)] focus-visible:ring-2 focus-visible:ring-[var(--accent)] lg:inline-flex"
           />
           <HeaderComingSoonControl
@@ -252,6 +277,16 @@ export function Header({
             title={t.controls.notificationsComingSoonTitle}
             body={t.controls.notificationsComingSoonBody}
             icon={<Bell size={19} weight="duotone" />}
+            open={openComingSoon === "notifications"}
+            onOpenChange={(open) => {
+              setAccountMenuOpen(false);
+              setOpenComingSoon((current) => {
+                if (open) {
+                  return "notifications";
+                }
+                return current === "notifications" ? null : current;
+              });
+            }}
             buttonClassName="hidden size-11 items-center justify-center rounded-full outline-none transition hover:bg-[var(--surface-soft)] focus-visible:ring-2 focus-visible:ring-[var(--accent)] md:inline-flex"
           />
           <button
@@ -292,7 +327,10 @@ export function Header({
               <div ref={accountMenuRef} className="relative hidden md:block">
                 <button
                   type="button"
-                  onClick={() => setAccountMenuOpen((open) => !open)}
+                  onClick={() => {
+                    setOpenComingSoon(null);
+                    setAccountMenuOpen((open) => !open);
+                  }}
                   className="inline-flex h-11 items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface)] px-2.5 pr-3 text-sm font-medium text-[var(--foreground)] shadow-[0_8px_24px_var(--shadow)] outline-none transition hover:bg-[var(--surface-soft)] active:translate-y-px focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
                   aria-controls="uais-account-menu"
                   aria-expanded={accountMenuOpen}

@@ -24,7 +24,7 @@ import type { TeacherCourse } from "@/data/uais";
 import { copy } from "@/i18n/copy";
 import type { Locale } from "@/i18n/copy";
 import {
-  isWritableTeacherCourseId,
+  isConfirmedWritableTeacherCourseId,
   type CourseSettingsDraftFieldInput,
   type CourseSettingsDraftValues,
   type TeacherClassItem,
@@ -353,7 +353,8 @@ export function CourseSettingsWorkspace({
                 <CourseCollaboratorManager
                   course={course}
                   locale={locale}
-                  writesEnabled={isWritableTeacherCourseId(writableCourseIds, course.id)}
+                  writesEnabled={isConfirmedWritableTeacherCourseId(writableCourseIds, course.id)}
+                  ownershipResolved={writableCourseIds !== undefined}
                 />
                 <CourseClassManager
                   classes={courseClasses[course.id] ?? []}
@@ -365,7 +366,8 @@ export function CourseSettingsWorkspace({
                   pendingBulkApprovalClassIds={pendingBulkApprovalClassIds}
                   course={course}
                   locale={locale}
-                  writesEnabled={isWritableTeacherCourseId(writableCourseIds, course.id)}
+                  writesEnabled={isConfirmedWritableTeacherCourseId(writableCourseIds, course.id)}
+                  ownershipResolved={writableCourseIds !== undefined}
                   onApproveMembership={approveClassMembership}
                   onApproveAllPendingMemberships={approveAllPendingMemberships}
                   onRejectMembership={rejectMembership}
@@ -395,7 +397,8 @@ export function CourseSettingsWorkspace({
                     }
                     onDeleteGroup={(groupId) => deleteLearningGroup(course.id, groupId)}
                     onAutoSplitGroups={(input) => autoSplitLearningGroups(course.id, input)}
-                    writesEnabled={isWritableTeacherCourseId(writableCourseIds, course.id)}
+                    writesEnabled={isConfirmedWritableTeacherCourseId(writableCourseIds, course.id)}
+                    ownershipResolved={writableCourseIds !== undefined}
                     pendingSuggestion={pendingGroupSuggestionsByCourse[course.id]}
                     onSuggestionApplied={(suggestionKey) =>
                       removePendingGroupSuggestion(course.id, suggestionKey)

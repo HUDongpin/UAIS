@@ -173,6 +173,7 @@ export function CourseClassManager({
   onNewClass,
   onOpenInvitation,
   writesEnabled = true,
+  ownershipResolved = true,
 }: {
   course: TeacherCourse;
   classes: TeacherClassItem[];
@@ -184,6 +185,7 @@ export function CourseClassManager({
   pendingBulkApprovalClassIds: string[];
   locale: Locale;
   writesEnabled?: boolean;
+  ownershipResolved?: boolean;
   onApproveMembership: (
     classItem: TeacherClassItem,
     membership: TeacherClassMembershipItem,
@@ -222,7 +224,7 @@ export function CourseClassManager({
         <Plus size={21} weight="bold" />
         {locale === "zh-CN" ? "新建班级" : "New class"}
       </button>
-      {writesEnabled ? null : (
+      {writesEnabled || !ownershipResolved ? null : (
         <p role="status" className="mt-3 text-sm font-semibold text-[var(--danger)]">
           {localizedText(TEACHING_OPERATION_COURSE_NOT_OWNED_MESSAGE, locale)}
         </p>
