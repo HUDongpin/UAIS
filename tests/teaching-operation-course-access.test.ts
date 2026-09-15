@@ -28,6 +28,33 @@ function request() {
 }
 
 describe("teaching operation course ownership access", () => {
+  it("does not treat course-owner-implicit as a denial when collaborator lookup would refuse", async () => {
+    const readTeachingCourseCapability = vi.fn(async () => ({
+      authorized: false as const,
+      reasonCode: "collaborator-grant-required" as const,
+    }));
+
+    await expect(
+      authorizeTeachingOperationCourseAccess({
+        request: request(),
+        authenticatedTeacher: teacher(),
+        courseId: catalogCourseId,
+        operationId: "course-settings",
+        actionSlot: "primary",
+        readManagedCourseOwnership: async () => true,
+        getTeachingOperationCourseOwnership: async () => ({
+          teacherId: "phoebe",
+          courseIds: [],
+        }),
+        readTeachingCourseCapability,
+      }),
+    ).resolves.toMatchObject({
+      status: "authorized",
+      reasonCode: "course-owner-implicit",
+    });
+    expect(readTeachingCourseCapability).not.toHaveBeenCalled();
+  });
+
   it("authorizes a snapshot owner even when AI ownership omits the course id", async () => {
     const readTeachingCourseCapability = vi.fn();
     const getTeachingOperationCourseOwnership = vi.fn(async () => ({
