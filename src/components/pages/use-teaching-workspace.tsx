@@ -672,13 +672,6 @@ export function useTeachingWorkspace() {
         return;
       }
       const receipt = payload.receipt;
-      if (!receipt) {
-        setInlineWorkspaceStatuses((currentStatuses) => ({
-          ...currentStatuses,
-          [operationId]: localizedText(TEACHING_OPERATION_SAVE_FAILED_MESSAGE, locale),
-        }));
-        return;
-      }
       const { persistConfirmed } = confirmAndOpenCourseSettingsStudentPreview({
         operationId,
         actionSlot,
