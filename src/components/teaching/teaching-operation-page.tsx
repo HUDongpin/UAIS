@@ -19,7 +19,11 @@ import { teacherCourses, teacherSidebarItems } from "@/data/uais";
 import type { LocalizedText, Locale } from "@/i18n/copy";
 import { createTeachingOperationIdempotencyKey } from "@/lib/teaching-operation-idempotency";
 import { fetchTeachingOperationAuditReadbackWithRetry } from "@/components/pages/teaching-page-inline-audit-readback";
-import { isCourseSettingsPrimarySave } from "@/components/pages/teaching-page-inline-receipt-guards";
+import {
+  openTeachingStudentPreviewUrl,
+  resolveCourseSettingsPersistConfirmation,
+} from "@/components/pages/teaching-student-preview";
+import type { InlineStudentPreviewSessionReceipt } from "@/components/pages/teaching-page-types";
 import { defaultExportManifest } from "@/components/teaching/teaching-operation-page-data";
 import { useOwnedTeachingCourseAccess } from "@/components/teaching/use-owned-teaching-course";
 import {
@@ -216,6 +220,7 @@ type TeachingOperationPartialFailure = {
 type TeachingOperationBackendResponse = {
   receipt?: TeachingOperationBackendReceipt;
   domainPersistenceSummary?: TeachingOperationDomainPersistenceSummary;
+  studentPreviewSessionReceipt?: InlineStudentPreviewSessionReceipt;
   partialFailure?: TeachingOperationPartialFailure;
   access?: {
     reasonCode?: string;
@@ -457,13 +462,21 @@ export function TeachingOperationPage({
         return;
       }
 
-      const persistConfirmed = isCourseSettingsPrimarySave(safeOperationId, actionSlot);
+      const { generatedPreview, persistConfirmed } = resolveCourseSettingsPersistConfirmation({
+        operationId: safeOperationId,
+        actionSlot,
+        artifacts: receipt.artifacts,
+        studentPreviewSessionReceipt: payload.studentPreviewSessionReceipt,
+      });
 
       const verifiedStatusMessage = receipt.displayMessage
         ? localizedText(receipt.displayMessage, locale)
         : actionSlot === "primary"
           ? localizedText(config.primaryMessage, locale)
           : localizedText(config.secondaryMessage, locale);
+      if (generatedPreview) {
+        openTeachingStudentPreviewUrl(generatedPreview.previewUrl);
+      }
 
       const exportArtifact = receipt.artifacts?.find(
         (artifact): artifact is Extract<TeachingOperationBackendArtifact, { kind: "export-file" }> =>
@@ -507,6 +520,7 @@ export function TeachingOperationPage({
           artifacts: verifiedArtifacts,
           verifiedReceiptAuthSession: receipt.audit?.authSession,
           persistConfirmed,
+          generatedPreviewUrl: generatedPreview?.previewUrl,
           ...(knowledgeResource
             ? {
                 knowledgeResource: {
@@ -543,6 +557,7 @@ export function TeachingOperationPage({
       expiresAt?: string;
     };
     persistConfirmed?: boolean;
+    generatedPreviewUrl?: string;
   }) {
     if (!input.persistConfirmed) {
       setAuditStatus({
@@ -632,6 +647,11 @@ export function TeachingOperationPage({
         setKnowledgeResourceRightsBasis("");
       }
       applyTeachingOperationArtifacts(input.artifacts);
+      const verifiedPreviewUrl =
+        matchingDomainProjection.previewUrl?.trim() || input.generatedPreviewUrl;
+      if (verifiedPreviewUrl) {
+        openTeachingStudentPreviewUrl(verifiedPreviewUrl);
+      }
       if (input.verifiedStatusMessage) {
         setStatusMessage(input.verifiedStatusMessage);
       }

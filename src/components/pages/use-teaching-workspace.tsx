@@ -8,10 +8,10 @@ import {
 } from "./teaching-page-inline-audit-readback";
 import {
   hasSignedInlineTeachingOperationReceiptAudit,
-  isCourseSettingsPrimarySave,
   isMismatchedOrIncompleteInlineTeachingOperationReceipt,
   isPersistedInlineTeachingOperationReceipt,
 } from "./teaching-page-inline-receipt-guards";
+import { confirmAndOpenCourseSettingsStudentPreview } from "./teaching-student-preview";
 import {
   createInlineWorkspaceActionConfig,
 } from "./teaching-page-workspace-config";
@@ -125,6 +125,7 @@ import {
   type InlineTeachingOperationAuditAlertSummaryResponse,
   type InlineTeachingOperationAuditAuthSession,
   type InlineTeachingOperationAuditReadbackResponse,
+  type InlineStudentPreviewSessionReceipt,
   type InlineTeachingOperationBackendReceipt,
   type InlineTeachingOperationDomainPersistenceSummary,
   type InlineTeachingOperationErrorResponse,
@@ -625,6 +626,7 @@ export function useTeachingWorkspace() {
           }>;
           ungroupedStudentCount?: number;
         };
+        studentPreviewSessionReceipt?: InlineStudentPreviewSessionReceipt;
         traceId?: string;
       };
       if (!isCurrentInlineWorkspaceAttempt(operationId, attemptId)) {
@@ -671,16 +673,18 @@ export function useTeachingWorkspace() {
         }));
         return;
       }
-      const keepCourseSettingsSaveWithoutAuditMatch = isCourseSettingsPrimarySave(
+      const { persistConfirmed } = confirmAndOpenCourseSettingsStudentPreview({
         operationId,
         actionSlot,
-      );
+        artifacts: payload.receipt.artifacts,
+        studentPreviewSessionReceipt: payload.studentPreviewSessionReceipt,
+      });
       if (
         payload.receipt?.operationId &&
         payload.receipt?.actionSlot &&
         !payload.traceId
       ) {
-        if (keepCourseSettingsSaveWithoutAuditMatch) {
+        if (persistConfirmed) {
           applyVerifiedCourseSettingsPatch(courseId, courseSettingsPatch);
           setInlineWorkspaceStatuses((currentStatuses) => ({
             ...currentStatuses,
@@ -723,7 +727,7 @@ export function useTeachingWorkspace() {
       if (payload.traceId) {
         const recordId = payload.receipt?.receiptId;
         if (!recordId) {
-          if (keepCourseSettingsSaveWithoutAuditMatch) {
+          if (persistConfirmed) {
             applyVerifiedCourseSettingsPatch(courseId, courseSettingsPatch);
             setInlineWorkspaceStatuses((currentStatuses) => ({
               ...currentStatuses,
@@ -740,7 +744,7 @@ export function useTeachingWorkspace() {
           }));
           return;
         }
-        if (keepCourseSettingsSaveWithoutAuditMatch) {
+        if (persistConfirmed) {
           applyVerifiedCourseSettingsPatch(courseId, courseSettingsPatch);
           setInlineWorkspaceStatuses((currentStatuses) => ({
             ...currentStatuses,
@@ -768,7 +772,7 @@ export function useTeachingWorkspace() {
           courseSettingsPatch,
           pendingGroupSuggestion,
           verifiedReceiptAuthSession: payload.receipt?.audit?.authSession,
-          persistConfirmed: keepCourseSettingsSaveWithoutAuditMatch,
+          persistConfirmed,
         });
       } else {
         if (

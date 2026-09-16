@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { getUaisCoreDatabaseReadiness } from "@/lib/db/core-database";
+import { collectTeachingOperationAuditDomainProjectionValues } from "@/lib/server/teaching-operations-receipt-normalizers";
 import {
   normalizeExternalTeachingOperationAuditReadbackRecord,
   isTeachingOperationProductionDatabaseAdapterEvidence,
@@ -688,9 +689,7 @@ function createUaisTeachingOperationExternalAuditAdapter(input: {
         ? body.events
         : [];
     const records = Array.isArray(body.records) ? body.records : [];
-    const domainProjections = Array.isArray(body.domainProjections)
-      ? body.domainProjections
-      : [];
+    const domainProjections = collectTeachingOperationAuditDomainProjectionValues(body);
     const rollbackRecords = Array.isArray(body.rollbackRecords)
       ? body.rollbackRecords
       : Array.isArray(body.rollbacks)

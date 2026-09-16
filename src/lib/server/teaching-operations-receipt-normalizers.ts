@@ -128,10 +128,40 @@ export function normalizeExternalAuditReadback(
     auditEvents: Array.isArray(value.auditEvents)
       ? value.auditEvents.map(normalizeTeachingOperationAuditReadbackEvent)
       : [],
-    domainProjections: Array.isArray(value.domainProjections)
-      ? value.domainProjections.map(normalizeTeachingOperationAuditReadbackDomainProjection)
-      : [],
+    domainProjections: collectTeachingOperationAuditDomainProjectionValues(value).map(
+      normalizeTeachingOperationAuditReadbackDomainProjection,
+    ),
   };
+}
+
+export function collectTeachingOperationAuditDomainProjectionValues(
+  value: Record<string, unknown>,
+) {
+  const topLevel = Array.isArray(value.domainProjections) ? value.domainProjections : [];
+  const fromRecords = Array.isArray(value.records)
+    ? value.records.flatMap((record) =>
+        isRecord(record) && Array.isArray(record.domainProjections)
+          ? record.domainProjections
+          : [],
+      )
+    : [];
+  const seen = new Set<string>();
+  const merged: unknown[] = [];
+  for (const projection of [...topLevel, ...fromRecords]) {
+    if (!isRecord(projection)) {
+      continue;
+    }
+    const objectId = typeof projection.objectId === "string" ? projection.objectId : "";
+    const operationRecordId =
+      typeof projection.operationRecordId === "string" ? projection.operationRecordId : "";
+    const key = `${objectId}\0${operationRecordId}`;
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    merged.push(projection);
+  }
+  return merged;
 }
 
 export function normalizeExternalRollbackReceipt(

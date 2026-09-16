@@ -3,6 +3,15 @@ import type { AnchorHTMLAttributes, ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { TeachingOperationPage } from "@/components/teaching/teaching-operation-page";
 
+const openTeachingStudentPreviewUrl = vi.hoisted(() => vi.fn());
+vi.mock("@/components/pages/teaching-student-preview", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/components/pages/teaching-student-preview")>();
+  return {
+    ...actual,
+    openTeachingStudentPreviewUrl,
+  };
+});
+
 vi.mock("next/link", () => ({
   default: ({
     href,
@@ -1229,6 +1238,153 @@ describe("TeachingOperationPage", () => {
           "领域对象已验证：student-preview-session / student-preview-session-teacher-research-methods",
         ),
       ).toBeNull();
+      expect(openTeachingStudentPreviewUrl).not.toHaveBeenCalled();
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
+
+  it("opens generated student previewUrl after persisted secondary preview even when audit fields are incomplete", async () => {
+    openTeachingStudentPreviewUrl.mockClear();
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      if (String(input) === "/api/teaching/courses") {
+        return ownedTeachingCourseListResponse();
+      }
+      if (String(input) === "/api/teaching/operations") {
+        expect(init?.method).toBe("POST");
+        return Response.json({
+          receipt: {
+            receiptId: "operation-page-student-preview-session-generated",
+            operationId: "course-settings",
+            actionSlot: "secondary",
+            courseId: "teacher-research-methods",
+            status: "persisted",
+            displayMessage: {
+              "zh-CN": "学生端预览已生成。",
+              "en-US": "Student preview generated.",
+            },
+            artifacts: [
+              {
+                kind: "student-preview",
+                previewId: "student-preview-20260916",
+                previewUrl: "/learning?teacherPreview=1&course=teacher-research-methods",
+              },
+            ],
+          },
+          studentPreviewSessionReceipt: {
+            objectType: "student-preview-session",
+            previewStatus: "generated",
+            previewUrl: "/learning?teacherPreview=1&course=teacher-research-methods",
+            previewId: "student-preview-20260916",
+            previewScope: "teacher-course-preview",
+            previewPolicy: "teacher-visible-preview-only",
+            previewedBy: "teacher-kang",
+            generatedAt: "2026-09-16T00:00:00.000Z",
+          },
+          domainPersistenceSummary: createPersistedDomainSummary({
+            operationId: "course-settings",
+            actionSlot: "secondary",
+            receiptId: "operation-page-student-preview-session-generated",
+            objectType: "student-preview-session",
+          }),
+          traceId: "trace-operation-page-student-preview-session-generated",
+        });
+      }
+
+      expect(String(input)).toBe("/api/teaching/operations/audit");
+      return Response.json({
+        traceId: "trace-audit-operation-page-student-preview-session-generated",
+        actorId: "teacher-kang",
+        auditEventCount: 1,
+        records: [
+          {
+            recordId: "operation-page-student-preview-session-generated",
+            courseId: "teacher-research-methods",
+            operationId: "course-settings",
+            actionSlot: "secondary",
+            status: "persisted",
+          },
+        ],
+        auditEvents: [
+          {
+            auditId: "audit-operation-page-student-preview-session-generated",
+            traceId: "trace-operation-page-student-preview-session-generated",
+            eventType: "teaching-operation.persisted",
+            actorId: "teacher-kang",
+            courseId: "teacher-research-methods",
+            authSession: createOperationAuditAuthSession(),
+          },
+        ],
+        domainProjections: [
+          {
+            objectId: "student-preview-session-teacher-research-methods",
+            objectType: "student-preview-session",
+            courseId: "teacher-research-methods",
+            operationRecordId: "operation-page-student-preview-session-generated",
+          },
+        ],
+      });
+    });
+
+    try {
+      render(
+        <TeachingOperationPage
+          action="manage"
+          operationId="course-settings"
+          selectedCourseId="teacher-research-methods"
+        />,
+      );
+
+      fireEvent.click(screen.getByRole("button", { name: "预览学生端" }));
+
+      await waitFor(() => {
+        expect(screen.getByText("学生端预览已生成。")).toBeTruthy();
+      });
+      expect(screen.queryByText("审计读回未完成，请稍后刷新。")).toBeNull();
+      expect(screen.queryByText("未保存到服务器，请重新登录或检查课程权限。")).toBeNull();
+      expect(openTeachingStudentPreviewUrl).toHaveBeenCalledWith(
+        "/learning?teacherPreview=1&course=teacher-research-methods",
+      );
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
+
+  it("does not map a real preview auth failure onto a generated-session success", async () => {
+    openTeachingStudentPreviewUrl.mockClear();
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      if (String(input) === "/api/teaching/courses") {
+        return ownedTeachingCourseListResponse();
+      }
+      return new Response(
+        JSON.stringify({
+          error: "UAIS teaching operation course ownership is required.",
+          access: {
+            status: "denied",
+            reasonCode: "course-scope-denied",
+            responsibleSession: "S12",
+          },
+        }),
+        { status: 403, headers: { "content-type": "application/json" } },
+      );
+    });
+
+    try {
+      render(
+        <TeachingOperationPage
+          action="manage"
+          operationId="course-settings"
+          selectedCourseId="teacher-research-methods"
+        />,
+      );
+
+      fireEvent.click(screen.getByRole("button", { name: "预览学生端" }));
+
+      await waitFor(() => {
+        expect(screen.getByText("未保存到服务器，请重新登录或检查课程权限。")).toBeTruthy();
+      });
+      expect(screen.queryByText("学生端预览已生成。")).toBeNull();
+      expect(openTeachingStudentPreviewUrl).not.toHaveBeenCalled();
     } finally {
       fetchSpy.mockRestore();
     }
