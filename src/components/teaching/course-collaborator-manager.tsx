@@ -45,10 +45,12 @@ export function CourseCollaboratorManager({
   course,
   locale,
   writesEnabled = true,
+  ownershipResolved = true,
 }: {
   course: TeacherCourse;
   locale: Locale;
   writesEnabled?: boolean;
+  ownershipResolved?: boolean;
 }) {
   const t = copy[locale].teaching;
   const courseTitle = localizedText(course.title, locale);
@@ -299,7 +301,7 @@ export function CourseCollaboratorManager({
           className="mt-4 space-y-4 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4"
           data-uais-course-collaborator-panel={course.id}
         >
-          {writesEnabled ? null : (
+          {writesEnabled || !ownershipResolved ? null : (
             <p role="status" className="text-sm font-semibold text-[var(--danger)]">
               {localizedText(TEACHING_OPERATION_COURSE_NOT_OWNED_MESSAGE, locale)}
             </p>

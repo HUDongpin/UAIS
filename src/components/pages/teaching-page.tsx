@@ -21,7 +21,10 @@ import {
   TEACHING_CATALOG_DEMO_READ_ONLY_MESSAGE,
   TEACHING_COURSE_LOAD_FAILED_MESSAGE,
 } from "./teaching-page-messages";
-import { isWritableTeacherCourseId } from "@/lib/teaching/course-readback";
+import {
+  isConfirmedWritableTeacherCourseId,
+  isWritableTeacherCourseId,
+} from "@/lib/teaching/course-readback";
 
 
 
@@ -311,12 +314,20 @@ export function TeachingPage() {
           onCreate={createCourseFromDraft}
         />
       ) : null}
-      {newClassCourse ? (
+      {newClassCourse &&
+      isConfirmedWritableTeacherCourseId(writableCourseIds, newClassCourse.id) ? (
         <NewClassDialog
           course={newClassCourse}
           locale={locale}
           onCancel={() => setNewClassCourseId(undefined)}
-          onCreate={(className) => createClassForCourse(newClassCourse.id, className)}
+          onCreate={(className) => {
+            if (
+              !isConfirmedWritableTeacherCourseId(writableCourseIds, newClassCourse.id)
+            ) {
+              return;
+            }
+            return createClassForCourse(newClassCourse.id, className);
+          }}
         />
       ) : null}
       {selectedClassInvitation ? (

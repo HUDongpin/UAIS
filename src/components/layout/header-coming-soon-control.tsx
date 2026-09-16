@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, type ReactNode } from "react";
 
 export function HeaderComingSoonControl({
   label,
@@ -9,6 +9,8 @@ export function HeaderComingSoonControl({
   icon,
   showLabel = false,
   buttonClassName,
+  open,
+  onOpenChange,
 }: {
   label: string;
   title: string;
@@ -16,10 +18,11 @@ export function HeaderComingSoonControl({
   icon: ReactNode;
   showLabel?: boolean;
   buttonClassName: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
 }) {
   const panelId = useId();
   const rootRef = useRef<HTMLDivElement>(null);
-  const [open, setOpen] = useState(false);
 
   useEffect(() => {
     if (!open) {
@@ -32,24 +35,36 @@ export function HeaderComingSoonControl({
         event.target instanceof Node &&
         !rootRef.current.contains(event.target)
       ) {
-        setOpen(false);
+        onOpenChange(false);
+      }
+    }
+
+    function handleDocumentFocusIn(event: FocusEvent) {
+      if (
+        rootRef.current &&
+        event.target instanceof Node &&
+        !rootRef.current.contains(event.target)
+      ) {
+        onOpenChange(false);
       }
     }
 
     function handleDocumentKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
-        setOpen(false);
+        onOpenChange(false);
       }
     }
 
     document.addEventListener("mousedown", handleDocumentPointerDown);
+    document.addEventListener("focusin", handleDocumentFocusIn);
     document.addEventListener("keydown", handleDocumentKeyDown);
 
     return () => {
       document.removeEventListener("mousedown", handleDocumentPointerDown);
+      document.removeEventListener("focusin", handleDocumentFocusIn);
       document.removeEventListener("keydown", handleDocumentKeyDown);
     };
-  }, [open]);
+  }, [open, onOpenChange]);
 
   return (
     <div ref={rootRef} className="relative">
@@ -60,7 +75,7 @@ export function HeaderComingSoonControl({
         aria-expanded={open}
         aria-haspopup="dialog"
         aria-controls={panelId}
-        onClick={() => setOpen((current) => !current)}
+        onClick={() => onOpenChange(!open)}
       >
         {icon}
         {showLabel ? <span className="hidden 2xl:inline">{label}</span> : null}

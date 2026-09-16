@@ -16,6 +16,7 @@ import {
   isMatchingMembershipApprovalResult,
   isPersistedMembershipApprovalReceipt,
   isWritableTeacherCourseId,
+  isConfirmedWritableTeacherCourseId,
   mergeTeacherClassesByCourseId,
   mergeTeacherCoursesById,
   mergeTeacherMembershipsByClassId,
@@ -634,5 +635,17 @@ describe("B-14 teaching course readback helpers", () => {
       isWritableTeacherCourseId(new Set(["teacher-research-methods"]), "teacher-math-pedagogy"),
     ).toBe(false);
     expect(isWritableTeacherCourseId(new Set(["teacher-research-methods"]), undefined)).toBe(false);
+    expect(isConfirmedWritableTeacherCourseId(undefined, "teacher-research-methods")).toBe(
+      false,
+    );
+    expect(
+      isConfirmedWritableTeacherCourseId(new Set(), "teacher-research-methods"),
+    ).toBe(false);
+    expect(
+      isConfirmedWritableTeacherCourseId(
+        new Set(["teacher-research-methods"]),
+        "teacher-research-methods",
+      ),
+    ).toBe(true);
   });
 });

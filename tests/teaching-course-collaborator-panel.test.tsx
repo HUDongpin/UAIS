@@ -68,7 +68,9 @@ describe("teaching-course collaborator panel", () => {
     expect(source).toContain(
       "<CourseCollaboratorManager",
     );
-    expect(source).toContain("writesEnabled={isWritableTeacherCourseId(writableCourseIds, course.id)}");
+    expect(source).toContain(
+      "writesEnabled={isConfirmedWritableTeacherCourseId(writableCourseIds, course.id)}",
+    );
   });
 
   it("loads only after expansion and renders an address-free grant", async () => {
