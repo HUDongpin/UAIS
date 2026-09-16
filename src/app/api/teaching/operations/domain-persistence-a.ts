@@ -134,7 +134,7 @@ export async function maybePersistStudentPreviewSessionDomainObject(input: {
     assertTeachingCourseManagementLocalJsonRuntimeAllowed(input.env);
   }
 
-  const { receipt } = await saveTeachingStudentPreviewSessionRecord({
+  const { studentPreviewSession, receipt } = await saveTeachingStudentPreviewSessionRecord({
     dataDir: resolveTeachingCourseManagementDataDir(input.env.UAIS_TEACHING_COURSES_DATA_DIR),
     repository: courseManagementRepository,
     actorId: input.authenticatedTeacher.actorId,
@@ -147,7 +147,22 @@ export async function maybePersistStudentPreviewSessionDomainObject(input: {
     },
     now: input.now,
   });
-  return receipt;
+  // Same widening as group-suggestions: the store already persisted the
+  // generated session, so the route must return those projection fields. The
+  // course-settings secondary gate reads previewUrl / previewStatus from this
+  // receipt when audit GET is still incomplete.
+  return {
+    ...receipt,
+    objectType: "student-preview-session" as const,
+    previewSessionId: studentPreviewSession.previewSessionId,
+    previewedBy: studentPreviewSession.previewedBy,
+    previewStatus: studentPreviewSession.previewStatus,
+    previewId: studentPreviewSession.previewId,
+    previewUrl: studentPreviewSession.previewUrl,
+    previewScope: studentPreviewSession.previewScope,
+    previewPolicy: studentPreviewSession.previewPolicy,
+    generatedAt: studentPreviewSession.generatedAt,
+  };
 }
 
 export async function maybePersistStudentRosterSyncDomainObject(input: {

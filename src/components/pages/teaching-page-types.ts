@@ -145,10 +145,26 @@ export type InlineTeachingOperationBackendReceipt = {
   actionSlot?: "primary" | "secondary";
   courseId?: string;
   status?: string;
+  artifacts?: Array<{
+    kind?: string;
+    previewId?: string;
+    previewUrl?: string;
+  }>;
   audit?: {
     authMode?: string;
     authSession?: InlineTeachingOperationAuditAuthSession;
   };
+};
+
+export type InlineStudentPreviewSessionReceipt = {
+  objectType?: string;
+  previewStatus?: string;
+  previewUrl?: string;
+  previewId?: string;
+  previewScope?: string;
+  previewPolicy?: string;
+  previewedBy?: string;
+  generatedAt?: string;
 };
 
 export type InlineTeachingOperationDomainPersistenceSummary = {

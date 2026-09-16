@@ -2779,6 +2779,128 @@ describe("TeachingPage", () => {
     ).toBeNull();
   });
 
+  it("opens generated student previewUrl after persisted secondary preview even when audit fields are incomplete", async () => {
+    const assign = vi.fn();
+    vi.stubGlobal("location", { assign });
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === "/api/teaching/operations") {
+        expect(init?.method).toBe("POST");
+        const body = JSON.parse(String(init?.body)) as {
+          operationId: string;
+          actionSlot: "primary" | "secondary";
+        };
+        expect(body).toEqual(
+          expect.objectContaining({
+            operationId: "course-settings",
+            actionSlot: "secondary",
+            courseId: "teacher-research-methods",
+            sourceAction: "inline-teaching-workspace",
+          }),
+        );
+        return Response.json({
+          receipt: {
+            receiptId: "operation-record-student-preview-session-generated",
+            operationId: "course-settings",
+            actionSlot: "secondary",
+            courseId: "teacher-research-methods",
+            status: "persisted",
+            audit: createSignedInlineOperationReceiptAudit(),
+            displayMessage: {
+              "zh-CN": "学生端预览已生成。",
+              "en-US": "Student preview generated.",
+            },
+            artifacts: [
+              {
+                kind: "student-preview",
+                previewId: "student-preview-20260916",
+                previewUrl: "/learning?teacherPreview=1&course=teacher-research-methods",
+              },
+            ],
+          },
+          studentPreviewSessionReceipt: {
+            objectType: "student-preview-session",
+            previewStatus: "generated",
+            previewUrl: "/learning?teacherPreview=1&course=teacher-research-methods",
+            previewId: "student-preview-20260916",
+            previewScope: "teacher-course-preview",
+            previewPolicy: "teacher-visible-preview-only",
+            previewedBy: "teacher-kang",
+            generatedAt: "2026-09-16T00:00:00.000Z",
+          },
+          domainPersistenceSummary: createPersistedInlineOperationDomainPersistenceSummary(
+            "operation-record-student-preview-session-generated",
+            "course-settings",
+            "secondary",
+          ),
+          traceId: "trace-inline-student-preview-session-generated",
+        });
+      }
+
+      if (String(input) === "/api/teaching/operations/audit") {
+        expect(init?.method).toBe("GET");
+        return Response.json({
+          traceId: "trace-audit-student-preview-session-generated",
+          actorId: "teacher-kang",
+          courseIds: ["teacher-research-methods"],
+          recordCount: 1,
+          auditEventCount: 1,
+          domainProjectionCount: 1,
+          records: [
+            {
+              recordId: "operation-record-student-preview-session-generated",
+              courseId: "teacher-research-methods",
+              operationId: "course-settings",
+              actionSlot: "secondary",
+              status: "persisted",
+            },
+          ],
+          auditEvents: [
+            {
+              eventId: "audit-student-preview-session-generated",
+              traceId: "trace-inline-student-preview-session-generated",
+              eventType: "teaching-operation.persisted",
+              actorId: "teacher-kang",
+              authSession: createInlineAuditAuthSession(),
+              courseId: "teacher-research-methods",
+            },
+          ],
+          domainProjections: [
+            {
+              objectId: "student-preview-session-teacher-research-methods",
+              objectType: "student-preview-session",
+              courseId: "teacher-research-methods",
+              operationRecordId: "operation-record-student-preview-session-generated",
+            },
+          ],
+        });
+      }
+
+      expect(String(input)).toBe("/api/teaching/operations/audit/alerts");
+      return createClearInlineOperationAuditAlertsResponse(
+        "trace-inline-student-preview-session-generated",
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    try {
+      render(<TeachingPage />);
+      await chooseWorkspaceCourse("teacher-research-methods");
+
+      fireEvent.click(screen.getByRole("button", { name: "预览学生端" }));
+
+      await waitFor(() => {
+        expect(screen.getByText("学生端预览已生成。")).toBeTruthy();
+      });
+      expect(screen.queryByText("审计读回未完成，请稍后刷新。")).toBeNull();
+      expect(screen.queryByText("未保存到服务器，请重新登录或检查课程权限。")).toBeNull();
+      expect(assign).toHaveBeenCalledWith(
+        "/learning?teacherPreview=1&course=teacher-research-methods",
+      );
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("requires permission preflight business readback before claiming preflight success", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       if (String(input) === "/api/teaching/operations") {

@@ -13885,6 +13885,20 @@ describe("teaching operation backend persistence", () => {
           courseId: course.courseId,
           traceId: "trace-generate-student-preview-domain-object",
           status: "persisted",
+          objectType: "student-preview-session",
+          previewStatus: "generated",
+          previewUrl: `/learning?teacherPreview=1&course=${course.courseId}`,
+          previewScope: "teacher-course-preview",
+          previewPolicy: "teacher-visible-preview-only",
+          previewedBy: "teacher-kang",
+          previewId: "student-preview-20260622-121500",
+          generatedAt: "2026-06-22T12:15:00.000Z",
+        }),
+      );
+      expect(body.receipt.artifacts).toContainEqual(
+        expect.objectContaining({
+          kind: "student-preview",
+          previewUrl: `/learning?teacherPreview=1&course=${encodeURIComponent(course.courseId)}`,
         }),
       );
       expect(studentPreviewSessions).toEqual([
