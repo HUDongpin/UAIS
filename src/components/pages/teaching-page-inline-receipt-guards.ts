@@ -12,7 +12,10 @@ import type {
 
 export function isPersistedInlineTeachingOperationReceipt(
   receipt: InlineTeachingOperationBackendReceipt | undefined,
-) {
+): receipt is InlineTeachingOperationBackendReceipt & {
+  receiptId: string;
+  status: "persisted";
+} {
   return Boolean(receipt?.receiptId && receipt.status === "persisted");
 }
 

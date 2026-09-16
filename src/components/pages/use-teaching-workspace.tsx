@@ -671,13 +671,14 @@ export function useTeachingWorkspace() {
         }));
         return;
       }
+      const receipt = payload.receipt;
       const { persistConfirmed } = confirmAndOpenCourseSettingsStudentPreview({
         operationId,
         actionSlot,
-        artifacts: payload.receipt.artifacts,
+        artifacts: receipt.artifacts,
         studentPreviewSessionReceipt: payload.studentPreviewSessionReceipt,
         domainPersistenceSummary: payload.domainPersistenceSummary,
-        courseId: payload.receipt.courseId ?? courseId,
+        courseId: receipt.courseId ?? courseId,
       });
       if (
         payload.receipt?.operationId &&
