@@ -12,9 +12,7 @@ import {
   isPersistedInlineTeachingOperationReceipt,
 } from "./teaching-page-inline-receipt-guards";
 import { confirmAndOpenCourseSettingsStudentPreview } from "./teaching-student-preview";
-import {
-  createInlineWorkspaceActionConfig,
-} from "./teaching-page-workspace-config";
+import { createInlineWorkspaceActionConfig } from "./teaching-page-workspace-config";
 import {
   doesInlineDomainProjectionMatchBusinessSemantics,
   findMatchingInlineDomainProjection,
@@ -678,6 +676,8 @@ export function useTeachingWorkspace() {
         actionSlot,
         artifacts: payload.receipt.artifacts,
         studentPreviewSessionReceipt: payload.studentPreviewSessionReceipt,
+        domainPersistenceSummary: payload.domainPersistenceSummary,
+        courseId: payload.receipt.courseId ?? courseId,
       });
       if (
         payload.receipt?.operationId &&

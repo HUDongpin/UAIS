@@ -4,7 +4,9 @@ import { isCourseSettingsPrimarySave } from "./teaching-page-inline-receipt-guar
 // The operations receipt already carries a student-preview artifact; the course-
 // management receipt should echo the same generated-session fields. The client
 // uses either source so a persisted preview can open previewUrl even when the
-// unscoped audit GET is still incomplete (#21 family / #24).
+// unscoped audit GET is still incomplete (#21 family / #24 / #26).
+// Secondary persistConfirmed also follows primary best-effort: a domain write
+// that persisted student-preview-session is enough, even if the receipt is bare.
 
 export type TeachingStudentPreviewArtifactLike = {
   kind?: string;
@@ -23,6 +25,11 @@ export type TeachingStudentPreviewSessionReceiptLike = {
   generatedAt?: unknown;
 };
 
+export type TeachingDomainPersistenceSummaryLike = {
+  status?: "persisted" | "missing-domain-objects" | "not-required";
+  persistedObjectTypes?: string[];
+};
+
 export type GeneratedStudentPreviewSession = {
   objectType: "student-preview-session";
   previewStatus: "generated";
@@ -34,6 +41,15 @@ export type GeneratedStudentPreviewSession = {
   generatedAt?: string;
 };
 
+export type CourseSettingsPersistConfirmationInput = {
+  operationId?: string;
+  actionSlot?: "primary" | "secondary";
+  artifacts?: TeachingStudentPreviewArtifactLike[];
+  studentPreviewSessionReceipt?: TeachingStudentPreviewSessionReceiptLike;
+  domainPersistenceSummary?: TeachingDomainPersistenceSummaryLike;
+  courseId?: string;
+};
+
 export function isCourseSettingsStudentPreview(
   operationId: string | undefined,
   actionSlot: "primary" | "secondary" | undefined,
@@ -41,27 +57,31 @@ export function isCourseSettingsStudentPreview(
   return operationId === "course-settings" && actionSlot === "secondary";
 }
 
-export function resolveCourseSettingsPersistConfirmation(input: {
-  operationId?: string;
-  actionSlot?: "primary" | "secondary";
-  artifacts?: TeachingStudentPreviewArtifactLike[];
-  studentPreviewSessionReceipt?: TeachingStudentPreviewSessionReceiptLike;
-}) {
+export function resolveCourseSettingsPersistConfirmation(
+  input: CourseSettingsPersistConfirmationInput,
+) {
   const generatedPreview = readGeneratedStudentPreviewSession(input);
+  const persistConfirmed =
+    isCourseSettingsPrimarySave(input.operationId, input.actionSlot) ||
+    Boolean(generatedPreview) ||
+    isCourseSettingsSecondaryDomainPersisted(input);
+  const previewUrl = isCourseSettingsStudentPreview(input.operationId, input.actionSlot)
+    ? (generatedPreview?.previewUrl ??
+      (persistConfirmed ? readFallbackTeachingStudentPreviewUrl(input.courseId) : undefined))
+    : undefined;
   return {
     generatedPreview,
-    persistConfirmed:
-      isCourseSettingsPrimarySave(input.operationId, input.actionSlot) ||
-      Boolean(generatedPreview),
+    persistConfirmed,
+    previewUrl,
   };
 }
 
 export function confirmAndOpenCourseSettingsStudentPreview(
-  input: Parameters<typeof resolveCourseSettingsPersistConfirmation>[0],
+  input: CourseSettingsPersistConfirmationInput,
 ) {
   const confirmation = resolveCourseSettingsPersistConfirmation(input);
-  if (confirmation.generatedPreview) {
-    openTeachingStudentPreviewUrl(confirmation.generatedPreview.previewUrl);
+  if (confirmation.previewUrl) {
+    openTeachingStudentPreviewUrl(confirmation.previewUrl);
   }
   return confirmation;
 }
@@ -124,6 +144,27 @@ export function openTeachingStudentPreviewUrl(previewUrl: string) {
     return;
   }
   window.location.assign(safePreviewUrl);
+}
+
+export function readFallbackTeachingStudentPreviewUrl(courseId: unknown) {
+  if (typeof courseId !== "string" || courseId.trim().length === 0) {
+    return undefined;
+  }
+  return readSafePreviewUrl(
+    `/learning?teacherPreview=1&course=${encodeURIComponent(courseId.trim())}`,
+  );
+}
+
+function isCourseSettingsSecondaryDomainPersisted(
+  input: CourseSettingsPersistConfirmationInput,
+) {
+  return (
+    isCourseSettingsStudentPreview(input.operationId, input.actionSlot) &&
+    input.domainPersistenceSummary?.status === "persisted" &&
+    Boolean(
+      input.domainPersistenceSummary.persistedObjectTypes?.includes("student-preview-session"),
+    )
+  );
 }
 
 function readSafePreviewUrl(value: unknown) {

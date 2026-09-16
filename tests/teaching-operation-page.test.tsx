@@ -1140,7 +1140,8 @@ describe("TeachingOperationPage", () => {
     }
   });
 
-  it("requires student preview session business readback before operation page claims preview success", async () => {
+  it("opens fallback student previewUrl after domain-persisted secondary even when the receipt is bare", async () => {
+    openTeachingStudentPreviewUrl.mockClear();
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
       if (String(input) === "/api/teaching/courses") {
         return ownedTeachingCourseListResponse();
@@ -1230,15 +1231,17 @@ describe("TeachingOperationPage", () => {
       fireEvent.click(screen.getByRole("button", { name: "预览学生端" }));
 
       await waitFor(() => {
-        expect(screen.getAllByText("审计读回未完成，请稍后刷新。").length).toBeGreaterThan(0);
+        expect(screen.getByText("学生端预览已生成。")).toBeTruthy();
       });
-      expect(screen.queryByText("学生端预览已生成。")).toBeNull();
+      expect(screen.queryByText("审计读回未完成，请稍后刷新。")).toBeNull();
       expect(
         screen.queryByText(
           "领域对象已验证：student-preview-session / student-preview-session-teacher-research-methods",
         ),
       ).toBeNull();
-      expect(openTeachingStudentPreviewUrl).not.toHaveBeenCalled();
+      expect(openTeachingStudentPreviewUrl).toHaveBeenCalledWith(
+        "/learning?teacherPreview=1&course=teacher-research-methods",
+      );
     } finally {
       fetchSpy.mockRestore();
     }

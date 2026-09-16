@@ -2676,7 +2676,9 @@ describe("TeachingPage", () => {
     ).toBeNull();
   });
 
-  it("requires student preview session business readback before claiming preview success", async () => {
+  it("opens fallback student previewUrl after domain-persisted secondary even when the receipt is bare", async () => {
+    const assign = vi.fn();
+    vi.stubGlobal("location", { assign });
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       if (String(input) === "/api/teaching/operations") {
         expect(init?.method).toBe("POST");
@@ -2761,22 +2763,28 @@ describe("TeachingPage", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<TeachingPage />);
-    await chooseWorkspaceCourse("teacher-research-methods");
+    try {
+      render(<TeachingPage />);
+      await chooseWorkspaceCourse("teacher-research-methods");
 
-    fireEvent.click(screen.getByRole("button", { name: "预览学生端" }));
+      fireEvent.click(screen.getByRole("button", { name: "预览学生端" }));
 
-    await waitFor(() => {
+      await waitFor(() => {
+        expect(screen.getByText("学生端预览已生成。")).toBeTruthy();
+      });
+      expect(screen.queryByText("审计读回未完成，请稍后刷新。")).toBeNull();
+      expect(screen.queryByText("学生端预览读回未匹配生成结果，请稍后刷新。")).toBeNull();
       expect(
-        screen.getByText("学生端预览读回未匹配生成结果，请稍后刷新。"),
-      ).toBeTruthy();
-    });
-    expect(screen.queryByText("学生端预览已生成。")).toBeNull();
-    expect(
-      screen.queryByText(
-        "领域对象已验证：student-preview-session / student-preview-session-teacher-research-methods",
-      ),
-    ).toBeNull();
+        screen.queryByText(
+          "领域对象已验证：student-preview-session / student-preview-session-teacher-research-methods",
+        ),
+      ).toBeNull();
+      expect(assign).toHaveBeenCalledWith(
+        "/learning?teacherPreview=1&course=teacher-research-methods",
+      );
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it("opens generated student previewUrl after persisted secondary preview even when audit fields are incomplete", async () => {
@@ -2896,6 +2904,41 @@ describe("TeachingPage", () => {
       expect(assign).toHaveBeenCalledWith(
         "/learning?teacherPreview=1&course=teacher-research-methods",
       );
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("does not map a real preview auth failure onto a generated-session success", async () => {
+    const assign = vi.fn();
+    vi.stubGlobal("location", { assign });
+    const fetchMock = vi.fn(async () =>
+      Response.json(
+        {
+          error: "UAIS teaching operation course ownership is required.",
+          access: {
+            status: "denied",
+            reasonCode: "course-scope-denied",
+            responsibleSession: "S12",
+          },
+        },
+        { status: 403 },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    try {
+      render(<TeachingPage />);
+      await chooseWorkspaceCourse("teacher-research-methods");
+
+      fireEvent.click(screen.getByRole("button", { name: "预览学生端" }));
+
+      await waitFor(() => {
+        expect(screen.getByText("未保存到服务器：当前教师无权操作该课程。")).toBeTruthy();
+      });
+      expect(screen.queryByText("学生端预览已生成。")).toBeNull();
+      expect(screen.queryByText("审计读回未完成，请稍后刷新。")).toBeNull();
+      expect(assign).not.toHaveBeenCalled();
     } finally {
       vi.unstubAllGlobals();
     }
