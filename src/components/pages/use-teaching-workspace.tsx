@@ -12,9 +12,7 @@ import {
   isPersistedInlineTeachingOperationReceipt,
 } from "./teaching-page-inline-receipt-guards";
 import { confirmAndOpenCourseSettingsStudentPreview } from "./teaching-student-preview";
-import {
-  createInlineWorkspaceActionConfig,
-} from "./teaching-page-workspace-config";
+import { createInlineWorkspaceActionConfig } from "./teaching-page-workspace-config";
 import {
   doesInlineDomainProjectionMatchBusinessSemantics,
   findMatchingInlineDomainProjection,
