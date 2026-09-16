@@ -27,7 +27,11 @@ export function hasSignedInlineTeachingOperationReceiptAudit(
 
 export function hasCompleteInlineTeachingAuthSession(
   authSession: InlineTeachingOperationAuditAuthSession | undefined,
-) {
+): authSession is InlineTeachingOperationAuditAuthSession & {
+  sessionId: string;
+  authenticatedAt: string;
+  expiresAt: string;
+} {
   return (
     typeof authSession?.sessionId === "string" &&
     authSession.sessionId.trim().length > 0 &&
@@ -36,6 +40,19 @@ export function hasCompleteInlineTeachingAuthSession(
     typeof authSession.expiresAt === "string" &&
     authSession.expiresAt.trim().length > 0
   );
+}
+
+export function resolveVerifiedInlineAuditAuthSession(
+  eventSession: InlineTeachingOperationAuditAuthSession | undefined,
+  alreadyVerifiedReceiptSession?: InlineTeachingOperationAuditAuthSession,
+) {
+  if (hasCompleteInlineTeachingAuthSession(eventSession)) {
+    return eventSession;
+  }
+  if (hasCompleteInlineTeachingAuthSession(alreadyVerifiedReceiptSession)) {
+    return alreadyVerifiedReceiptSession;
+  }
+  return undefined;
 }
 
 export function isMismatchedInlineTeachingOperationReceipt(
@@ -69,5 +86,12 @@ export function isMismatchedOrIncompleteInlineTeachingOperationReceipt(
     !receipt.actionSlot ||
     isMismatchedInlineTeachingOperationReceipt(receipt, expected)
   );
+}
+
+export function isCourseSettingsPrimarySave(
+  operationId: string | undefined,
+  actionSlot: "primary" | "secondary" | undefined,
+) {
+  return operationId === "course-settings" && actionSlot === "primary";
 }
 

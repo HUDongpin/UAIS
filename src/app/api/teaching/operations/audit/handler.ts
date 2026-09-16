@@ -3,18 +3,25 @@ import { getUaisCoreDatabaseReadiness } from "@/lib/db/core-database";
 import {
   normalizeExternalTeachingOperationAuditReadbackRecord,
   isTeachingOperationProductionDatabaseAdapterEvidence,
+  loadTeachingOperationDatabase,
   normalizeTeachingOperationAuditReadbackDomainProjection,
   normalizeTeachingOperationAuditReadbackEvent,
-  readTeachingOperationDatabase,
   resolveTeachingOperationDataDir,
   TeachingOperationStoreError,
   type TeachingOperationAuditEvent,
+  type TeachingOperationDatabase,
   type TeachingOperationDomainProjection,
   type TeachingOperationProductionDatabaseAdapterEvidence,
   type TeachingOperationRecord,
   type TeachingOperationRollbackProjection,
 } from "@/lib/server/teaching-operations-store";
 import { createUaisTeacherAiOwnershipAdapter } from "@/lib/server/teacher-ai-ownership-store";
+import { isSameTeachingActorId } from "@/lib/server/teaching-actor-id";
+import {
+  createTeachingManagedCourseOwnershipAdapter,
+  expandOwnedCourseIdsWithManagedOwnership,
+  type ReadManagedTeachingCourseOwnership,
+} from "@/lib/server/teacher-managed-course-ownership";
 import { readUaisAuthenticatedTeacherSessionFromSignedCookies } from "@/lib/server/teacher-auth-session";
 import { getUaisAppSessionClaimsFromCookieString } from "@/lib/server/uais-app-session";
 import {
@@ -33,8 +40,13 @@ type TeachingOperationAuditGetHandlerDeps = {
   now?: Date;
   fetch?: typeof fetch;
   getTeachingOperationCourseOwnership?: GetTeachingOperationCourseOwnership;
+  readManagedCourseOwnership?: ReadManagedTeachingCourseOwnership;
   readTeachingCourseCapability?: ReadTeachingCourseCapability;
   readExternalTeachingOperationAudit?: TeachingOperationExternalAuditAdapter;
+  readSnapshotTeachingOperationDatabase?: (input: {
+    dataDir?: string;
+    env?: Record<string, string | undefined>;
+  }) => Promise<TeachingOperationDatabase>;
 };
 
 type AuthenticatedTeacher = {
@@ -125,12 +137,22 @@ export function createTeachingOperationAuditGetHandler(
   deps: TeachingOperationAuditGetHandlerDeps = {},
 ) {
   const env = deps.env ?? process.env;
+  const usesDefaultTeachingOperationCourseOwnership =
+    deps.getTeachingOperationCourseOwnership === undefined;
   const getTeachingOperationCourseOwnership =
     deps.getTeachingOperationCourseOwnership ??
     createTeachingOperationCourseOwnershipAdapter({
       env,
       fetch: deps.fetch,
     });
+  const readManagedCourseOwnership =
+    deps.readManagedCourseOwnership ??
+    (usesDefaultTeachingOperationCourseOwnership
+      ? createTeachingManagedCourseOwnershipAdapter({
+          env,
+          fetch: deps.fetch,
+        })
+      : undefined);
   const readTeachingCourseCapability =
     deps.readTeachingCourseCapability ??
     createTeachingCourseCapabilityAdapter({ env, now: deps.now });
@@ -171,6 +193,7 @@ export function createTeachingOperationAuditGetHandler(
         env,
         now: deps.now,
       });
+      const requestedCourseId = readRequestedAuditCourseId(request);
       if (!authenticatedTeacher) {
         return jsonResponse(401, {
           error: "UAIS teacher authentication is required.",
@@ -191,9 +214,11 @@ export function createTeachingOperationAuditGetHandler(
           ownershipCheckFailed = true;
         }
       }
-      const ownershipMatchesActor =
-        ownership?.teacherId === authenticatedTeacher.actorId;
-      if (!ownershipMatchesActor && !readTeachingCourseCapability) {
+      const ownershipMatchesActor = Boolean(
+        ownership?.teacherId &&
+          isSameTeachingActorId(ownership.teacherId, authenticatedTeacher.actorId),
+      );
+      if (!ownershipMatchesActor && !readTeachingCourseCapability && !readManagedCourseOwnership) {
         const reasonCode = ownershipCheckFailed
           ? "teacher-course-ownership-check-failed"
           : "teacher-course-ownership-required";
@@ -209,10 +234,9 @@ export function createTeachingOperationAuditGetHandler(
           redaction: createRedaction(),
         }, traceId);
       }
-      const ownedCourseIds = ownershipMatchesActor && ownership
+      let ownedCourseIds = ownershipMatchesActor && ownership
         ? [...new Set(ownership.courseIds ?? [])].sort()
         : [];
-      const ownedCourseIdSet = new Set(ownedCourseIds);
       const externalAudit =
         deps.readExternalTeachingOperationAudit ??
         createUaisTeachingOperationExternalAuditAdapter({
@@ -233,8 +257,11 @@ export function createTeachingOperationAuditGetHandler(
           teacherId: authenticatedTeacher.actorId,
         });
       } else {
-        const database = await readTeachingOperationDatabase({
+        const readSnapshotTeachingOperationDatabase =
+          deps.readSnapshotTeachingOperationDatabase ?? loadTeachingOperationDatabase;
+        const database = await readSnapshotTeachingOperationDatabase({
           dataDir: resolveTeachingOperationDataDir(env.UAIS_TEACHING_OPERATIONS_DATA_DIR),
+          env,
         });
         auditSource = {
           events: database.auditEvents,
@@ -247,6 +274,31 @@ export function createTeachingOperationAuditGetHandler(
           storageWritePolicy: "read-only-local-json-file",
         };
       }
+
+      if (readManagedCourseOwnership) {
+        try {
+          ownedCourseIds = await expandOwnedCourseIdsWithManagedOwnership({
+            actorId: authenticatedTeacher.actorId,
+            ownedCourseIds,
+            candidateCourseIds: [
+              ...collectAuditSourceCourseIds(auditSource),
+              ...(requestedCourseId ? [requestedCourseId] : []),
+            ],
+            readManagedCourseOwnership,
+          });
+        } catch {
+          return jsonResponse(503, {
+            error: "UAIS teaching operation audit course ownership check failed.",
+            traceId,
+            access: createDeniedAccess("teacher-course-ownership-check-failed", {
+              actorId: authenticatedTeacher.actorId,
+              role: authenticatedTeacher.role,
+            }),
+            redaction: createRedaction(),
+          }, traceId);
+        }
+      }
+      const ownedCourseIdSet = new Set(ownedCourseIds);
 
       const visibility = await resolveTeachingOperationAuditVisibility({
         actorId: authenticatedTeacher.actorId,
@@ -784,6 +836,35 @@ function isDefined<T>(value: T | undefined): value is T {
   return value !== undefined;
 }
 
+function collectAuditSourceCourseIds(source: TeachingOperationAuditEvidenceSource) {
+  const courseIds = new Set<string>();
+  const addCourseId = (value: unknown) => {
+    if (typeof value === "string" && value.trim().length > 0) {
+      courseIds.add(value);
+    }
+  };
+  for (const record of source.records) {
+    addCourseId(record.courseId);
+  }
+  for (const event of source.events) {
+    if ("courseId" in event) {
+      addCourseId(event.courseId);
+    }
+    if ("impactedCourseIds" in event) {
+      for (const courseId of event.impactedCourseIds) {
+        addCourseId(courseId);
+      }
+    }
+  }
+  for (const projection of source.domainProjections) {
+    addCourseId(projection.courseId);
+  }
+  for (const rollbackRecord of source.rollbackRecords) {
+    addCourseId(rollbackRecord.courseId);
+  }
+  return [...courseIds];
+}
+
 function isAuditEventCourseVisible(
   event: TeachingOperationAuditEvent,
   courseIds: Set<string>,
@@ -803,6 +884,22 @@ function readSafeTraceId(request: Request) {
     return headerTraceId;
   }
   return `trace-${randomUUID()}`;
+}
+
+function readRequestedAuditCourseId(request: Request) {
+  const headerCourseId = request.headers.get("x-uais-course-id")?.trim();
+  if (headerCourseId && isSafeTeachingOperationId(headerCourseId)) {
+    return headerCourseId;
+  }
+  try {
+    const queryCourseId = new URL(request.url).searchParams.get("courseId")?.trim();
+    if (queryCourseId && isSafeTeachingOperationId(queryCourseId)) {
+      return queryCourseId;
+    }
+  } catch {
+    return undefined;
+  }
+  return undefined;
 }
 
 function isSafeTeachingOperationId(value: string) {

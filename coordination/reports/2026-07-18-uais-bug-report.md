@@ -24,7 +24,7 @@ The tree is healthy after the fixes below (the suite grew from 1996 → 2000 tes
 
 ### 1 — Minor (FIXED): Theme was never threaded through SSR → hydration mismatch on the header toggle + dark-mode flash (FOUC)
 
-- **Files:** [src/app/layout.tsx](src/app/layout.tsx), [src/components/providers/app-preferences.tsx](src/components/providers/app-preferences.tsx), [src/components/layout/header.tsx:238](src/components/layout/header.tsx#L238)
+- **Files:** [src/app/layout.tsx](../../src/app/layout.tsx), [src/components/providers/app-preferences.tsx](../../src/components/providers/app-preferences.tsx), [src/components/layout/header.tsx:238](../../src/components/layout/header.tsx#L238)
 - **Defect:** Theme state was seeded on the client from `localStorage`/`matchMedia` (`getInitialTheme`). During SSR `window` is undefined, so the server always rendered `theme = "light"`: no `dark` class on `<html>`, and the header rendered the `Moon` icon. A returning dark-mode user's hydration render read `localStorage`, seeded `theme = "dark"`, and produced the `Sun` icon — a React 19 recoverable hydration mismatch on a deep descendant of `<html suppressHydrationWarning>` (which does **not** cover descendants), plus a flash of the light theme on every load (FOUC). This was the asymmetry with locale, which was already threaded server→client via the `uais-locale` cookie + `initialLocale` prop.
 - **Fix (applied):** Mirror the locale design.
   - `app-preferences.tsx`: persist theme to a route-readable `uais-theme` cookie on every change (alongside `localStorage`), export `resolveThemeMode`, and seed the provider's `useState` from a new `initialTheme` prop instead of `getInitialTheme` (which was removed).
@@ -35,7 +35,7 @@ The tree is healthy after the fixes below (the suite grew from 1996 → 2000 tes
 
 ### 2 — Robustness (FIXED): `readScaledScore` accepted non-finite scores into learner-profile aggregates
 
-- **File:** [src/lib/learning-records/learner-profile.ts:290-303](src/lib/learning-records/learner-profile.ts#L290)
+- **File:** [src/lib/learning-records/learner-profile.ts:290-303](../../src/lib/learning-records/learner-profile.ts#L290)
 - **Defect:** The profile score reader accepted `score.scaled`/`score.raw`/`score.max` on `typeof === "number"` alone. Its sibling in the adaptive recommender additionally required `Number.isFinite(...)`. A `NaN`/`Infinity` value would flow into `bestScore`/`averageScore` as `NaN` in the profile but be rejected by the recommender — divergent behavior on the same statement, and a `NaN` in the profile poisons every aggregate that reads it.
 - **Fix (applied):** Add `Number.isFinite` guards to `scaled`, `raw`, and `max`, aligning `readScaledScore` with the recommender.
 - **Result:** Non-finite scores are ignored instead of poisoning `bestScore`/`averageScore`/`progress.averageScore` with `NaN`.
@@ -44,7 +44,7 @@ The tree is healthy after the fixes below (the suite grew from 1996 → 2000 tes
 
 ### 3 — Hardening (FIXED): `/api/ai/chat` accepted an unbounded `maxAgentTurns`
 
-- **File:** [src/app/api/ai/chat/route.ts:27,254](src/app/api/ai/chat/route.ts#L27)
+- **File:** [src/app/api/ai/chat/route.ts:27,254](../../src/app/api/ai/chat/route.ts#L27)
 - **Defect:** A client could pass any positive `maxAgentTurns`; it was floored but not upper-clamped, and drives the supervisor's `turns.length >= maxAgentTurns` short-circuit.
 - **Fix (applied):** Add a `maxAllowedAgentTurns = 8` constant and clamp with `Math.min(Math.floor(value), maxAllowedAgentTurns)` at parse time.
 - **Result:** Even if the director's post-first-turn behavior ever changes, a large client value can no longer drive an unbounded loop. The route already requires a signed teacher/admin session; the director short-circuits to `cue-user` after the first turn, so this is defense-in-depth.

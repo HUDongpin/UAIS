@@ -2,8 +2,13 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  hasCompleteInlineTeachingAuthSession,
+  fetchTeachingOperationAuditReadbackWithRetry,
+  isInlineAuditRecordForAction,
+  resolveInlineTeachingOperationAuditMatch,
+} from "./teaching-page-inline-audit-readback";
+import {
   hasSignedInlineTeachingOperationReceiptAudit,
+  isCourseSettingsPrimarySave,
   isMismatchedOrIncompleteInlineTeachingOperationReceipt,
   isPersistedInlineTeachingOperationReceipt,
 } from "./teaching-page-inline-receipt-guards";
@@ -11,11 +16,8 @@ import {
   createInlineWorkspaceActionConfig,
 } from "./teaching-page-workspace-config";
 import {
-  doesInlineCourseSettingsProjectionMatchPatch,
   doesInlineDomainProjectionMatchBusinessSemantics,
-  doesInlineDomainReadbackMatchBusinessSemantics,
   findMatchingInlineDomainProjection,
-  findMatchingInlineDomainProjections,
   getInlineDomainProjectionSemanticMismatchMessage,
 } from "./teaching-page-projection-verifiers";
 import {
@@ -126,7 +128,6 @@ import {
   type InlineTeachingOperationBackendReceipt,
   type InlineTeachingOperationDomainPersistenceSummary,
   type InlineTeachingOperationErrorResponse,
-  type InlineTeachingOperationRecord,
   type InlineWorkspaceAlertNotificationStatus,
   type InlineWorkspaceAlertStatus,
   type InlineWorkspaceAuditStatus,
@@ -670,11 +671,27 @@ export function useTeachingWorkspace() {
         }));
         return;
       }
+      const keepCourseSettingsSaveWithoutAuditMatch = isCourseSettingsPrimarySave(
+        operationId,
+        actionSlot,
+      );
       if (
         payload.receipt?.operationId &&
         payload.receipt?.actionSlot &&
         !payload.traceId
       ) {
+        if (keepCourseSettingsSaveWithoutAuditMatch) {
+          applyVerifiedCourseSettingsPatch(courseId, courseSettingsPatch);
+          setInlineWorkspaceStatuses((currentStatuses) => ({
+            ...currentStatuses,
+            [operationId]: payload.receipt?.displayMessage
+              ? localizedText(payload.receipt.displayMessage, locale)
+              : actionSlot === "primary"
+                ? actionConfig.primaryMessage
+                : actionConfig.secondaryMessage,
+          }));
+          return;
+        }
         setInlineWorkspaceStatuses((currentStatuses) => ({
           ...currentStatuses,
           [operationId]: localizedText(TEACHING_OPERATION_AUDIT_FAILED_MESSAGE, locale),
@@ -706,6 +723,14 @@ export function useTeachingWorkspace() {
       if (payload.traceId) {
         const recordId = payload.receipt?.receiptId;
         if (!recordId) {
+          if (keepCourseSettingsSaveWithoutAuditMatch) {
+            applyVerifiedCourseSettingsPatch(courseId, courseSettingsPatch);
+            setInlineWorkspaceStatuses((currentStatuses) => ({
+              ...currentStatuses,
+              [operationId]: verifiedStatusMessage,
+            }));
+            return;
+          }
           setInlineWorkspaceAuditStatuses((currentStatuses) => ({
             ...currentStatuses,
             [operationId]: {
@@ -715,10 +740,18 @@ export function useTeachingWorkspace() {
           }));
           return;
         }
-        setInlineWorkspaceStatuses((currentStatuses) => ({
-          ...currentStatuses,
-          [operationId]: localizedText(TEACHING_OPERATION_AUDIT_PENDING_MESSAGE, locale),
-        }));
+        if (keepCourseSettingsSaveWithoutAuditMatch) {
+          applyVerifiedCourseSettingsPatch(courseId, courseSettingsPatch);
+          setInlineWorkspaceStatuses((currentStatuses) => ({
+            ...currentStatuses,
+            [operationId]: verifiedStatusMessage,
+          }));
+        } else {
+          setInlineWorkspaceStatuses((currentStatuses) => ({
+            ...currentStatuses,
+            [operationId]: localizedText(TEACHING_OPERATION_AUDIT_PENDING_MESSAGE, locale),
+          }));
+        }
         const pendingGroupSuggestion = createTeacherGroupSuggestionDraft({
           receiptId: recordId,
           courseId: payload.receipt?.courseId ?? courseId,
@@ -734,6 +767,8 @@ export function useTeachingWorkspace() {
           actionSlot,
           courseSettingsPatch,
           pendingGroupSuggestion,
+          verifiedReceiptAuthSession: payload.receipt?.audit?.authSession,
+          persistConfirmed: keepCourseSettingsSaveWithoutAuditMatch,
         });
       } else {
         if (
@@ -778,127 +813,110 @@ export function useTeachingWorkspace() {
     actionSlot: "primary" | "secondary";
     courseSettingsPatch?: CourseSettingsPatchPayload;
     pendingGroupSuggestion?: TeacherGroupSuggestionDraft;
+    verifiedReceiptAuthSession?: InlineTeachingOperationAuditAuthSession;
+    persistConfirmed?: boolean;
   }) {
     if (!isCurrentInlineWorkspaceAttempt(input.operationId, input.attemptId)) {
       return;
     }
-    setInlineWorkspaceAuditStatuses((currentStatuses) => ({
-      ...currentStatuses,
-      [input.operationId]: {
-        status: "pending",
-        traceId: input.traceId,
-      },
-    }));
+    if (!input.persistConfirmed) {
+      setInlineWorkspaceAuditStatuses((currentStatuses) => ({
+        ...currentStatuses,
+        [input.operationId]: {
+          status: "pending",
+          traceId: input.traceId,
+        },
+      }));
+    }
+
+    const keepPersistedSaveWithoutAuditMatch = () => {
+      setInlineWorkspaceAuditStatuses((currentStatuses) => {
+        if (!(input.operationId in currentStatuses)) {
+          return currentStatuses;
+        }
+        const nextStatuses = { ...currentStatuses };
+        delete nextStatuses[input.operationId];
+        return nextStatuses;
+      });
+    };
 
     try {
-      const response = await fetch("/api/teaching/operations/audit", {
-        method: "GET",
-        headers: { accept: "application/json" },
+      const audit = await fetchTeachingOperationAuditReadbackWithRetry<
+        InlineTeachingOperationAuditReadbackResponse
+      >({
+        traceId: input.traceId,
+        courseId: input.courseId,
+        recordId: input.recordId,
+        isCurrentAttempt: () =>
+          isCurrentInlineWorkspaceAttempt(input.operationId, input.attemptId),
       });
-      if (!response.ok) {
-        throw new Error("Teaching operation audit readback failed.");
-      }
-      const audit = (await response.json()) as InlineTeachingOperationAuditReadbackResponse;
-      if (!isCurrentInlineWorkspaceAttempt(input.operationId, input.attemptId)) {
-        return;
-      }
-      const matchingAuditEvent = audit.auditEvents?.find((event) => {
-        if (event.traceId !== input.traceId) {
-          return false;
+      if (!audit) return;
+      const match = resolveInlineTeachingOperationAuditMatch({
+        audit,
+        traceId: input.traceId,
+        courseId: input.courseId,
+        recordId: input.recordId,
+        operationId: input.operationId,
+        actionSlot: input.actionSlot,
+        courseSettingsPatch: input.courseSettingsPatch,
+        verifiedReceiptAuthSession: input.verifiedReceiptAuthSession,
+      });
+      if (match.status === "incomplete") {
+        if (input.persistConfirmed) {
+          keepPersistedSaveWithoutAuditMatch();
+          return;
         }
-        return input.courseId ? event.courseId === input.courseId : true;
-      });
-      const matchingRecord = input.recordId
-        ? audit.records?.find((record) => {
-            if (record.recordId !== input.recordId) {
-              return false;
-            }
-            return isInlineAuditRecordForAction(record, {
-              courseId: input.courseId,
-              operationId: input.operationId,
-              actionSlot: input.actionSlot,
-            });
-          })
-        : undefined;
-      if (!matchingAuditEvent) {
-        throw new Error("Teaching operation audit readback did not include the saved trace.");
+        switch (match.reason) {
+          case "patch-mismatch":
+            setInlineWorkspaceStatuses((currentStatuses) => ({
+              ...currentStatuses,
+              [input.operationId]: localizedText(
+                TEACHING_COURSE_SETTINGS_READBACK_MISMATCH_MESSAGE,
+                locale,
+              ),
+            }));
+            setInlineWorkspaceAuditStatuses((currentStatuses) => ({
+              ...currentStatuses,
+              [input.operationId]: {
+                status: "failed",
+                traceId: input.traceId,
+              },
+            }));
+            return;
+          case "semantic-mismatch":
+            setInlineWorkspaceStatuses((currentStatuses) => ({
+              ...currentStatuses,
+              [input.operationId]: getInlineDomainProjectionSemanticMismatchMessage(
+                input.operationId,
+                input.actionSlot,
+                locale,
+              ),
+            }));
+            setInlineWorkspaceAuditStatuses((currentStatuses) => ({
+              ...currentStatuses,
+              [input.operationId]: {
+                status: "failed",
+                traceId: input.traceId,
+              },
+            }));
+            return;
+          case "missing-event":
+          case "missing-record":
+          case "missing-projection":
+          case "missing-session":
+            throw new Error("Teaching operation audit readback did not include the saved operation.");
+          default: {
+            const exhaustive: never = match.reason;
+            throw new Error(String(exhaustive));
+          }
+        }
       }
-      if (input.recordId && !matchingRecord) {
-        throw new Error("Teaching operation audit readback did not include the saved record.");
-      }
-      const matchingDomainProjection = findMatchingInlineDomainProjection(
-        audit.domainProjections,
-        {
-          courseId: input.courseId,
-          operationId: input.operationId,
-          actionSlot: input.actionSlot,
-          recordId: input.recordId,
-        },
-      );
-      if (!matchingDomainProjection?.objectId || !matchingDomainProjection.objectType) {
-        throw new Error(
-          "Teaching operation audit readback did not include the saved domain projection.",
-        );
-      }
-      const matchingDomainProjections = findMatchingInlineDomainProjections(
-        audit.domainProjections,
-        {
-          courseId: input.courseId,
-          operationId: input.operationId,
-          actionSlot: input.actionSlot,
-          recordId: input.recordId,
-        },
-      );
-      if (
-        !doesInlineCourseSettingsProjectionMatchPatch(
-          matchingDomainProjection,
-          input.courseSettingsPatch,
-        )
-      ) {
-        setInlineWorkspaceStatuses((currentStatuses) => ({
-          ...currentStatuses,
-          [input.operationId]: localizedText(
-            TEACHING_COURSE_SETTINGS_READBACK_MISMATCH_MESSAGE,
-            locale,
-          ),
-        }));
-        setInlineWorkspaceAuditStatuses((currentStatuses) => ({
-          ...currentStatuses,
-          [input.operationId]: {
-            status: "failed",
-            traceId: input.traceId,
-          },
-        }));
-        return;
-      }
-      if (
-        !doesInlineDomainReadbackMatchBusinessSemantics(matchingDomainProjections, {
-          operationId: input.operationId,
-          actionSlot: input.actionSlot,
-        })
-      ) {
-        setInlineWorkspaceStatuses((currentStatuses) => ({
-          ...currentStatuses,
-          [input.operationId]: getInlineDomainProjectionSemanticMismatchMessage(
-            input.operationId,
-            input.actionSlot,
-            locale,
-          ),
-        }));
-        setInlineWorkspaceAuditStatuses((currentStatuses) => ({
-          ...currentStatuses,
-          [input.operationId]: {
-            status: "failed",
-            traceId: input.traceId,
-          },
-        }));
-        return;
-      }
-      if (!isVerifiedInlineAuditAuthSession(matchingAuditEvent.authSession)) {
-        throw new Error(
-          "Teaching operation audit readback did not include the signed teacher session.",
-        );
-      }
+      const {
+        matchingAuditEvent,
+        matchingRecord,
+        matchingDomainProjection,
+        verifiedAuthSession,
+      } = match;
 
       applyVerifiedCourseSettingsPatch(
         matchingRecord?.courseId ?? input.courseId,
@@ -916,7 +934,7 @@ export function useTeachingWorkspace() {
           status: "verified",
           traceId: input.traceId,
           actorId: matchingAuditEvent.actorId ?? audit.actorId,
-          authSession: matchingAuditEvent.authSession,
+          authSession: verifiedAuthSession,
           auditEventCount: audit.auditEventCount,
           recordId: matchingRecord?.recordId,
           courseId: matchingRecord?.courseId ?? input.courseId,
@@ -938,6 +956,10 @@ export function useTeachingWorkspace() {
       }
     } catch {
       if (!isCurrentInlineWorkspaceAttempt(input.operationId, input.attemptId)) {
+        return;
+      }
+      if (input.persistConfirmed) {
+        keepPersistedSaveWithoutAuditMatch();
         return;
       }
       setInlineWorkspaceStatuses((currentStatuses) => ({
@@ -1041,32 +1063,6 @@ export function useTeachingWorkspace() {
     attemptId: number,
   ) {
     return inlineWorkspaceAttemptIdsRef.current[operationId] === attemptId;
-  }
-
-  function isInlineAuditRecordForAction(
-    record: InlineTeachingOperationRecord,
-    input: {
-      courseId?: string;
-      operationId: TeachingOperationId;
-      actionSlot: "primary" | "secondary";
-    },
-  ) {
-    if (input.courseId && record.courseId !== input.courseId) {
-      return false;
-    }
-    if (record.operationId && record.operationId !== input.operationId) {
-      return false;
-    }
-    if (record.actionSlot && record.actionSlot !== input.actionSlot) {
-      return false;
-    }
-    return true;
-  }
-
-  function isVerifiedInlineAuditAuthSession(
-    authSession: InlineTeachingOperationAuditAuthSession | undefined,
-  ) {
-    return hasCompleteInlineTeachingAuthSession(authSession);
   }
 
   function removePendingGroupSuggestion(courseId: string, suggestionKey: string) {
@@ -1601,7 +1597,6 @@ export function useTeachingWorkspace() {
     createInlineWorkspaceAttemptId,
     isCurrentInlineWorkspaceAttempt,
     isInlineAuditRecordForAction,
-    isVerifiedInlineAuditAuthSession,
     removePendingGroupSuggestion,
     queueInlineWorkspaceAuditAlertNotifications,
     runInlineWorkspaceRollback,
