@@ -678,6 +678,8 @@ export function useTeachingWorkspace() {
         actionSlot,
         artifacts: payload.receipt.artifacts,
         studentPreviewSessionReceipt: payload.studentPreviewSessionReceipt,
+        domainPersistenceSummary: payload.domainPersistenceSummary,
+        courseId: payload.receipt.courseId ?? courseId,
       });
       if (
         payload.receipt?.operationId &&

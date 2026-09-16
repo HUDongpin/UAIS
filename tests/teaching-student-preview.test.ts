@@ -1,9 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { collectTeachingOperationAuditDomainProjectionValues } from "@/lib/server/teaching-operations-receipt-normalizers";
 import {
+  confirmAndOpenCourseSettingsStudentPreview,
   isCourseSettingsStudentPreview,
   openTeachingStudentPreviewUrl,
+  readFallbackTeachingStudentPreviewUrl,
   readGeneratedStudentPreviewSession,
+  resolveCourseSettingsPersistConfirmation,
 } from "@/components/pages/teaching-student-preview";
 
 describe("teaching student preview session", () => {
@@ -82,6 +85,83 @@ describe("teaching student preview session", () => {
         ],
       }),
     ).toBeUndefined();
+  });
+
+  it("confirms secondary persist from domain persistence even when the receipt is bare", () => {
+    expect(
+      resolveCourseSettingsPersistConfirmation({
+        operationId: "course-settings",
+        actionSlot: "secondary",
+        courseId: "teacher-course-uais-qa-test-owned-20260915-140423",
+        domainPersistenceSummary: {
+          status: "persisted",
+          persistedObjectTypes: ["student-preview-session"],
+        },
+      }),
+    ).toEqual({
+      generatedPreview: undefined,
+      persistConfirmed: true,
+      previewUrl:
+        "/learning?teacherPreview=1&course=teacher-course-uais-qa-test-owned-20260915-140423",
+    });
+  });
+
+  it("does not confirm secondary persist from a courseId fallback alone", () => {
+    expect(
+      resolveCourseSettingsPersistConfirmation({
+        operationId: "course-settings",
+        actionSlot: "secondary",
+        courseId: "teacher-course-owned",
+      }),
+    ).toEqual({
+      generatedPreview: undefined,
+      persistConfirmed: false,
+      previewUrl: undefined,
+    });
+  });
+
+  it("keeps primary save persistConfirmed without a generated preview", () => {
+    expect(
+      resolveCourseSettingsPersistConfirmation({
+        operationId: "course-settings",
+        actionSlot: "primary",
+        courseId: "teacher-course-owned",
+        domainPersistenceSummary: {
+          status: "persisted",
+          persistedObjectTypes: ["course-settings"],
+        },
+      }),
+    ).toEqual({
+      generatedPreview: undefined,
+      persistConfirmed: true,
+      previewUrl: undefined,
+    });
+  });
+
+  it("opens the fallback previewUrl for a domain-persisted secondary without artifact or url", () => {
+    const assign = vi.fn();
+    vi.stubGlobal("location", { assign });
+
+    const confirmation = confirmAndOpenCourseSettingsStudentPreview({
+      operationId: "course-settings",
+      actionSlot: "secondary",
+      courseId: "teacher-course-owned",
+      domainPersistenceSummary: {
+        status: "persisted",
+        persistedObjectTypes: ["student-preview-session"],
+      },
+    });
+
+    expect(confirmation.persistConfirmed).toBe(true);
+    expect(confirmation.generatedPreview).toBeUndefined();
+    expect(assign).toHaveBeenCalledWith("/learning?teacherPreview=1&course=teacher-course-owned");
+  });
+
+  it("builds a safe fallback previewUrl from a known courseId", () => {
+    expect(readFallbackTeachingStudentPreviewUrl("teacher-course-owned")).toBe(
+      "/learning?teacherPreview=1&course=teacher-course-owned",
+    );
+    expect(readFallbackTeachingStudentPreviewUrl("")).toBeUndefined();
   });
 
   it("opens a safe previewUrl and ignores local-path leakage", () => {

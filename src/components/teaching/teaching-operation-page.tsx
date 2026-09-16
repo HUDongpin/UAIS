@@ -462,11 +462,13 @@ export function TeachingOperationPage({
         return;
       }
 
-      const { generatedPreview, persistConfirmed } = resolveCourseSettingsPersistConfirmation({
+      const { persistConfirmed, previewUrl } = resolveCourseSettingsPersistConfirmation({
         operationId: safeOperationId,
         actionSlot,
         artifacts: receipt.artifacts,
         studentPreviewSessionReceipt: payload.studentPreviewSessionReceipt,
+        domainPersistenceSummary: payload.domainPersistenceSummary,
+        courseId: receipt.courseId ?? selectedCourseId,
       });
 
       const verifiedStatusMessage = receipt.displayMessage
@@ -474,8 +476,8 @@ export function TeachingOperationPage({
         : actionSlot === "primary"
           ? localizedText(config.primaryMessage, locale)
           : localizedText(config.secondaryMessage, locale);
-      if (generatedPreview) {
-        openTeachingStudentPreviewUrl(generatedPreview.previewUrl);
+      if (previewUrl) {
+        openTeachingStudentPreviewUrl(previewUrl);
       }
 
       const exportArtifact = receipt.artifacts?.find(
@@ -520,7 +522,7 @@ export function TeachingOperationPage({
           artifacts: verifiedArtifacts,
           verifiedReceiptAuthSession: receipt.audit?.authSession,
           persistConfirmed,
-          generatedPreviewUrl: generatedPreview?.previewUrl,
+          generatedPreviewUrl: previewUrl,
           ...(knowledgeResource
             ? {
                 knowledgeResource: {
