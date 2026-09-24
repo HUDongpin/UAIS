@@ -17,6 +17,7 @@ import {
   isPersistedMembershipApprovalReceipt,
   isWritableTeacherCourseId,
   isConfirmedWritableTeacherCourseId,
+  isSelectedTeacherCourseWriteEnabled,
   mergeTeacherClassesByCourseId,
   mergeTeacherCoursesById,
   mergeTeacherMembershipsByClassId,
@@ -646,6 +647,44 @@ describe("B-14 teaching course readback helpers", () => {
         new Set(["teacher-research-methods"]),
         "teacher-research-methods",
       ),
+    ).toBe(true);
+  });
+
+  it("fail-closes selected-course writes while ownership is unresolved and keeps them after resolve", () => {
+    expect(
+      isSelectedTeacherCourseWriteEnabled({
+        writableCourseIds: undefined,
+        courseId: "teacher-research-methods",
+        ownershipUnresolved: true,
+      }),
+    ).toBe(false);
+    expect(
+      isSelectedTeacherCourseWriteEnabled({
+        writableCourseIds: undefined,
+        courseId: undefined,
+        ownershipUnresolved: true,
+      }),
+    ).toBe(false);
+    expect(
+      isSelectedTeacherCourseWriteEnabled({
+        writableCourseIds: undefined,
+        courseId: "teacher-research-methods",
+        ownershipUnresolved: false,
+      }),
+    ).toBe(true);
+    expect(
+      isSelectedTeacherCourseWriteEnabled({
+        writableCourseIds: new Set(),
+        courseId: "teacher-research-methods",
+        ownershipUnresolved: false,
+      }),
+    ).toBe(false);
+    expect(
+      isSelectedTeacherCourseWriteEnabled({
+        writableCourseIds: new Set(["owned-research-methods"]),
+        courseId: "owned-research-methods",
+        ownershipUnresolved: false,
+      }),
     ).toBe(true);
   });
 });

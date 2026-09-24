@@ -74,6 +74,7 @@ type CourseSettingsWorkspaceProps = {
   selectedCourseActionLabel: string | undefined;
   selectedCourseAction: { courseId: string; action: TeacherCourseAction } | undefined;
   isSelectedCourseWritable?: boolean;
+  ownershipUnresolved?: boolean;
   writableCourseIds?: ReadonlySet<string>;
   onSelectCourseAction: (courseId: string) => void;
   setIsNewCourseOpen: Dispatch<SetStateAction<boolean>>;
@@ -138,6 +139,7 @@ export function CourseSettingsWorkspace({
   selectedCourseActionLabel,
   selectedCourseAction,
   isSelectedCourseWritable = true,
+  ownershipUnresolved = false,
   writableCourseIds,
   onSelectCourseAction,
   setIsNewCourseOpen,
@@ -217,6 +219,7 @@ export function CourseSettingsWorkspace({
             selectedActionCourse={selectedActionCourse}
             selectedCourseActionLabel={selectedCourseActionLabel}
             isCourseWritable={isSelectedCourseWritable}
+            ownershipUnresolved={ownershipUnresolved}
             onSelectCourse={onSelectCourseAction}
           />}
           {activeCourseSettingsCourse && activeCourseSettingsDraft ? (

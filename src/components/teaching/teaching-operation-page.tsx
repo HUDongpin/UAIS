@@ -322,7 +322,9 @@ export function TeachingOperationPage({
   const description = operation ? localizedText(operation.description, locale) : "";
   const selectedCourse = teacherCourses.find((course) => course.id === selectedCourseId);
   const ownedCourseAccess = useOwnedTeachingCourseAccess(selectedCourseId);
-  const isSelectedCourseWritable = ownedCourseAccess !== "unowned";
+  // No course id is not the same as an unresolved ownership list: unknown stays
+  // writable, but a missing course must match the empty-state banner.
+  const isSelectedCourseWritable = Boolean(selectedCourseId?.trim()) && ownedCourseAccess !== "unowned";
   const [statusMessage, setStatusMessage] = useState(localizedText(config.readyMessage, locale));
   const [manifestReady, setManifestReady] = useState(false);
   const [exportManifest, setExportManifest] =
@@ -377,7 +379,7 @@ export function TeachingOperationPage({
   async function persistTeachingOperationAction(actionSlot: "primary" | "secondary") {
     if (actionPendingRef.current || isAuditPending || !isSelectedCourseWritable) {
       if (!isSelectedCourseWritable) {
-        setStatusMessage(localizedText(TEACHING_OPERATION_COURSE_NOT_OWNED_MESSAGE, locale));
+        setStatusMessage(localizedText(selectedCourseId?.trim() ? TEACHING_OPERATION_COURSE_NOT_OWNED_MESSAGE : TEACHING_OPERATION_COURSE_CONTEXT_MISSING_MESSAGE, locale));
       }
       return;
     }
@@ -1212,7 +1214,7 @@ export function TeachingOperationPage({
                   only fail. A persisted course that is not in the static catalog
                   still shows its id rather than claiming no course, so a teacher
                   can see that navigation carried the context. */}
-              <p className="text-sm font-semibold text-[var(--foreground)]">
+              <p id="teaching-operation-course-context" className="text-sm font-semibold text-[var(--foreground)]">
                 {selectedCourseId
                   ? `${locale === "zh-CN" ? "已选择课程" : "Selected course"}：${
                       selectedCourse
@@ -1320,7 +1322,7 @@ export function TeachingOperationPage({
               <button
                 type="button"
                 className="inline-flex h-11 items-center gap-2 rounded-full bg-[var(--accent)] px-5 text-sm font-semibold text-white outline-none transition hover:bg-[var(--accent-strong)] active:translate-y-px focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[var(--accent)] disabled:active:translate-y-0"
-                disabled={areActionButtonsDisabled}
+                disabled={areActionButtonsDisabled} aria-describedby="teaching-operation-course-context"
                 onClick={runPrimaryAction}
               >
                 <Lightning size={18} weight="bold" />
@@ -1333,7 +1335,7 @@ export function TeachingOperationPage({
                   areActionButtonsDisabled ||
                   (safeOperationId === "knowledge-base" &&
                     !isKnowledgeResourceRegistrationReady)
-                }
+                } aria-describedby="teaching-operation-course-context"
                 onClick={runSecondaryAction}
               >
                 <CheckCircle size={18} weight="duotone" />

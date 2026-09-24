@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { AnchorHTMLAttributes, ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { TeachingOperationPage } from "@/components/teaching/teaching-operation-page";
+import { operationConfigs } from "@/components/teaching/teaching-operation-page-data";
 
 const openTeachingStudentPreviewUrl = vi.hoisted(() => vi.fn());
 vi.mock("@/components/pages/teaching-student-preview", async (importOriginal) => {
@@ -207,6 +208,53 @@ describe("TeachingOperationPage", () => {
     expect(screen.getByText("未选择课程：教学操作需要课程上下文。")).toBeTruthy();
   });
 
+  it("disables write and job-start controls when no course is selected", () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(
+      async () =>
+        new Response(JSON.stringify({ error: "should-not-run" }), {
+          status: 500,
+          headers: { "content-type": "application/json" },
+        }),
+    );
+
+    try {
+      for (const [operationId] of operations) {
+        const { unmount } = render(<TeachingOperationPage operationId={operationId} />);
+        const config = operationConfigs[operationId];
+        const primary = screen.getByRole("button", {
+          name: config.primaryAction["zh-CN"],
+        }) as HTMLButtonElement;
+        const secondary = screen.getByRole("button", {
+          name: config.secondaryAction["zh-CN"],
+        }) as HTMLButtonElement;
+
+        expect(screen.getByText("未选择课程：教学操作需要课程上下文。")).toBeTruthy();
+        expect(primary.disabled).toBe(true);
+        expect(secondary.disabled).toBe(true);
+        expect(primary.getAttribute("aria-describedby")).toBe("teaching-operation-course-context");
+        expect(secondary.getAttribute("aria-describedby")).toBe(
+          "teaching-operation-course-context",
+        );
+
+        if (operationId === "knowledge-base") {
+          expect((screen.getByLabelText("资料标题") as HTMLInputElement).disabled).toBe(true);
+          expect((screen.getByLabelText("公开 HTTPS 来源") as HTMLInputElement).disabled).toBe(
+            true,
+          );
+          expect((screen.getByLabelText("权利依据") as HTMLSelectElement).disabled).toBe(true);
+        }
+
+        fireEvent.click(primary);
+        fireEvent.click(secondary);
+        unmount();
+      }
+
+      expect(teachingOperationsPosts(fetchSpy)).toHaveLength(0);
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
+
   it("names the missing course context instead of blaming sign-in or permissions", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
       if (String(input) === "/api/teaching/courses") {
@@ -227,7 +275,12 @@ describe("TeachingOperationPage", () => {
     })
 
     try {
-      render(<TeachingOperationPage operationId="course-settings" />);
+      render(
+        <TeachingOperationPage
+          operationId="course-settings"
+          selectedCourseId="teacher-research-methods"
+        />,
+      );
 
       fireEvent.click(screen.getByRole("button", { name: "保存课程设置" }));
 
@@ -305,7 +358,12 @@ describe("TeachingOperationPage", () => {
       expect(screen.getByText("课程设置已由服务端持久化。")).toBeTruthy();
     });
 
-    rerender(<TeachingOperationPage operationId="data-export" />);
+    rerender(
+      <TeachingOperationPage
+        operationId="data-export"
+        selectedCourseId="teacher-math-pedagogy"
+      />,
+    );
 
     fireEvent.click(screen.getByRole("button", { name: "生成导出清单" }));
     await waitFor(() => {
@@ -313,7 +371,12 @@ describe("TeachingOperationPage", () => {
     });
     expect(screen.getByText("导出清单已生成")).toBeTruthy();
 
-    rerender(<TeachingOperationPage operationId="invite-code" />);
+    rerender(
+      <TeachingOperationPage
+        operationId="invite-code"
+        selectedCourseId="teacher-math-pedagogy"
+      />,
+    );
 
     fireEvent.click(screen.getByRole("button", { name: "生成新邀请码" }));
     await waitFor(() => {
@@ -360,7 +423,12 @@ describe("TeachingOperationPage", () => {
     })
 
     try {
-    const { container } = render(<TeachingOperationPage operationId="data-export" />);
+    const { container } = render(
+      <TeachingOperationPage
+        operationId="data-export"
+        selectedCourseId="teacher-research-methods"
+      />,
+    );
 
     expect(container.querySelector('[data-uais-openmaic-page="data-export"]')).toBeTruthy();
     expect(screen.getByText("开放课堂智能系统导出包")).toBeTruthy();
@@ -4320,9 +4388,7 @@ describe("TeachingOperationPage", () => {
       const { container, unmount } = render(
         <TeachingOperationPage
           operationId={operationId}
-          selectedCourseId={
-            operationId === "knowledge-base" ? "teacher-research-methods" : undefined
-          }
+          selectedCourseId="teacher-research-methods"
         />,
       );
       if (operationId === "knowledge-base") {
