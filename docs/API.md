@@ -21,17 +21,26 @@ routes as product contracts until they are explicitly promoted.
 
 ### `GET /healthz`
 
-Purpose: low-cost app liveness for uptime checks.
+Purpose: redacted uptime check. It reports app liveness plus whether the core
+database answers and carries this build's migrations.
 
-Success:
+Healthy:
 
-- `200`
-- `cache-control: no-store`
-- Body includes `status: "ok"`, `service: "uais"`, `checkedAt`, `checks.app`,
-  and a redaction block.
+- HTTP `200` with `cache-control: no-store`.
+- JSON `status: "ok"`, `service: "uais"`, `checkedAt`, and `checks` for `app`,
+  `database`, and `migrations`.
+- `redaction` with `secrets`, `localFiles`, and `databaseUrl` all `"omitted"`.
+- Optional `gitCommitSha`: the first 7 characters of `VERCEL_GIT_COMMIT_SHA`
+  when that value is a valid hex SHA. Omitted when the variable is missing or
+  invalid.
 
-This endpoint does not prove database, provider, or production-storage
-readiness. Keep readiness checks separate from liveness.
+Unhealthy database or migrations:
+
+- HTTP `503` with `status: "degraded"`, not HTTP 200 with a warning.
+- Same `service`, `checks`, cache, and redaction rules as a healthy response.
+
+`checks.app: "ok"` alone does not prove the site is healthy. Auth-provider and
+production-storage readiness stay on their own checks.
 
 ## App Session
 
