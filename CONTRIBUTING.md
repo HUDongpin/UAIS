@@ -93,7 +93,12 @@ Before inviting real users:
 
 - Shared local-demo credentials must not authenticate in production.
 - Deployed environments must have explicit session signing secrets.
-- `/healthz` must return HTTP 200 with a no-store response.
+- A healthy `/healthz` returns HTTP 200 with `cache-control: no-store` and JSON
+  `status: "ok"`, `service: "uais"`, and `checks` for `app`, `database`, and
+  `migrations`. When `VERCEL_GIT_COMMIT_SHA` is a hex commit SHA, the body also
+  includes its first 7 characters as `gitCommitSha`. An unhealthy database or
+  migrations check returns
+  HTTP 503 with `status: "degraded"`, not HTTP 200 with a warning.
 - A rollback operator must be able to follow
   `docs/runbooks/production-rollback.md`.
 - The pre-deploy checklist in `docs/runbooks/pre-deploy-checklist.md` must be

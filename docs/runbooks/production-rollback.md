@@ -8,7 +8,8 @@ Purpose: restore the last known good UAIS production deployment quickly when a r
 
 Start rollback when any of these happen in production:
 
-- `/healthz` does not return HTTP 200 with `status: "ok"`.
+- `/healthz` does not return HTTP 200 with `status: "ok"`. HTTP 503 with
+  `status: "degraded"` is also a rollback trigger.
 - Login succeeds but the first protected page redirects incorrectly or fails to render.
 - A protected API that was green before the release returns repeated 5xx responses.
 - The release owner cannot complete the post-deploy smoke within 10 minutes.

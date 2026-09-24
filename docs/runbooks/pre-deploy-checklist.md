@@ -62,7 +62,9 @@ passes - if the output says the suites were skipped, the lane did not run.
 
 For a preview or staging deployment:
 
-- `GET /healthz` returns HTTP 200 and `cache-control: no-store`.
+- A healthy `GET /healthz` returns HTTP 200, `cache-control: no-store`, and
+  `status: "ok"`. HTTP 503 with `status: "degraded"` means the database or
+  migrations check is unhealthy, so the smoke fails.
 - External uptime points to the target lane's `/healthz` endpoint.
 - Sentry receives a test event in the target lane without DSNs, tokens, cookies,
   local paths, request bodies, or student content in the evidence.
