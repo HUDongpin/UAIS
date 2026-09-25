@@ -145,16 +145,19 @@ export function collectTeachingOperationAuditDomainProjectionValues(
           : [],
       )
     : [];
+  // Append-only audits list every version of one domain object, oldest first
+  // (a pending gradebook update, then the released row). Those versions share
+  // objectId and operationRecordId, so identity dedupe kept the oldest and
+  // rollback read "not released". Collapse only exact copies — the same
+  // projection repeated at the top level and inside the record that wrote it —
+  // and keep distinct versions in encounter order.
   const seen = new Set<string>();
   const merged: unknown[] = [];
   for (const projection of [...topLevel, ...fromRecords]) {
     if (!isRecord(projection)) {
       continue;
     }
-    const objectId = typeof projection.objectId === "string" ? projection.objectId : "";
-    const operationRecordId =
-      typeof projection.operationRecordId === "string" ? projection.operationRecordId : "";
-    const key = `${objectId}\0${operationRecordId}`;
+    const key = canonicalJson(projection);
     if (seen.has(key)) {
       continue;
     }
@@ -162,6 +165,19 @@ export function collectTeachingOperationAuditDomainProjectionValues(
     merged.push(projection);
   }
   return merged;
+}
+
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `[${value.map((entry) => canonicalJson(entry)).join(",")}]`;
+  }
+  if (isRecord(value)) {
+    return `{${Object.keys(value)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value) ?? "null";
 }
 
 export function normalizeExternalRollbackReceipt(
