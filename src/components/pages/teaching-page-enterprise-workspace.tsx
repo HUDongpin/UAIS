@@ -55,6 +55,7 @@ type EnterpriseWorkspaceProps = {
   onUpdateInvitePolicyDraft: (patch: Partial<InviteCodePolicyDraft>) => void;
   selectedCourseAction: { courseId: string; action: TeacherCourseAction } | undefined;
   isSelectedCourseWritable?: boolean;
+  ownershipUnresolved?: boolean;
   selectedActionCourse: TeacherCourse | undefined;
   selectedCourseActionLabel: string | undefined;
   onSelectCourseAction: (courseId: string) => void;
@@ -100,6 +101,7 @@ export function EnterpriseWorkspace({
   onUpdateInvitePolicyDraft,
   selectedCourseAction,
   isSelectedCourseWritable = true,
+  ownershipUnresolved = false,
   selectedActionCourse,
   selectedCourseActionLabel,
   onSelectCourseAction,
@@ -165,6 +167,7 @@ export function EnterpriseWorkspace({
             selectedActionCourse={selectedActionCourse}
             selectedCourseActionLabel={selectedCourseActionLabel}
             isCourseWritable={isSelectedCourseWritable}
+            ownershipUnresolved={ownershipUnresolved}
             onSelectCourse={onSelectCourseAction}
           />}
           </div>
@@ -256,6 +259,7 @@ export function EnterpriseWorkspace({
               copyInviteWorkspaceValue={copyInviteWorkspaceValue}
               runInviteWorkspaceAction={runInviteWorkspaceAction}
               isCourseWritable={isSelectedCourseWritable}
+              ownershipUnresolved={ownershipUnresolved}
             /> : null}
         </section>
 

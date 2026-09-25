@@ -24,8 +24,10 @@ import {
   TEACHING_COURSE_CREATE_OWNERSHIP_EVIDENCE_MISSING_MESSAGE,
   TEACHING_COURSE_CREATE_RECEIPT_MISSING_MESSAGE,
   TEACHING_OPERATION_ALERT_NOTIFICATION_FAILED_MESSAGE,
+  INVITE_TARGET_REQUIRED_MESSAGE,
   TEACHING_OPERATION_COURSE_NOT_OWNED_MESSAGE,
   TEACHING_OPERATION_COURSE_REQUIRED_MESSAGE,
+  TEACHING_OPERATION_OWNERSHIP_UNCONFIRMED_MESSAGE,
   TEACHING_OPERATION_ROLLBACK_FAILED_MESSAGE,
   TEACHING_OPERATION_SAVE_FAILED_MESSAGE,
 } from "./teaching-page-messages";
@@ -736,14 +738,35 @@ export function createInvitePartialFailureStatus(
 export function readInlineWorkspaceWriteBlockMessage(input: {
   selectedCourseId: string | undefined;
   writableCourseIds: ReadonlySet<string> | undefined;
+  ownershipUnresolved?: boolean;
 }) {
   if (!input.selectedCourseId) {
     return TEACHING_OPERATION_COURSE_REQUIRED_MESSAGE;
+  }
+  if (input.ownershipUnresolved) {
+    return TEACHING_OPERATION_OWNERSHIP_UNCONFIRMED_MESSAGE;
   }
   if (!isWritableTeacherCourseId(input.writableCourseIds, input.selectedCourseId)) {
     return TEACHING_OPERATION_COURSE_NOT_OWNED_MESSAGE;
   }
   return undefined;
+}
+
+export function readInviteWorkspacePreflight(input: {
+  courseId: string | undefined;
+  targetClassId: string | undefined;
+  policyError: boolean;
+  writableCourseIds: ReadonlySet<string> | undefined;
+  ownershipUnresolved: boolean;
+}) {
+  if (!input.courseId || !input.targetClassId || input.policyError) {
+    return INVITE_TARGET_REQUIRED_MESSAGE;
+  }
+  return readInlineWorkspaceWriteBlockMessage({
+    selectedCourseId: input.courseId,
+    writableCourseIds: input.writableCourseIds,
+    ownershipUnresolved: input.ownershipUnresolved,
+  });
 }
 
 

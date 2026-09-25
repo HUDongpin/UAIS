@@ -134,6 +134,49 @@ describe("teaching workbench write preflight", () => {
     expect(screen.queryByRole("dialog", { name: "新建班级" })).toBeNull();
   });
 
+  it("disables selected-course inline and invite writes while ownership is unresolved", async () => {
+    const fetchMock = vi.fn(() => new Promise<Response>(() => {}));
+    vi.stubGlobal("fetch", fetchMock);
+    window.history.replaceState(null, "", "/teaching");
+
+    render(<TeachingPage />);
+
+    expect(screen.getByRole("button", { name: "保存课程设置" })).toHaveProperty("disabled", true);
+
+    await chooseWorkspaceCourse("teacher-research-methods");
+
+    const saveButton = screen.getByRole("button", { name: "保存课程设置" });
+    expect(saveButton).toHaveProperty("disabled", true);
+    expect(screen.getByLabelText("课程名称")).toHaveProperty("disabled", true);
+    expect(
+      screen.getByText("正在确认课程所有权，写入操作暂不可用。"),
+    ).toBeTruthy();
+    expect(
+      screen.queryByText("当前账号不是这门课程的授课教师，写入操作已关闭。"),
+    ).toBeNull();
+    expect(
+      document.querySelector('[data-uais-inline-workspace-course-writable="false"]'),
+    ).toBeTruthy();
+
+    fireEvent.click(saveButton);
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      "/api/teaching/operations",
+      expect.anything(),
+    );
+
+    fireEvent.click(screen.getByRole("link", { name: "邀请码" }));
+    expect(screen.getByRole("button", { name: "生成新邀请码" })).toHaveProperty("disabled", true);
+    expect(screen.getByRole("button", { name: "确认发布邀请码" })).toHaveProperty("disabled", true);
+    expect(document.querySelector('[data-uais-invite-writes-enabled="false"]')).toBeTruthy();
+    expect(document.getElementById("invite-policy-expires-at")).toHaveProperty("disabled", true);
+    expect(document.getElementById("invite-policy-max-joins")).toHaveProperty("disabled", true);
+    expect(document.getElementById("invite-policy-disabled")).toHaveProperty("disabled", true);
+
+    fireEvent.click(screen.getByRole("link", { name: "智能体配置" }));
+    expect(screen.getByRole("button", { name: "保存智能体方案" })).toHaveProperty("disabled", true);
+    expect(screen.getByRole("button", { name: "运行权限预检" })).toHaveProperty("disabled", true);
+  });
+
   it("keeps new-class writes enabled for a course returned by the server list", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       if (String(input) === "/api/teaching/courses") {
@@ -171,5 +214,16 @@ describe("teaching workbench write preflight", () => {
 
     fireEvent.click(newClassButton);
     expect(screen.getByRole("dialog", { name: "新建班级" })).toBeTruthy();
+
+    await chooseWorkspaceCourse("owned-research-methods");
+    expect(screen.getByRole("button", { name: "保存课程设置" })).toHaveProperty("disabled", false);
+    expect(screen.getByLabelText("课程名称")).toHaveProperty("disabled", false);
+    expect(screen.queryByText("正在确认课程所有权，写入操作暂不可用。")).toBeNull();
+    expect(
+      screen.queryByText("当前账号不是这门课程的授课教师，写入操作已关闭。"),
+    ).toBeNull();
+
+    fireEvent.click(screen.getByRole("link", { name: "邀请码" }));
+    expect(document.querySelector('[data-uais-invite-writes-enabled="true"]')).toBeTruthy();
   });
 });

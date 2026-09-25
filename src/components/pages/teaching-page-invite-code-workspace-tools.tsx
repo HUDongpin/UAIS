@@ -39,6 +39,7 @@ import {
   INVITE_CODE_COPIED_MESSAGE,
   INVITE_LINK_COPIED_MESSAGE,
   TEACHING_OPERATION_COURSE_NOT_OWNED_MESSAGE,
+  TEACHING_OPERATION_OWNERSHIP_UNCONFIRMED_MESSAGE,
 } from "./teaching-page-messages";
 
 type InviteCodeWorkspaceToolsProps = {
@@ -58,6 +59,7 @@ type InviteCodeWorkspaceToolsProps = {
   copyInviteWorkspaceValue: (value: string, successMessage: LocalizedText) => void;
   runInviteWorkspaceAction: (actionSlot: "primary" | "secondary") => void;
   isCourseWritable?: boolean;
+  ownershipUnresolved?: boolean;
 };
 
 export function InviteCodeWorkspaceTools({
@@ -76,6 +78,7 @@ export function InviteCodeWorkspaceTools({
   copyInviteWorkspaceValue,
   runInviteWorkspaceAction,
   isCourseWritable = true,
+  ownershipUnresolved = false,
 }: InviteCodeWorkspaceToolsProps) {
   const t = copy[locale].teaching;
   const selectedClass = selectedInviteClass;
@@ -152,7 +155,12 @@ export function InviteCodeWorkspaceTools({
             role="status"
             className="mt-3 text-sm font-semibold text-[var(--danger)]"
           >
-            {localizedText(TEACHING_OPERATION_COURSE_NOT_OWNED_MESSAGE, locale)}
+            {localizedText(
+              ownershipUnresolved
+                ? TEACHING_OPERATION_OWNERSHIP_UNCONFIRMED_MESSAGE
+                : TEACHING_OPERATION_COURSE_NOT_OWNED_MESSAGE,
+              locale,
+            )}
           </p>
         ) : null}
 

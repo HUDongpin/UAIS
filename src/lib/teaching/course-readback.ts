@@ -710,6 +710,21 @@ export function isConfirmedWritableTeacherCourseId(
   return isWritableTeacherCourseId(writableCourseIds, courseId);
 }
 
+// Selected-course settings, inline actions, and invite publish must not use the
+// #10 fail-open reading of an undefined id set while the teacher course list is
+// still in flight. `isWritableTeacherCourseId(undefined, id) === true` stays for
+// callers that are not waiting on that list.
+export function isSelectedTeacherCourseWriteEnabled(input: {
+  writableCourseIds: ReadonlySet<string> | undefined;
+  courseId: string | undefined;
+  ownershipUnresolved: boolean;
+}) {
+  if (input.ownershipUnresolved) {
+    return false;
+  }
+  return isWritableTeacherCourseId(input.writableCourseIds, input.courseId);
+}
+
 export function mergeTeacherClassesByCourseId(
   persistedClasses: Record<string, TeacherClassItem[]>,
   currentClasses: Record<string, TeacherClassItem[]>,

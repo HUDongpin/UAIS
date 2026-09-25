@@ -23,7 +23,7 @@ import {
 } from "./teaching-page-messages";
 import {
   isConfirmedWritableTeacherCourseId,
-  isWritableTeacherCourseId,
+  isSelectedTeacherCourseWriteEnabled,
 } from "@/lib/teaching/course-readback";
 
 
@@ -43,6 +43,7 @@ export function TeachingPage() {
     classMemberships,
     authenticatedTeacherActorId,
     writableCourseIds,
+    ownershipUnresolved,
     catalogDemoCoursesVisible,
     learningChatroomGroupsEnabled,
     persistedCourseLoadError,
@@ -100,10 +101,11 @@ export function TeachingPage() {
     setSelectedCourseAction(courseId ? { courseId, action: "manage" } : undefined);
   }
 
-  const isSelectedCourseWritable = isWritableTeacherCourseId(
+  const isSelectedCourseWritable = isSelectedTeacherCourseWriteEnabled({
     writableCourseIds,
-    selectedCourseAction?.courseId,
-  );
+    courseId: selectedCourseAction?.courseId,
+    ownershipUnresolved,
+  });
 
   function renderActiveWorkspacePanel() {
     if (activeWorkspaceItemId === "course-settings") {
@@ -133,6 +135,7 @@ export function TeachingPage() {
           selectedCourseActionLabel={selectedCourseActionLabel}
           selectedCourseAction={selectedCourseAction}
           isSelectedCourseWritable={isSelectedCourseWritable}
+          ownershipUnresolved={ownershipUnresolved}
           writableCourseIds={writableCourseIds}
           onSelectCourseAction={selectWorkspaceCourse}
           setIsNewCourseOpen={setIsNewCourseOpen}
@@ -170,6 +173,7 @@ export function TeachingPage() {
         selectedCourseActionLabel={selectedCourseActionLabel}
         selectedCourseAction={selectedCourseAction}
         isSelectedCourseWritable={isSelectedCourseWritable}
+        ownershipUnresolved={ownershipUnresolved}
         courseCards={courseCards}
         onSelectCourseAction={selectWorkspaceCourse}
         t={t}
@@ -210,6 +214,7 @@ export function TeachingPage() {
         onSelectCourseAction={selectWorkspaceCourse}
         selectedCourseAction={selectedCourseAction}
         isSelectedCourseWritable={isSelectedCourseWritable}
+        ownershipUnresolved={ownershipUnresolved}
         selectedActionCourse={selectedActionCourse}
         selectedCourseActionLabel={selectedCourseActionLabel}
         copyInviteWorkspaceValue={copyInviteWorkspaceValue}

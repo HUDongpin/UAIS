@@ -84,6 +84,10 @@ export const TEACHING_OPERATION_COURSE_NOT_OWNED_MESSAGE: LocalizedText = {
   "zh-CN": "当前账号不是这门课程的授课教师，写入操作已关闭。",
   "en-US": "This account is not the course owner, so write actions are disabled.",
 };
+export const TEACHING_OPERATION_OWNERSHIP_UNCONFIRMED_MESSAGE: LocalizedText = {
+  "zh-CN": "正在确认课程所有权，写入操作暂不可用。",
+  "en-US": "Course ownership is still loading, so write actions are unavailable.",
+};
 export const TEACHING_COURSE_COVER_TEACHER_READBACK_REQUIRED_MESSAGE: LocalizedText = {
   "zh-CN": "教师身份未读回，请重新登录或等待课程数据读回后再生成封面。",
   "en-US":

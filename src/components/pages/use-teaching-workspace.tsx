@@ -36,6 +36,7 @@ import {
   isPersistedTeachingClassCreateReceipt,
   isPersistedTeachingCourseCreateReceipt,
   readInlineWorkspaceWriteBlockMessage,
+  readInviteWorkspacePreflight,
   readJsonPayload,
 } from "./teaching-page-helpers";
 import {
@@ -99,7 +100,6 @@ import {
   INVITE_PUBLICATION_RECEIPT_MISSING_MESSAGE,
   INVITE_PUBLISHED_MESSAGE,
   INVITE_READY_MESSAGE,
-  INVITE_TARGET_REQUIRED_MESSAGE,
   describeStudentGroupSuggestion,
   TEACHING_CLASS_CREATE_READBACK_MISMATCH_MESSAGE,
   TEACHING_CLASS_CREATE_READBACK_MISSING_MESSAGE,
@@ -181,7 +181,7 @@ export function useTeachingWorkspace() {
   const [authenticatedTeacherActorId, setAuthenticatedTeacherActorId] =
     useState<string>();
   const {
-    writableCourseIds, catalogDemoCoursesVisible, applyWorkbenchCourses, markCatalogDemoReadOnly,
+    writableCourseIds, ownershipUnresolved, catalogDemoCoursesVisible, applyWorkbenchCourses, markCatalogDemoReadOnly,
   } = useTeachingWorkbenchWriteAccess();
   // Chatroom-groups feature gate (plan D9). Starts false so a workspace that has
   // not heard from the server — or a deployment with the flag off — shows no
@@ -524,7 +524,7 @@ export function useTeachingWorkspace() {
     // course id, so an unset course used to become "whatever sorted first" and
     // the receipt came back looking entirely successful.
     const selectedCourseId = selectedCourseAction?.courseId;
-    const blockedWrite = readInlineWorkspaceWriteBlockMessage({ selectedCourseId, writableCourseIds });
+    const blockedWrite = readInlineWorkspaceWriteBlockMessage({ selectedCourseId, writableCourseIds, ownershipUnresolved });
     if (blockedWrite) {
       setInlineWorkspaceStatuses((s) => ({ ...s, [operationId]: localizedText(blockedWrite, locale) }));
       return;
@@ -1249,10 +1249,10 @@ export function useTeachingWorkspace() {
     // Plan E9: an invite code belongs to one class. Both halves of the target are
     // now required, because the old fallback published a code for the first class
     // of the first course and reported it as a success.
-    if (!courseId || !targetClassId || inviteTargeting.invitePolicyDraftError) {
-      setInviteWorkspaceStatus(INVITE_TARGET_REQUIRED_MESSAGE);
-      return;
-    }
+    const invitePreflight = readInviteWorkspacePreflight({
+      courseId, targetClassId, policyError: Boolean(inviteTargeting.invitePolicyDraftError), writableCourseIds, ownershipUnresolved,
+    });
+    if (invitePreflight) return setInviteWorkspaceStatus(invitePreflight);
 
     const attemptId = createInlineWorkspaceAttemptId(operationId);
     setInviteWorkspaceStatus(TEACHING_OPERATION_SAVE_PENDING_MESSAGE);
@@ -1546,7 +1546,7 @@ export function useTeachingWorkspace() {
     setClassMemberships,
     authenticatedTeacherActorId,
     setAuthenticatedTeacherActorId,
-    writableCourseIds,
+    writableCourseIds, ownershipUnresolved,
     catalogDemoCoursesVisible,
     learningChatroomGroupsEnabled,
     persistedCourseLoadError,
