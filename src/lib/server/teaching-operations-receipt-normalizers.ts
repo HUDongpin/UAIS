@@ -168,11 +168,18 @@ export function collectTeachingOperationAuditDomainProjectionValues(
 }
 
 function canonicalJson(value: unknown): string {
+  if (value === undefined) {
+    return "undefined";
+  }
+  if (value instanceof Date) {
+    return JSON.stringify(Number.isNaN(value.getTime()) ? null : value.toISOString());
+  }
   if (Array.isArray(value)) {
     return `[${value.map((entry) => canonicalJson(entry)).join(",")}]`;
   }
   if (isRecord(value)) {
     return `{${Object.keys(value)
+      .filter((key) => value[key] !== undefined)
       .sort()
       .map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`)
       .join(",")}}`;
