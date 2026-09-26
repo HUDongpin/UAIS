@@ -22,21 +22,45 @@ routes as product contracts until they are explicitly promoted.
 ### `GET /healthz`
 
 Purpose: redacted uptime check. It reports app liveness plus whether the core
-database answers and carries this build's migrations.
+database answers and already contains all migrations required by this build.
 
 Healthy:
 
 - HTTP `200` with `cache-control: no-store`.
 - JSON `status: "ok"`, `service: "uais"`, `checkedAt`, and `checks` for `app`,
   `database`, and `migrations`.
+- `checks.migrations: "ok"` means the database's `uais_schema_migrations`
+  ledger already contains every migration this build requires
+  (`UAIS_CORE_DATABASE_MIGRATION_VERSIONS`). Extra versions applied beyond this
+  build (database ahead of code) do not fail the check.
 - `redaction` with `secrets`, `localFiles`, and `databaseUrl` all `"omitted"`.
 - Optional `gitCommitSha`: the first 7 characters of `VERCEL_GIT_COMMIT_SHA`
-  when that value is a valid hex SHA. Omitted when the variable is missing or
-  invalid.
+  when the trimmed value is 7-40 hexadecimal characters. Omitted when it is
+  missing or does not match.
 
-Unhealthy database or migrations:
+Exception: non-production runtime with no database configured:
 
-- HTTP `503` with `status: "degraded"`, not HTTP 200 with a warning.
+- If `UAIS_CORE_DATABASE_URL`, `DATABASE_URL`, and `POSTGRES_URL` are all unset
+  or blank, and the runtime is not production, the response is still HTTP `200`
+  / `status: "ok"`, with `checks.database: "not-configured"` and
+  `checks.migrations: "not-configured"`.
+- "Production" means any of `VERCEL_ENV`, `NODE_ENV`, or `UAIS_DEPLOYMENT_ENV`
+  is exactly `production`.
+
+Unhealthy (HTTP `503`, `status: "degraded"`, not HTTP 200 with a warning):
+
+- `checks.database: "unreachable"` and `checks.migrations: "unknown"` when the
+  pool cannot be created, `SELECT 1` fails, or the probe exceeds its 8-second
+  deadline or throws.
+- `checks.migrations: "behind"` in every runtime: the ledger is readable but
+  is missing at least one version in `UAIS_CORE_DATABASE_MIGRATION_VERSIONS`.
+  `checks.database` stays `"ok"`. The body adds `migrationCurrency` with
+  `expected` (that version count), `missing` (absent version names), and
+  `valueRedacted: true`.
+- `checks.database: "ok"` and `checks.migrations: "unknown"`: the ledger could
+  not be read. No `migrationCurrency`.
+- `checks.database` or `checks.migrations` is `"not-configured"` in a production
+  runtime.
 - Same `service`, `checks`, cache, and redaction rules as a healthy response.
 
 `checks.app: "ok"` alone does not prove the site is healthy. Auth-provider and
