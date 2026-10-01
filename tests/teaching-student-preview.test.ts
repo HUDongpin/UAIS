@@ -176,6 +176,76 @@ describe("teaching student preview session", () => {
     expect(assign).not.toHaveBeenCalled();
   });
 
+  it("collapses exact audit projection copies and keeps distinct versions in order", () => {
+    const pending = {
+      objectId: "gradebook-update-course",
+      objectType: "gradebook-update",
+      operationRecordId: "grading-save-1",
+      updateStatus: "pending-release",
+    };
+    const released = {
+      ...pending,
+      updateStatus: "released",
+      releasedBy: "teacher-kang",
+    };
+    const reversedKeyCopy = {
+      updateStatus: pending.updateStatus,
+      operationRecordId: pending.operationRecordId,
+      objectType: pending.objectType,
+      objectId: pending.objectId,
+    };
+
+    expect(
+      collectTeachingOperationAuditDomainProjectionValues({
+        domainProjections: [pending, released, reversedKeyCopy],
+        records: [
+          {
+            recordId: "grading-save-1",
+            domainProjections: [pending, released],
+          },
+        ],
+      }),
+    ).toEqual([pending, released]);
+
+    const withExplicitUndefined = {
+      objectId: "student-preview-session-owned-course",
+      objectType: "student-preview-session",
+      operationRecordId: "preview-1",
+      previewStatus: "generated",
+      previewUrl: undefined,
+    };
+    const withoutOptionalKey = {
+      objectId: "student-preview-session-owned-course",
+      objectType: "student-preview-session",
+      operationRecordId: "preview-1",
+      previewStatus: "generated",
+    };
+    const withNullUrl = {
+      ...withoutOptionalKey,
+      previewUrl: null,
+    };
+    const earlierPreview = {
+      ...withoutOptionalKey,
+      generatedAt: new Date("2026-06-22T10:00:00.000Z"),
+    };
+    const laterPreview = {
+      ...withoutOptionalKey,
+      generatedAt: new Date("2026-06-22T11:00:00.000Z"),
+    };
+
+    expect(
+      collectTeachingOperationAuditDomainProjectionValues({
+        domainProjections: [
+          withExplicitUndefined,
+          withoutOptionalKey,
+          withNullUrl,
+          earlierPreview,
+          laterPreview,
+        ],
+      }),
+    ).toEqual([withExplicitUndefined, withNullUrl, earlierPreview, laterPreview]);
+  });
+
   it("hydrates audit domain projections from nested operation records", () => {
     expect(
       collectTeachingOperationAuditDomainProjectionValues({
