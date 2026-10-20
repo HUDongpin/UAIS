@@ -49,15 +49,27 @@ describe("enterprise closed-loop regression guards", () => {
       "function doesOperationPageDomainProjectionMatchBusinessSemantics",
     );
 
-    expect(page).toContain("function isVerifiedOperationAuditAuthSession");
-    expect(page).toContain('typeof authSession?.sessionId === "string"');
-    expect(page).toContain('typeof authSession.authenticatedAt === "string"');
-    expect(page).toContain('typeof authSession.expiresAt === "string"');
-    expect(
-      auditReadbackSection.indexOf(
-        "!isVerifiedOperationAuditAuthSession(matchingAuditEvent.authSession)",
-      ),
-    ).toBeLessThan(auditReadbackSection.indexOf('status: "verified"'));
+    const receiptGuards = source("src/components/pages/teaching-page-inline-receipt-guards.ts");
+    const sessionGuard = sliceRequiredSection(
+      receiptGuards,
+      "export function hasCompleteInlineTeachingAuthSession",
+      "export function resolveVerifiedInlineAuditAuthSession",
+    );
+    expect(page).toContain(
+      "hasCompleteInlineTeachingAuthSession as isVerifiedOperationAuditAuthSession",
+    );
+    expect(page).toContain('from "@/components/pages/teaching-page-inline-receipt-guards"');
+    expect(sessionGuard).toContain('typeof authSession?.sessionId === "string"');
+    expect(sessionGuard).toContain("authSession.sessionId.trim().length > 0");
+    expect(sessionGuard).toContain('typeof authSession.authenticatedAt === "string"');
+    expect(sessionGuard).toContain("authSession.authenticatedAt.trim().length > 0");
+    expect(sessionGuard).toContain('typeof authSession.expiresAt === "string"');
+    expect(sessionGuard).toContain("authSession.expiresAt.trim().length > 0");
+    const sessionCheckIndex = auditReadbackSection.indexOf(
+      "!isVerifiedOperationAuditAuthSession(matchingAuditEvent.authSession)",
+    );
+    expect(sessionCheckIndex).toBeGreaterThan(-1);
+    expect(sessionCheckIndex).toBeLessThan(auditReadbackSection.indexOf('status: "verified"'));
     expect(pageTest).toContain(
       "requires a complete signed teacher session before verifying operation page audit readback",
     );

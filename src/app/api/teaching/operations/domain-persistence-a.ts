@@ -36,6 +36,7 @@ import {
   readStudentRosterSyncProviderConfig,
 } from "./provider-config";
 import { readTeachingKnowledgeResourceRegistration } from "@/lib/server/teaching-knowledge-resource";
+import { generateTeachingUnitDraftContent } from "@/lib/server/teaching-unit-draft-generator";
 import {
   createRedaction,
   isRecord,
@@ -755,6 +756,7 @@ export async function maybePublishCourseContentWithProvider(input: {
 export async function maybePersistCourseUnitDraftDomainObject(input: {
   env: Record<string, string | undefined>;
   fetch?: typeof fetch;
+  body: Record<string, unknown>;
   receipt: TeachingOperationReceipt;
   authenticatedTeacher: TeachingOperationAuthenticatedTeacher;
   courseId?: string;
@@ -769,13 +771,6 @@ export async function maybePersistCourseUnitDraftDomainObject(input: {
   ) {
     return undefined;
   }
-  if (
-    !isTeachingCourseManagementPersistenceConfigured(input.env) &&
-    !isTeachingOperationProductionRuntime(input.env)
-  ) {
-    return undefined;
-  }
-
   const courseManagementRepository = createUaisTeachingCourseManagementRepository({
     env: input.env,
     fetch: input.fetch,
@@ -790,6 +785,12 @@ export async function maybePersistCourseUnitDraftDomainObject(input: {
     actorId: input.authenticatedTeacher.actorId,
     courseId: input.courseId,
     operationRecordId: input.receipt.receiptId,
+    generateContent: (course) => generateTeachingUnitDraftContent({
+      course,
+      locale: input.body.locale === "en-US" ? "en-US" : "zh-CN",
+      env: input.env,
+      fetch: input.fetch,
+    }),
     ...(input.receipt.sourceAction ? { sourceAction: input.receipt.sourceAction } : {}),
     traceId: input.traceId,
     audit: {

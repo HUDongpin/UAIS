@@ -89,3 +89,27 @@ export function createTeacherGroupSuggestionDraft(input: {
     suggestedGroups,
   };
 }
+
+export function removeTeacherGroupSuggestion(
+  currentSuggestions: Record<string, TeacherGroupSuggestionDraft>,
+  courseId: string,
+  suggestionKey: string,
+) {
+  const currentCourseSuggestion = currentSuggestions[courseId];
+  if (!currentCourseSuggestion) {
+    return currentSuggestions;
+  }
+  const suggestedGroups = currentCourseSuggestion.suggestedGroups.filter(
+    (suggestion) => suggestion.suggestionKey !== suggestionKey,
+  );
+  const nextSuggestions = { ...currentSuggestions };
+  if (suggestedGroups.length === 0) {
+    delete nextSuggestions[courseId];
+  } else {
+    nextSuggestions[courseId] = {
+      ...currentCourseSuggestion,
+      suggestedGroups,
+    };
+  }
+  return nextSuggestions;
+}
