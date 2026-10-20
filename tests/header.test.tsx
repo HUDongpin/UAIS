@@ -273,37 +273,37 @@ describe("Header", () => {
     expect(screen.queryByRole("button", { name: "全局搜索" })).toBeNull();
   });
 
-  it("opens a coming-soon panel for calendar and notifications instead of a silent no-op", () => {
+  it("opens course data panels for calendar and notifications", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({
+      courses: [], classes: [], memberships: [],
+      receipt: { status: "read", action: "list-courses", actorId: teacherSession.account },
+    })));
+    Object.defineProperty(HTMLDialogElement.prototype, "showModal", {
+      configurable: true, value() { this.setAttribute("open", ""); },
+    });
+    Object.defineProperty(HTMLDialogElement.prototype, "close", {
+      configurable: true, value() { this.removeAttribute("open"); this.dispatchEvent(new Event("close")); },
+    });
     mockPathname = "/teaching";
     render(<Header initialSessionUser={teacherSession} />);
 
     fireEvent.click(screen.getByRole("button", { name: "日历" }));
-    const calendarPanel = screen.getByRole("dialog", { name: "日历即将推出" });
-    expect(calendarPanel.textContent).toContain("课程日历尚未开放");
-    fireEvent.keyDown(document, { key: "Escape" });
-    expect(screen.queryByRole("dialog", { name: "日历即将推出" })).toBeNull();
+    const calendarPanel = screen.getByRole("dialog", { name: "课程日历" });
+    await within(calendarPanel).findByText("暂无已发布任务的截止时间。");
+    fireEvent.click(within(calendarPanel).getByRole("button", { name: "关闭" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "通知" }));
-    const notificationsPanel = screen.getByRole("dialog", { name: "通知即将推出" });
-    expect(notificationsPanel.textContent).toContain("通知中心尚未开放");
-    fireEvent.keyDown(document, { key: "Escape" });
-    expect(screen.queryByRole("dialog", { name: "通知即将推出" })).toBeNull();
+    const notificationsPanel = screen.getByRole("dialog", { name: "通知中心" });
+    await within(notificationsPanel).findByText("暂无可显示的班级申请或学习反馈。");
+    fireEvent.click(within(notificationsPanel).getByRole("button", { name: "关闭" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 
-  it("keeps only one header coming-soon panel open and closes it when focus moves away", () => {
-    mockPathname = "/teaching";
-    render(<Header initialSessionUser={teacherSession} />);
-
-    fireEvent.click(screen.getByRole("button", { name: "日历" }));
-    expect(screen.getByRole("dialog", { name: "日历即将推出" })).toBeTruthy();
-
-    fireEvent.click(screen.getByRole("button", { name: "通知" }));
-    expect(screen.queryByRole("dialog", { name: "日历即将推出" })).toBeNull();
-    expect(screen.getByRole("dialog", { name: "通知即将推出" })).toBeTruthy();
-
-    const accountButton = screen.getByRole("button", { name: "教师账号" });
-    fireEvent.focusIn(accountButton);
-    expect(screen.queryByRole("dialog", { name: "通知即将推出" })).toBeNull();
+  it("does not offer personal course data controls without a session", () => {
+    render(<Header />);
+    expect(screen.queryByRole("button", { name: "日历" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "通知" })).toBeNull();
   });
 
   // E12/PKG-7: the header had 30 hardcoded light hex classes and no dark
@@ -327,20 +327,20 @@ describe("Header", () => {
   // E12/PKG-7 mobile navigation. jsdom has no viewport matching, and this suite
   // has never stubbed `matchMedia`, so the drawer is asserted the way the rest of
   // the suite asserts responsive behaviour: on the rendered structure, plus the
-  // `md:hidden` / `md:flex` classes that decide which of the two surfaces a
+  // `xl:hidden` / `xl:flex` classes that decide which of the two surfaces a
   // phone actually sees.
   describe("mobile navigation drawer", () => {
-    it("keeps the drawer trigger below md and the desktop nav from md up", () => {
+    it("keeps the drawer trigger below xl and the desktop nav from xl up", () => {
       mockPathname = "/courses";
       const { container } = render(<Header initialSessionUser={teacherSession} />);
 
       const trigger = screen.getByRole("button", { name: "打开导航菜单" });
       expect(trigger.getAttribute("aria-expanded")).toBe("false");
       expect(trigger.getAttribute("aria-controls")).toBe("uais-mobile-nav-panel");
-      expect(trigger.parentElement?.className).toContain("md:hidden");
+      expect(trigger.parentElement?.className).toContain("xl:hidden");
       expect(
         screen.getByRole("navigation", { name: "Primary" }).className,
-      ).toContain("md:flex");
+      ).toContain("xl:flex");
       expect(container.querySelector("[data-uais-mobile-nav]")).toBeNull();
     });
 

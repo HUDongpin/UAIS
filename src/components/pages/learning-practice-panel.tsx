@@ -69,19 +69,32 @@ type DraftRecoveryEnvelope = {
 
 const draftRecoveryMaxAgeMs = 7 * 24 * 60 * 60 * 1_000;
 
-export function LearningPracticePanel({
-  locale,
-  courseId,
-  classId,
-  lessonKey,
-  signInHref,
-}: {
+type LearningPracticePanelProps = {
   locale: Locale;
   courseId?: string;
   classId?: string;
   lessonKey?: string;
+  requestedActivityId?: string;
   signInHref: string;
-}) {
+};
+
+export function LearningPracticePanel(props: LearningPracticePanelProps) {
+  const sessionUser = useSessionUser();
+  const scopeKey = JSON.stringify([
+    sessionUser?.account, sessionUser?.role, props.courseId, props.classId,
+    props.lessonKey, props.requestedActivityId,
+  ]);
+  return <LearningPracticeEditor key={scopeKey} {...props} />;
+}
+
+function LearningPracticeEditor({
+  locale,
+  courseId,
+  classId,
+  lessonKey,
+  requestedActivityId,
+  signInHref,
+}: LearningPracticePanelProps) {
   const zh = locale === "zh-CN";
   const sessionUser = useSessionUser();
   const learnerAccount =
@@ -115,8 +128,11 @@ export function LearningPracticePanel({
     setLoading(true);
     setLoadError("");
     try {
+      const selection = requestedActivityId
+        ? `?${new URLSearchParams({ activityId: requestedActivityId, classId })}`
+        : "";
       const response = await fetch(
-        `/api/learning/courses/${encodeURIComponent(courseId)}/units/${encodeURIComponent(lessonKey)}`,
+        `/api/learning/courses/${encodeURIComponent(courseId)}/units/${encodeURIComponent(lessonKey)}${selection}`,
         { headers: { accept: "application/json" }, cache: "no-store" },
       );
       const body = (await response.json()) as UnitResponse;
@@ -136,6 +152,12 @@ export function LearningPracticePanel({
       }
       if (!response.ok || !body.activity?.id) {
         throw new Error(body.reasonCode ?? "learning-unit-unavailable");
+      }
+      if (requestedActivityId && (
+        body.activity.id.toLowerCase() !== requestedActivityId.trim().toLowerCase() ||
+        body.unit?.courseId !== courseId || body.unit.classId !== classId || body.unit.lessonKey !== lessonKey
+      )) {
+        throw new Error("learning-unit-scope-mismatch");
       }
       setSignedOut(false);
       setUnit(body);
@@ -170,7 +192,7 @@ export function LearningPracticePanel({
     } finally {
       setLoading(false);
     }
-  }, [classId, courseId, learnerAccount, lessonKey, zh]);
+  }, [classId, courseId, learnerAccount, lessonKey, requestedActivityId, zh]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => void loadUnit(), 0);

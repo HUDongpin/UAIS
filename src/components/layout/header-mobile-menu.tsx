@@ -2,12 +2,13 @@
 
 // The phone-width half of the app header (E12/PKG-7).
 //
-// Below `md` the desktop header hides its primary nav AND its account menu, so
+// Below `xl` the desktop header hides its primary nav AND its account menu, so
 // the only route affordance left on a phone was the logo link and there was no
 // way to sign out at all. This is that missing surface: one hamburger that opens
 // a sheet carrying the same role-scoped links the desktop nav renders, plus the
 // sign-out the account menu owns. The desktop header is untouched — this whole
-// component is `md:hidden`.
+// component is `xl:hidden`. The larger breakpoint leaves room for the calendar
+// and notification controls on tablets without overlapping the centered links.
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
@@ -107,7 +108,7 @@ export function HeaderMobileMenu({
   }, [open]);
 
   return (
-    <div className="md:hidden">
+    <div className="xl:hidden">
       <button
         ref={triggerRef}
         type="button"
