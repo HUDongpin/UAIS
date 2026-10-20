@@ -1108,7 +1108,7 @@ export function TeachingOperationPage({
               {title}
             </h1>
             <p className="mt-3 max-w-3xl text-base leading-7 text-[var(--muted)]">
-              {description || localizedText(config.summary, locale)}
+              {safeOperationId === "data-export" ? localizedText(config.summary, locale) : description || localizedText(config.summary, locale)}
             </p>
           </div>
           <div className="rounded-2xl border border-[var(--accent-border)] bg-[var(--accent-soft)] px-4 py-3 text-sm text-[var(--foreground)]">
@@ -1172,7 +1172,7 @@ export function TeachingOperationPage({
         </aside>
 
         <div className="space-y-5">
-          <section className="grid gap-5 xl:grid-cols-[minmax(0,1.05fr)_360px]">
+          <section className={safeOperationId === "data-export" ? "grid min-w-0 gap-5" : "grid gap-5 xl:grid-cols-[minmax(0,1.05fr)_360px]"}>
             <div className="space-y-5">
               <section className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5 shadow-[0_18px_42px_var(--shadow)]">
             <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
@@ -1406,7 +1406,7 @@ export function TeachingOperationPage({
               exportManifest={exportManifest}
               inviteCode={inviteCode}
               locale={locale}
-              manifestReady={manifestReady}
+              manifestReady={manifestReady} selectedCourseId={selectedCourseId}
             />
               </section>
             </div>

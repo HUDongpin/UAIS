@@ -16,7 +16,6 @@
 
 import { useState } from "react";
 import { ChartBar } from "@phosphor-icons/react/dist/ssr/ChartBar";
-import { CheckCircle } from "@phosphor-icons/react/dist/ssr/CheckCircle";
 import { ClipboardText } from "@phosphor-icons/react/dist/ssr/ClipboardText";
 import { Export as ExportIcon } from "@phosphor-icons/react/dist/ssr/Export";
 import { FileText } from "@phosphor-icons/react/dist/ssr/FileText";
@@ -28,13 +27,13 @@ import { ShieldCheck } from "@phosphor-icons/react/dist/ssr/ShieldCheck";
 import { SquaresFour } from "@phosphor-icons/react/dist/ssr/SquaresFour";
 import { createInviteJoinUrl } from "@/components/pages/teaching-page-helpers";
 import { InvitationQrCode } from "@/components/teaching/invitation-qr-code";
+import { TeachingCourseExportDownloads } from "@/components/teaching/teaching-course-export-downloads";
 import { localizedText } from "@/components/ui/localized-text";
 import type { Locale } from "@/i18n/copy";
 import {
   localText,
   openMaicAgentPlans,
   openMaicCourseScenes,
-  openMaicExportPackages,
   openMaicManifestChecklist,
   type ExportManifestState,
   type OpenMaicScenePlan,
@@ -47,12 +46,14 @@ export function OperationSpecificPreview({
   inviteCode,
   locale,
   manifestReady,
+  selectedCourseId,
 }: {
   config: OperationConfig;
   exportManifest: ExportManifestState;
   inviteCode: string;
   locale: Locale;
   manifestReady: boolean;
+  selectedCourseId?: string;
 }) {
   if (config.id === "data-export") {
     return (
@@ -60,6 +61,7 @@ export function OperationSpecificPreview({
         exportManifest={exportManifest}
         locale={locale}
         manifestReady={manifestReady}
+        selectedCourseId={selectedCourseId}
       />
     );
   }
@@ -135,10 +137,12 @@ function OpenMaicDataExportPreview({
   exportManifest,
   locale,
   manifestReady,
+  selectedCourseId,
 }: {
   exportManifest: ExportManifestState;
   locale: Locale;
   manifestReady: boolean;
+  selectedCourseId?: string;
 }) {
   return (
     <div className="mt-5 space-y-4" data-uais-openmaic-page="data-export">
@@ -152,8 +156,8 @@ function OpenMaicDataExportPreview({
               </h3>
               <p className="mt-1 text-sm leading-6 text-[var(--muted)]">
                 {locale === "zh-CN"
-                  ? "同一页面提供演示文稿、资源包、课堂包与清单预览，方便后续接入真实打包服务。"
-                  : "One page exposes PPTX, Resource Pack ZIP, Classroom ZIP, and manifest preview for future packaging services."}
+                  ? "下载所选课程当前已发布课件的 PPTX、实际媒体资源 ZIP 或可离线打开的课堂 ZIP。尚未发布课件时，使用已保存的教学草稿，并在文件中标记草稿状态。"
+                  : "Download the selected course’s current published deck as PPTX, its media as a resource ZIP, or an offline classroom ZIP. Courses without a published deck use saved teaching content, clearly marked as a draft."}
               </p>
             </div>
           </div>
@@ -162,37 +166,7 @@ function OpenMaicDataExportPreview({
           </span>
         </div>
 
-        <div className="mt-4 grid gap-3 lg:grid-cols-3">
-          {openMaicExportPackages.map((item) => (
-            <article
-              key={localizedText(item.title, locale)}
-              className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4"
-            >
-              <div className="flex items-center justify-between gap-3">
-                <h4 className="text-sm font-semibold text-[var(--foreground)]">
-                  {localizedText(item.title, locale)}
-                </h4>
-                <span className="rounded-full bg-[var(--surface-soft)] px-2 py-1 text-xs font-semibold text-[var(--muted)]">
-                  {localizedText(item.format, locale)}
-                </span>
-              </div>
-              <p className="mt-2 text-xs font-semibold text-[var(--accent)]">
-                {localizedText(item.status, locale)}
-              </p>
-              <ul className="mt-3 space-y-2 text-sm leading-6 text-[var(--muted)]">
-                {item.includes.map((include) => (
-                  <li key={localizedText(include, locale)} className="flex gap-2">
-                    <CheckCircle size={16} weight="duotone" className="mt-1 shrink-0 text-[var(--accent)]" />
-                    <span>{localizedText(include, locale)}</span>
-                  </li>
-                ))}
-              </ul>
-              <p className="mt-3 text-xs leading-5 text-[var(--muted)]">
-                {localizedText(item.note, locale)}
-              </p>
-            </article>
-          ))}
-        </div>
+        <TeachingCourseExportDownloads key={selectedCourseId} courseId={selectedCourseId} locale={locale} />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
@@ -203,6 +177,11 @@ function OpenMaicDataExportPreview({
               {locale === "zh-CN" ? "清单与打包范围" : "Manifest and packaging scope"}
             </h3>
           </div>
+          <p className="mt-3 text-sm leading-6 text-[var(--muted)]">
+            {locale === "zh-CN"
+              ? "每个 ZIP 已包含文件清单与完整性校验信息。下方状态仅对应独立的数据任务清单，不影响上方三种文件下载。"
+              : "Each ZIP includes a file inventory and integrity checks. The status below refers only to the separate data-task manifest and does not affect the three file downloads above."}
+          </p>
           <div className="mt-4 rounded-xl border border-[var(--accent-border)] bg-[var(--accent-soft)] px-4 py-3 text-sm font-semibold text-[var(--foreground)]">
             {manifestReady ? (
               exportManifest.downloadUrl ? (

@@ -1,3 +1,5 @@
+import type { TeachingUnitDraftContent } from "@/lib/teaching/unit-draft";
+
 export type TeachingCourseManagementRedaction = {
   secrets: "omitted";
   localFiles: "omitted";
@@ -426,6 +428,7 @@ export type TeachingCourseUnitDraftRecord = {
   ownerTeacherId: string;
   generatedBy: string;
   draftStatus: "generated";
+  content?: TeachingUnitDraftContent;
   operationRecordId: string;
   sourceAction?: string;
   draftScope: "teacher-editable-unit-plan";
