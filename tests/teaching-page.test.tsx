@@ -45,6 +45,18 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+function createDashboardInsightsReadback(overrides: Partial<{
+  notStarted: number; draft: number; submitted: number; revisionRequested: number;
+  resubmitted: number; accepted: number; overdue: number;
+}> = {}) {
+  return Response.json({
+    courseId: "teacher-research-methods",
+    counts: { notStarted: 4, draft: 1, submitted: 2, revisionRequested: 1, resubmitted: 1, accepted: 1, overdue: 2, ...overrides },
+    projectionVersion: 7,
+    dataFreshAt: "2026-10-20T01:00:00.000Z",
+  });
+}
+
 // Plan E9: the inline operations refuse to run until a course is explicitly
 // chosen. The picker replaced a silent `courseCards[0]` fallback, so every test
 // that used to rely on that fallback now names the same course out loud.
@@ -3247,206 +3259,53 @@ describe("TeachingPage", () => {
     ).toBeNull();
   });
 
-  it("requires quiz board state business readback before claiming quiz board refresh success", async () => {
-    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      if (String(input) === "/api/teaching/operations") {
-        expect(init?.method).toBe("POST");
-        const body = JSON.parse(String(init?.body)) as {
-          operationId: string;
-          actionSlot: "primary" | "secondary";
-        };
-        expect(body).toEqual(
-          expect.objectContaining({
-            operationId: "quiz-board",
-            actionSlot: "primary",
-            courseId: "teacher-research-methods",
-            sourceAction: "inline-teaching-workspace",
-          }),
-        );
-        return Response.json({
-          receipt: {
-            receiptId: "operation-record-quiz-board-state-semantic-missing",
-            operationId: "quiz-board",
-            actionSlot: "primary",
-            courseId: "teacher-research-methods",
-            status: "persisted",
-            audit: createSignedInlineOperationReceiptAudit(),
-            displayMessage: {
-              "zh-CN": "测验看板已刷新，错因分布可复核。",
-              "en-US": "Quiz board refreshed with error patterns ready for review.",
-            },
-          },
-          domainPersistenceSummary: createPersistedInlineOperationDomainPersistenceSummary(
-            "operation-record-quiz-board-state-semantic-missing",
-            "quiz-board",
-            "primary",
-          ),
-          traceId: "trace-inline-quiz-board-state-semantic-missing",
-        });
-      }
-
-      if (String(input) === "/api/teaching/operations/audit") {
-        expect(init?.method).toBe("GET");
-        return Response.json({
-          traceId: "trace-audit-quiz-board-state-semantic-missing",
-          actorId: "teacher-kang",
-          courseIds: ["teacher-research-methods"],
-          recordCount: 1,
-          auditEventCount: 1,
-          domainProjectionCount: 1,
-          records: [
-            {
-              recordId: "operation-record-quiz-board-state-semantic-missing",
-              courseId: "teacher-research-methods",
-              operationId: "quiz-board",
-              actionSlot: "primary",
-              status: "persisted",
-            },
-          ],
-          auditEvents: [
-            {
-              eventId: "audit-quiz-board-state-semantic-missing",
-              traceId: "trace-inline-quiz-board-state-semantic-missing",
-              eventType: "teaching-operation.persisted",
-              actorId: "teacher-kang",
-              authSession: createInlineAuditAuthSession(),
-              courseId: "teacher-research-methods",
-            },
-          ],
-          domainProjections: [
-            {
-              objectId: "quiz-board-state-teacher-research-methods",
-              objectType: "quiz-board-state",
-              courseId: "teacher-research-methods",
-              operationRecordId: "operation-record-quiz-board-state-semantic-missing",
-            },
-          ],
-        });
-      }
-
-      expect(String(input)).toBe("/api/teaching/operations/audit/alerts");
-      return createClearInlineOperationAuditAlertsResponse(
-        "trace-inline-quiz-board-state-semantic-missing",
-      );
+  it("reads real quiz dashboard insights without mutating quiz board state", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input) === "/api/teaching/courses") return createResearchMethodsClassCourseListReadback();
+      if (String(input) === "/api/teaching/courses/teacher-research-methods/learning-insights") return createDashboardInsightsReadback();
+      throw new Error(`Unexpected request: ${String(input)}`);
     });
     vi.stubGlobal("fetch", fetchMock);
-
     render(<TeachingPage />);
     await chooseWorkspaceCourse("teacher-research-methods");
-
     fireEvent.click(screen.getByRole("link", { name: "测验看板" }));
-    fireEvent.click(screen.getByRole("button", { name: "刷新测验看板" }));
 
-    await waitFor(() => {
-      expect(screen.getByText("测验看板读回未匹配刷新结果，请稍后刷新。")).toBeTruthy();
-    });
-    expect(screen.queryByText("测验看板已刷新，错因分布可复核。")).toBeNull();
-    expect(
-      screen.queryByText(
-        "领域对象已验证：quiz-board-state / quiz-board-state-teacher-research-methods",
-      ),
-    ).toBeNull();
+    expect(await screen.findByText("50%")).toBeTruthy();
+    expect(screen.getByText("任务提交率")).toBeTruthy();
+    expect(screen.queryByText("91%")).toBeNull();
+    expect(screen.queryByRole("button", { name: "标记低质题复核" })).toBeNull();
+    expect(screen.queryByText("测验 3 看板已刷新")).toBeNull();
+    expect(screen.queryByRole("heading", { name: "业务流程" })).toBeNull();
+    expect(fetchMock.mock.calls.filter(([input]) => String(input) === "/api/teaching/operations")).toHaveLength(0);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/teaching/courses/teacher-research-methods/learning-insights",
+      expect.objectContaining({ cache: "no-store" }),
+    );
   });
 
-  it("requires quiz item review business readback before claiming low-quality item review success", async () => {
-    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      if (String(input) === "/api/teaching/operations") {
-        expect(init?.method).toBe("POST");
-        const body = JSON.parse(String(init?.body)) as {
-          operationId: string;
-          actionSlot: "primary" | "secondary";
-        };
-        expect(body).toEqual(
-          expect.objectContaining({
-            operationId: "quiz-board",
-            actionSlot: "secondary",
-            courseId: "teacher-research-methods",
-            sourceAction: "inline-teaching-workspace",
-          }),
-        );
-        return Response.json({
-          receipt: {
-            receiptId: "operation-record-quiz-item-review-semantic-missing",
-            operationId: "quiz-board",
-            actionSlot: "secondary",
-            courseId: "teacher-research-methods",
-            status: "persisted",
-            audit: createSignedInlineOperationReceiptAudit(),
-            displayMessage: {
-              "zh-CN": "低质题已标记为教师复核。",
-              "en-US": "Low-quality items flagged for teacher review.",
-            },
-          },
-          domainPersistenceSummary: createPersistedInlineOperationDomainPersistenceSummary(
-            "operation-record-quiz-item-review-semantic-missing",
-            "quiz-board",
-            "secondary",
-          ),
-          traceId: "trace-inline-quiz-item-review-semantic-missing",
-        });
+  it("keeps quiz statistics unavailable after course denial and refreshes by reading again", async () => {
+    let allowed = false;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input) === "/api/teaching/courses") return createResearchMethodsClassCourseListReadback();
+      if (String(input).includes("learning-insights")) {
+        return allowed ? createDashboardInsightsReadback() : Response.json({ error: "denied" }, { status: 403 });
       }
-
-      if (String(input) === "/api/teaching/operations/audit") {
-        expect(init?.method).toBe("GET");
-        return Response.json({
-          traceId: "trace-audit-quiz-item-review-semantic-missing",
-          actorId: "teacher-kang",
-          courseIds: ["teacher-research-methods"],
-          recordCount: 1,
-          auditEventCount: 1,
-          domainProjectionCount: 1,
-          records: [
-            {
-              recordId: "operation-record-quiz-item-review-semantic-missing",
-              courseId: "teacher-research-methods",
-              operationId: "quiz-board",
-              actionSlot: "secondary",
-              status: "persisted",
-            },
-          ],
-          auditEvents: [
-            {
-              eventId: "audit-quiz-item-review-semantic-missing",
-              traceId: "trace-inline-quiz-item-review-semantic-missing",
-              eventType: "teaching-operation.persisted",
-              actorId: "teacher-kang",
-              authSession: createInlineAuditAuthSession(),
-              courseId: "teacher-research-methods",
-            },
-          ],
-          domainProjections: [
-            {
-              objectId: "quiz-item-review-teacher-research-methods",
-              objectType: "quiz-item-review",
-              courseId: "teacher-research-methods",
-              operationRecordId: "operation-record-quiz-item-review-semantic-missing",
-            },
-          ],
-        });
-      }
-
-      expect(String(input)).toBe("/api/teaching/operations/audit/alerts");
-      return createClearInlineOperationAuditAlertsResponse(
-        "trace-inline-quiz-item-review-semantic-missing",
-      );
+      throw new Error(`Unexpected request: ${String(input)}`);
     });
     vi.stubGlobal("fetch", fetchMock);
-
     render(<TeachingPage />);
     await chooseWorkspaceCourse("teacher-research-methods");
-
     fireEvent.click(screen.getByRole("link", { name: "测验看板" }));
-    fireEvent.click(screen.getByRole("button", { name: "标记低质题复核" }));
+    expect(await screen.findByText("无权读取这门课程的学习统计。")).toBeTruthy();
+    expect(screen.queryByText("50%")).toBeNull();
+    expect(screen.queryByText("91%")).toBeNull();
 
-    await waitFor(() => {
-      expect(screen.getByText("低质题复核读回未匹配标记结果，请稍后刷新。")).toBeTruthy();
-    });
-    expect(screen.queryByText("低质题已标记为教师复核。")).toBeNull();
-    expect(
-      screen.queryByText(
-        "领域对象已验证：quiz-item-review / quiz-item-review-teacher-research-methods",
-      ),
-    ).toBeNull();
+    allowed = true;
+    fireEvent.click(screen.getByRole("button", { name: "刷新测验看板" }));
+    expect(await screen.findByText("50%")).toBeTruthy();
+    expect(screen.queryByText("无权读取这门课程的学习统计。")).toBeNull();
+    expect(fetchMock.mock.calls.filter(([input]) => String(input).includes("learning-insights"))).toHaveLength(2);
+    expect(fetchMock.mock.calls.filter(([input]) => String(input) === "/api/teaching/operations")).toHaveLength(0);
   });
 
   it("requires export manifest business readback before claiming export manifest success", async () => {
@@ -4100,204 +3959,54 @@ describe("TeachingPage", () => {
     expect(screen.queryByRole("button", { name: "添加资料占位" })).toBeNull();
   });
 
-  it("requires dashboard state business readback before claiming dashboard refresh success", async () => {
-    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      if (String(input) === "/api/teaching/operations") {
-        expect(init?.method).toBe("POST");
-        const body = JSON.parse(String(init?.body)) as {
-          operationId: string;
-          actionSlot: "primary" | "secondary";
-        };
-        expect(body).toEqual(
-          expect.objectContaining({
-            operationId: "dashboard",
-            actionSlot: "primary",
-            courseId: "teacher-research-methods",
-            sourceAction: "inline-teaching-workspace",
-          }),
-        );
-        return Response.json({
-          receipt: {
-            receiptId: "operation-record-dashboard-state-semantic-missing",
-            operationId: "dashboard",
-            actionSlot: "primary",
-            courseId: "teacher-research-methods",
-            status: "persisted",
-            audit: createSignedInlineOperationReceiptAudit(),
-            displayMessage: {
-              "zh-CN": "数据看板已刷新。",
-              "en-US": "Dashboard refreshed.",
-            },
-          },
-          domainPersistenceSummary: createPersistedInlineOperationDomainPersistenceSummary(
-            "operation-record-dashboard-state-semantic-missing",
-            "dashboard",
-            "primary",
-          ),
-          traceId: "trace-inline-dashboard-state-semantic-missing",
-        });
-      }
-
-      if (String(input) === "/api/teaching/operations/audit") {
-        expect(init?.method).toBe("GET");
-        return Response.json({
-          traceId: "trace-audit-dashboard-state-semantic-missing",
-          actorId: "teacher-kang",
-          courseIds: ["teacher-research-methods"],
-          recordCount: 1,
-          auditEventCount: 1,
-          domainProjectionCount: 1,
-          records: [
-            {
-              recordId: "operation-record-dashboard-state-semantic-missing",
-              courseId: "teacher-research-methods",
-              operationId: "dashboard",
-              actionSlot: "primary",
-              status: "persisted",
-            },
-          ],
-          auditEvents: [
-            {
-              eventId: "audit-dashboard-state-semantic-missing",
-              traceId: "trace-inline-dashboard-state-semantic-missing",
-              eventType: "teaching-operation.persisted",
-              actorId: "teacher-kang",
-              authSession: createInlineAuditAuthSession(),
-              courseId: "teacher-research-methods",
-            },
-          ],
-          domainProjections: [
-            {
-              objectId: "dashboard-state-teacher-research-methods",
-              objectType: "dashboard-state",
-              courseId: "teacher-research-methods",
-              operationRecordId: "operation-record-dashboard-state-semantic-missing",
-            },
-          ],
-        });
-      }
-
-      expect(String(input)).toBe("/api/teaching/operations/audit/alerts");
-      return createClearInlineOperationAuditAlertsResponse(
-        "trace-inline-dashboard-state-semantic-missing",
-      );
+  it("refreshes real dashboard statistics instead of recording a dashboard refresh operation", async () => {
+    let refreshed = false;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input) === "/api/teaching/courses") return createResearchMethodsClassCourseListReadback();
+      if (String(input).includes("learning-insights")) return createDashboardInsightsReadback(refreshed ? { notStarted: 2, accepted: 3 } : {});
+      throw new Error(`Unexpected request: ${String(input)}`);
     });
     vi.stubGlobal("fetch", fetchMock);
-
     render(<TeachingPage />);
     await chooseWorkspaceCourse("teacher-research-methods");
-
     fireEvent.click(screen.getByRole("link", { name: "数据看板" }));
-    fireEvent.click(screen.getByRole("button", { name: "刷新数据看板" }));
+    expect(await screen.findByText("60%")).toBeTruthy();
+    expect(screen.getByText("10%")).toBeTruthy();
+    expect(screen.getByText("任务启动率")).toBeTruthy();
+    expect(screen.getByText("任务接受率")).toBeTruthy();
+    expect(screen.getByText("逾期任务")).toBeTruthy();
+    expect(screen.queryByText("88%")).toBeNull();
+    expect(screen.queryByText("71%")).toBeNull();
 
-    await waitFor(() => {
-      expect(screen.getByText("数据看板读回未匹配刷新结果，请稍后刷新。")).toBeTruthy();
-    });
-    expect(screen.queryByText("数据看板已刷新。")).toBeNull();
-    expect(
-      screen.queryByText("领域对象已验证：dashboard-state / dashboard-state-teacher-research-methods"),
-    ).toBeNull();
+    refreshed = true;
+    fireEvent.click(screen.getByRole("button", { name: "刷新数据看板" }));
+    expect(await screen.findByText("80%")).toBeTruthy();
+    expect(screen.getByText("30%")).toBeTruthy();
+    expect(screen.queryByText("60%")).toBeNull();
+    expect(fetchMock.mock.calls.filter(([input]) => String(input).includes("learning-insights"))).toHaveLength(2);
+    expect(fetchMock.mock.calls.filter(([input]) => String(input) === "/api/teaching/operations")).toHaveLength(0);
   });
 
-  it("requires dashboard snapshot business readback before claiming daily snapshot lock success", async () => {
-    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      if (String(input) === "/api/teaching/operations") {
-        expect(init?.method).toBe("POST");
-        const body = JSON.parse(String(init?.body)) as {
-          operationId: string;
-          actionSlot: "primary" | "secondary";
-        };
-        expect(body).toEqual(
-          expect.objectContaining({
-            operationId: "dashboard",
-            actionSlot: "secondary",
-            courseId: "teacher-research-methods",
-            sourceAction: "inline-teaching-workspace",
-          }),
-        );
-        return Response.json({
-          receipt: {
-            receiptId: "operation-record-dashboard-snapshot-semantic-missing",
-            operationId: "dashboard",
-            actionSlot: "secondary",
-            courseId: "teacher-research-methods",
-            status: "persisted",
-            audit: createSignedInlineOperationReceiptAudit(),
-            displayMessage: {
-              "zh-CN": "日报快照已锁定到当前视图。",
-              "en-US": "Daily snapshot locked to current view.",
-            },
-          },
-          domainPersistenceSummary: createPersistedInlineOperationDomainPersistenceSummary(
-            "operation-record-dashboard-snapshot-semantic-missing",
-            "dashboard",
-            "secondary",
-          ),
-          traceId: "trace-inline-dashboard-snapshot-semantic-missing",
-        });
-      }
-
-      if (String(input) === "/api/teaching/operations/audit") {
-        expect(init?.method).toBe("GET");
-        return Response.json({
-          traceId: "trace-audit-dashboard-snapshot-semantic-missing",
-          actorId: "teacher-kang",
-          courseIds: ["teacher-research-methods"],
-          recordCount: 1,
-          auditEventCount: 1,
-          domainProjectionCount: 1,
-          records: [
-            {
-              recordId: "operation-record-dashboard-snapshot-semantic-missing",
-              courseId: "teacher-research-methods",
-              operationId: "dashboard",
-              actionSlot: "secondary",
-              status: "persisted",
-            },
-          ],
-          auditEvents: [
-            {
-              eventId: "audit-dashboard-snapshot-semantic-missing",
-              traceId: "trace-inline-dashboard-snapshot-semantic-missing",
-              eventType: "teaching-operation.persisted",
-              actorId: "teacher-kang",
-              authSession: createInlineAuditAuthSession(),
-              courseId: "teacher-research-methods",
-            },
-          ],
-          domainProjections: [
-            {
-              objectId: "dashboard-snapshot-teacher-research-methods",
-              objectType: "dashboard-snapshot",
-              courseId: "teacher-research-methods",
-              operationRecordId: "operation-record-dashboard-snapshot-semantic-missing",
-            },
-          ],
-        });
-      }
-
-      expect(String(input)).toBe("/api/teaching/operations/audit/alerts");
-      return createClearInlineOperationAuditAlertsResponse(
-        "trace-inline-dashboard-snapshot-semantic-missing",
-      );
+  it("does not read dashboard statistics until a course is chosen or offer an unsupported snapshot write", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input) === "/api/teaching/courses") return createResearchMethodsClassCourseListReadback();
+      if (String(input).includes("learning-insights")) return createDashboardInsightsReadback();
+      throw new Error(`Unexpected request: ${String(input)}`);
     });
     vi.stubGlobal("fetch", fetchMock);
-
     render(<TeachingPage />);
-    await chooseWorkspaceCourse("teacher-research-methods");
-
     fireEvent.click(screen.getByRole("link", { name: "数据看板" }));
-    fireEvent.click(screen.getByRole("button", { name: "锁定日报快照" }));
+    expect((screen.getByRole("button", { name: "刷新数据看板" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByRole("button", { name: "锁定日报快照" })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "业务流程" })).toBeNull();
+    expect(fetchMock.mock.calls.filter(([input]) => String(input).includes("learning-insights"))).toHaveLength(0);
 
-    await waitFor(() => {
-      expect(screen.getByText("日报快照读回未匹配锁定结果，请稍后刷新。")).toBeTruthy();
-    });
-    expect(screen.queryByText("日报快照已锁定到当前视图。")).toBeNull();
-    expect(
-      screen.queryByText(
-        "领域对象已验证：dashboard-snapshot / dashboard-snapshot-teacher-research-methods",
-      ),
-    ).toBeNull();
+    await chooseWorkspaceCourse("teacher-research-methods");
+    expect(await screen.findByText("60%")).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("工作台操作课程"), { target: { value: "" } });
+    expect(screen.queryByText("60%")).toBeNull();
+    expect((screen.getByRole("button", { name: "刷新数据看板" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(fetchMock.mock.calls.filter(([input]) => String(input).includes("learning-insights"))).toHaveLength(1);
   });
 
   it("requires course content publication readback before claiming content publish success", async () => {
@@ -5281,7 +4990,7 @@ describe("TeachingPage", () => {
           ?.textContent,
       ).toBe("课程设置已由服务端持久化。");
     });
-    expect(screen.getByText("审计读回已验证：trace-inline-course-settings-pending-audit")).toBeTruthy();
+    expect(await screen.findByText("审计读回已验证：trace-inline-course-settings-pending-audit")).toBeTruthy();
   });
 
   it("applies persisted course settings to course cards without waiting for audit GET", async () => {
@@ -7154,6 +6863,10 @@ describe("TeachingPage", () => {
         }
       | undefined;
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === "/api/teaching/courses/teacher-research-methods/learning-insights") {
+        expect(init?.method ?? "GET").toBe("GET");
+        return createDashboardInsightsReadback();
+      }
       if (String(input) === "/api/teaching/courses") {
         return createResearchMethodsClassCourseListReadback();
       }
@@ -7235,6 +6948,17 @@ describe("TeachingPage", () => {
       expect(container.querySelector("[data-uais-teaching-workspace-panel]")).toBeTruthy();
       expect(screen.queryByRole("link", { name: /进入操作页|进入管理|打开完整配置/ })).toBeNull();
       expect(screen.getByRole("button", { name: primaryAction })).toBeTruthy();
+      if (label === "数据看板" || label === "测验看板") {
+        expect(await screen.findByText(label === "数据看板" ? "60%" : "50%")).toBeTruthy();
+        expect(screen.queryByRole("button", { name: secondaryAction })).toBeNull();
+        const writesBeforeRefresh = fetchMock.mock.calls.filter(([input]) => String(input) === "/api/teaching/operations").length;
+        const readsBeforeRefresh = fetchMock.mock.calls.filter(([input]) => String(input).includes("learning-insights")).length;
+        fireEvent.click(screen.getByRole("button", { name: primaryAction }));
+        await waitFor(() => expect(fetchMock.mock.calls.filter(([input]) => String(input).includes("learning-insights"))).toHaveLength(readsBeforeRefresh + 1));
+        expect(await screen.findByText(label === "数据看板" ? "60%" : "50%")).toBeTruthy();
+        expect(fetchMock.mock.calls.filter(([input]) => String(input) === "/api/teaching/operations")).toHaveLength(writesBeforeRefresh);
+        continue;
+      }
       if (label === "课程知识库") {
         expect(screen.getByRole("link", { name: secondaryAction })).toBeTruthy();
       } else {
@@ -7249,7 +6973,10 @@ describe("TeachingPage", () => {
     }
     expect(
       fetchMock.mock.calls.filter(([input]) => String(input) === "/api/teaching/operations"),
-    ).toHaveLength(operationActions.length);
+    ).toHaveLength(operationActions.filter(([, , , , operationId]) => operationId !== "dashboard" && operationId !== "quiz-board").length);
+    expect(
+      fetchMock.mock.calls.filter(([input]) => String(input).includes("learning-insights")),
+    ).toHaveLength(4);
   });
 
   it("lets teachers manage invite codes directly inside the main workspace", async () => {

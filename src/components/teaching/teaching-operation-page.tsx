@@ -9,6 +9,7 @@ import { Lightning } from "@phosphor-icons/react/dist/ssr/Lightning";
 import { ShieldCheck } from "@phosphor-icons/react/dist/ssr/ShieldCheck";
 import { SquaresFour } from "@phosphor-icons/react/dist/ssr/SquaresFour";
 import { useAppPreferences } from "@/components/providers/app-preferences";
+import { TeachingDashboardInsights } from "@/components/pages/teaching-dashboard-insights";
 import {
   getTeachingOperationHrefWithCourse,
   isTeachingOperationId,
@@ -16,7 +17,7 @@ import {
 } from "@/components/teaching/teaching-operation-data";
 import { localizedText } from "@/components/ui/localized-text";
 import { teacherCourses, teacherSidebarItems } from "@/data/uais";
-import type { LocalizedText, Locale } from "@/i18n/copy";
+import { copy, type LocalizedText, type Locale } from "@/i18n/copy";
 import { createTeachingOperationIdempotencyKey } from "@/lib/teaching-operation-idempotency";
 import { fetchTeachingOperationAuditReadbackWithRetry } from "@/components/pages/teaching-page-inline-audit-readback";
 import {
@@ -321,6 +322,7 @@ export function TeachingOperationPage({
   const title = operation ? localizedText(operation.title, locale) : safeOperationId;
   const description = operation ? localizedText(operation.description, locale) : "";
   const selectedCourse = teacherCourses.find((course) => course.id === selectedCourseId);
+  const isInsightsWorkspace = safeOperationId === "dashboard" || safeOperationId === "quiz-board";
   const ownedCourseAccess = useOwnedTeachingCourseAccess(selectedCourseId);
   // No course id is not the same as an unresolved ownership list: unknown stays
   // writable, but a missing course must match the empty-state banner.
@@ -941,77 +943,9 @@ export function TeachingOperationPage({
         expectedCheckedScopes.every((scope) => projection.checkedScopes?.includes(scope))
       );
     }
-    if (input.operationId === "dashboard" && input.actionSlot === "primary") {
-      const expectedVisibleMetrics = [
-        "engagement",
-        "progress",
-        "assessment-quality",
-      ];
-      return (
-        projection.objectType === "dashboard-state" &&
-        projection.refreshStatus === "refreshed" &&
-        projection.refreshPolicy === "teacher-visible-course-dashboard" &&
-        typeof projection.refreshedBy === "string" &&
-        projection.refreshedBy.trim().length > 0 &&
-        typeof projection.refreshedAt === "string" &&
-        projection.refreshedAt.trim().length > 0 &&
-        Array.isArray(projection.visibleMetrics) &&
-        expectedVisibleMetrics.every((metricName) =>
-          projection.visibleMetrics?.includes(metricName),
-        )
-      );
-    }
-    if (input.operationId === "dashboard" && input.actionSlot === "secondary") {
-      return (
-        projection.objectType === "dashboard-snapshot" &&
-        projection.snapshotStatus === "locked" &&
-        projection.snapshotScope === "daily-course-dashboard" &&
-        projection.retentionPolicy === "teacher-locked-dashboard-snapshot" &&
-        typeof projection.lockedBy === "string" &&
-        projection.lockedBy.trim().length > 0 &&
-        typeof projection.snapshotId === "string" &&
-        projection.snapshotId.trim().length > 0 &&
-        typeof projection.lockedAt === "string" &&
-        projection.lockedAt.trim().length > 0
-      );
-    }
-    if (input.operationId === "quiz-board" && input.actionSlot === "primary") {
-      const expectedVisibleMetrics = [
-        "completion-rate",
-        "item-quality",
-        "misconception-clusters",
-      ];
-      return (
-        projection.objectType === "quiz-board-state" &&
-        projection.refreshStatus === "refreshed" &&
-        projection.reviewPolicy === "teacher-visible-quiz-quality-board" &&
-        typeof projection.refreshedBy === "string" &&
-        projection.refreshedBy.trim().length > 0 &&
-        typeof projection.refreshedAt === "string" &&
-        projection.refreshedAt.trim().length > 0 &&
-        Array.isArray(projection.visibleMetrics) &&
-        expectedVisibleMetrics.every((metricName) =>
-          projection.visibleMetrics?.includes(metricName),
-        )
-      );
-    }
-    if (input.operationId === "quiz-board" && input.actionSlot === "secondary") {
-      const expectedFlaggedSignals = [
-        "low-discrimination",
-        "high-error-rate",
-        "teacher-review-needed",
-      ];
-      return (
-        projection.objectType === "quiz-item-review" &&
-        projection.reviewStatus === "flagged-for-review" &&
-        projection.reviewPolicy === "teacher-review-before-quiz-reuse" &&
-        typeof projection.flaggedBy === "string" &&
-        projection.flaggedBy.trim().length > 0 &&
-        typeof projection.flaggedAt === "string" &&
-        projection.flaggedAt.trim().length > 0 &&
-        Array.isArray(projection.flaggedSignals) &&
-        expectedFlaggedSignals.every((signal) => projection.flaggedSignals?.includes(signal))
-      );
+    // Dashboards read learning insights and no longer confirm mutation receipts.
+    if (input.operationId === "dashboard" || input.operationId === "quiz-board") {
+      return false;
     }
     if (input.operationId === "grading" && input.actionSlot === "primary") {
       return (
@@ -1108,7 +1042,9 @@ export function TeachingOperationPage({
               {title}
             </h1>
             <p className="mt-3 max-w-3xl text-base leading-7 text-[var(--muted)]">
-              {description || localizedText(config.summary, locale)}
+              {isInsightsWorkspace
+                ? copy[locale].teachingInsights[safeOperationId === "dashboard" ? "dashboardDescription" : "quizDescription"]
+                : description || localizedText(config.summary, locale)}
             </p>
           </div>
           <div className="rounded-2xl border border-[var(--accent-border)] bg-[var(--accent-soft)] px-4 py-3 text-sm text-[var(--foreground)]">
@@ -1171,7 +1107,19 @@ export function TeachingOperationPage({
           </nav>
         </aside>
 
-        <div className="space-y-5">
+        {safeOperationId === "dashboard" || safeOperationId === "quiz-board" ? (
+          <section className="min-w-0 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5">
+            {selectedCourseId ? <p className="break-words text-sm font-semibold text-[var(--foreground)]">
+              {locale === "zh-CN" ? "已选择课程" : "Selected course"}：{selectedCourse ? localizedText(selectedCourse.title, locale) : selectedCourseId}
+            </p> : null}
+            <TeachingDashboardInsights
+              operationId={safeOperationId}
+              courseId={selectedCourseId}
+              classId={selectedClassId}
+              locale={locale}
+            />
+          </section>
+        ) : <div className="space-y-5">
           <section className="grid gap-5 xl:grid-cols-[minmax(0,1.05fr)_360px]">
             <div className="space-y-5">
               <section className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5 shadow-[0_18px_42px_var(--shadow)]">
@@ -1460,7 +1408,7 @@ export function TeachingOperationPage({
               </section>
             </aside>
           </section>
-        </div>
+        </div>}
       </section>
     </div>
   );

@@ -578,20 +578,9 @@ export const operationConfigs: Record<TeachingOperationId, OperationConfig> = {
       "zh-CN": "日报快照已锁定到当前视图。",
       "en-US": "Daily snapshot locked to current view.",
     },
-    metrics: [
-      metric("参与率", "Participation", "84%"),
-      metric("任务完成", "Task completion", "71%"),
-      metric("风险提醒", "Risk alerts", "4"),
-    ],
-    workflow: [
-      localText("学习记录汇总", "Learning-record aggregation"),
-      localText("趋势计算", "Trend calculation"),
-      localText("教师日报", "Teacher daily digest"),
-    ],
-    records: [
-      localText("小组协作次数本周提升 12%。", "Group collaboration rose 12% this week."),
-      localText("第 3 单元作业提交率低于课程均值。", "Unit 3 submission rate is below course average."),
-    ],
+    metrics: [],
+    workflow: [],
+    records: [],
   },
   "quiz-board": {
     id: "quiz-board",
@@ -623,20 +612,9 @@ export const operationConfigs: Record<TeachingOperationId, OperationConfig> = {
       "zh-CN": "低质题已标记为教师复核。",
       "en-US": "Low-quality items flagged for teacher review.",
     },
-    metrics: [
-      metric("测验", "Quizzes", "8"),
-      metric("平均分", "Average", "82"),
-      metric("需复核题", "Items to review", "3"),
-    ],
-    workflow: [
-      localText("答题数据", "Response data"),
-      localText("题目质量", "Item quality"),
-      localText("补救建议", "Remediation suggestions"),
-    ],
-    records: [
-      localText("变量关系题错因集中在概念混淆。", "Variable-relation errors cluster around concept confusion."),
-      localText("课堂提问链测验需要补充例题。", "Question-sequence quiz needs more examples."),
-    ],
+    metrics: [],
+    workflow: [],
+    records: [],
   },
   grading: {
     id: "grading",

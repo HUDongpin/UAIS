@@ -7,7 +7,7 @@
 
 import { localizedText } from "@/components/ui/localized-text";
 import type { TeachingOperationId } from "@/components/teaching/teaching-operation-data";
-import type { Locale } from "@/i18n/copy";
+import { copy, type Locale } from "@/i18n/copy";
 import {
   INVITE_GENERATED_MESSAGE,
   INVITE_PUBLISHED_MESSAGE,
@@ -381,61 +381,20 @@ export function createEnterpriseWorkspaceConfig(
       id: "dashboard",
       title: zh ? "数据看板工作台" : "Data Dashboard Workspace",
       subtitle: zh ? "教学洞察" : "Teaching Insight",
-      description: zh
-        ? "汇总参与度、进度、协作和风险信号，支持刷新实时看板与锁定日报快照。"
-        : "Aggregate engagement, progress, collaboration, and risk signals with refresh and daily snapshot lock.",
-      metrics: [
-        { label: zh ? "活跃率" : "Active Rate", value: "88%", note: zh ? "最近 7 天学生活跃情况" : "Student activity over the last 7 days" },
-        { label: zh ? "进度中位数" : "Median Progress", value: "71%", note: zh ? "按单元完成度统计" : "Calculated from unit completion" },
-        { label: zh ? "风险提醒" : "Risk Alerts", value: "9", note: zh ? "需要教师关注的学生或小组" : "Students or groups needing attention" },
-      ],
-      lanes: [
-        {
-          title: zh ? "刷新数据看板" : "Refresh Dashboard",
-          items: zh
-            ? ["更新参与度、进度和协作趋势", "同步最新低活跃学生和小组状态"]
-            : ["Update engagement, progress, and collaboration trends", "Sync latest low-activity student and group states"],
-        },
-        {
-          title: zh ? "锁定日报快照" : "Lock Daily Snapshot",
-          items: zh
-            ? ["生成当天教师日报和班级摘要", "冻结数据口径供后续复盘引用"]
-            : ["Generate daily teacher report and class summary", "Freeze metric definitions for later review"],
-        },
-      ],
-      records: zh
-        ? ["今日看板已刷新", "日报快照等待教师锁定", "协作趋势较上周提升 6%"]
-        : ["Today dashboard refreshed", "Daily snapshot awaits teacher lock", "Collaboration trend is up 6% from last week"],
+      description: copy[locale].teachingInsights.dashboardDescription,
+      // These workspaces read scoped learning insights in TeachingDashboardInsights.
+      metrics: [],
+      lanes: [],
+      records: [],
     },
     "quiz-board": {
       id: "quiz-board",
       title: zh ? "测验看板工作台" : "Quiz Board Workspace",
       subtitle: zh ? "测验质量" : "Quiz Quality",
-      description: zh
-        ? "分析测验完成、得分、错因和题目质量，支持低质题复核与课堂补救。"
-        : "Analyze quiz completion, scores, error patterns, and item quality for review and remediation.",
-      metrics: [
-        { label: zh ? "完成率" : "Completion", value: "91%", note: zh ? "本周测验提交情况" : "Quiz submissions this week" },
-        { label: zh ? "低质题" : "Low-Quality Items", value: "4", note: zh ? "区分度或通过率异常" : "Abnormal discrimination or pass rate" },
-        { label: zh ? "错因簇" : "Error Clusters", value: "7", note: zh ? "按知识点和思维过程归类" : "Grouped by concept and reasoning process" },
-      ],
-      lanes: [
-        {
-          title: zh ? "刷新测验看板" : "Refresh Quiz Board",
-          items: zh
-            ? ["同步提交、得分分布和题目统计", "更新错因标签与班级薄弱点"]
-            : ["Sync submissions, score distribution, and item stats", "Update error tags and class weak points"],
-        },
-        {
-          title: zh ? "标记低质题复核" : "Mark Item Review",
-          items: zh
-            ? ["识别低区分度、歧义题和异常通过率", "推送给教师进行题干和选项修订"]
-            : ["Identify low-discrimination, ambiguous, or abnormal items", "Send to teacher for stem and option revision"],
-        },
-      ],
-      records: zh
-        ? ["第 3 次测验看板已刷新", "4 道题进入低质题复核", "建议补充函数图像概念讲解"]
-        : ["Quiz 3 board refreshed", "4 items entered low-quality review", "Recommend extra function graph explanation"],
+      description: copy[locale].teachingInsights.quizDescription,
+      metrics: [],
+      lanes: [],
+      records: [],
     },
     grading: {
       id: "grading",
