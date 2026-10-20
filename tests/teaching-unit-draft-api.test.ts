@@ -103,9 +103,19 @@ afterEach(async () => {
 });
 
 describe("teaching unit draft API", () => {
+  it("rejects a header-only PNG without changing the stored draft or revision", async () => {
+    await seedDraft();
+    const header = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAADElEQVQImWNQKe8GAAHpASfBfuXbAAAAAElFTkSuQmCC", "base64").subarray(0, 33);
+    const attempted = { ...content, mediaSlides: [{ id: "broken", title: "Invalid PNG", notes: "QA", image: { mime: "image/png", base64: header.toString("base64") } }] };
+    const result = await createTeachingUnitDraftPatchHandler({ env, now })(request("PATCH", { content: attempted, expectedRevision: 1 }), context());
+    expect(result.status).toBe(400);
+    const readback = await createTeachingUnitDraftGetHandler({ env, now })(request(), context());
+    expect((await readback.json()).unitDraft).toMatchObject({ content, revision: 1 });
+  });
+
   it("persists private media through the authenticated draft API without publishing", async () => {
     await seedDraft();
-    const image = { mime: "image/png", base64: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a6f8AAAAASUVORK5CYII=" };
+    const image = { mime: "image/png", base64: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAADElEQVQImWNQKe8GAAHpASfBfuXbAAAAAElFTkSuQmCC" };
     const withMedia = { ...content, mediaSlides: [{ id: "media-one", title: "QA image", notes: "Private QA", image }] };
     const patch = createTeachingUnitDraftPatchHandler({ env, now });
     const saved = await patch(request("PATCH", { content: withMedia, expectedRevision: 1 }), context());

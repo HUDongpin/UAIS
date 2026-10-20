@@ -1,4 +1,4 @@
-import { imageSize } from "image-size";
+import sharp from "sharp";
 import { decodeDraftMedia } from "@/lib/teaching/unit-draft-media";
 import { randomUUID } from "node:crypto";
 import { isTeachingUnitDraftContent } from "@/lib/teaching/unit-draft";
@@ -72,8 +72,12 @@ export async function updateTeachingUnitDraft(input: UnitDraftAccessInput & {
   for (const slide of content.mediaSlides ?? []) {
     if (!slide.image) continue;
     try {
-      const { width, height } = imageSize(decodeDraftMedia(slide.image));
-      if (!width || !height || width * height > 40_000_000) throw new Error("Invalid dimensions");
+      const decoder = sharp(decodeDraftMedia(slide.image), { failOn: "warning", limitInputPixels: 40_000_000 });
+      const { width, height, format } = await decoder.metadata();
+      if (!width || !height || width * height > 40_000_000 ||
+        format !== (slide.image.mime === "image/png" ? "png" : "jpeg")) throw new Error("Invalid image");
+      // Metadata alone accepts header-only files. Decode all pixels before saving.
+      await decoder.stats();
     } catch { throw new TeachingCourseManagementStoreError(400, "Draft image is invalid or too large."); }
   }
   const dataDir = resolveTeachingCourseManagementDataDir(input.dataDir);

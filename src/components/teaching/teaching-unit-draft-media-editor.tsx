@@ -12,6 +12,12 @@ async function readMedia(file: File, kind: "image" | "audio"): Promise<DraftMedi
     reader.onerror = () => reject(new Error("media-read"));
     reader.readAsDataURL(file);
   });
+  if (kind === "image") {
+    const bitmap = await createImageBitmap(file);
+    try {
+      if (!bitmap.width || !bitmap.height || bitmap.width * bitmap.height > 40_000_000) throw new Error("media-dimensions");
+    } finally { bitmap.close(); }
+  }
   return { mime: kind === "audio" ? "audio/wav" : file.type === "image/png" ? "image/png" : "image/jpeg", base64: data.slice(data.indexOf(",") + 1) };
 }
 

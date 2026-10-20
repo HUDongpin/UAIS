@@ -5030,7 +5030,8 @@ describe("TeachingPage", () => {
   });
 
   it("keeps persisted course-settings success visible while best-effort audit GET is in flight", async () => {
-    let resolveAuditReadback: (response: Response) => void = () => undefined;
+    let resolveAuditReadback!: (response: Response) => void;
+    const auditReadback = new Promise<Response>((resolve) => { resolveAuditReadback = resolve; });
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       if (String(input) === "/api/teaching/operations") {
         expect(init?.method).toBe("POST");
@@ -5054,9 +5055,7 @@ describe("TeachingPage", () => {
 
       if (String(input) === "/api/teaching/operations/audit") {
         expect(init?.method).toBe("GET");
-        return new Promise<Response>((resolve) => {
-          resolveAuditReadback = resolve;
-        });
+        return auditReadback.then((response) => response.clone());
       }
 
       expect(String(input)).toBe("/api/teaching/operations/audit/alerts");
@@ -5096,54 +5095,56 @@ describe("TeachingPage", () => {
     ).toBe("课程设置已由服务端持久化。");
     expect(screen.queryByText("审计读回未完成，请稍后刷新。")).toBeNull();
 
-    resolveAuditReadback(
-      Response.json({
-        traceId: "trace-audit-readback-pending-audit",
-        actorId: "teacher-kang",
-        courseIds: ["teacher-research-methods"],
-        recordCount: 1,
-        auditEventCount: 1,
-        domainProjectionCount: 1,
-        records: [
-          {
-            recordId: "operation-record-course-settings-pending-audit",
-            courseId: "teacher-research-methods",
-            operationId: "course-settings",
-            actionSlot: "primary",
-            status: "persisted",
-          },
-        ],
-        auditEvents: [
-          {
-            auditId: "audit-inline-course-settings-pending-audit",
-            traceId: "trace-inline-course-settings-pending-audit",
-            eventType: "teaching-operation.persisted",
-            actorId: "teacher-kang",
-            authSession: createInlineAuditAuthSession(),
-            courseId: "teacher-research-methods",
-          },
-        ],
-        domainProjections: [
-          {
-            objectId: "course-settings-teacher-research-methods",
-            objectType: "course-settings",
-            courseId: "teacher-research-methods",
-            operationRecordId: "operation-record-course-settings-pending-audit",
-            updatedBy: "teacher-kang",
-            status: "saved",
-            updatedAt: "2026-06-22T10:40:00.000Z",
-          },
-        ],
-      }),
-    );
+    await act(async () => {
+      resolveAuditReadback(
+        Response.json({
+          traceId: "trace-audit-readback-pending-audit",
+          actorId: "teacher-kang",
+          courseIds: ["teacher-research-methods"],
+          recordCount: 1,
+          auditEventCount: 1,
+          domainProjectionCount: 1,
+          records: [
+            {
+              recordId: "operation-record-course-settings-pending-audit",
+              courseId: "teacher-research-methods",
+              operationId: "course-settings",
+              actionSlot: "primary",
+              status: "persisted",
+            },
+          ],
+          auditEvents: [
+            {
+              auditId: "audit-inline-course-settings-pending-audit",
+              traceId: "trace-inline-course-settings-pending-audit",
+              eventType: "teaching-operation.persisted",
+              actorId: "teacher-kang",
+              authSession: createInlineAuditAuthSession(),
+              courseId: "teacher-research-methods",
+            },
+          ],
+          domainProjections: [
+            {
+              objectId: "course-settings-teacher-research-methods",
+              objectType: "course-settings",
+              courseId: "teacher-research-methods",
+              operationRecordId: "operation-record-course-settings-pending-audit",
+              updatedBy: "teacher-kang",
+              status: "saved",
+              updatedAt: "2026-06-22T10:40:00.000Z",
+            },
+          ],
+        }),
+      );
+    });
 
     await waitFor(() => {
       expect(
         container.querySelector('[data-uais-inline-workspace-status="course-settings"]')
           ?.textContent,
       ).toBe("课程设置已由服务端持久化。");
+      expect(screen.getByText("审计读回已验证：trace-inline-course-settings-pending-audit")).toBeTruthy();
     });
-    expect(screen.getByText("审计读回已验证：trace-inline-course-settings-pending-audit")).toBeTruthy();
   });
 
   it("applies persisted course settings to course cards without waiting for audit GET", async () => {

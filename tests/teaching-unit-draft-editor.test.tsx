@@ -20,7 +20,20 @@ function draft(overrides: Record<string, unknown> = {}) {
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 describe("TeachingUnitDraftEditor", () => {
+  it("rejects an image when browser decoding fails without adding it to the draft", async () => {
+    vi.stubGlobal("createImageBitmap", vi.fn(async () => { throw new Error("Invalid image"); }));
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({ unitDraft: draft() })));
+    render(<TeachingUnitDraftEditor courseId="course-a" locale="zh-CN" />);
+    fireEvent.change(await screen.findByRole("textbox", { name: "媒体页标题" }), { target: { value: "Broken image" } });
+    fireEvent.change(screen.getByLabelText("媒体页图片"), { target: { files: [new File([new Uint8Array([137,80,78,71])], "bad.png", { type: "image/png" })] } });
+    fireEvent.click(screen.getByRole("button", { name: "添加媒体页" }));
+    expect(await screen.findByRole("alert")).toBeTruthy();
+    expect(screen.queryByRole("img", { name: "Broken image" })).toBeNull();
+    expect((screen.getByRole("button", { name: "保存单元正文" }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
   it("adds an uploaded private image, saves it and restores it after reopening", async () => {
+    vi.stubGlobal("createImageBitmap", vi.fn(async () => ({ width: 1, height: 1, close: vi.fn() })));
     let saved = draft();
     vi.stubGlobal("fetch", vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
       if (init?.method === "PATCH") saved = draft({ content: JSON.parse(String(init.body)).content, revision: 2 });
@@ -29,7 +42,7 @@ describe("TeachingUnitDraftEditor", () => {
     const view = render(<TeachingUnitDraftEditor courseId="course-a" locale="zh-CN" />);
     await screen.findByRole("textbox", { name: "媒体页标题" });
     fireEvent.change(screen.getByRole("textbox", { name: "媒体页标题" }), { target: { value: "QA private image" } });
-    const bytes = Uint8Array.from(atob("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a6f8AAAAASUVORK5CYII="), (c) => c.charCodeAt(0));
+    const bytes = Uint8Array.from(atob("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAADElEQVQImWNQKe8GAAHpASfBfuXbAAAAAElFTkSuQmCC"), (c) => c.charCodeAt(0));
     fireEvent.change(screen.getByLabelText("媒体页图片"), { target: { files: [new File([bytes], "qa.png", { type: "image/png" })] } });
     fireEvent.click(screen.getByRole("button", { name: "添加媒体页" }));
     expect(await screen.findByRole("img", { name: "QA private image" })).toBeTruthy();
