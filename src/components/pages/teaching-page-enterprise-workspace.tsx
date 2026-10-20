@@ -21,6 +21,7 @@ import { InlineWorkspaceStatus } from "./teaching-page-inline-workspace-status";
 import { InviteCodeWorkspaceTools } from "./teaching-page-invite-code-workspace-tools";
 import { WorkspaceContext } from "./teaching-page-workspace-context";
 import { createEnterpriseWorkspaceConfig } from "./teaching-page-workspace-config";
+import { TeachingDashboardInsights } from "./teaching-dashboard-insights";
 import type {
   InlineWorkspaceAlertNotificationStatus,
   InlineWorkspaceAlertStatus,
@@ -117,6 +118,7 @@ export function EnterpriseWorkspace({
       locale,
     );
     const Icon = dashboardIcons[config.id as keyof typeof dashboardIcons] ?? SquaresFour;
+    const isInsightsWorkspace = config.id === "dashboard" || config.id === "quiz-board";
 
     return (
       <div
@@ -145,7 +147,7 @@ export function EnterpriseWorkspace({
                 <QrCode size={17} weight="duotone" />
                 {locale === "zh-CN" ? "当前页可操作" : "Operable here"}
               </span>
-            ) : (
+            ) : isInsightsWorkspace ? null : (
               <InlineWorkspaceActionButtons
                 operationId={config.id}
                 locale={locale}
@@ -171,7 +173,7 @@ export function EnterpriseWorkspace({
             onSelectCourse={onSelectCourseAction}
           />}
           </div>
-          {config.id === "invite-code" ? null : <InlineWorkspaceStatus
+          {config.id === "invite-code" || isInsightsWorkspace ? null : <InlineWorkspaceStatus
               operationId={config.id}
               locale={locale}
               inlineWorkspaceStatuses={inlineWorkspaceStatuses}
@@ -226,7 +228,13 @@ export function EnterpriseWorkspace({
             </section>
           ) : null}
 
-          <div className="mt-5 grid gap-3 md:grid-cols-3">
+          {config.id === "dashboard" || config.id === "quiz-board" ? (
+            <TeachingDashboardInsights
+              operationId={config.id}
+              courseId={selectedCourseAction?.courseId}
+              locale={locale}
+            />
+          ) : <div className="mt-5 grid gap-3 md:grid-cols-3">
             {config.metrics.map((metric) => (
               <article
                 key={metric.label}
@@ -241,7 +249,7 @@ export function EnterpriseWorkspace({
                 <p className="mt-2 text-sm leading-6 text-[var(--muted)]">{metric.note}</p>
               </article>
             ))}
-          </div>
+          </div>}
 
           {config.id === "invite-code" ? <InviteCodeWorkspaceTools
               locale={locale}
@@ -263,7 +271,7 @@ export function EnterpriseWorkspace({
             /> : null}
         </section>
 
-        <section className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
+        {isInsightsWorkspace ? null : <section className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
           <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5 shadow-[0_18px_42px_var(--shadow)]">
             <h3 className="text-lg font-semibold text-[var(--foreground)]">
               {locale === "zh-CN" ? "业务流程" : "Workflow"}
@@ -305,7 +313,7 @@ export function EnterpriseWorkspace({
               ))}
             </div>
           </aside>
-        </section>
+        </section>}
       </div>
     );
   }
