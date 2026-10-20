@@ -328,8 +328,8 @@ const publishedPlaybacks: PublishedPptPlayback[] = [
 //
 // Synchronous by design: see published-playback-store.ts for why the whole
 // chain from `authorizeLearningPptPlaybackAccess` down must stay sync.
-function readAllPublishedPlaybacks(): PublishedPptPlayback[] {
-  const merged = [...readPublishedPlaybackFiles(), ...publishedPlaybacks];
+function readAllPublishedPlaybacks(env: Record<string, string | undefined> = process.env): PublishedPptPlayback[] {
+  const merged = [...readPublishedPlaybackFiles(env), ...publishedPlaybacks];
   const byCourseId = new Map<string, PublishedPptPlayback>();
   for (const playback of merged) {
     if (!byCourseId.has(playback.courseId)) {
@@ -339,9 +339,9 @@ function readAllPublishedPlaybacks(): PublishedPptPlayback[] {
   return [...byCourseId.values()];
 }
 
-export function findPublishedPlaybackByCourseId(courseId: string) {
+export function findPublishedPlaybackByCourseId(courseId: string, env: Record<string, string | undefined> = process.env) {
   const safeCourseId = requireSafeId(courseId, "course id");
-  return readAllPublishedPlaybacks().find((playback) => playback.courseId === safeCourseId);
+  return readAllPublishedPlaybacks(env).find((playback) => playback.courseId === safeCourseId);
 }
 
 export function assertPublishedLearningPptPlaybackAudio(input: {

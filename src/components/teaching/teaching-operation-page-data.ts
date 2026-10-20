@@ -82,29 +82,29 @@ export const openMaicExportPackages: OpenMaicExportPackage[] = [
   {
     title: localText("课堂演示文稿", "Classroom Presentation PPTX"),
     format: localText("演示文稿", "PPTX"),
-    status: localText("可下载", "Download ready"),
+    status: localText("按课程生成", "Generated for the selected course"),
     includes: [
-      localText("按场景顺序导出演示页", "Slides exported in scene order"),
+      localText("按当前课件顺序导出演示页", "Slides exported in current deck order"),
       localText("保留教师讲解备注", "Teacher narration notes preserved"),
-      localText("与课堂播放节奏对齐", "Aligned with classroom playback cadence"),
+      localText("已发布页面保留原始画面", "Published slide images preserved"),
     ],
     note: localText(
-      "对应开放课堂智能系统的演示文稿导出入口。",
-      "Maps to the OpenMAIC PPTX export entry.",
+      "可在演示软件中打开；已发布课件以图片页保留版式，讲解文字放入备注。",
+      "Opens in presentation software; published pages retain their layout as images, with narration in speaker notes.",
     ),
   },
   {
     title: localText("资源包", "Resource Pack ZIP"),
     format: localText("压缩包", "ZIP"),
-    status: localText("包含媒体", "Media included"),
+    status: localText("实际文件", "Actual files"),
     includes: [
-      localText("图片、音频和附件清单", "Image, audio, and attachment manifest"),
-      localText("课件资源引用表", "Courseware resource reference table"),
-      localText("离线复核所需素材", "Assets for offline review"),
+      localText("已发布课件的图片与音频文件", "Published slide images and audio files"),
+      localText("讲解文字与资源校验清单", "Narration text and file verification manifest"),
+      localText("未发布课程的已保存教学草稿", "Saved teaching content for unpublished courses"),
     ],
     note: localText(
-      "对应开放课堂智能系统的资源包打包能力。",
-      "Maps to the OpenMAIC Resource Pack bundling capability.",
+      "ZIP 中包含文件本身。草稿课程只导出已有教学材料，不生成虚构媒体。",
+      "The ZIP contains the files themselves. Draft courses export saved materials without invented media.",
     ),
   },
   {
@@ -113,20 +113,20 @@ export const openMaicExportPackages: OpenMaicExportPackage[] = [
     status: localText("课堂包", "Classroom package"),
     includes: [
       localText("清单文件与场景文件", "manifest.json and scenes.json"),
-      localText("智能体、媒体、音频引用", "Agent, media, and audio references"),
-      localText("课堂播放与恢复数据", "Classroom playback and restore data"),
+      localText("PPTX、媒体文件和已保存的智能体权限", "PPTX, media files, and saved agent permissions"),
+      localText("解压后可打开的离线课堂页面", "An offline classroom page to open after extraction"),
     ],
     note: localText(
-      "对应开放课堂智能系统的课堂包导出。",
-      "Maps to OpenMAIC classroom-package export.",
+      "解压并打开 index.html 阅读课件和播放音频；不包含学生私密数据。",
+      "Extract and open index.html to read slides and play audio. Student private data is excluded.",
     ),
   },
 ];
 
 export const openMaicManifestChecklist = [
   localText("清单记录课程、场景、导出时间和包版本", "Manifest records course, scene, export time, and package version"),
-  localText("媒体/音频只记录脱敏引用，不展示本地路径", "Media and audio use redacted references, not local paths"),
-  localText("智能体配置随课堂包一起打包，便于还原课堂", "Agent configs travel with the classroom package for restore"),
+  localText("媒体文件使用包内相对路径，不包含服务器路径或凭据", "Media uses package-relative paths, without server paths or credentials"),
+  localText("课堂包记录实际保存的智能体权限，未配置时为空", "Classroom packages record saved agent permissions, or an empty list if none are configured"),
 ];
 
 export const openMaicAgentPlans: OpenMaicAgentPlan[] = [
@@ -510,8 +510,8 @@ export const operationConfigs: Record<TeachingOperationId, OperationConfig> = {
       "en-US": "Data delivery",
     },
     summary: {
-      "zh-CN": "按开放课堂智能系统的导出模式生成演示文稿、资源包、课堂包和清单，并打包媒体、音频和智能体配置。",
-      "en-US": "Generate OpenMAIC-style PPTX, Resource Pack ZIP, Classroom ZIP, manifest, and media/audio/agent packaging.",
+      "zh-CN": "按所选课程下载 PPTX、资源 ZIP 和离线课堂 ZIP。数据导出清单是独立入口，不代表文件包已生成。",
+      "en-US": "Download PPTX, resource ZIP, and offline classroom ZIP for the selected course. The separate data manifest does not indicate package completion.",
     },
     readyMessage: {
       "zh-CN": "导出任务等待范围确认。",
