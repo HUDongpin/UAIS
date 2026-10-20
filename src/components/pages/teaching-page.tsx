@@ -58,6 +58,12 @@ export function TeachingPage() {
     inviteWorkspaceJoinUrl,
     inviteWorkspaceStatus,
     inlineWorkspaceStatuses,
+    setInlineWorkspaceStatuses,
+    setInlineWorkspaceAuditStatuses,
+    setInlineWorkspaceAlertStatuses,
+    setInlineWorkspaceAlertNotificationStatuses,
+    setInlineWorkspaceRollbackStatuses,
+    createInlineWorkspaceAttemptId,
     inlineWorkspaceAuditStatuses,
     inlineWorkspaceAlertStatuses,
     inlineWorkspaceAlertNotificationStatuses,
@@ -98,6 +104,14 @@ export function TeachingPage() {
   // The workspace-wide course selector. `manage` is the action every inline
   // operation runs under; the label the context panel shows comes from it.
   function selectWorkspaceCourse(courseId: string) {
+    if (selectedCourseAction?.courseId !== courseId) {
+      createInlineWorkspaceAttemptId("content");
+      setInlineWorkspaceStatuses((current) => ({ ...current, content: undefined }));
+      setInlineWorkspaceAuditStatuses((current) => ({ ...current, content: undefined }));
+      setInlineWorkspaceAlertStatuses((current) => ({ ...current, content: undefined }));
+      setInlineWorkspaceAlertNotificationStatuses((current) => ({ ...current, content: undefined }));
+      setInlineWorkspaceRollbackStatuses((current) => ({ ...current, content: undefined }));
+    }
     setSelectedCourseAction(courseId ? { courseId, action: "manage" } : undefined);
   }
 

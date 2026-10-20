@@ -53,6 +53,12 @@ import { createUaisTeacherAuthSessionCookieHeader } from "@/lib/server/teacher-a
 import { normalizeResourceReviewItemRecord } from "@/lib/server/teaching-course-management-record-normalizers";
 import { normalizeDomainProjection } from "@/lib/server/teaching-operations-domain-projection-normalizer";
 
+import { teachingUnitDraftContent } from "./fixtures/teaching-unit-draft-content";
+
+const unitDraftProviderFetch: typeof fetch = async () => Response.json({
+  choices: [{ message: { content: JSON.stringify(teachingUnitDraftContent) } }],
+});
+
 const productionTeacherAuthIssuerSecret =
   "test-teacher-auth-issuer-secret-strong-fixture";
 
@@ -9862,7 +9868,9 @@ describe("teaching operation backend persistence", () => {
           UAIS_TEACHING_OPERATIONS_DATA_DIR: operationsDataDir,
           UAIS_TEACHING_COURSES_DATA_DIR: coursesDataDir,
           UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET: teacherAuthSecret,
+          DEEPSEEK_API_KEY: "unit-draft-test-provider-key",
         },
+        fetch: unitDraftProviderFetch,
         getTeachingOperationCourseOwnership: async () => ({
           teacherId: "teacher-collaborator",
           courseIds: [],
@@ -17125,7 +17133,9 @@ describe("teaching operation backend persistence", () => {
         UAIS_TEACHING_COURSES_DATA_DIR: coursesDataDir,
         UAIS_TEACHER_AI_OWNERSHIP_DIR: ownershipDir,
         UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET: teacherAuthSecret,
+        DEEPSEEK_API_KEY: "unit-draft-test-provider-key",
       },
+      fetch: unitDraftProviderFetch,
       now: new Date("2026-06-22T12:45:00.000Z"),
     });
 
@@ -17200,7 +17210,8 @@ describe("teaching operation backend persistence", () => {
           operationRecordId: body.receipt.receiptId,
           sourceAction: "inline-teaching-workspace",
           draftScope: "teacher-editable-unit-plan",
-          sourceSystems: ["course-knowledge-index", "teaching-objectives", "quiz-bank"],
+          sourceSystems: ["course-settings"],
+          content: teachingUnitDraftContent,
           reviewPolicy: "teacher-review-before-student-release",
           generatedAt: "2026-06-22T12:45:00.000Z",
           storagePolicy: "local-json-teaching-course-management",
@@ -17254,6 +17265,7 @@ describe("teaching operation backend persistence", () => {
       UAIS_TEACHING_COURSES_DATA_DIR: coursesDataDir,
       UAIS_TEACHER_AI_OWNERSHIP_DIR: ownershipDir,
       UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET: teacherAuthSecret,
+      DEEPSEEK_API_KEY: "unit-draft-test-provider-key",
     };
 
     try {
@@ -17288,10 +17300,12 @@ describe("teaching operation backend persistence", () => {
       };
       const firstPostOperation = createTeachingOperationActionPostHandler({
         env,
+        fetch: unitDraftProviderFetch,
         now: new Date("2026-06-22T12:45:00.000Z"),
       });
       const secondPostOperation = createTeachingOperationActionPostHandler({
         env,
+        fetch: unitDraftProviderFetch,
         now: new Date("2026-06-22T13:00:00.000Z"),
       });
 
@@ -17362,7 +17376,8 @@ describe("teaching operation backend persistence", () => {
           operationRecordId: firstBody.receipt.receiptId,
           draftStatus: "generated",
           draftScope: "teacher-editable-unit-plan",
-          sourceSystems: ["course-knowledge-index", "teaching-objectives", "quiz-bank"],
+          sourceSystems: ["course-settings"],
+          content: teachingUnitDraftContent,
           reviewPolicy: "teacher-review-before-student-release",
           generatedAt: "2026-06-22T12:45:00.000Z",
         }),

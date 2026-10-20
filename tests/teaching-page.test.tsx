@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { AnchorHTMLAttributes, ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { TeachingPage } from "@/components/pages/teaching-page";
@@ -4399,7 +4399,7 @@ describe("TeachingPage", () => {
     ).toBeNull();
   });
 
-  it("requires unit draft business readback before claiming draft generation success", async () => {
+  it("rejects metadata-only unit draft readback before claiming draft generation success", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       if (String(input) === "/api/teaching/operations") {
         expect(init?.method).toBe("POST");
@@ -4471,11 +4471,25 @@ describe("TeachingPage", () => {
               objectType: "unit-draft",
               courseId: "teacher-research-methods",
               operationRecordId: "operation-record-unit-draft-semantic-missing",
+              draftStatus: "ready-for-teacher-review",
+              reviewPolicy: "teacher-review-before-course-publish",
+              generatedBy: "teacher-kang",
+              artifactId: "metadata-only-unit-draft",
+              generatedAt: "2026-10-20T01:00:00.000Z",
             },
           ],
         });
       }
 
+      if (String(input).endsWith("/unit-draft")) {
+        return Response.json({ unitDraft: {
+          courseId: "teacher-research-methods",
+          unitDraftId: "course-unit-draft-teacher-research-methods",
+          operationRecordId: "operation-record-unit-draft-semantic-missing",
+          draftStatus: "generated",
+          revision: 1,
+        } });
+      }
       expect(String(input)).toBe("/api/teaching/operations/audit/alerts");
       return createClearInlineOperationAuditAlertsResponse(
         "trace-inline-unit-draft-semantic-missing",
@@ -4496,6 +4510,147 @@ describe("TeachingPage", () => {
     expect(
       screen.queryByText("领域对象已验证：unit-draft / unit-draft-teacher-research-methods"),
     ).toBeNull();
+  });
+
+
+  it("clears pending unit generation when switching courses and ignores its late response", async () => {
+    let finishGeneration!: (response: Response) => void;
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input) === "/api/teaching/operations") {
+        return new Promise<Response>((resolve) => { finishGeneration = resolve; });
+      }
+      return Response.json({}, { status: 404 });
+    }));
+    render(<TeachingPage />);
+    await chooseWorkspaceCourse("teacher-research-methods");
+    fireEvent.click(screen.getByRole("link", { name: "课程内容" }));
+    fireEvent.click(screen.getByRole("button", { name: "生成单元草稿" }));
+    expect(screen.getByRole("button", { name: "生成单元草稿" })).toHaveProperty("disabled", true);
+    await chooseWorkspaceCourse("teacher-math-pedagogy");
+    expect(screen.getByRole("button", { name: "生成单元草稿" })).toHaveProperty("disabled", false);
+    expect(await screen.findByText("尚无单元草稿，请先生成。")).toBeTruthy();
+    await act(async () => { finishGeneration(Response.json({ receipt: { displayMessage: { "zh-CN": "旧课程生成完成", "en-US": "Previous course ready" } } })); });
+    expect(screen.queryByText("旧课程生成完成")).toBeNull();
+  });
+
+
+  it("renders the generated teaching body after canonical inline unit draft readback", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === "/api/teaching/operations") {
+        expect(init?.method).toBe("POST");
+        const body = JSON.parse(String(init?.body)) as {
+          operationId: string;
+          actionSlot: "primary" | "secondary";
+        };
+        expect(body).toEqual(
+          expect.objectContaining({
+            operationId: "content",
+            actionSlot: "secondary",
+            courseId: "teacher-research-methods",
+            sourceAction: "inline-teaching-workspace",
+          }),
+        );
+        return Response.json({
+          receipt: {
+            receiptId: "operation-record-unit-draft-body-ready",
+            operationId: "content",
+            actionSlot: "secondary",
+            courseId: "teacher-research-methods",
+            status: "persisted",
+            audit: createSignedInlineOperationReceiptAudit(),
+            displayMessage: {
+              "zh-CN": "单元草稿已生成，等待教师校订。",
+              "en-US": "Unit draft generated and waiting for teacher edits.",
+            },
+          },
+          domainPersistenceSummary: createPersistedInlineOperationDomainPersistenceSummary(
+            "operation-record-unit-draft-body-ready",
+            "content",
+            "secondary",
+          ),
+          traceId: "trace-inline-unit-draft-body-ready",
+        });
+      }
+
+      if (String(input) === "/api/teaching/operations/audit") {
+        expect(init?.method).toBe("GET");
+        return Response.json({
+          traceId: "trace-audit-unit-draft-body-ready",
+          actorId: "teacher-kang",
+          courseIds: ["teacher-research-methods"],
+          recordCount: 1,
+          auditEventCount: 1,
+          domainProjectionCount: 1,
+          records: [
+            {
+              recordId: "operation-record-unit-draft-body-ready",
+              courseId: "teacher-research-methods",
+              operationId: "content",
+              actionSlot: "secondary",
+              status: "persisted",
+            },
+          ],
+          auditEvents: [
+            {
+              eventId: "audit-unit-draft-body-ready",
+              traceId: "trace-inline-unit-draft-body-ready",
+              eventType: "teaching-operation.persisted",
+              actorId: "teacher-kang",
+              authSession: createInlineAuditAuthSession(),
+              courseId: "teacher-research-methods",
+            },
+          ],
+          domainProjections: [
+            {
+              objectId: "unit-draft-teacher-research-methods",
+              objectType: "unit-draft",
+              courseId: "teacher-research-methods",
+              operationRecordId: "operation-record-unit-draft-body-ready",
+              draftStatus: "ready-for-teacher-review",
+              reviewPolicy: "teacher-review-before-course-publish",
+              generatedBy: "teacher-kang",
+              artifactId: "complete-unit-draft",
+              generatedAt: "2026-10-20T01:00:00.000Z",
+            },
+          ],
+        });
+      }
+
+      if (String(input).endsWith("/unit-draft")) {
+        return Response.json({ unitDraft: {
+          courseId: "teacher-research-methods",
+          unitDraftId: "course-unit-draft-teacher-research-methods",
+          operationRecordId: "operation-record-unit-draft-body-ready",
+          draftStatus: "generated",
+          content: {
+            title: "研究变量与证据",
+            objectives: ["区分自变量、因变量和控制变量，解释它们与研究问题的关系。"],
+            activities: [{ title: "分析教学案例", durationMinutes: 15, instructions: "两人一组阅读案例，标注影响学习表现的变量并比较解释。" }],
+            lectureScript: "今天我们从课堂案例中的变量开始。请先找出研究者改变了什么，再找出研究者测量了什么。把这两者写成一个可检验的问题，并说明你需要控制哪些条件。",
+            questions: [{ prompt: "改变学习时长并测量成绩时，哪个是因变量？", referenceAnswer: "成绩是因变量，因为它是改变条件之后测量的结果。" }],
+          },
+          revision: 1,
+        } });
+      }
+      expect(String(input)).toBe("/api/teaching/operations/audit/alerts");
+      return createClearInlineOperationAuditAlertsResponse(
+        "trace-inline-unit-draft-body-ready",
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<TeachingPage />);
+    await chooseWorkspaceCourse("teacher-research-methods");
+
+    fireEvent.click(screen.getByRole("link", { name: "课程内容" }));
+    fireEvent.click(screen.getByRole("button", { name: "生成单元草稿" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("单元草稿已生成，等待教师校订。")).toBeTruthy();
+    });
+    expect(await screen.findByRole("textbox", { name: "单元标题" })).toHaveProperty("value", "研究变量与证据");
+    expect(screen.getByRole("textbox", { name: "教学讲稿" })).toHaveProperty("value", "今天我们从课堂案例中的变量开始。请先找出研究者改变了什么，再找出研究者测量了什么。把这两者写成一个可检验的问题，并说明你需要控制哪些条件。");
+    expect(screen.getByRole("button", { name: "保存单元正文" })).toBeTruthy();
   });
 
   it("requires grading queue and gradebook update readback before claiming review queue save success", async () => {

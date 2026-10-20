@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { TeachingUnitDraftEditor, readVerifiedTeachingUnitDraft } from "./teaching-unit-draft-editor";
 import Link from "next/link";
 import { ArrowLeft } from "@phosphor-icons/react/dist/ssr/ArrowLeft";
 import { CheckCircle } from "@phosphor-icons/react/dist/ssr/CheckCircle";
@@ -19,6 +20,10 @@ import { teacherCourses, teacherSidebarItems } from "@/data/uais";
 import type { LocalizedText, Locale } from "@/i18n/copy";
 import { createTeachingOperationIdempotencyKey } from "@/lib/teaching-operation-idempotency";
 import { fetchTeachingOperationAuditReadbackWithRetry } from "@/components/pages/teaching-page-inline-audit-readback";
+import {
+  hasCompleteInlineTeachingAuthSession as isVerifiedOperationAuditAuthSession,
+  isMismatchedInlineTeachingOperationReceipt as isMismatchedTeachingOperationReceipt,
+} from "@/components/pages/teaching-page-inline-receipt-guards";
 import {
   openTeachingStudentPreviewUrl,
   resolveCourseSettingsPersistConfirmation,
@@ -308,7 +313,11 @@ const TEACHING_OPERATION_COURSE_NOT_OWNED_MESSAGE: LocalizedText = {
     "This account is not the course owner. Demo course cards cannot be saved. Open a course saved under your account, or create one first.",
 };
 
-export function TeachingOperationPage({
+export function TeachingOperationPage(props: TeachingOperationPageProps) {
+  return <TeachingOperationPageContent key={`${props.operationId}:${props.selectedCourseId ?? "none"}`} {...props} />;
+}
+
+function TeachingOperationPageContent({
   operationId,
   selectedCourseId,
   selectedClassId,
@@ -331,6 +340,7 @@ export function TeachingOperationPage({
     useState<ExportManifestState>(defaultExportManifest);
   const [inviteCode, setInviteCode] = useState(defaultInviteCode);
   const [auditStatus, setAuditStatus] = useState<OperationAuditStatus>();
+  const [verifiedUnitDraftRecordId, setVerifiedUnitDraftRecordId] = useState<string>();
   const [knowledgeResourceTitle, setKnowledgeResourceTitle] = useState("");
   const [knowledgeResourceUrl, setKnowledgeResourceUrl] = useState("");
   const [knowledgeResourceRightsBasis, setKnowledgeResourceRightsBasis] =
@@ -414,6 +424,7 @@ export function TeachingOperationPage({
           operationId: safeOperationId,
           actionSlot,
           courseId: selectedCourseId,
+          ...(safeOperationId === "content" && actionSlot === "secondary" ? { locale } : {}),
           ...(targetClassId ? { targetClassId } : {}),
           sourceAction,
           ...(knowledgeResource ? { knowledgeResource } : {}),
@@ -472,6 +483,11 @@ export function TeachingOperationPage({
         domainPersistenceSummary: payload.domainPersistenceSummary,
         courseId: receipt.courseId ?? selectedCourseId,
       });
+
+      if (safeOperationId === "content" && actionSlot === "secondary" &&
+        (!payload.traceId || !receipt.receiptId || receipt.courseId !== selectedCourseId)) {
+        throw new Error("Unit generation requires course-bound audit and content readback.");
+      }
 
       const verifiedStatusMessage = receipt.displayMessage
         ? localizedText(receipt.displayMessage, locale)
@@ -630,6 +646,12 @@ export function TeachingOperationPage({
         throw new Error("Teaching operation audit readback did not include the saved operation.");
       }
 
+      if (safeOperationId === "content" && input.actionSlot === "secondary") {
+        if (!input.courseId) throw new Error("Unit draft course is missing.");
+        await readVerifiedTeachingUnitDraft(input.courseId, input.recordId);
+        setVerifiedUnitDraftRecordId(input.recordId);
+      }
+
       setAuditStatus({
         status: "verified",
         traceId: input.traceId,
@@ -673,25 +695,6 @@ export function TeachingOperationPage({
         traceId: input.traceId,
       });
     }
-  }
-
-  function isVerifiedOperationAuditAuthSession(
-    authSession: NonNullable<
-      TeachingOperationAuditReadbackResponse["auditEvents"]
-    >[number]["authSession"],
-  ): authSession is {
-    sessionId: string;
-    authenticatedAt: string;
-    expiresAt: string;
-  } {
-    return (
-      typeof authSession?.sessionId === "string" &&
-      authSession.sessionId.trim().length > 0 &&
-      typeof authSession.authenticatedAt === "string" &&
-      authSession.authenticatedAt.trim().length > 0 &&
-      typeof authSession.expiresAt === "string" &&
-      authSession.expiresAt.trim().length > 0
-    );
   }
 
   function doesOperationPageDomainProjectionMatchBusinessSemantics(
@@ -1401,13 +1404,21 @@ export function TeachingOperationPage({
               </div>
             ) : null}
 
-            <OperationSpecificPreview
+            {safeOperationId === "content" && selectedCourseId && isSelectedCourseWritable ? (
+              <TeachingUnitDraftEditor
+                courseId={selectedCourseId}
+                locale={locale}
+                expectedOperationRecordId={verifiedUnitDraftRecordId}
+                generationPending={isActionPending || isAuditPending}
+              />
+            ) : null}
+            {safeOperationId !== "content" ? <OperationSpecificPreview
               config={config}
               exportManifest={exportManifest}
               inviteCode={inviteCode}
               locale={locale}
               manifestReady={manifestReady}
-            />
+            /> : null}
               </section>
             </div>
 
@@ -1545,22 +1556,6 @@ function createTeachingOperationDomainPersistenceFailureMessage(
     "zh-CN": `领域对象未保存到服务器：${detail}。请稍后重试。`,
     "en-US": `Domain objects were not saved to the server: ${detail}. Please retry later.`,
   };
-}
-
-function isMismatchedTeachingOperationReceipt(
-  receipt: TeachingOperationBackendReceipt,
-  expected: {
-    operationId: TeachingOperationId;
-    actionSlot: "primary" | "secondary";
-  },
-) {
-  if (receipt.operationId && receipt.operationId !== expected.operationId) {
-    return true;
-  }
-  if (receipt.actionSlot && receipt.actionSlot !== expected.actionSlot) {
-    return true;
-  }
-  return false;
 }
 
 function isTeachingOperationFailureStatus(statusMessage: string, locale: Locale) {

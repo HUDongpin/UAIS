@@ -20,6 +20,9 @@ import { InlineWorkspaceActionButtons } from "./teaching-page-inline-workspace-a
 import { InlineWorkspaceStatus } from "./teaching-page-inline-workspace-status";
 import { InviteCodeWorkspaceTools } from "./teaching-page-invite-code-workspace-tools";
 import { WorkspaceContext } from "./teaching-page-workspace-context";
+import { TeachingUnitDraftEditor } from "@/components/teaching/teaching-unit-draft-editor";
+import { localizedText } from "@/components/ui/localized-text";
+import { TEACHING_OPERATION_SAVE_PENDING_MESSAGE } from "./teaching-page-messages";
 import { createEnterpriseWorkspaceConfig } from "./teaching-page-workspace-config";
 import type {
   InlineWorkspaceAlertNotificationStatus,
@@ -182,6 +185,23 @@ export function EnterpriseWorkspace({
               runInlineWorkspaceRollback={runInlineWorkspaceRollback}
               queueInlineWorkspaceAuditAlertNotifications={queueInlineWorkspaceAuditAlertNotifications}
             />}
+
+          {config.id === "content" && selectedCourseAction?.courseId && isSelectedCourseWritable ? (
+            <TeachingUnitDraftEditor
+              courseId={selectedCourseAction.courseId}
+              locale={locale}
+              expectedOperationRecordId={
+                inlineWorkspaceAuditStatuses.content?.status === "verified" &&
+                inlineWorkspaceAuditStatuses.content.courseId === selectedCourseAction.courseId &&
+                inlineWorkspaceAuditStatuses.content.domainObjectType === "unit-draft"
+                  ? inlineWorkspaceAuditStatuses.content.recordId : undefined
+              }
+              generationPending={
+                inlineWorkspaceAuditStatuses.content?.status === "pending" ||
+                inlineWorkspaceStatuses.content === localizedText(TEACHING_OPERATION_SAVE_PENDING_MESSAGE, locale)
+              }
+            />
+          ) : null}
 
           {config.id === "students" &&
           learningChatroomGroupsEnabled &&

@@ -46,6 +46,7 @@ import { useAppPreferences } from "@/components/providers/app-preferences";
 import { createInviteCodePolicyPatch } from "@/components/teaching/invite-code-policy";
 import {
   createTeacherGroupSuggestionDraft,
+  removeTeacherGroupSuggestion,
   type TeacherGroupSuggestionDraft,
 } from "@/components/teaching/group-suggestion-review";
 import {
@@ -91,6 +92,7 @@ import {
   type TeachingCourseListResponse,
 } from "@/lib/teaching/course-readback";
 import { createTeachingOperationIdempotencyKey } from "@/lib/teaching-operation-idempotency";
+import { readVerifiedTeachingUnitDraft } from "@/components/teaching/teaching-unit-draft-editor";
 import {
   INVITE_CLASS_INVITATION_READBACK_MISMATCH_MESSAGE,
   INVITE_CODE_DRAFT_READBACK_MISMATCH_MESSAGE,
@@ -583,6 +585,7 @@ export function useTeachingWorkspace() {
           actionSlot,
           courseId,
           sourceAction,
+          ...(operationId === "content" && actionSlot === "secondary" ? { locale } : {}),
           ...(courseSettingsPatch ? { courseSettingsPatch } : {}),
           idempotencyKey: createTeachingOperationIdempotencyKey({
             operationId,
@@ -670,6 +673,10 @@ export function useTeachingWorkspace() {
           [operationId]: domainPersistenceFailureStatus,
         }));
         return;
+      }
+      if (operationId === "content" && actionSlot === "secondary" &&
+        (!payload.traceId || !payload.receipt?.receiptId || payload.receipt.courseId !== courseId)) {
+        throw new Error("Unit generation requires course-bound audit and content readback.");
       }
       const receipt = payload.receipt;
       const { persistConfirmed } = confirmAndOpenCourseSettingsStudentPreview({
@@ -923,6 +930,12 @@ export function useTeachingWorkspace() {
         verifiedAuthSession,
       } = match;
 
+      if (input.operationId === "content" && input.actionSlot === "secondary") {
+        if (!input.courseId) throw new Error("Unit draft course is missing.");
+        await readVerifiedTeachingUnitDraft(input.courseId, input.recordId);
+        if (!isCurrentInlineWorkspaceAttempt(input.operationId, input.attemptId)) return;
+      }
+
       applyVerifiedCourseSettingsPatch(
         matchingRecord?.courseId ?? input.courseId,
         input.courseSettingsPatch,
@@ -969,7 +982,9 @@ export function useTeachingWorkspace() {
       }
       setInlineWorkspaceStatuses((currentStatuses) => ({
         ...currentStatuses,
-        [input.operationId]: localizedText(TEACHING_OPERATION_AUDIT_FAILED_MESSAGE, locale),
+        [input.operationId]: input.operationId === "content" && input.actionSlot === "secondary"
+            ? getInlineDomainProjectionSemanticMismatchMessage("content", "secondary", locale)
+            : localizedText(TEACHING_OPERATION_AUDIT_FAILED_MESSAGE, locale),
       }));
       setInlineWorkspaceAuditStatuses((currentStatuses) => ({
         ...currentStatuses,
@@ -1071,25 +1086,9 @@ export function useTeachingWorkspace() {
   }
 
   function removePendingGroupSuggestion(courseId: string, suggestionKey: string) {
-    setPendingGroupSuggestionsByCourse((currentSuggestions) => {
-      const currentCourseSuggestion = currentSuggestions[courseId];
-      if (!currentCourseSuggestion) {
-        return currentSuggestions;
-      }
-      const suggestedGroups = currentCourseSuggestion.suggestedGroups.filter(
-        (suggestion) => suggestion.suggestionKey !== suggestionKey,
-      );
-      const nextSuggestions = { ...currentSuggestions };
-      if (suggestedGroups.length === 0) {
-        delete nextSuggestions[courseId];
-      } else {
-        nextSuggestions[courseId] = {
-          ...currentCourseSuggestion,
-          suggestedGroups,
-        };
-      }
-      return nextSuggestions;
-    });
+    setPendingGroupSuggestionsByCourse((currentSuggestions) =>
+      removeTeacherGroupSuggestion(currentSuggestions, courseId, suggestionKey),
+    );
   }
 
   async function queueInlineWorkspaceAuditAlertNotifications(

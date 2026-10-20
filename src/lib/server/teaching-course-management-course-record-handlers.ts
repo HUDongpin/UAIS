@@ -1,4 +1,9 @@
 import { TeachingCourseManagementStoreError } from "./teaching-course-management-error";
+import {
+  isTeachingUnitDraftContent,
+  type TeachingUnitDraftContent,
+} from "@/lib/teaching/unit-draft";
+import { createLocalTeachingUnitDraftRepository } from "./teaching-unit-draft-local-repository";
 import { isTeachingCourseManagementActorAuthorized } from "./teaching-course-management-authorization";
 import { createRedaction, requireSafeId } from "./teaching-course-management-guards";
 import {
@@ -25,6 +30,7 @@ import type {
   TeachingCourseManagementRepository,
   TeachingCourseQuizAssessmentRecord,
   TeachingCourseQuizItemReviewRecord,
+  TeachingCourseRecord,
   TeachingCourseUnitDraftRecord,
   TeachingResourceReviewItemRecord,
 } from "@/lib/server/teaching-course-management-types";
@@ -487,6 +493,7 @@ export async function saveTeachingCourseUnitDraftRecord(input: {
   actorId: string;
   courseId: string;
   operationRecordId: string;
+  generateContent?: (course: TeachingCourseRecord) => Promise<TeachingUnitDraftContent>;
   sourceAction?: string;
   traceId?: string;
   audit?: {
@@ -498,7 +505,8 @@ export async function saveTeachingCourseUnitDraftRecord(input: {
   receipt: TeachingCourseManagementReceipt;
 }> {
   const dataDir = resolveTeachingCourseManagementDataDir(input.dataDir);
-  const storage = input.repository?.storage ?? localTeachingCourseManagementStorage;
+  const repository = input.repository ?? createLocalTeachingUnitDraftRepository({ dataDir });
+  const storage = repository.storage;
   const actorId = requireSafeId(input.actorId, "actor id");
   const courseId = requireSafeId(input.courseId, "course id");
   const operationRecordId = requireSafeId(input.operationRecordId, "operation record id");
@@ -508,12 +516,15 @@ export async function saveTeachingCourseUnitDraftRecord(input: {
   const now = input.now ?? new Date();
   const generatedAt = now.toISOString();
   const unitDraftId = `course-unit-draft-${courseId}`;
+  let generatedContent: TeachingUnitDraftContent | undefined;
+  let initialDraftRevision: number | undefined;
+  let initialDraftOperationRecordId: string | undefined;
 
   const writeRetry = createTeachingCourseManagementWriteRetry();
   for (let attempt = 0; attempt < teachingCourseManagementMaxWriteAttempts; attempt += 1) {
     const snapshot = await readTeachingCourseManagementSnapshot({
       dataDir,
-      repository: input.repository,
+      repository,
       courseId,
     });
     const database = snapshot.database;
@@ -543,7 +554,10 @@ export async function saveTeachingCourseUnitDraftRecord(input: {
       existingUnitDraftIndex >= 0
         ? unitDrafts[existingUnitDraftIndex]
         : undefined;
-    if (existingUnitDraft?.operationRecordId === operationRecordId) {
+    if (
+      existingUnitDraft?.operationRecordId === operationRecordId &&
+      isTeachingUnitDraftContent(existingUnitDraft.content)
+    ) {
       const receipt = createReceipt({
         action: "generate-course-unit-draft",
         actorId,
@@ -558,6 +572,28 @@ export async function saveTeachingCourseUnitDraftRecord(input: {
       };
     }
 
+    if (generatedContent) {
+      if (
+        existingUnitDraft?.revision !== initialDraftRevision ||
+        existingUnitDraft?.operationRecordId !== initialDraftOperationRecordId
+      ) {
+        throw new TeachingCourseManagementStoreError(
+          409, "Teaching unit draft changed during generation; reload before generating again.",
+          undefined, "unit-draft-revision-conflict",
+        );
+      }
+    } else {
+      if (!input.generateContent) {
+        throw new TeachingCourseManagementStoreError(503, "Teaching unit draft generation is unavailable.");
+      }
+      initialDraftRevision = existingUnitDraft?.revision;
+      initialDraftOperationRecordId = existingUnitDraft?.operationRecordId;
+      generatedContent = await input.generateContent(course);
+      if (!isTeachingUnitDraftContent(generatedContent)) {
+        throw new TeachingCourseManagementStoreError(502, "Teaching unit draft generation returned incomplete content.");
+      }
+    }
+
     database.courses[courseIndex] = {
       ...course,
       updatedAt: generatedAt,
@@ -569,10 +605,12 @@ export async function saveTeachingCourseUnitDraftRecord(input: {
       ownerTeacherId: course.ownerTeacherId,
       generatedBy: actorId,
       draftStatus: "generated",
+      content: generatedContent,
+      revision: (existingUnitDraft?.revision ?? 0) + 1,
       operationRecordId,
       ...(sourceAction ? { sourceAction } : {}),
       draftScope: "teacher-editable-unit-plan",
-      sourceSystems: ["course-knowledge-index", "teaching-objectives", "quiz-bank"],
+      sourceSystems: ["course-settings"],
       reviewPolicy: "teacher-review-before-student-release",
       generatedAt,
       storagePolicy: storage.recordStoragePolicy,
@@ -610,7 +648,7 @@ export async function saveTeachingCourseUnitDraftRecord(input: {
     try {
       await writeTeachingCourseManagementSnapshot({
         dataDir,
-        repository: input.repository,
+        repository,
         database,
         expectedRevision: snapshot.revision,
         courseId,
@@ -620,14 +658,13 @@ export async function saveTeachingCourseUnitDraftRecord(input: {
         receipt,
       };
     } catch (error) {
-      if (input.repository && (await writeRetry.shouldRetry({ attempt, error }))) {
+      if (await writeRetry.shouldRetry({ attempt, error })) {
         continue;
       }
       // A conflict that survives the ladder is exhausted contention, not a
       // caller mistake: answer with the structured 409 rather than passing the
-      // backend's own revision-mismatch prose through. The local file path has no
-      // revisions and never lands here.
-      throw input.repository && writeRetry.isConflict(error)
+      // backend's own revision-mismatch prose through. Local snapshots use the same retry policy.
+      throw writeRetry.isConflict(error)
         ? createTeachingCourseManagementContentionError()
         : error;
     }

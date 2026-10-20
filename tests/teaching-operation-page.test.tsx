@@ -469,22 +469,11 @@ describe("TeachingOperationPage", () => {
     expect(screen.getByText("需教师确认后发布")).toBeTruthy();
   });
 
-  it("implements scene-based course content with playback, Pro edit, and continuation", () => {
+  it("does not present sample scenes as generated content without a selected course", () => {
     const { container } = render(<TeachingOperationPage operationId="content" />);
-
-    expect(container.querySelector('[data-uais-openmaic-page="content"]')).toBeTruthy();
-    expect(screen.getByText("开放课堂智能系统场景内容结构")).toBeTruthy();
-    expect(screen.getByText("研究问题导入")).toBeTruthy();
-    expect(screen.getByText("变量关系快测")).toBeTruthy();
-    expect(screen.getByText("小组白板活动")).toBeTruthy();
-    expect(screen.getByText("研究设计挑战")).toBeTruthy();
-    expect(screen.getByText("演示页")).toBeTruthy();
-    expect(screen.getByText("测验")).toBeTruthy();
-    expect(screen.getByText("互动任务")).toBeTruthy();
-    expect(screen.getByText("问题式学习")).toBeTruthy();
-    expect(screen.getAllByText("课堂播放").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("专业编辑").length).toBeGreaterThan(0);
-    expect(screen.getByText("场景续生成")).toBeTruthy();
+    expect(container.querySelector('[data-uais-openmaic-page="content"]')).toBeNull();
+    expect(screen.queryByText("研究问题导入")).toBeNull();
+    expect(screen.queryByRole("textbox", { name: "教学讲稿" })).toBeNull();
   });
 
   it("calls the teaching operation backend when a teacher runs a button action", async () => {
@@ -2112,11 +2101,9 @@ describe("TeachingOperationPage", () => {
     }
   });
 
-  it("requires unit draft business readback before operation page claims draft generation success", async () => {
+  it("rejects metadata-only unit draft readback before operation page claims generation success", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
-      if (String(input) === "/api/teaching/courses") {
-        return ownedTeachingCourseListResponse();
-      }
+      if (String(input) === "/api/teaching/courses") return ownedTeachingCourseListResponse();
       if (String(input) === "/api/teaching/operations") {
         expect(init?.method).toBe("POST");
         const body = JSON.parse(String(init?.body)) as {
@@ -2155,6 +2142,15 @@ describe("TeachingOperationPage", () => {
         });
       }
 
+      if (String(input).endsWith("/unit-draft")) {
+        return Response.json({ unitDraft: {
+          courseId: "teacher-research-methods",
+          unitDraftId: "course-unit-draft-teacher-research-methods",
+          operationRecordId: "operation-page-unit-draft-semantic-missing",
+          draftStatus: "generated",
+          revision: 1,
+        } });
+      }
       expect(String(input)).toBe("/api/teaching/operations/audit");
       return Response.json({
         traceId: "trace-audit-operation-page-unit-draft-semantic-missing",
@@ -2185,6 +2181,11 @@ describe("TeachingOperationPage", () => {
             objectType: "unit-draft",
             courseId: "teacher-research-methods",
             operationRecordId: "operation-page-unit-draft-semantic-missing",
+            draftStatus: "ready-for-teacher-review",
+            reviewPolicy: "teacher-review-before-course-publish",
+            generatedBy: "teacher-kang",
+            artifactId: "metadata-only-unit-draft",
+            generatedAt: "2026-10-20T01:00:00.000Z",
           },
         ],
       });
@@ -4417,7 +4418,9 @@ describe("TeachingOperationPage", () => {
 
       fireEvent.click(actionButtons[1]);
       await waitFor(() => {
-        expect(liveStatus?.textContent).toBe(`${operationId}:secondary:server-persisted`);
+        expect(liveStatus?.textContent).toBe(operationId === "content"
+          ? "未保存到服务器，请重新登录或检查课程权限。"
+          : `${operationId}:secondary:server-persisted`);
       });
       expect(liveStatus?.textContent).not.toBe(primaryStatus);
 
