@@ -1,4 +1,7 @@
+import { isDraftMediaSlides, type DraftMediaSlide } from "./unit-draft-media";
+
 export type TeachingUnitDraftContent = {
+  mediaSlides?: DraftMediaSlide[];
   title: string;
   objectives: string[];
   activities: Array<{
@@ -28,7 +31,8 @@ function hasOnlyKeys(value: Record<string, unknown>, keys: string[]) {
 export function isTeachingUnitDraftContent(value: unknown): value is TeachingUnitDraftContent {
   if (
     !isRecord(value) ||
-    !hasOnlyKeys(value, ["title", "objectives", "activities", "lectureScript", "questions"]) ||
+    !hasOnlyKeys(value, ["title", "objectives", "activities", "lectureScript", "questions", ...(Object.hasOwn(value, "mediaSlides") ? ["mediaSlides"] : [])]) ||
+    (Object.hasOwn(value, "mediaSlides") && !isDraftMediaSlides(value.mediaSlides)) ||
     !isText(value.title, 200) ||
     !isText(value.lectureScript, 50_000) ||
     !Array.isArray(value.objectives) || value.objectives.length < 1 || value.objectives.length > 12 ||
@@ -54,5 +58,6 @@ export function isTeachingUnitDraftContent(value: unknown): value is TeachingUni
     return false;
   }
   // Bound the whole editable document as well as each individual field.
-  return JSON.stringify(value).length <= 60_000;
+  const textContent = { title: value.title, objectives: value.objectives, activities: value.activities, lectureScript: value.lectureScript, questions: value.questions };
+  return JSON.stringify(textContent).length <= 60_000;
 }

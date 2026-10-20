@@ -1,3 +1,4 @@
+import { draftRequestByteLimit } from "@/lib/teaching/unit-draft-media";
 import {
   assertProductionTeachingOperationCourseOwnershipAccessConfigured,
   authorizeTeachingOperationCourseAccess,
@@ -46,7 +47,7 @@ type TeachingUnitDraftHandlerDeps = {
   readTeachingCourseCapability?: ReadTeachingCourseCapability;
 };
 
-const maxBodyBytes = 200_000;
+const maxBodyBytes = draftRequestByteLimit;
 
 export function createTeachingUnitDraftGetHandler(deps: TeachingUnitDraftHandlerDeps = {}) {
   return createTeachingUnitDraftHandler("GET", deps);

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { TeachingUnitDraftMediaEditor } from "./teaching-unit-draft-media-editor";
 import { FloppyDisk } from "@phosphor-icons/react/dist/ssr/FloppyDisk";
 import { copy, type Locale } from "@/i18n/copy";
 import { isTeachingUnitDraftContent, type TeachingUnitDraftContent } from "@/lib/teaching/unit-draft";
@@ -47,6 +48,7 @@ function UnitDraftEditor({ courseId, locale, expectedOperationRecordId, generati
   const [draft, setDraft] = useState<VerifiedTeachingUnitDraft>();
   const [content, setContent] = useState<TeachingUnitDraftContent>();
   const [status, setStatus] = useState<"loading" | "ready" | "dirty" | "missing" | "incomplete" | "error" | "saving" | "saved" | "conflict">("loading");
+  const [mediaBusy, setMediaBusy] = useState(false);
   const mounted = useRef(false);
   const savePending = useRef(false);
 
@@ -71,7 +73,7 @@ function UnitDraftEditor({ courseId, locale, expectedOperationRecordId, generati
   }
 
   async function save() {
-    if (!draft || !content || !isTeachingUnitDraftContent(content) || savePending.current || generationPending) return;
+    if (!draft || !content || !isTeachingUnitDraftContent(content) || savePending.current || generationPending || mediaBusy) return;
     savePending.current = true;
     setStatus("saving");
     try {
@@ -105,7 +107,7 @@ function UnitDraftEditor({ courseId, locale, expectedOperationRecordId, generati
       <p role="status" className="mt-2 text-sm leading-6 text-[var(--muted)]">{generationPending ? (t.generating) : message}</p>
       {content && !generationPending ? (
         <form className="mt-4 space-y-4" onSubmit={(event) => { event.preventDefault(); void save(); }}>
-          <fieldset disabled={status === "saving"} className="min-w-0 space-y-4 disabled:opacity-60">
+          <fieldset disabled={status === "saving" || mediaBusy} className="min-w-0 space-y-4 disabled:opacity-60">
             <label className={labelClass}>{t.title}<input value={content.title} onChange={(event) => editContent({ ...content, title: event.target.value })} className={fieldClass} /></label>
             <label className={labelClass}>{t.objectives}<textarea rows={4} value={content.objectives.join("\n")} onChange={(event) => editContent({ ...content, objectives: event.target.value.split("\n") })} className={fieldClass} /></label>
             {content.activities.map((activity, index) => (
@@ -124,6 +126,8 @@ function UnitDraftEditor({ courseId, locale, expectedOperationRecordId, generati
                 <label className={labelClass}>{t.referenceAnswer.replace("{n}", String(index + 1))}<textarea rows={3} value={question.referenceAnswer} onChange={(event) => editContent({ ...content, questions: content.questions.map((item, i) => i === index ? { ...item, referenceAnswer: event.target.value } : item) })} className={fieldClass} /></label>
               </fieldset>
             ))}
+            <TeachingUnitDraftMediaEditor value={content.mediaSlides ?? []} locale={locale} onBusy={setMediaBusy} onChange={(mediaSlides) => editContent({ ...content, mediaSlides })} />
+            {mediaBusy ? <p role="status">{t.mediaBusy}</p> : null}
             {!isTeachingUnitDraftContent(content) ? <p className="text-sm text-[var(--muted)]">{t.invalid}</p> : null}
             <button type="submit" disabled={!isTeachingUnitDraftContent(content) || status === "conflict"} className="inline-flex min-h-11 items-center gap-2 rounded-full bg-[var(--accent)] px-4 text-sm font-semibold text-white outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] disabled:opacity-50"><FloppyDisk size={18} />{status === "saving" ? (t.savingButton) : (t.saveButton)}</button>
           </fieldset>

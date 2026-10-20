@@ -1,3 +1,5 @@
+import { imageSize } from "image-size";
+import { decodeDraftMedia } from "@/lib/teaching/unit-draft-media";
 import { randomUUID } from "node:crypto";
 import { isTeachingUnitDraftContent } from "@/lib/teaching/unit-draft";
 import { isTeachingCourseManagementActorAuthorized } from "./teaching-course-management-authorization";
@@ -67,6 +69,13 @@ export async function updateTeachingUnitDraft(input: UnitDraftAccessInput & {
     throw new TeachingCourseManagementStoreError(400, "A valid teaching unit draft revision is required.");
   }
   const content = structuredClone(input.content);
+  for (const slide of content.mediaSlides ?? []) {
+    if (!slide.image) continue;
+    try {
+      const { width, height } = imageSize(decodeDraftMedia(slide.image));
+      if (!width || !height || width * height > 40_000_000) throw new Error("Invalid dimensions");
+    } catch { throw new TeachingCourseManagementStoreError(400, "Draft image is invalid or too large."); }
+  }
   const dataDir = resolveTeachingCourseManagementDataDir(input.dataDir);
   const actorId = requireSafeId(input.actorId, "actor id");
   const courseId = requireSafeId(input.courseId, "course id");

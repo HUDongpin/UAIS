@@ -1,3 +1,7 @@
+import { draftRequestByteLimit } from "@/lib/teaching/unit-draft-media";
+import { readTeachingCourseExportSource } from "@/lib/server/teaching-course-export-source";
+import { createTeachingCourseExportPackage } from "@/lib/server/teaching-course-export-package";
+import JSZip from "jszip";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -99,6 +103,34 @@ afterEach(async () => {
 });
 
 describe("teaching unit draft API", () => {
+  it("persists private media through the authenticated draft API without publishing", async () => {
+    await seedDraft();
+    const image = { mime: "image/png", base64: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a6f8AAAAASUVORK5CYII=" };
+    const withMedia = { ...content, mediaSlides: [{ id: "media-one", title: "QA image", notes: "Private QA", image }] };
+    const patch = createTeachingUnitDraftPatchHandler({ env, now });
+    const saved = await patch(request("PATCH", { content: withMedia, expectedRevision: 1 }), context());
+    expect(saved.status).toBe(200);
+    const payload = await saved.json();
+    expect(payload.unitDraft).toMatchObject({ draftStatus: "generated", revision: 2, content: withMedia });
+    const readback = await createTeachingUnitDraftGetHandler({ env, now })(request(), context());
+    expect((await readback.json()).unitDraft.content).toEqual(withMedia);
+    const denied = await createTeachingUnitDraftGetHandler({ env, now })(request("GET", undefined, teacherCookie("teacher-other")), context());
+    expect(denied.status).toBe(403);
+    expect(await denied.text()).not.toContain(image.base64);
+    expect((await patch(request("PATCH", { content: withMedia, expectedRevision: 1 }), context())).status).toBe(409);
+    const source = await readTeachingCourseExportSource({ courseId, env, locale: "en-US" });
+    expect(source.sourceKind).toBe("unit-draft");
+    expect(source.slides.at(-1)?.image?.bytes.toString("base64")).toBe(image.base64);
+    for (const format of ["pptx", "resource-zip", "classroom-zip"] as const) {
+      const output = await createTeachingCourseExportPackage({ source, format, locale: "en-US" });
+      const zip = await JSZip.loadAsync(output.bytes);
+      const media = Object.values(zip.files).filter((file) => !file.dir && file.name.endsWith(".png"));
+      expect(media.length).toBeGreaterThan(0);
+      expect(await media[0].async("base64")).toBe(image.base64);
+    }
+
+  });
+
   it("returns persisted teaching content for its authenticated course owner", async () => {
     await seedDraft();
     const get = createTeachingUnitDraftGetHandler({ env, now });
@@ -218,7 +250,7 @@ describe("teaching unit draft API", () => {
   it("rejects malformed and oversized JSON bodies", async () => {
     await seedDraft();
     const patch = createTeachingUnitDraftPatchHandler({ env, now });
-    for (const [body, status] of [["{", 400], [" ".repeat(200_001), 413]] as const) {
+    for (const [body, status] of [["{", 400], [" ".repeat(draftRequestByteLimit + 1), 413]] as const) {
       const response = await patch(new Request("http://localhost/api/unit-draft", {
         method: "PATCH",
         headers: { cookie: teacherCookie(), "content-type": "application/json" },

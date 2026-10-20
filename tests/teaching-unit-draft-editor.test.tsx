@@ -20,6 +20,26 @@ function draft(overrides: Record<string, unknown> = {}) {
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 describe("TeachingUnitDraftEditor", () => {
+  it("adds an uploaded private image, saves it and restores it after reopening", async () => {
+    let saved = draft();
+    vi.stubGlobal("fetch", vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === "PATCH") saved = draft({ content: JSON.parse(String(init.body)).content, revision: 2 });
+      return Response.json({ unitDraft: saved });
+    }));
+    const view = render(<TeachingUnitDraftEditor courseId="course-a" locale="zh-CN" />);
+    await screen.findByRole("textbox", { name: "媒体页标题" });
+    fireEvent.change(screen.getByRole("textbox", { name: "媒体页标题" }), { target: { value: "QA private image" } });
+    const bytes = Uint8Array.from(atob("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a6f8AAAAASUVORK5CYII="), (c) => c.charCodeAt(0));
+    fireEvent.change(screen.getByLabelText("媒体页图片"), { target: { files: [new File([bytes], "qa.png", { type: "image/png" })] } });
+    fireEvent.click(screen.getByRole("button", { name: "添加媒体页" }));
+    expect(await screen.findByRole("img", { name: "QA private image" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "保存单元正文" }));
+    await screen.findByText("单元正文已保存，仍需教师审核后发布。");
+    view.unmount();
+    render(<TeachingUnitDraftEditor courseId="course-a" locale="zh-CN" />);
+    expect(await screen.findByRole("img", { name: "QA private image" })).toBeTruthy();
+  });
+
   it("shows generation success only after canonical body readback and allows saving the generated content", async () => {
     let generated = false;
     let saved = draft();

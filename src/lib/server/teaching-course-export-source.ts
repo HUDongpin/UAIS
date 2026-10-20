@@ -1,3 +1,4 @@
+import { decodeDraftMedia, draftWavDuration } from "@/lib/teaching/unit-draft-media";
 import { readFile, realpath, stat } from "node:fs/promises";
 import { join, relative, resolve, sep } from "node:path";
 import type { Locale } from "@/i18n/copy";
@@ -110,6 +111,14 @@ export async function readTeachingCourseExportSource(input: {
       notes: question.referenceAnswer,
     })),
   ];
+  for (const media of content.mediaSlides ?? []) {
+    const audio = media.audio ? Buffer.from(decodeDraftMedia(media.audio)) : undefined;
+    slides.push({
+      id: `draft-media-${media.id}`, title: media.title, notes: media.notes,
+      ...(media.image ? { image: { bytes: Buffer.from(decodeDraftMedia(media.image)), extension: media.image.mime === "image/png" ? "png" as const : "jpg" as const } } : {}),
+      ...(audio ? { audio: { bytes: audio, extension: "wav" as const }, durationSeconds: draftWavDuration(audio) } : {}),
+    });
+  }
   return {
     courseId: input.courseId,
     title: content.title,
