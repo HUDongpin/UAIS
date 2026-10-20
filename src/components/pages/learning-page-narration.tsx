@@ -483,6 +483,7 @@ export function NarrationDock({
             aria-label={locale === "zh-CN" ? "学习工具" : "Study Tools"}
             aria-controls="learning-tools-panel"
             aria-expanded={studyToolsOpen}
+            disabled={!publishedPlayback?.slides.length}
             title={locale === "zh-CN" ? "学习工具" : "Study Tools"}
             onClick={onOpenStudyTools}
             className={[

@@ -13784,6 +13784,20 @@ describe("teaching operation backend persistence", () => {
           courseId: course.courseId,
           traceId: "trace-generate-student-preview-domain-object",
           status: "persisted",
+          objectType: "student-preview-session",
+          previewStatus: "generated",
+          previewUrl: `/learning?teacherPreview=1&course=${course.courseId}`,
+          previewScope: "teacher-course-preview",
+          previewPolicy: "teacher-visible-preview-only",
+          previewedBy: "teacher-kang",
+          previewId: "student-preview-20260622-121500",
+          generatedAt: "2026-06-22T12:15:00.000Z",
+        }),
+      );
+      expect(body.receipt.artifacts).toContainEqual(
+        expect.objectContaining({
+          kind: "student-preview",
+          previewUrl: `/learning?teacherPreview=1&course=${encodeURIComponent(course.courseId)}`,
         }),
       );
       expect(studentPreviewSessions).toEqual([
@@ -23712,6 +23726,7 @@ describe("teaching operation backend persistence", () => {
   it("accepts the ready Postgres course ownership adapter before applying the teaching-operation persistence gate", async () => {
     const dataDir = await mkdtemp(join(tmpdir(), "uais-teaching-route-production-postgres-ownership-"));
     const teacherAuthSecret = "test-teacher-auth-session-signing-secret";
+    const externalToken = "test-external-storage-access-token-with-32-chars";
     const courseId = "teacher-research-methods";
     const cookie = createUaisTeacherAuthSessionCookieHeader({
       secret: teacherAuthSecret,
@@ -23723,11 +23738,46 @@ describe("teaching operation backend persistence", () => {
         expiresAt: "2026-06-22T12:00:00.000Z",
       },
     });
+    // #10 checks the course-management snapshot before any other ownership
+    // grant and fail-closes if that read throws. Production with a core
+    // database URL auto-selects Postgres for that snapshot, which this test
+    // cannot reach. An explicit external snapshot that does not list the
+    // teacher completes the canonical check without granting access, so the
+    // ready Postgres adapter is still the grant that runs before the
+    // local-JSON persistence gate.
+    const ownershipChecks: string[] = [];
     const ownershipQueries: Array<{ statement: string; values: unknown[] }> = [];
+    const fetchImpl: typeof fetch = async (url, init) => {
+      ownershipChecks.push("snapshot");
+      const method = init?.method ?? "GET";
+      if (
+        method === "GET" &&
+        String(url) ===
+          "https://external-storage.example.test/teaching-course-management/database"
+      ) {
+        return Response.json({
+          database: {
+            schemaVersion: "uais-teaching-course-management-v1",
+            updatedAt: "2026-06-22T11:00:00.000Z",
+            courses: [],
+            classes: [],
+            memberships: [],
+            auditEvents: [],
+          },
+          revision: "snapshot-rev-postgres-ownership",
+          productionDatabaseAdapter: createReadyProductionDatabaseAdapter(),
+        });
+      }
+      return Response.json(
+        { error: "unexpected teaching course management request" },
+        { status: 502 },
+      );
+    };
     const createTeacherAiOwnershipDatabase: UaisTeacherAiOwnershipPostgresClientFactory =
       () => {
         const sql = Object.assign(
           async (strings: TemplateStringsArray, ...values: unknown[]) => {
+            ownershipChecks.push("postgres-ownership");
             ownershipQueries.push({
               statement: strings.join(" ? ").replace(/\s+/g, " ").trim(),
               values,
@@ -23758,14 +23808,15 @@ describe("teaching operation backend persistence", () => {
         NODE_ENV: "production",
         VERCEL_ENV: "production",
         UAIS_TEACHING_OPERATIONS_DATA_DIR: dataDir,
+        UAIS_TEACHING_COURSE_MANAGEMENT_BACKEND: "external",
+        UAIS_EXTERNAL_STORAGE_BASE_URL: "https://external-storage.example.test",
+        UAIS_EXTERNAL_STORAGE_ACCESS_TOKEN: externalToken,
         UAIS_TEACHER_AI_OWNERSHIP_BACKEND: "postgres",
         UAIS_CORE_DATABASE_URL: "postgres://redacted.example.test/uais",
         ...productionTeacherAuthProviderEnv(teacherAuthSecret),
       },
+      fetch: fetchImpl,
       createTeacherAiOwnershipDatabase,
-      // This fixture exercises the derived ownership adapter and persistence
-      // gate; the canonical course store is deliberately empty.
-      readManagedCourseOwnership: async () => false,
       now: new Date("2026-06-22T11:05:00.000Z"),
     });
 
@@ -23796,7 +23847,9 @@ describe("teaching operation backend persistence", () => {
       expect(body.error).not.toContain("course ownership access requires external storage");
       expect(body.traceId).toBe("trace-production-postgres-ownership-ready");
       expect(body.receipt).toBeUndefined();
+      expect(ownershipChecks).toEqual(["snapshot", "postgres-ownership"]);
       expect(ownershipQueries).toHaveLength(1);
+      expect(JSON.stringify(body)).not.toContain(externalToken);
       expect(ownershipQueries[0]).toEqual(
         expect.objectContaining({
           statement: expect.stringContaining(

@@ -25,8 +25,13 @@ import {
 import { localizedText } from "@/components/ui/localized-text";
 import { teacherSidebarItems } from "@/data/uais";
 import {
+  TEACHING_CATALOG_DEMO_READ_ONLY_MESSAGE,
   TEACHING_COURSE_LOAD_FAILED_MESSAGE,
 } from "./teaching-page-messages";
+import {
+  isConfirmedWritableTeacherCourseId,
+  isSelectedTeacherCourseWriteEnabled,
+} from "@/lib/teaching/course-readback";
 
 
 
@@ -44,6 +49,9 @@ export function TeachingPage() {
     courseClasses,
     classMemberships,
     authenticatedTeacherActorId,
+    writableCourseIds,
+    ownershipUnresolved,
+    catalogDemoCoursesVisible,
     learningChatroomGroupsEnabled,
     persistedCourseLoadError,
     membershipApprovalStatuses,
@@ -129,6 +137,12 @@ export function TeachingPage() {
     setSelectedCourseAction(courseId ? { courseId, action: "manage" } : undefined);
   }
 
+  const isSelectedCourseWritable = isSelectedTeacherCourseWriteEnabled({
+    writableCourseIds,
+    courseId: selectedCourseAction?.courseId,
+    ownershipUnresolved,
+  });
+
   function renderActiveWorkspacePanel() {
     if (activeWorkspaceItemId === "course-settings") {
       return (
@@ -156,6 +170,9 @@ export function TeachingPage() {
           selectedActionCourse={selectedActionCourse}
           selectedCourseActionLabel={selectedCourseActionLabel}
           selectedCourseAction={selectedCourseAction}
+          isSelectedCourseWritable={isSelectedCourseWritable}
+          ownershipUnresolved={ownershipUnresolved}
+          writableCourseIds={writableCourseIds}
           onSelectCourseAction={selectWorkspaceCourse}
           setIsNewCourseOpen={setIsNewCourseOpen}
           setNewClassCourseId={setNewClassCourseId}
@@ -191,6 +208,8 @@ export function TeachingPage() {
         selectedActionCourse={selectedActionCourse}
         selectedCourseActionLabel={selectedCourseActionLabel}
         selectedCourseAction={selectedCourseAction}
+        isSelectedCourseWritable={isSelectedCourseWritable}
+        ownershipUnresolved={ownershipUnresolved}
         courseCards={courseCards}
         onSelectCourseAction={selectWorkspaceCourse}
         t={t}
@@ -230,6 +249,8 @@ export function TeachingPage() {
         onUpdateInvitePolicyDraft={updateInvitePolicyDraft}
         onSelectCourseAction={selectWorkspaceCourse}
         selectedCourseAction={selectedCourseAction}
+        isSelectedCourseWritable={isSelectedCourseWritable}
+        ownershipUnresolved={ownershipUnresolved}
         selectedActionCourse={selectedActionCourse}
         selectedCourseActionLabel={selectedCourseActionLabel}
         copyInviteWorkspaceValue={copyInviteWorkspaceValue}
@@ -252,6 +273,15 @@ export function TeachingPage() {
           {t.teaching.summary}
         </p>
       </section>
+
+      {catalogDemoCoursesVisible && !persistedCourseLoadError ? (
+        <section
+          role="status"
+          className="rounded-2xl border border-[var(--accent-border)] bg-[var(--accent-soft)] p-4 text-sm font-semibold leading-6 text-[var(--accent)]"
+        >
+          <p>{localizedText(TEACHING_CATALOG_DEMO_READ_ONLY_MESSAGE, locale)}</p>
+        </section>
+      ) : null}
 
       {persistedCourseLoadError ? (
         <section
@@ -325,12 +355,20 @@ export function TeachingPage() {
           onCreate={createCourseFromDraft}
         />
       ) : null}
-      {newClassCourse ? (
+      {newClassCourse &&
+      isConfirmedWritableTeacherCourseId(writableCourseIds, newClassCourse.id) ? (
         <NewClassDialog
           course={newClassCourse}
           locale={locale}
           onCancel={() => setNewClassCourseId(undefined)}
-          onCreate={(className) => createClassForCourse(newClassCourse.id, className)}
+          onCreate={(className) => {
+            if (
+              !isConfirmedWritableTeacherCourseId(writableCourseIds, newClassCourse.id)
+            ) {
+              return;
+            }
+            return createClassForCourse(newClassCourse.id, className);
+          }}
         />
       ) : null}
       {selectedClassInvitation ? (

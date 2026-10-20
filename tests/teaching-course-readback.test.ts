@@ -15,10 +15,14 @@ import {
   extractCourseSemester,
   isMatchingMembershipApprovalResult,
   isPersistedMembershipApprovalReceipt,
+  isWritableTeacherCourseId,
+  isConfirmedWritableTeacherCourseId,
+  isSelectedTeacherCourseWriteEnabled,
   mergeTeacherClassesByCourseId,
   mergeTeacherCoursesById,
   mergeTeacherMembershipsByClassId,
   resolveCourseSettingsDraftValues,
+  resolveTeacherWorkbenchCourses,
 } from "@/lib/teaching/course-readback";
 
 const course: TeacherCourse = {
@@ -553,6 +557,135 @@ describe("B-14 teaching course readback helpers", () => {
         requestedClass: republishedClass,
       }),
     ).toBe(false);
+  });
+
+  it("replaces catalog demo cards with persisted courses and marks only those ids writable", () => {
+    const persistedCourse: TeacherCourse = {
+      id: "owned-research-methods",
+      title: {
+        "zh-CN": "已保存研究方法",
+        "en-US": "Saved research methods",
+      },
+      status: {
+        "zh-CN": "已保存课程",
+        "en-US": "Saved course",
+      },
+      students: 4,
+      currentFocus: {
+        "zh-CN": "服务端课程",
+        "en-US": "Server course",
+      },
+    };
+
+    expect(
+      resolveTeacherWorkbenchCourses({
+        persistedCourses: [persistedCourse],
+        catalogCourses: [defaultSemesterCourse, course],
+      }),
+    ).toEqual({
+      courses: [persistedCourse],
+      writableCourseIds: ["owned-research-methods"],
+      catalogDemo: false,
+    });
+    expect(
+      resolveTeacherWorkbenchCourses({
+        persistedCourses: [],
+        catalogCourses: [defaultSemesterCourse],
+      }),
+    ).toEqual({
+      courses: [defaultSemesterCourse],
+      writableCourseIds: [],
+      catalogDemo: true,
+    });
+  });
+
+  it("round-trips a persisted owned-course description through the settings form", () => {
+    const persistedCourse = createTeacherCourseFromPersistedCourse({
+      courseId: "teacher-course-uais-qa-test-owned",
+      courseName: "UAIS-QA-TEST-owned",
+      semester: "2026",
+      description: "Owned course description",
+    });
+    expect(persistedCourse).toBeDefined();
+    expect(resolveCourseSettingsDraftValues(persistedCourse!, undefined, "zh-CN")).toEqual({
+      courseName: "UAIS-QA-TEST-owned",
+      semester: "2026",
+      description: "Owned course description",
+    });
+    expect(
+      createCourseSettingsPatchFromDraft(persistedCourse!, {
+        description: typedIn("Owned course description", "zh-CN"),
+      }),
+    ).toBeUndefined();
+    expect(
+      createCourseSettingsPatchFromDraft(persistedCourse!, {
+        description: typedIn("Updated owned description", "zh-CN"),
+      }),
+    ).toEqual({
+      description: "Updated owned description",
+    });
+  });
+
+  it("treats an unset writable set as writable and an empty set as read-only", () => {
+    expect(isWritableTeacherCourseId(undefined, "teacher-research-methods")).toBe(true);
+    expect(isWritableTeacherCourseId(new Set(), "teacher-research-methods")).toBe(false);
+    expect(
+      isWritableTeacherCourseId(new Set(["teacher-research-methods"]), "teacher-research-methods"),
+    ).toBe(true);
+    expect(
+      isWritableTeacherCourseId(new Set(["teacher-research-methods"]), "teacher-math-pedagogy"),
+    ).toBe(false);
+    expect(isWritableTeacherCourseId(new Set(["teacher-research-methods"]), undefined)).toBe(false);
+    expect(isConfirmedWritableTeacherCourseId(undefined, "teacher-research-methods")).toBe(
+      false,
+    );
+    expect(
+      isConfirmedWritableTeacherCourseId(new Set(), "teacher-research-methods"),
+    ).toBe(false);
+    expect(
+      isConfirmedWritableTeacherCourseId(
+        new Set(["teacher-research-methods"]),
+        "teacher-research-methods",
+      ),
+    ).toBe(true);
+  });
+
+  it("fail-closes selected-course writes while ownership is unresolved and keeps them after resolve", () => {
+    expect(
+      isSelectedTeacherCourseWriteEnabled({
+        writableCourseIds: undefined,
+        courseId: "teacher-research-methods",
+        ownershipUnresolved: true,
+      }),
+    ).toBe(false);
+    expect(
+      isSelectedTeacherCourseWriteEnabled({
+        writableCourseIds: undefined,
+        courseId: undefined,
+        ownershipUnresolved: true,
+      }),
+    ).toBe(false);
+    expect(
+      isSelectedTeacherCourseWriteEnabled({
+        writableCourseIds: undefined,
+        courseId: "teacher-research-methods",
+        ownershipUnresolved: false,
+      }),
+    ).toBe(true);
+    expect(
+      isSelectedTeacherCourseWriteEnabled({
+        writableCourseIds: new Set(),
+        courseId: "teacher-research-methods",
+        ownershipUnresolved: false,
+      }),
+    ).toBe(false);
+    expect(
+      isSelectedTeacherCourseWriteEnabled({
+        writableCourseIds: new Set(["owned-research-methods"]),
+        courseId: "owned-research-methods",
+        ownershipUnresolved: false,
+      }),
+    ).toBe(true);
   });
 });
 

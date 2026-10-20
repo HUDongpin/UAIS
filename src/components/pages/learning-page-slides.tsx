@@ -25,8 +25,7 @@ import type {
 } from "@/lib/learning/ppt-playback-types";
 import { copy, type Locale } from "@/i18n/copy";
 import {
-  getPublishedPlaybackEmptyDescription,
-  getPublishedPlaybackEmptyTitle,
+  getPublishedPlaybackStageCopy,
   getPublishedPlaybackErrorLabel,
   type PublishedPlaybackError,
   type StudyAction,
@@ -346,7 +345,7 @@ export function PptStage({
       className="flex min-h-0 w-full flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-[0_18px_44px_var(--shadow)] xl:h-full"
     >
       <div className="relative min-h-[470px] flex-1 p-7 lg:p-9 xl:min-h-0">
-        {publishedPlaybackError ? (
+        {publishedPlaybackError && publishedPlaybackError !== "not-published" ? (
           <div
             role="alert"
             data-uais-learning-ppt-error={publishedPlaybackError}
@@ -404,10 +403,10 @@ export function PptStage({
           className="flex min-h-[380px] flex-col items-center justify-center gap-3 px-6 text-center xl:min-h-[465px]"
         >
           <h1 className="text-[22px] font-semibold tracking-tight text-[var(--foreground)]">
-            {getPublishedPlaybackEmptyTitle(locale)}
+            {getPublishedPlaybackStageCopy(locale, publishedPlaybackError).title}
           </h1>
           <p className="max-w-md text-base leading-7 text-[var(--muted)]">
-            {getPublishedPlaybackEmptyDescription(locale)}
+            {getPublishedPlaybackStageCopy(locale, publishedPlaybackError).description}
           </p>
         </div>
       </div>

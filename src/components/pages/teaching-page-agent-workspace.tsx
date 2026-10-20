@@ -50,6 +50,8 @@ type AgentWorkspaceProps = {
   selectedActionCourse: TeacherCourse | undefined;
   selectedCourseActionLabel: string | undefined;
   selectedCourseAction: { courseId: string; action: TeacherCourseAction } | undefined;
+  isSelectedCourseWritable?: boolean;
+  ownershipUnresolved?: boolean;
   courseCards: TeacherCourse[];
   onSelectCourseAction: (courseId: string) => void;
   t: (typeof copy)[Locale];
@@ -84,6 +86,8 @@ export function AgentWorkspace({
   selectedActionCourse,
   selectedCourseActionLabel,
   selectedCourseAction,
+  isSelectedCourseWritable = true,
+  ownershipUnresolved = false,
   courseCards,
   onSelectCourseAction,
   t,
@@ -114,6 +118,7 @@ export function AgentWorkspace({
               locale={locale}
               inlineWorkspaceStatuses={inlineWorkspaceStatuses}
               isCourseChosen={Boolean(selectedCourseAction?.courseId)}
+              isCourseWritable={isSelectedCourseWritable}
               selectedCourseId={selectedCourseAction?.courseId}
               runInlineWorkspaceAction={runInlineWorkspaceAction}
             />}
@@ -127,6 +132,8 @@ export function AgentWorkspace({
             selectedCourseAction={selectedCourseAction}
             selectedActionCourse={selectedActionCourse}
             selectedCourseActionLabel={selectedCourseActionLabel}
+            isCourseWritable={isSelectedCourseWritable}
+            ownershipUnresolved={ownershipUnresolved}
             onSelectCourse={onSelectCourseAction}
           />}
           </div>

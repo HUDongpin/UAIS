@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import type { TeachingOperationBackendArtifact, TeachingOperationBackendReceipt, TeachingOperationDomainPersistenceSummary, TeachingOperationAuditReadbackResponse, TeachingOperationPartialFailure, TeachingOperationBackendResponse } from "./teaching-operation-backend-types";
 import { TeachingUnitDraftEditor, readVerifiedTeachingUnitDraft } from "./teaching-unit-draft-editor";
 import Link from "next/link";
 import { ArrowLeft } from "@phosphor-icons/react/dist/ssr/ArrowLeft";
@@ -20,7 +21,13 @@ import { localizedText } from "@/components/ui/localized-text";
 import { teacherCourses, teacherSidebarItems } from "@/data/uais";
 import { copy, type LocalizedText, type Locale } from "@/i18n/copy";
 import { createTeachingOperationIdempotencyKey } from "@/lib/teaching-operation-idempotency";
+import { fetchTeachingOperationAuditReadbackWithRetry } from "@/components/pages/teaching-page-inline-audit-readback";
+import {
+  openTeachingStudentPreviewUrl,
+  resolveCourseSettingsPersistConfirmation,
+} from "@/components/pages/teaching-student-preview";
 import { defaultExportManifest } from "@/components/teaching/teaching-operation-page-data";
+import { useOwnedTeachingCourseAccess } from "@/components/teaching/use-owned-teaching-course";
 import {
   formatCourseAction,
   OperationSpecificPreview,
@@ -49,170 +56,6 @@ type KnowledgeResourceAuditExpectation = {
   title: string;
   rightsBasis: Exclude<KnowledgeResourceRightsBasis, "">;
   visibility: "course-only";
-};
-
-type TeachingOperationBackendArtifact =
-  | {
-      kind: "export-file";
-      manifestId: string;
-      downloadUrl: string;
-      contentType: "application/json";
-    }
-  | {
-      kind: "invite-code";
-      code: string;
-      status: "generated" | "published";
-      joinUrl: string;
-    }
-  | {
-      kind: string;
-      [key: string]: unknown;
-    };
-
-type TeachingOperationBackendReceipt = {
-  receiptId?: string;
-  operationId?: string;
-  actionSlot?: "primary" | "secondary";
-  courseId?: string;
-  displayMessage?: LocalizedText;
-  artifacts?: TeachingOperationBackendArtifact[];
-};
-
-type TeachingOperationDomainPersistenceSummary = {
-  status?: "persisted" | "missing-domain-objects" | "not-required";
-  required?: boolean;
-  operationReceiptId?: string;
-  expectedObjectTypes?: string[];
-  persistedObjectTypes?: string[];
-  missingObjectTypes?: string[];
-};
-
-type TeachingOperationAuditReadbackResponse = {
-  actorId?: string;
-  auditEventCount?: number;
-  records?: Array<{
-    recordId?: string;
-    courseId?: string;
-  }>;
-  auditEvents?: Array<{
-    traceId?: string;
-    actorId?: string;
-    courseId?: string;
-    authSession?: {
-      sessionId?: string;
-      authenticatedAt?: string;
-      expiresAt?: string;
-    };
-  }>;
-  domainProjections?: Array<{
-    objectId?: string;
-    objectType?: string;
-    courseId?: string;
-    operationRecordId?: string;
-    status?: string;
-    updatedBy?: string;
-    updatedAt?: string;
-    previewedBy?: string;
-    previewStatus?: string;
-    previewId?: string;
-    previewUrl?: string;
-    previewScope?: string;
-    previewPolicy?: string;
-    generatedAt?: string;
-    savedBy?: string;
-    planStatus?: string;
-    enabledAgents?: string[];
-    governancePolicy?: string;
-    savedAt?: string;
-    checkedBy?: string;
-    preflightStatus?: string;
-    checkedPermissions?: string[];
-    preflightPolicy?: string;
-    checkedAt?: string;
-    syncedBy?: string;
-    syncStatus?: string;
-    sourceSystems?: string[];
-    pendingTeacherReviewCount?: number;
-    syncedAt?: string;
-    queuedBy?: string;
-    reviewStatus?: string;
-    resourceSource?: string;
-    title?: string;
-    sourceFingerprint?: string;
-    rightsBasis?: string;
-    visibility?: string;
-    reviewPolicy?: string;
-    queuedAt?: string;
-    publishedBy?: string;
-    publicationStatus?: string;
-    releaseScope?: string;
-    publishedAt?: string;
-    generatedBy?: string;
-    suggestionStatus?: string;
-    groupingBasis?: string[];
-    draftStatus?: string;
-    artifactId?: string;
-    settingsStatus?: string;
-    adminScopes?: string[];
-    notificationStatus?: string;
-    deliveryChannel?: string;
-    outboxId?: string;
-    deliveryPolicy?: string;
-    createdBy?: string;
-    exportStatus?: string;
-    manifestId?: string;
-    datasetScopes?: string[];
-    exportPolicy?: string;
-    createdAt?: string;
-    validatedBy?: string;
-    validationStatus?: string;
-    checkedScopes?: string[];
-    validationPolicy?: string;
-    validatedAt?: string;
-    refreshedBy?: string;
-    refreshStatus?: string;
-    visibleMetrics?: string[];
-    refreshPolicy?: string;
-    refreshedAt?: string;
-    lockedBy?: string;
-    snapshotStatus?: string;
-    snapshotId?: string;
-    snapshotScope?: string;
-    retentionPolicy?: string;
-    lockedAt?: string;
-    flaggedBy?: string;
-    flaggedSignals?: string[];
-    flaggedAt?: string;
-    queueStatus?: string;
-    feedbackStatus?: string;
-    feedbackScope?: string;
-    inviteCode?: string;
-    joinUrl?: string;
-    invitePolicy?: string;
-    enrollmentPolicy?: string;
-  }>;
-};
-
-type TeachingOperationPartialFailure = {
-  operationReceiptId?: string;
-  rollbackRoute?: string;
-  compensation?: {
-    status?: string;
-    receipt?: {
-      targetRecordId?: string;
-    };
-  };
-};
-
-type TeachingOperationBackendResponse = {
-  receipt?: TeachingOperationBackendReceipt;
-  domainPersistenceSummary?: TeachingOperationDomainPersistenceSummary;
-  partialFailure?: TeachingOperationPartialFailure;
-  access?: {
-    reasonCode?: string;
-  };
-  error?: string;
-  traceId?: string;
 };
 
 const defaultInviteCode = "55395057";
@@ -287,6 +130,13 @@ const TEACHING_OPERATION_COURSE_CONTEXT_MISSING_MESSAGE: LocalizedText = {
   "en-US": "Not saved to the server: course context is missing. Please enter from a course card.",
 };
 
+const TEACHING_OPERATION_COURSE_NOT_OWNED_MESSAGE: LocalizedText = {
+  "zh-CN":
+    "当前账号不是这门课程的授课教师。演示课程卡片不能保存到服务器；请从已保存在你名下的课程进入，或先创建课程。",
+  "en-US":
+    "This account is not the course owner. Demo course cards cannot be saved. Open a course saved under your account, or create one first.",
+};
+
 export function TeachingOperationPage(props: TeachingOperationPageProps) {
   return <TeachingOperationPageContent key={`${props.operationId}:${props.selectedCourseId ?? "none"}`} {...props} />;
 }
@@ -305,6 +155,10 @@ function TeachingOperationPageContent({
   const description = operation ? localizedText(operation.description, locale) : "";
   const selectedCourse = teacherCourses.find((course) => course.id === selectedCourseId);
   const isInsightsWorkspace = safeOperationId === "dashboard" || safeOperationId === "quiz-board";
+  const ownedCourseAccess = useOwnedTeachingCourseAccess(isInsightsWorkspace ? undefined : selectedCourseId);
+  // No course id is not the same as an unresolved ownership list: unknown stays
+  // writable, but a missing course must match the empty-state banner.
+  const isSelectedCourseWritable = Boolean(selectedCourseId?.trim()) && ownedCourseAccess !== "unowned";
   const [statusMessage, setStatusMessage] = useState(localizedText(config.readyMessage, locale));
   const [manifestReady, setManifestReady] = useState(false);
   const [exportManifest, setExportManifest] =
@@ -320,7 +174,8 @@ function TeachingOperationPageContent({
   const actionPendingRef = useRef(false);
   const isStatusFailure = isTeachingOperationFailureStatus(statusMessage, locale);
   const isAuditPending = auditStatus?.status === "pending";
-  const areActionButtonsDisabled = isActionPending || isAuditPending;
+  const areActionButtonsDisabled =
+    isActionPending || isAuditPending || !isSelectedCourseWritable;
   const isKnowledgeResourceRegistrationReady = Boolean(
     selectedCourseId &&
       knowledgeResourceTitle.trim() &&
@@ -329,14 +184,14 @@ function TeachingOperationPageContent({
   );
 
   function runPrimaryAction() {
-    if (actionPendingRef.current || isAuditPending) {
+    if (actionPendingRef.current || isAuditPending || !isSelectedCourseWritable) {
       return;
     }
     void persistTeachingOperationAction("primary");
   }
 
   function runSecondaryAction() {
-    if (actionPendingRef.current || isAuditPending) {
+    if (actionPendingRef.current || isAuditPending || !isSelectedCourseWritable) {
       return;
     }
     if (safeOperationId === "knowledge-base" && !isKnowledgeResourceRegistrationReady) {
@@ -357,7 +212,10 @@ function TeachingOperationPageContent({
   }
 
   async function persistTeachingOperationAction(actionSlot: "primary" | "secondary") {
-    if (actionPendingRef.current || isAuditPending) {
+    if (actionPendingRef.current || isAuditPending || !isSelectedCourseWritable) {
+      if (!isSelectedCourseWritable) {
+        setStatusMessage(localizedText(selectedCourseId?.trim() ? TEACHING_OPERATION_COURSE_NOT_OWNED_MESSAGE : TEACHING_OPERATION_COURSE_CONTEXT_MISSING_MESSAGE, locale));
+      }
       return;
     }
 
@@ -446,12 +304,23 @@ function TeachingOperationPageContent({
         (!payload.traceId || !receipt.receiptId || receipt.courseId !== selectedCourseId)) {
         throw new Error("Unit generation requires course-bound audit and content readback.");
       }
+      const { persistConfirmed, previewUrl } = resolveCourseSettingsPersistConfirmation({
+        operationId: safeOperationId,
+        actionSlot,
+        artifacts: receipt.artifacts,
+        studentPreviewSessionReceipt: payload.studentPreviewSessionReceipt,
+        domainPersistenceSummary: payload.domainPersistenceSummary,
+        courseId: receipt.courseId ?? selectedCourseId,
+      });
 
       const verifiedStatusMessage = receipt.displayMessage
         ? localizedText(receipt.displayMessage, locale)
         : actionSlot === "primary"
           ? localizedText(config.primaryMessage, locale)
           : localizedText(config.secondaryMessage, locale);
+      if (previewUrl) {
+        openTeachingStudentPreviewUrl(previewUrl);
+      }
 
       const exportArtifact = receipt.artifacts?.find(
         (artifact): artifact is Extract<TeachingOperationBackendArtifact, { kind: "export-file" }> =>
@@ -470,6 +339,10 @@ function TeachingOperationPageContent({
 
       if (payload.traceId) {
         if (!receipt.receiptId) {
+          if (persistConfirmed) {
+            setStatusMessage(verifiedStatusMessage);
+            return;
+          }
           setStatusMessage(localizedText(TEACHING_OPERATION_AUDIT_FAILED_MESSAGE, locale));
           setAuditStatus({
             status: "failed",
@@ -477,7 +350,11 @@ function TeachingOperationPageContent({
           });
           return;
         }
-        setStatusMessage(localizedText(TEACHING_OPERATION_AUDIT_PENDING_MESSAGE, locale));
+        if (persistConfirmed) {
+          setStatusMessage(verifiedStatusMessage);
+        } else {
+          setStatusMessage(localizedText(TEACHING_OPERATION_AUDIT_PENDING_MESSAGE, locale));
+        }
         await readOperationAuditEvidence({
           traceId: payload.traceId,
           recordId: receipt.receiptId,
@@ -485,6 +362,9 @@ function TeachingOperationPageContent({
           actionSlot,
           verifiedStatusMessage,
           artifacts: verifiedArtifacts,
+          verifiedReceiptAuthSession: receipt.audit?.authSession,
+          persistConfirmed,
+          generatedPreviewUrl: previewUrl,
           ...(knowledgeResource
             ? {
                 knowledgeResource: {
@@ -515,21 +395,32 @@ function TeachingOperationPageContent({
     verifiedStatusMessage?: string;
     artifacts?: VerifiedOperationArtifacts;
     knowledgeResource?: KnowledgeResourceAuditExpectation;
+    verifiedReceiptAuthSession?: {
+      sessionId?: string;
+      authenticatedAt?: string;
+      expiresAt?: string;
+    };
+    persistConfirmed?: boolean;
+    generatedPreviewUrl?: string;
   }) {
-    setAuditStatus({
-      status: "pending",
-      traceId: input.traceId,
-    });
+    if (!input.persistConfirmed) {
+      setAuditStatus({
+        status: "pending",
+        traceId: input.traceId,
+      });
+    }
 
     try {
-      const response = await fetch("/api/teaching/operations/audit", {
-        method: "GET",
-        headers: { accept: "application/json" },
+      const audit = await fetchTeachingOperationAuditReadbackWithRetry<
+        TeachingOperationAuditReadbackResponse
+      >({
+        traceId: input.traceId,
+        courseId: input.courseId,
+        recordId: input.recordId,
       });
-      if (!response.ok) {
+      if (!audit) {
         throw new Error("Teaching operation audit readback failed.");
       }
-      const audit = (await response.json()) as TeachingOperationAuditReadbackResponse;
       const matchingRecord = audit.records?.find((record) => {
         if (record.recordId !== input.recordId) {
           return false;
@@ -548,18 +439,34 @@ function TeachingOperationPageContent({
         }
         return input.courseId ? projection.courseId === input.courseId : true;
       });
+      const verifiedAuthSession = isVerifiedOperationAuditAuthSession(
+        matchingAuditEvent?.authSession,
+      )
+        ? matchingAuditEvent.authSession
+        : isVerifiedOperationAuditAuthSession(input.verifiedReceiptAuthSession)
+          ? input.verifiedReceiptAuthSession
+          : undefined;
       if (
         !matchingRecord ||
         !matchingAuditEvent ||
         !matchingDomainProjection?.objectId ||
         !matchingDomainProjection.objectType ||
-        !isVerifiedOperationAuditAuthSession(matchingAuditEvent.authSession) ||
+        (!isVerifiedOperationAuditAuthSession(matchingAuditEvent.authSession) &&
+          !isVerifiedOperationAuditAuthSession(input.verifiedReceiptAuthSession)) ||
+        !verifiedAuthSession ||
         !doesOperationPageDomainProjectionMatchBusinessSemantics(matchingDomainProjection, {
           operationId: safeOperationId,
           actionSlot: input.actionSlot,
           knowledgeResource: input.knowledgeResource,
         })
       ) {
+        if (input.persistConfirmed) {
+          setAuditStatus(undefined);
+          if (input.verifiedStatusMessage) {
+            setStatusMessage(input.verifiedStatusMessage);
+          }
+          return;
+        }
         throw new Error("Teaching operation audit readback did not include the saved operation.");
       }
 
@@ -575,9 +482,9 @@ function TeachingOperationPageContent({
         actorId: matchingAuditEvent.actorId ?? audit.actorId,
         auditEventCount: audit.auditEventCount,
         authSession: {
-          sessionId: matchingAuditEvent.authSession.sessionId,
-          authenticatedAt: matchingAuditEvent.authSession.authenticatedAt,
-          expiresAt: matchingAuditEvent.authSession.expiresAt,
+          sessionId: verifiedAuthSession.sessionId,
+          authenticatedAt: verifiedAuthSession.authenticatedAt,
+          expiresAt: verifiedAuthSession.expiresAt,
         },
         domainProjection: {
           objectId: matchingDomainProjection.objectId,
@@ -590,10 +497,22 @@ function TeachingOperationPageContent({
         setKnowledgeResourceRightsBasis("");
       }
       applyTeachingOperationArtifacts(input.artifacts);
+      const verifiedPreviewUrl =
+        matchingDomainProjection.previewUrl?.trim() || input.generatedPreviewUrl;
+      if (verifiedPreviewUrl) {
+        openTeachingStudentPreviewUrl(verifiedPreviewUrl);
+      }
       if (input.verifiedStatusMessage) {
         setStatusMessage(input.verifiedStatusMessage);
       }
     } catch {
+      if (input.persistConfirmed) {
+        setAuditStatus(undefined);
+        if (input.verifiedStatusMessage) {
+          setStatusMessage(input.verifiedStatusMessage);
+        }
+        return;
+      }
       setStatusMessage(localizedText(TEACHING_OPERATION_AUDIT_FAILED_MESSAGE, locale));
       setAuditStatus({
         status: "failed",
@@ -1157,7 +1076,7 @@ function TeachingOperationPageContent({
                   only fail. A persisted course that is not in the static catalog
                   still shows its id rather than claiming no course, so a teacher
                   can see that navigation carried the context. */}
-              <p className="text-sm font-semibold text-[var(--foreground)]">
+              <p id="teaching-operation-course-context" className="text-sm font-semibold text-[var(--foreground)]">
                 {selectedCourseId
                   ? `${locale === "zh-CN" ? "已选择课程" : "Selected course"}：${
                       selectedCourse
@@ -1172,6 +1091,11 @@ function TeachingOperationPageContent({
                   the url and a teacher should be able to see that the click they
                   made carried it. Rendered as the id because the static catalog
                   has no class titles to resolve against. */}
+              {ownedCourseAccess === "unowned" ? (
+                <p className="mt-2 text-sm leading-6 text-[var(--danger)]">
+                  {localizedText(TEACHING_OPERATION_COURSE_NOT_OWNED_MESSAGE, locale)}
+                </p>
+              ) : null}
               {selectedClassId ? (
                 <p
                   data-uais-operation-selected-class={selectedClassId}
@@ -1204,8 +1128,9 @@ function TeachingOperationPageContent({
                       type="text"
                       value={knowledgeResourceTitle}
                       maxLength={160}
+                      disabled={!isSelectedCourseWritable}
                       onChange={(event) => setKnowledgeResourceTitle(event.target.value)}
-                      className="h-11 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 text-sm font-normal text-[var(--foreground)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+                      className="h-11 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 text-sm font-normal text-[var(--foreground)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-60"
                     />
                   </label>
                   <label className="grid gap-2 text-sm font-semibold text-[var(--foreground)]">
@@ -1217,20 +1142,22 @@ function TeachingOperationPageContent({
                       value={knowledgeResourceUrl}
                       maxLength={2048}
                       aria-describedby="knowledge-resource-url-help"
+                      disabled={!isSelectedCourseWritable}
                       onChange={(event) => setKnowledgeResourceUrl(event.target.value)}
-                      className="h-11 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 text-sm font-normal text-[var(--foreground)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+                      className="h-11 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 text-sm font-normal text-[var(--foreground)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-60"
                     />
                   </label>
                   <label className="grid gap-2 text-sm font-semibold text-[var(--foreground)]">
                     {locale === "zh-CN" ? "权利依据" : "Rights basis"}
                     <select
                       value={knowledgeResourceRightsBasis}
+                      disabled={!isSelectedCourseWritable}
                       onChange={(event) =>
                         setKnowledgeResourceRightsBasis(
                           event.target.value as KnowledgeResourceRightsBasis,
                         )
                       }
-                      className="h-11 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 text-sm font-normal text-[var(--foreground)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+                      className="h-11 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 text-sm font-normal text-[var(--foreground)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       <option value="">{locale === "zh-CN" ? "请选择" : "Select one"}</option>
                       <option value="owner-created">{locale === "zh-CN" ? "教师原创" : "Owner-created"}</option>
@@ -1257,7 +1184,7 @@ function TeachingOperationPageContent({
               <button
                 type="button"
                 className="inline-flex h-11 items-center gap-2 rounded-full bg-[var(--accent)] px-5 text-sm font-semibold text-white outline-none transition hover:bg-[var(--accent-strong)] active:translate-y-px focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[var(--accent)] disabled:active:translate-y-0"
-                disabled={areActionButtonsDisabled}
+                disabled={areActionButtonsDisabled} aria-describedby="teaching-operation-course-context"
                 onClick={runPrimaryAction}
               >
                 <Lightning size={18} weight="bold" />
@@ -1270,7 +1197,7 @@ function TeachingOperationPageContent({
                   areActionButtonsDisabled ||
                   (safeOperationId === "knowledge-base" &&
                     !isKnowledgeResourceRegistrationReady)
-                }
+                } aria-describedby="teaching-operation-course-context"
                 onClick={runSecondaryAction}
               >
                 <CheckCircle size={18} weight="duotone" />

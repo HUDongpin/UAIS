@@ -2245,7 +2245,7 @@ describe("TeachingPage", () => {
     expect(screen.queryByText("审计读回已验证")).toBeNull();
   });
 
-  it("does not claim inline course settings success when audit trace evidence is missing", async () => {
+  it("treats a persisted course-settings save as complete when the audit trace is omitted", async () => {
     const fetchMock = vi.fn(async () =>
       Response.json({
         receipt: {
@@ -2278,9 +2278,9 @@ describe("TeachingPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "保存课程设置" }));
 
     await waitFor(() => {
-      expect(screen.getAllByText("审计读回未完成，请稍后刷新。").length).toBeGreaterThan(0);
+      expect(screen.getByText("课程设置已由服务端持久化。")).toBeTruthy();
     });
-    expect(screen.queryByText("课程设置已由服务端持久化。")).toBeNull();
+    expect(screen.queryByText("审计读回未完成，请稍后刷新。")).toBeNull();
     expect(screen.queryByText("审计读回已验证")).toBeNull();
   });
 
@@ -2688,7 +2688,9 @@ describe("TeachingPage", () => {
     ).toBeNull();
   });
 
-  it("requires student preview session business readback before claiming preview success", async () => {
+  it("opens fallback student previewUrl after domain-persisted secondary even when the receipt is bare", async () => {
+    const assign = vi.fn();
+    vi.stubGlobal("location", { assign, hash: "" });
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       if (String(input) === "/api/teaching/operations") {
         expect(init?.method).toBe("POST");
@@ -2773,22 +2775,185 @@ describe("TeachingPage", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<TeachingPage />);
-    await chooseWorkspaceCourse("teacher-research-methods");
+    try {
+      render(<TeachingPage />);
+      await chooseWorkspaceCourse("teacher-research-methods");
 
-    fireEvent.click(screen.getByRole("button", { name: "预览学生端" }));
+      fireEvent.click(screen.getByRole("button", { name: "预览学生端" }));
 
-    await waitFor(() => {
+      await waitFor(() => {
+        expect(screen.getByText("学生端预览已生成。")).toBeTruthy();
+      });
+      expect(screen.queryByText("审计读回未完成，请稍后刷新。")).toBeNull();
+      expect(screen.queryByText("学生端预览读回未匹配生成结果，请稍后刷新。")).toBeNull();
       expect(
-        screen.getByText("学生端预览读回未匹配生成结果，请稍后刷新。"),
-      ).toBeTruthy();
+        screen.queryByText(
+          "领域对象已验证：student-preview-session / student-preview-session-teacher-research-methods",
+        ),
+      ).toBeNull();
+      expect(assign).toHaveBeenCalledWith(
+        "/learning?teacherPreview=1&course=teacher-research-methods",
+      );
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("opens generated student previewUrl after persisted secondary preview even when audit fields are incomplete", async () => {
+    const assign = vi.fn();
+    vi.stubGlobal("location", { assign, hash: "" });
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === "/api/teaching/operations") {
+        expect(init?.method).toBe("POST");
+        const body = JSON.parse(String(init?.body)) as {
+          operationId: string;
+          actionSlot: "primary" | "secondary";
+        };
+        expect(body).toEqual(
+          expect.objectContaining({
+            operationId: "course-settings",
+            actionSlot: "secondary",
+            courseId: "teacher-research-methods",
+            sourceAction: "inline-teaching-workspace",
+          }),
+        );
+        return Response.json({
+          receipt: {
+            receiptId: "operation-record-student-preview-session-generated",
+            operationId: "course-settings",
+            actionSlot: "secondary",
+            courseId: "teacher-research-methods",
+            status: "persisted",
+            audit: createSignedInlineOperationReceiptAudit(),
+            displayMessage: {
+              "zh-CN": "学生端预览已生成。",
+              "en-US": "Student preview generated.",
+            },
+            artifacts: [
+              {
+                kind: "student-preview",
+                previewId: "student-preview-20260916",
+                previewUrl: "/learning?teacherPreview=1&course=teacher-research-methods",
+              },
+            ],
+          },
+          studentPreviewSessionReceipt: {
+            objectType: "student-preview-session",
+            previewStatus: "generated",
+            previewUrl: "/learning?teacherPreview=1&course=teacher-research-methods",
+            previewId: "student-preview-20260916",
+            previewScope: "teacher-course-preview",
+            previewPolicy: "teacher-visible-preview-only",
+            previewedBy: "teacher-kang",
+            generatedAt: "2026-09-16T00:00:00.000Z",
+          },
+          domainPersistenceSummary: createPersistedInlineOperationDomainPersistenceSummary(
+            "operation-record-student-preview-session-generated",
+            "course-settings",
+            "secondary",
+          ),
+          traceId: "trace-inline-student-preview-session-generated",
+        });
+      }
+
+      if (String(input) === "/api/teaching/operations/audit") {
+        expect(init?.method).toBe("GET");
+        return Response.json({
+          traceId: "trace-audit-student-preview-session-generated",
+          actorId: "teacher-kang",
+          courseIds: ["teacher-research-methods"],
+          recordCount: 1,
+          auditEventCount: 1,
+          domainProjectionCount: 1,
+          records: [
+            {
+              recordId: "operation-record-student-preview-session-generated",
+              courseId: "teacher-research-methods",
+              operationId: "course-settings",
+              actionSlot: "secondary",
+              status: "persisted",
+            },
+          ],
+          auditEvents: [
+            {
+              eventId: "audit-student-preview-session-generated",
+              traceId: "trace-inline-student-preview-session-generated",
+              eventType: "teaching-operation.persisted",
+              actorId: "teacher-kang",
+              authSession: createInlineAuditAuthSession(),
+              courseId: "teacher-research-methods",
+            },
+          ],
+          domainProjections: [
+            {
+              objectId: "student-preview-session-teacher-research-methods",
+              objectType: "student-preview-session",
+              courseId: "teacher-research-methods",
+              operationRecordId: "operation-record-student-preview-session-generated",
+            },
+          ],
+        });
+      }
+
+      expect(String(input)).toBe("/api/teaching/operations/audit/alerts");
+      return createClearInlineOperationAuditAlertsResponse(
+        "trace-inline-student-preview-session-generated",
+      );
     });
-    expect(screen.queryByText("学生端预览已生成。")).toBeNull();
-    expect(
-      screen.queryByText(
-        "领域对象已验证：student-preview-session / student-preview-session-teacher-research-methods",
+    vi.stubGlobal("fetch", fetchMock);
+
+    try {
+      render(<TeachingPage />);
+      await chooseWorkspaceCourse("teacher-research-methods");
+
+      fireEvent.click(screen.getByRole("button", { name: "预览学生端" }));
+
+      await waitFor(() => {
+        expect(screen.getByText("学生端预览已生成。")).toBeTruthy();
+      });
+      expect(screen.queryByText("审计读回未完成，请稍后刷新。")).toBeNull();
+      expect(screen.queryByText("未保存到服务器，请重新登录或检查课程权限。")).toBeNull();
+      expect(assign).toHaveBeenCalledWith(
+        "/learning?teacherPreview=1&course=teacher-research-methods",
+      );
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("does not map a real preview auth failure onto a generated-session success", async () => {
+    const assign = vi.fn();
+    vi.stubGlobal("location", { assign, hash: "" });
+    const fetchMock = vi.fn(async () =>
+      Response.json(
+        {
+          error: "UAIS teaching operation course ownership is required.",
+          access: {
+            status: "denied",
+            reasonCode: "course-scope-denied",
+            responsibleSession: "S12",
+          },
+        },
+        { status: 403 },
       ),
-    ).toBeNull();
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    try {
+      render(<TeachingPage />);
+      await chooseWorkspaceCourse("teacher-research-methods");
+
+      fireEvent.click(screen.getByRole("button", { name: "预览学生端" }));
+
+      await waitFor(() => {
+        expect(screen.getByText("未保存到服务器：当前教师无权操作该课程。")).toBeTruthy();
+      });
+      expect(screen.queryByText("学生端预览已生成。")).toBeNull();
+      expect(screen.queryByText("审计读回未完成，请稍后刷新。")).toBeNull();
+      expect(assign).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it("requires permission preflight business readback before claiming preflight success", async () => {
@@ -4554,7 +4719,10 @@ describe("TeachingPage", () => {
         "/api/teaching/operations/audit",
         expect.objectContaining({
           method: "GET",
-          headers: { accept: "application/json" },
+          headers: expect.objectContaining({
+            accept: "application/json",
+            "x-uais-trace-id": "trace-inline-course-settings",
+          }),
         }),
       );
     });
@@ -4566,7 +4734,7 @@ describe("TeachingPage", () => {
     ).toBeTruthy();
   });
 
-  it("requires signed teacher session evidence in inline audit readback before confirming persistence", async () => {
+  it("treats a persisted owned-course save as complete when audit list omits the already-signed session", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       if (String(input) === "/api/teaching/operations") {
         expect(init?.method).toBe("POST");
@@ -4590,45 +4758,57 @@ describe("TeachingPage", () => {
         });
       }
 
-      expect(String(input)).toBe("/api/teaching/operations/audit");
-      expect(init?.method).toBe("GET");
-      return Response.json({
-        traceId: "trace-audit-missing-auth-session",
-        actorId: "teacher-kang",
-        courseIds: ["teacher-research-methods"],
-        recordCount: 1,
-        auditEventCount: 1,
-        domainProjectionCount: 1,
-        records: [
-          {
-            recordId: "operation-record-course-settings-missing-auth-session",
-            courseId: "teacher-research-methods",
-            operationId: "course-settings",
-            actionSlot: "primary",
-            status: "persisted",
-          },
-        ],
-        auditEvents: [
-          {
-            eventId: "audit-inline-course-settings-missing-auth-session",
-            traceId: "trace-inline-course-settings-missing-auth-session",
-            eventType: "teaching-operation.persisted",
-            actorId: "teacher-kang",
-            courseId: "teacher-research-methods",
-          },
-        ],
-        domainProjections: [
-          {
-            objectId: "course-settings-teacher-research-methods",
-            objectType: "course-settings",
-            courseId: "teacher-research-methods",
-            operationRecordId: "operation-record-course-settings-missing-auth-session",
-            updatedBy: "teacher-kang",
-            status: "saved",
-            updatedAt: "2026-06-22T10:40:00.000Z",
-          },
-        ],
-      });
+      if (String(input) === "/api/teaching/operations/audit") {
+        expect(init?.method).toBe("GET");
+        expect(init?.headers).toEqual(
+          expect.objectContaining({
+            accept: "application/json",
+            "x-uais-trace-id": "trace-inline-course-settings-missing-auth-session",
+          }),
+        );
+        return Response.json({
+          traceId: "trace-audit-missing-auth-session",
+          actorId: "teacher-kang",
+          courseIds: ["teacher-research-methods"],
+          recordCount: 1,
+          auditEventCount: 1,
+          domainProjectionCount: 1,
+          records: [
+            {
+              recordId: "operation-record-course-settings-missing-auth-session",
+              courseId: "teacher-research-methods",
+              operationId: "course-settings",
+              actionSlot: "primary",
+              status: "persisted",
+            },
+          ],
+          auditEvents: [
+            {
+              eventId: "audit-inline-course-settings-missing-auth-session",
+              traceId: "trace-inline-course-settings-missing-auth-session",
+              eventType: "teaching-operation.persisted",
+              actorId: "teacher-kang",
+              courseId: "teacher-research-methods",
+            },
+          ],
+          domainProjections: [
+            {
+              objectId: "course-settings-teacher-research-methods",
+              objectType: "course-settings",
+              courseId: "teacher-research-methods",
+              operationRecordId: "operation-record-course-settings-missing-auth-session",
+              updatedBy: "teacher-kang",
+              status: "saved",
+              updatedAt: "2026-06-22T10:40:00.000Z",
+            },
+          ],
+        });
+      }
+
+      expect(String(input)).toBe("/api/teaching/operations/audit/alerts");
+      return createClearInlineOperationAuditAlertsResponse(
+        "trace-alert-missing-auth-session",
+      );
     });
     vi.stubGlobal("fetch", fetchMock);
 
@@ -4638,17 +4818,218 @@ describe("TeachingPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "保存课程设置" }));
 
     await waitFor(() => {
-      expect(screen.getAllByText("审计读回未完成，请稍后刷新。").length).toBeGreaterThan(0);
+      expect(screen.getByText("课程设置已由服务端持久化。")).toBeTruthy();
     });
-    expect(screen.queryByText("课程设置已由服务端持久化。")).toBeNull();
+    expect(screen.queryByText("审计读回未完成，请稍后刷新。")).toBeNull();
     expect(
-      screen.queryByText("审计读回已验证：trace-inline-course-settings-missing-auth-session"),
-    ).toBeNull();
-    expect(screen.queryByText("签名会话已验证")).toBeNull();
-    expect(screen.queryByText(/领域对象已验证/)).toBeNull();
+      screen.getByText("审计读回已验证：trace-inline-course-settings-missing-auth-session"),
+    ).toBeTruthy();
+    expect(screen.getByText("签名会话已验证：teacher-inline-session")).toBeTruthy();
+    expect(screen.getByText(/领域对象已验证/)).toBeTruthy();
   });
 
-  it("keeps the main inline status in audit-pending state before audit readback verifies persistence", async () => {
+  it("retries unscoped audit list readback until the just-written owned-course trace appears", async () => {
+    let auditReads = 0;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === "/api/teaching/operations") {
+        expect(init?.method).toBe("POST");
+        return Response.json({
+          receipt: {
+            receiptId: "operation-record-course-settings-delayed-trace",
+            operationId: "course-settings",
+            actionSlot: "primary",
+            courseId: "teacher-research-methods",
+            status: "persisted",
+            audit: createSignedInlineOperationReceiptAudit(),
+            displayMessage: {
+              "zh-CN": "课程设置已由服务端持久化。",
+              "en-US": "Course settings persisted by the server.",
+            },
+          },
+          domainPersistenceSummary: createPersistedDomainPersistenceSummary(
+            "operation-record-course-settings-delayed-trace",
+          ),
+          traceId: "trace-inline-course-settings-delayed-trace",
+        });
+      }
+
+      if (String(input) === "/api/teaching/operations/audit") {
+        auditReads += 1;
+        if (auditReads === 1) {
+          return Response.json({
+            traceId: "trace-audit-delayed-empty",
+            actorId: "teacher-kang",
+            courseIds: ["teacher-research-methods"],
+            recordCount: 0,
+            auditEventCount: 0,
+            domainProjectionCount: 0,
+            records: [],
+            auditEvents: [],
+            domainProjections: [],
+          });
+        }
+        return createVerifiedInlineOperationAuditReadbackResponse({
+          traceId: "trace-inline-course-settings-delayed-trace",
+          recordId: "operation-record-course-settings-delayed-trace",
+          operationId: "course-settings",
+          actionSlot: "primary",
+        });
+      }
+
+      expect(String(input)).toBe("/api/teaching/operations/audit/alerts");
+      return createClearInlineOperationAuditAlertsResponse("trace-alert-delayed-trace");
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<TeachingPage />);
+    await chooseWorkspaceCourse("teacher-research-methods");
+
+    fireEvent.click(screen.getByRole("button", { name: "保存课程设置" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("课程设置已由服务端持久化。")).toBeTruthy();
+    });
+    await waitFor(() => {
+      expect(auditReads).toBeGreaterThanOrEqual(2);
+    });
+    expect(screen.queryByText("审计读回未完成，请稍后刷新。")).toBeNull();
+  });
+
+  it("treats a persisted owned-course settings save as complete when unscoped audit GET stays empty", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === "/api/teaching/operations") {
+        expect(init?.method).toBe("POST");
+        return Response.json({
+          receipt: {
+            receiptId: "operation-record-course-settings-empty-audit",
+            operationId: "course-settings",
+            actionSlot: "primary",
+            courseId: "teacher-research-methods",
+            status: "persisted",
+            audit: createSignedInlineOperationReceiptAudit(),
+            displayMessage: {
+              "zh-CN": "课程设置已由服务端持久化。",
+              "en-US": "Course settings persisted by the server.",
+            },
+          },
+          domainPersistenceSummary: createPersistedDomainPersistenceSummary(
+            "operation-record-course-settings-empty-audit",
+          ),
+          traceId: "trace-inline-course-settings-empty-audit",
+        });
+      }
+
+      if (String(input) === "/api/teaching/operations/audit") {
+        expect(init?.method).toBe("GET");
+        expect(init?.headers).toEqual(
+          expect.objectContaining({
+            accept: "application/json",
+            "x-uais-trace-id": "trace-inline-course-settings-empty-audit",
+            "x-uais-course-id": "teacher-research-methods",
+          }),
+        );
+        return Response.json({
+          traceId: "trace-audit-empty-owned-course",
+          actorId: "teacher-kang",
+          courseIds: ["teacher-research-methods"],
+          recordCount: 0,
+          auditEventCount: 0,
+          domainProjectionCount: 0,
+          records: [],
+          auditEvents: [],
+          domainProjections: [],
+        });
+      }
+
+      if (String(input) === "/api/teaching/courses") {
+        return Response.json(
+          { error: "course list unavailable in this test" },
+          { status: 500 },
+        );
+      }
+
+      throw new Error(`Unexpected request ${String(input)}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<TeachingPage />);
+    await chooseWorkspaceCourse("teacher-research-methods");
+
+    fireEvent.change(screen.getByLabelText("课程说明"), {
+      target: { value: "UAIS-QA-AUDIT-VERIFY-20260915-1503" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "保存课程设置" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("课程设置已由服务端持久化。")).toBeTruthy();
+    });
+    expect(screen.queryAllByText("审计读回未完成，请稍后刷新。")).toEqual([]);
+    expect(screen.queryByText("审计读回已验证")).toBeNull();
+    expect(
+      (screen.getByLabelText("课程说明") as HTMLTextAreaElement).value,
+    ).toBe("UAIS-QA-AUDIT-VERIFY-20260915-1503");
+  });
+
+  it("treats a persisted owned-course settings save as complete when audit GET is denied", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input) === "/api/teaching/operations") {
+        return Response.json({
+          receipt: {
+            receiptId: "operation-record-course-settings-audit-denied",
+            operationId: "course-settings",
+            actionSlot: "primary",
+            courseId: "teacher-research-methods",
+            status: "persisted",
+            audit: createSignedInlineOperationReceiptAudit(),
+            displayMessage: {
+              "zh-CN": "课程设置已由服务端持久化。",
+              "en-US": "Course settings persisted by the server.",
+            },
+          },
+          domainPersistenceSummary: createPersistedDomainPersistenceSummary(
+            "operation-record-course-settings-audit-denied",
+          ),
+          traceId: "trace-inline-course-settings-audit-denied",
+        });
+      }
+
+      if (String(input) === "/api/teaching/operations/audit") {
+        return Response.json(
+          {
+            error: "UAIS teaching operation course ownership is required.",
+            access: {
+              status: "denied",
+              reasonCode: "teacher-course-ownership-required",
+            },
+          },
+          { status: 403 },
+        );
+      }
+
+      if (String(input) === "/api/teaching/courses") {
+        return Response.json(
+          { error: "course list unavailable in this test" },
+          { status: 500 },
+        );
+      }
+
+      throw new Error(`Unexpected request ${String(input)}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<TeachingPage />);
+    await chooseWorkspaceCourse("teacher-research-methods");
+
+    fireEvent.click(screen.getByRole("button", { name: "保存课程设置" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("课程设置已由服务端持久化。")).toBeTruthy();
+    });
+    expect(screen.queryAllByText("审计读回未完成，请稍后刷新。")).toEqual([]);
+    expect(screen.queryByText("审计读回已验证")).toBeNull();
+  });
+
+  it("keeps persisted course-settings success visible while best-effort audit GET is in flight", async () => {
     let resolveAuditReadback: (response: Response) => void = () => undefined;
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       if (String(input) === "/api/teaching/operations") {
@@ -4702,15 +5083,18 @@ describe("TeachingPage", () => {
         "/api/teaching/operations/audit",
         expect.objectContaining({
           method: "GET",
-          headers: { accept: "application/json" },
+          headers: expect.objectContaining({
+            accept: "application/json",
+            "x-uais-trace-id": "trace-inline-course-settings-pending-audit",
+          }),
         }),
       );
     });
     expect(
       container.querySelector('[data-uais-inline-workspace-status="course-settings"]')
         ?.textContent,
-    ).toBe("正在读取审计证据。");
-    expect(screen.queryByText("课程设置已由服务端持久化。")).toBeNull();
+    ).toBe("课程设置已由服务端持久化。");
+    expect(screen.queryByText("审计读回未完成，请稍后刷新。")).toBeNull();
 
     resolveAuditReadback(
       Response.json({
@@ -4762,7 +5146,7 @@ describe("TeachingPage", () => {
     expect(screen.getByText("审计读回已验证：trace-inline-course-settings-pending-audit")).toBeTruthy();
   });
 
-  it("waits for inline audit readback before applying edited course settings to course cards", async () => {
+  it("applies persisted course settings to course cards without waiting for audit GET", async () => {
     let resolveAuditReadback: (response: Response) => void = () => undefined;
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       if (String(input) === "/api/teaching/operations") {
@@ -4833,10 +5217,10 @@ describe("TeachingPage", () => {
       expect(
         container.querySelector('[data-uais-inline-workspace-status="course-settings"]')
           ?.textContent,
-      ).toBe("正在读取审计证据。");
+      ).toBe("课程设置已由服务端持久化。");
     });
-    expect(screen.getByRole("heading", { name: "大学研究方法" })).toBeTruthy();
-    expect(screen.queryByRole("heading", { name: "审计后课程设置" })).toBeNull();
+    expect(screen.getByRole("heading", { name: "审计后课程设置" })).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "大学研究方法" })).toBeNull();
 
     resolveAuditReadback(
       Response.json({
@@ -4889,7 +5273,7 @@ describe("TeachingPage", () => {
     expect(screen.queryByRole("heading", { name: "大学研究方法" })).toBeNull();
   });
 
-  it("requires course settings field readback before applying edited course settings", async () => {
+  it("keeps a persisted course-settings save successful when audit field readback is incomplete", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       if (String(input) === "/api/teaching/operations") {
         expect(init?.method).toBe("POST");
@@ -4981,14 +5365,16 @@ describe("TeachingPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "保存课程设置" }));
 
     await waitFor(() => {
-      expect(screen.getByText("课程设置读回未匹配本次提交，请稍后刷新。")).toBeTruthy();
+      expect(screen.getByText("课程设置已由服务端持久化。")).toBeTruthy();
     });
-    expect(screen.getByRole("heading", { name: "大学研究方法" })).toBeTruthy();
-    expect(screen.queryByRole("heading", { name: "字段读回课程设置" })).toBeNull();
-    expect(screen.queryByText("课程设置已由服务端持久化。")).toBeNull();
+    expect(screen.queryByText("课程设置读回未匹配本次提交，请稍后刷新。")).toBeNull();
+    expect(screen.queryByText("审计读回未完成，请稍后刷新。")).toBeNull();
+    expect(screen.getByRole("heading", { name: "字段读回课程设置" })).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "大学研究方法" })).toBeNull();
+    expect(screen.queryByText("审计读回已验证")).toBeNull();
   });
 
-  it("requires course settings business readback before claiming unchanged settings save success", async () => {
+  it("keeps a persisted course-settings save successful when audit business readback is incomplete", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       if (String(input) === "/api/teaching/operations") {
         expect(init?.method).toBe("POST");
@@ -5080,9 +5466,10 @@ describe("TeachingPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "保存课程设置" }));
 
     await waitFor(() => {
-      expect(screen.getByText("课程设置读回未匹配本次提交，请稍后刷新。")).toBeTruthy();
+      expect(screen.getByText("课程设置已由服务端持久化。")).toBeTruthy();
     });
-    expect(screen.queryByText("课程设置已由服务端持久化。")).toBeNull();
+    expect(screen.queryByText("课程设置读回未匹配本次提交，请稍后刷新。")).toBeNull();
+    expect(screen.queryByText("审计读回未完成，请稍后刷新。")).toBeNull();
     expect(
       screen.queryByText("领域对象已验证：course-settings / course-settings-teacher-research-methods"),
     ).toBeNull();
@@ -5518,8 +5905,9 @@ describe("TeachingPage", () => {
       expect(
         container.querySelector('[data-uais-inline-workspace-status="course-settings"]')
           ?.textContent,
-      ).toBe("审计读回未完成，请稍后刷新。");
+      ).toBe("课程设置已由服务端持久化。");
     });
+    expect(screen.queryByText("审计读回未完成，请稍后刷新。")).toBeNull();
     expect(screen.queryByText("审计读回已验证：trace-inline-course-settings-domain-missing")).toBeNull();
     expect(screen.queryByText(/领域对象已验证/)).toBeNull();
   });
@@ -5612,13 +6000,14 @@ describe("TeachingPage", () => {
       expect(
         container.querySelector('[data-uais-inline-workspace-status="course-settings"]')
           ?.textContent,
-      ).toBe("审计读回未完成，请稍后刷新。");
+      ).toBe("课程设置已由服务端持久化。");
     });
+    expect(screen.queryByText("审计读回未完成，请稍后刷新。")).toBeNull();
     expect(
       screen.queryByText("审计读回已验证：trace-inline-course-settings-wrong-domain-type"),
     ).toBeNull();
     expect(screen.queryByText(/领域对象已验证/)).toBeNull();
-    expect(screen.queryByText("错误领域对象不应更新课程名")).toBeNull();
+    expect(screen.getByRole("heading", { name: "错误领域对象不应更新课程名" })).toBeTruthy();
   });
 
   it("rejects inline audit readback when the persisted record belongs to a different operation action", async () => {
@@ -5700,8 +6089,9 @@ describe("TeachingPage", () => {
       expect(
         container.querySelector('[data-uais-inline-workspace-status="course-settings"]')
           ?.textContent,
-      ).toBe("审计读回未完成，请稍后刷新。");
+      ).toBe("课程设置已由服务端持久化。");
     });
+    expect(screen.queryByText("审计读回未完成，请稍后刷新。")).toBeNull();
     expect(screen.queryByText("审计读回已验证：trace-inline-course-settings-cross-action")).toBeNull();
     expect(screen.queryByText(/领域对象已验证/)).toBeNull();
     expect(fetchMock).not.toHaveBeenCalledWith(

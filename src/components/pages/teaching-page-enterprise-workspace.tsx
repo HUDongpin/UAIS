@@ -58,6 +58,8 @@ type EnterpriseWorkspaceProps = {
   onSelectInviteClass: (classId: string) => void;
   onUpdateInvitePolicyDraft: (patch: Partial<InviteCodePolicyDraft>) => void;
   selectedCourseAction: { courseId: string; action: TeacherCourseAction } | undefined;
+  isSelectedCourseWritable?: boolean;
+  ownershipUnresolved?: boolean;
   selectedActionCourse: TeacherCourse | undefined;
   selectedCourseActionLabel: string | undefined;
   onSelectCourseAction: (courseId: string) => void;
@@ -102,6 +104,8 @@ export function EnterpriseWorkspace({
   onSelectInviteClass,
   onUpdateInvitePolicyDraft,
   selectedCourseAction,
+  isSelectedCourseWritable = true,
+  ownershipUnresolved = false,
   selectedActionCourse,
   selectedCourseActionLabel,
   onSelectCourseAction,
@@ -152,6 +156,7 @@ export function EnterpriseWorkspace({
                 locale={locale}
                 inlineWorkspaceStatuses={inlineWorkspaceStatuses}
                 isCourseChosen={Boolean(selectedCourseAction?.courseId)}
+                isCourseWritable={isSelectedCourseWritable}
                 selectedCourseId={selectedCourseAction?.courseId}
                 runInlineWorkspaceAction={runInlineWorkspaceAction}
               />
@@ -166,6 +171,8 @@ export function EnterpriseWorkspace({
             selectedCourseAction={selectedCourseAction}
             selectedActionCourse={selectedActionCourse}
             selectedCourseActionLabel={selectedCourseActionLabel}
+            isCourseWritable={isSelectedCourseWritable}
+            ownershipUnresolved={ownershipUnresolved}
             onSelectCourse={onSelectCourseAction}
           />}
           </div>
@@ -279,6 +286,8 @@ export function EnterpriseWorkspace({
               onUpdateInvitePolicyDraft={onUpdateInvitePolicyDraft}
               copyInviteWorkspaceValue={copyInviteWorkspaceValue}
               runInviteWorkspaceAction={runInviteWorkspaceAction}
+              isCourseWritable={isSelectedCourseWritable}
+              ownershipUnresolved={ownershipUnresolved}
             /> : null}
         </section>
 

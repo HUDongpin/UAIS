@@ -128,10 +128,63 @@ export function normalizeExternalAuditReadback(
     auditEvents: Array.isArray(value.auditEvents)
       ? value.auditEvents.map(normalizeTeachingOperationAuditReadbackEvent)
       : [],
-    domainProjections: Array.isArray(value.domainProjections)
-      ? value.domainProjections.map(normalizeTeachingOperationAuditReadbackDomainProjection)
-      : [],
+    domainProjections: collectTeachingOperationAuditDomainProjectionValues(value).map(
+      normalizeTeachingOperationAuditReadbackDomainProjection,
+    ),
   };
+}
+
+export function collectTeachingOperationAuditDomainProjectionValues(
+  value: Record<string, unknown>,
+) {
+  const topLevel = Array.isArray(value.domainProjections) ? value.domainProjections : [];
+  const fromRecords = Array.isArray(value.records)
+    ? value.records.flatMap((record) =>
+        isRecord(record) && Array.isArray(record.domainProjections)
+          ? record.domainProjections
+          : [],
+      )
+    : [];
+  // Append-only audits list every version of one domain object, oldest first
+  // (a pending gradebook update, then the released row). Those versions share
+  // objectId and operationRecordId, so identity dedupe kept the oldest and
+  // rollback read "not released". Collapse only exact copies — the same
+  // projection repeated at the top level and inside the record that wrote it —
+  // and keep distinct versions in encounter order.
+  const seen = new Set<string>();
+  const merged: unknown[] = [];
+  for (const projection of [...topLevel, ...fromRecords]) {
+    if (!isRecord(projection)) {
+      continue;
+    }
+    const key = canonicalJson(projection);
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    merged.push(projection);
+  }
+  return merged;
+}
+
+function canonicalJson(value: unknown): string {
+  if (value === undefined) {
+    return "undefined";
+  }
+  if (value instanceof Date) {
+    return JSON.stringify(Number.isNaN(value.getTime()) ? null : value.toISOString());
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map((entry) => canonicalJson(entry)).join(",")}]`;
+  }
+  if (isRecord(value)) {
+    return `{${Object.keys(value)
+      .filter((key) => value[key] !== undefined)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value) ?? "null";
 }
 
 export function normalizeExternalRollbackReceipt(

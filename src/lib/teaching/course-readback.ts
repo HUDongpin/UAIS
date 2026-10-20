@@ -666,6 +666,65 @@ export function mergeTeacherCoursesById(
   ];
 }
 
+// Workbench cards must not keep catalog demo IDs as writable courses after a
+// successful server list. Those catalog IDs are the two-course visual template;
+// teaching writes authorize against snapshot `ownerTeacherId`.
+export function resolveTeacherWorkbenchCourses(input: {
+  persistedCourses: TeacherCourse[];
+  catalogCourses: TeacherCourse[];
+}) {
+  if (input.persistedCourses.length > 0) {
+    return {
+      courses: input.persistedCourses,
+      writableCourseIds: input.persistedCourses.map((course) => course.id),
+      catalogDemo: false,
+    };
+  }
+  return {
+    courses: input.catalogCourses,
+    writableCourseIds: [] as string[],
+    catalogDemo: true,
+  };
+}
+
+export function isWritableTeacherCourseId(
+  writableCourseIds: ReadonlySet<string> | undefined,
+  courseId: string | undefined,
+) {
+  if (!courseId) {
+    return false;
+  }
+  if (!writableCourseIds) {
+    return true;
+  }
+  return writableCourseIds.has(courseId);
+}
+
+export function isConfirmedWritableTeacherCourseId(
+  writableCourseIds: ReadonlySet<string> | undefined,
+  courseId: string | undefined,
+) {
+  if (!writableCourseIds) {
+    return false;
+  }
+  return isWritableTeacherCourseId(writableCourseIds, courseId);
+}
+
+// Selected-course settings, inline actions, and invite publish must not use the
+// #10 fail-open reading of an undefined id set while the teacher course list is
+// still in flight. `isWritableTeacherCourseId(undefined, id) === true` stays for
+// callers that are not waiting on that list.
+export function isSelectedTeacherCourseWriteEnabled(input: {
+  writableCourseIds: ReadonlySet<string> | undefined;
+  courseId: string | undefined;
+  ownershipUnresolved: boolean;
+}) {
+  if (input.ownershipUnresolved) {
+    return false;
+  }
+  return isWritableTeacherCourseId(input.writableCourseIds, input.courseId);
+}
+
 export function mergeTeacherClassesByCourseId(
   persistedClasses: Record<string, TeacherClassItem[]>,
   currentClasses: Record<string, TeacherClassItem[]>,

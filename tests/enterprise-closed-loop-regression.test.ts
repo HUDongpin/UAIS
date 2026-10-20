@@ -62,6 +62,10 @@ describe("enterprise closed-loop regression guards", () => {
       "requires a complete signed teacher session before verifying operation page audit readback",
     );
     expect(pageTest).toContain("weak-operation-page-session");
+    expect(auditReadbackSection).toContain("verifiedReceiptAuthSession");
+    expect(pageTest).toContain(
+      "treats operation page save as complete when audit list omits the already-signed session",
+    );
   });
 
   it("keeps operation detail transient artifacts cleared before retry persistence", () => {

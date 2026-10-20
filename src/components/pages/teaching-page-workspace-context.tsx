@@ -15,6 +15,10 @@ import type { TeacherCourse } from "@/data/uais";
 import { copy } from "@/i18n/copy";
 import type { Locale } from "@/i18n/copy";
 import { extractCourseSemester } from "@/lib/teaching/course-readback";
+import {
+  TEACHING_OPERATION_COURSE_NOT_OWNED_MESSAGE,
+  TEACHING_OPERATION_OWNERSHIP_UNCONFIRMED_MESSAGE,
+} from "./teaching-page-messages";
 import type { TeacherCourseAction } from "./teaching-page-types";
 
 type WorkspaceContextProps = {
@@ -24,6 +28,8 @@ type WorkspaceContextProps = {
   selectedCourseAction: { courseId: string; action: TeacherCourseAction } | undefined;
   selectedActionCourse: TeacherCourse | undefined;
   selectedCourseActionLabel: string | undefined;
+  isCourseWritable?: boolean;
+  ownershipUnresolved?: boolean;
   onSelectCourse: (courseId: string) => void;
 };
 
@@ -34,6 +40,8 @@ export function WorkspaceContext({
   selectedCourseAction,
   selectedActionCourse,
   selectedCourseActionLabel,
+  isCourseWritable = true,
+  ownershipUnresolved = false,
   onSelectCourse,
 }: WorkspaceContextProps) {
     return (
@@ -85,6 +93,19 @@ export function WorkspaceContext({
                 {locale === "zh-CN" ? "课程操作" : "Course action"}：
                 {selectedCourseActionLabel}
               </p>
+              {isCourseWritable ? null : (
+                <p
+                  role="status"
+                  className="mt-2 font-semibold text-[var(--danger)]"
+                >
+                  {localizedText(
+                    ownershipUnresolved
+                      ? TEACHING_OPERATION_OWNERSHIP_UNCONFIRMED_MESSAGE
+                      : TEACHING_OPERATION_COURSE_NOT_OWNED_MESSAGE,
+                    locale,
+                  )}
+                </p>
+              )}
             </div>
           ) : null}
         </div>

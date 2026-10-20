@@ -226,6 +226,8 @@ export function createTeachingOperationActionPostHandler(
         courseId,
         operationId,
         actionSlot: body.actionSlot,
+        env,
+        fetch: deps.fetch,
         getTeachingOperationCourseOwnership,
         readManagedCourseOwnership,
         readTeachingCourseCapability,

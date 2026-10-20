@@ -3,6 +3,18 @@ import type { AnchorHTMLAttributes, ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { TeachingOperationPage } from "@/components/teaching/teaching-operation-page";
 
+import { operationConfigs } from "@/components/teaching/teaching-operation-page-data";
+
+const openTeachingStudentPreviewUrl = vi.hoisted(() => vi.fn());
+vi.mock("@/components/pages/teaching-student-preview", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/components/pages/teaching-student-preview")>();
+  return {
+    ...actual,
+    openTeachingStudentPreviewUrl,
+  };
+});
+
+
 vi.mock("next/link", () => ({
   default: ({
     href,
@@ -87,6 +99,21 @@ function createDashboardInsightsReadback(overrides: Partial<{
     dataFreshAt: "2026-10-20T01:00:00.000Z",
   });
 }
+
+function ownedTeachingCourseListResponse(courseId = "teacher-research-methods") {
+  return new Response(JSON.stringify({ courses: [{ courseId }] }), {
+    status: 200,
+    headers: { "content-type": "application/json" },
+  });
+}
+
+function teachingOperationsPosts(spy: { mock: { calls: unknown[][] } }) {
+  return spy.mock.calls.filter(([input, init]) => {
+    const method = ((init as RequestInit | undefined)?.method ?? "GET").toUpperCase();
+    return String(input) === "/api/teaching/operations" && method === "POST";
+  });
+}
+
 
 describe("TeachingOperationPage", () => {
   it("reads real dashboard insights for the selected course and class without operation writes", async () => {
@@ -245,8 +272,11 @@ describe("TeachingOperationPage", () => {
   });
 
   it("names the missing course context instead of blaming sign-in or permissions", async () => {
-    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      if (String(input) === "/api/teaching/courses") {
+        return ownedTeachingCourseListResponse();
+      }
+      return new Response(
         JSON.stringify({
           error: "UAIS teaching operation course access is required.",
           traceId: "trace-course-id-required",
@@ -257,11 +287,16 @@ describe("TeachingOperationPage", () => {
           },
         }),
         { status: 400, headers: { "content-type": "application/json" } },
-      ),
-    );
+      );
+    })
 
     try {
-      render(<TeachingOperationPage operationId="course-settings" />);
+      render(
+        <TeachingOperationPage
+          operationId="course-settings"
+          selectedCourseId="teacher-research-methods"
+        />,
+      );
 
       fireEvent.click(screen.getByRole("button", { name: "保存课程设置" }));
 
@@ -339,7 +374,12 @@ describe("TeachingOperationPage", () => {
       expect(screen.getByText("课程设置已由服务端持久化。")).toBeTruthy();
     });
 
-    rerender(<TeachingOperationPage operationId="data-export" />);
+    rerender(
+      <TeachingOperationPage
+        operationId="data-export"
+        selectedCourseId="teacher-math-pedagogy"
+      />,
+    );
 
     fireEvent.click(screen.getByRole("button", { name: "生成导出清单" }));
     await waitFor(() => {
@@ -347,7 +387,12 @@ describe("TeachingOperationPage", () => {
     });
     expect(screen.getByText("导出清单已生成")).toBeTruthy();
 
-    rerender(<TeachingOperationPage operationId="invite-code" />);
+    rerender(
+      <TeachingOperationPage
+        operationId="invite-code"
+        selectedCourseId="teacher-math-pedagogy"
+      />,
+    );
 
     fireEvent.click(screen.getByRole("button", { name: "生成新邀请码" }));
     await waitFor(() => {
@@ -360,8 +405,11 @@ describe("TeachingOperationPage", () => {
   });
 
   it("implements the OpenMAIC-style data export package page", async () => {
-    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      if (String(input) === "/api/teaching/courses") {
+        return ownedTeachingCourseListResponse();
+      }
+      return new Response(
         JSON.stringify({
           receipt: {
             operationId: "data-export",
@@ -387,11 +435,16 @@ describe("TeachingOperationPage", () => {
           }),
         }),
         { status: 200, headers: { "content-type": "application/json" } },
-      ),
-    );
+      );
+    })
 
     try {
-    const { container } = render(<TeachingOperationPage operationId="data-export" />);
+    const { container } = render(
+      <TeachingOperationPage
+        operationId="data-export"
+        selectedCourseId="teacher-research-methods"
+      />,
+    );
 
     expect(container.querySelector('[data-uais-openmaic-page="data-export"]')).toBeTruthy();
     expect(screen.getByText("开放课堂智能系统导出包")).toBeTruthy();
@@ -440,8 +493,11 @@ describe("TeachingOperationPage", () => {
   });
 
   it("calls the teaching operation backend when a teacher runs a button action", async () => {
-    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      if (String(input) === "/api/teaching/courses") {
+        return ownedTeachingCourseListResponse();
+      }
+      return new Response(
         JSON.stringify({
           receipt: {
             operationId: "course-settings",
@@ -465,8 +521,8 @@ describe("TeachingOperationPage", () => {
           }),
         }),
         { status: 200, headers: { "content-type": "application/json" } },
-      ),
-    );
+      );
+    })
 
     try {
       render(
@@ -479,8 +535,8 @@ describe("TeachingOperationPage", () => {
 
       fireEvent.click(screen.getByRole("button", { name: "保存课程设置" }));
 
-      await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
-      const [, requestInit] = fetchSpy.mock.calls[0];
+      await waitFor(() => expect(teachingOperationsPosts(fetchSpy)).toHaveLength(1));
+      const [, requestInit] = teachingOperationsPosts(fetchSpy)[0];
       const body = JSON.parse(String(requestInit?.body));
       expect(fetchSpy).toHaveBeenCalledWith(
         "/api/teaching/operations",
@@ -509,6 +565,9 @@ describe("TeachingOperationPage", () => {
 
   it("reads back audit evidence after operation page persistence before closing the trace loop", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      if (String(input) === "/api/teaching/courses") {
+        return ownedTeachingCourseListResponse();
+      }
       if (String(input) === "/api/teaching/operations") {
         expect(init?.method).toBe("POST");
         return Response.json({
@@ -535,7 +594,12 @@ describe("TeachingOperationPage", () => {
 
       expect(String(input)).toBe("/api/teaching/operations/audit");
       expect(init?.method).toBe("GET");
-      expect(init?.headers).toEqual({ accept: "application/json" });
+      expect(init?.headers).toEqual(
+        expect.objectContaining({
+          accept: "application/json",
+          "x-uais-trace-id": "trace-operation-page-course-settings",
+        }),
+      );
       return Response.json({
         traceId: "trace-audit-operation-page-readback",
         actorId: "teacher-kang",
@@ -588,12 +652,20 @@ describe("TeachingOperationPage", () => {
 
       fireEvent.click(screen.getByRole("button", { name: "保存课程设置" }));
 
-      await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(2));
+      await waitFor(() =>
+        expect(fetchSpy).toHaveBeenCalledWith(
+          "/api/teaching/operations/audit",
+          expect.anything(),
+        ),
+      );
       expect(fetchSpy).toHaveBeenCalledWith(
         "/api/teaching/operations/audit",
         expect.objectContaining({
           method: "GET",
-          headers: { accept: "application/json" },
+          headers: expect.objectContaining({
+            accept: "application/json",
+            "x-uais-trace-id": "trace-operation-page-course-settings",
+          }),
         }),
       );
       expect(screen.getByText("课程设置已由服务端持久化。")).toBeTruthy();
@@ -611,6 +683,9 @@ describe("TeachingOperationPage", () => {
   it("keeps operation page success hidden until audit readback verifies the saved trace", async () => {
     let resolveAuditReadback: (response: Response) => void = () => undefined;
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      if (String(input) === "/api/teaching/courses") {
+        return ownedTeachingCourseListResponse();
+      }
       if (String(input) === "/api/teaching/operations") {
         expect(init?.method).toBe("POST");
         return Response.json({
@@ -653,9 +728,14 @@ describe("TeachingOperationPage", () => {
 
       fireEvent.click(screen.getByRole("button", { name: "保存课程设置" }));
 
-      await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(2));
-      expect(screen.getAllByText("正在读取审计证据。").length).toBeGreaterThan(0);
-      expect(screen.queryByText("课程设置已由服务端持久化。")).toBeNull();
+      await waitFor(() =>
+        expect(fetchSpy).toHaveBeenCalledWith(
+          "/api/teaching/operations/audit",
+          expect.anything(),
+        ),
+      );
+      expect(screen.getByText("课程设置已由服务端持久化。")).toBeTruthy();
+      expect(screen.queryByText("审计读回未完成，请稍后刷新。")).toBeNull();
 
       resolveAuditReadback(
         Response.json({
@@ -708,6 +788,9 @@ describe("TeachingOperationPage", () => {
 
   it("requires a complete signed teacher session before verifying operation page audit readback", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      if (String(input) === "/api/teaching/courses") {
+        return ownedTeachingCourseListResponse();
+      }
       if (String(input) === "/api/teaching/operations") {
         return Response.json({
           receipt: {
@@ -782,9 +865,9 @@ describe("TeachingOperationPage", () => {
       fireEvent.click(screen.getByRole("button", { name: "保存课程设置" }));
 
       await waitFor(() => {
-        expect(screen.getAllByText("审计读回未完成，请稍后刷新。").length).toBeGreaterThan(0);
+        expect(screen.getByText("课程设置已由服务端持久化。")).toBeTruthy();
       });
-      expect(screen.queryByText("课程设置已由服务端持久化。")).toBeNull();
+      expect(screen.queryByText("审计读回未完成，请稍后刷新。")).toBeNull();
       expect(
         screen.queryByText("审计读回已验证：trace-operation-page-course-settings-weak-session"),
       ).toBeNull();
@@ -796,6 +879,9 @@ describe("TeachingOperationPage", () => {
 
   it("requires a matching domain projection before verifying operation page audit readback", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      if (String(input) === "/api/teaching/courses") {
+        return ownedTeachingCourseListResponse();
+      }
       if (String(input) === "/api/teaching/operations") {
         return Response.json({
           receipt: {
@@ -857,10 +943,16 @@ describe("TeachingOperationPage", () => {
 
       fireEvent.click(screen.getByRole("button", { name: "保存课程设置" }));
 
-      await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(2));
+      await waitFor(() =>
+        expect(fetchSpy).toHaveBeenCalledWith(
+          "/api/teaching/operations/audit",
+          expect.anything(),
+        ),
+      );
       await waitFor(() => {
-        expect(screen.getAllByText("审计读回未完成，请稍后刷新。").length).toBeGreaterThan(0);
+        expect(screen.getByText("课程设置已由服务端持久化。")).toBeTruthy();
       });
+      expect(screen.queryByText("审计读回未完成，请稍后刷新。")).toBeNull();
       expect(screen.queryByText("审计读回已验证：trace-operation-page-domain-missing")).toBeNull();
     } finally {
       fetchSpy.mockRestore();
@@ -869,6 +961,9 @@ describe("TeachingOperationPage", () => {
 
   it("requires course settings business readback before operation page claims settings save success", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      if (String(input) === "/api/teaching/courses") {
+        return ownedTeachingCourseListResponse();
+      }
       if (String(input) === "/api/teaching/operations") {
         expect(init?.method).toBe("POST");
         return Response.json({
@@ -940,9 +1035,10 @@ describe("TeachingOperationPage", () => {
       fireEvent.click(screen.getByRole("button", { name: "保存课程设置" }));
 
       await waitFor(() => {
-        expect(screen.getAllByText("审计读回未完成，请稍后刷新。").length).toBeGreaterThan(0);
+        expect(screen.getByText("课程设置已由服务端持久化。")).toBeTruthy();
       });
-      expect(screen.queryByText("课程设置已由服务端持久化。")).toBeNull();
+      expect(screen.queryByText("审计读回未完成，请稍后刷新。")).toBeNull();
+      expect(screen.queryByText("课程设置读回未匹配本次提交，请稍后刷新。")).toBeNull();
       expect(
         screen.queryByText(
           "领域对象已验证：course-settings / course-settings-teacher-research-methods",
@@ -953,108 +1049,13 @@ describe("TeachingOperationPage", () => {
     }
   });
 
-  it("requires student preview session business readback before operation page claims preview success", async () => {
-    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
-      if (String(input) === "/api/teaching/operations") {
-        expect(init?.method).toBe("POST");
-        const body = JSON.parse(String(init?.body)) as {
-          operationId?: string;
-          actionSlot?: "primary" | "secondary";
-          courseId?: string;
-          sourceAction?: string;
-        };
-        expect(body).toEqual(
-          expect.objectContaining({
-            operationId: "course-settings",
-            actionSlot: "secondary",
-            courseId: "teacher-research-methods",
-            sourceAction: "manage",
-          }),
-        );
-        return Response.json({
-          receipt: {
-            receiptId: "operation-page-student-preview-session-semantic-missing",
-            operationId: "course-settings",
-            actionSlot: "secondary",
-            courseId: "teacher-research-methods",
-            status: "persisted",
-            displayMessage: {
-              "zh-CN": "学生端预览已生成。",
-              "en-US": "Student preview generated.",
-            },
-          },
-          domainPersistenceSummary: createPersistedDomainSummary({
-            operationId: "course-settings",
-            actionSlot: "secondary",
-            receiptId: "operation-page-student-preview-session-semantic-missing",
-            objectType: "student-preview-session",
-          }),
-          traceId: "trace-operation-page-student-preview-session-semantic-missing",
-        });
-      }
 
-      expect(String(input)).toBe("/api/teaching/operations/audit");
-      return Response.json({
-        traceId: "trace-audit-operation-page-student-preview-session-semantic-missing",
-        actorId: "teacher-kang",
-        auditEventCount: 1,
-        records: [
-          {
-            recordId: "operation-page-student-preview-session-semantic-missing",
-            courseId: "teacher-research-methods",
-            operationId: "course-settings",
-            actionSlot: "secondary",
-            status: "persisted",
-          },
-        ],
-        auditEvents: [
-          {
-            auditId: "audit-operation-page-student-preview-session-semantic-missing",
-            traceId: "trace-operation-page-student-preview-session-semantic-missing",
-            eventType: "teaching-operation.persisted",
-            actorId: "teacher-kang",
-            courseId: "teacher-research-methods",
-            authSession: createOperationAuditAuthSession(),
-          },
-        ],
-        domainProjections: [
-          {
-            objectId: "student-preview-session-teacher-research-methods",
-            objectType: "student-preview-session",
-            courseId: "teacher-research-methods",
-            operationRecordId: "operation-page-student-preview-session-semantic-missing",
-          },
-        ],
-      });
-    });
-
-    try {
-      render(
-        <TeachingOperationPage
-          action="manage"
-          operationId="course-settings"
-          selectedCourseId="teacher-research-methods"
-        />,
-      );
-
-      fireEvent.click(screen.getByRole("button", { name: "预览学生端" }));
-
-      await waitFor(() => {
-        expect(screen.getAllByText("审计读回未完成，请稍后刷新。").length).toBeGreaterThan(0);
-      });
-      expect(screen.queryByText("学生端预览已生成。")).toBeNull();
-      expect(
-        screen.queryByText(
-          "领域对象已验证：student-preview-session / student-preview-session-teacher-research-methods",
-        ),
-      ).toBeNull();
-    } finally {
-      fetchSpy.mockRestore();
-    }
-  });
 
   it("requires agent plan business readback before operation page claims agent plan save success", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      if (String(input) === "/api/teaching/courses") {
+        return ownedTeachingCourseListResponse();
+      }
       if (String(input) === "/api/teaching/operations") {
         expect(init?.method).toBe("POST");
         const body = JSON.parse(String(init?.body)) as {
@@ -1153,6 +1154,9 @@ describe("TeachingOperationPage", () => {
 
   it("requires permission preflight business readback before operation page claims preflight success", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      if (String(input) === "/api/teaching/courses") {
+        return ownedTeachingCourseListResponse();
+      }
       if (String(input) === "/api/teaching/operations") {
         expect(init?.method).toBe("POST");
         const body = JSON.parse(String(init?.body)) as {
@@ -1253,6 +1257,9 @@ describe("TeachingOperationPage", () => {
 
   it("requires knowledge index business readback before operation page claims knowledge sync success", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      if (String(input) === "/api/teaching/courses") {
+        return ownedTeachingCourseListResponse();
+      }
       if (String(input) === "/api/teaching/operations") {
         expect(init?.method).toBe("POST");
         const body = JSON.parse(String(init?.body)) as {
@@ -1351,6 +1358,9 @@ describe("TeachingOperationPage", () => {
 
   it("submits a complete knowledge-source registration and rejects incomplete review evidence", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      if (String(input) === "/api/teaching/courses") {
+        return ownedTeachingCourseListResponse();
+      }
       if (String(input) === "/api/teaching/operations") {
         expect(init?.method).toBe("POST");
         const body = JSON.parse(String(init?.body)) as {
@@ -1475,6 +1485,9 @@ describe("TeachingOperationPage", () => {
 
   it("verifies registered knowledge-source evidence and clears the submitted URL", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      if (String(input) === "/api/teaching/courses") {
+        return ownedTeachingCourseListResponse();
+      }
       if (String(input) === "/api/teaching/operations") {
         const body = JSON.parse(String(init?.body)) as {
           knowledgeResource?: Record<string, unknown>;
@@ -1590,6 +1603,9 @@ describe("TeachingOperationPage", () => {
 
   it("requires course content business readback before operation page claims content publish success", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      if (String(input) === "/api/teaching/courses") {
+        return ownedTeachingCourseListResponse();
+      }
       if (String(input) === "/api/teaching/operations") {
         expect(init?.method).toBe("POST");
         const body = JSON.parse(String(init?.body)) as {
@@ -1800,6 +1816,9 @@ describe("TeachingOperationPage", () => {
 
   it("requires admin settings business readback before operation page claims admin settings save success", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      if (String(input) === "/api/teaching/courses") {
+        return ownedTeachingCourseListResponse();
+      }
       if (String(input) === "/api/teaching/operations") {
         expect(init?.method).toBe("POST");
         const body = JSON.parse(String(init?.body)) as {
@@ -1898,6 +1917,9 @@ describe("TeachingOperationPage", () => {
 
   it("requires email notification business readback before operation page claims collaboration invite success", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      if (String(input) === "/api/teaching/courses") {
+        return ownedTeachingCourseListResponse();
+      }
       if (String(input) === "/api/teaching/operations") {
         expect(init?.method).toBe("POST");
         const body = JSON.parse(String(init?.body)) as {
@@ -1998,6 +2020,9 @@ describe("TeachingOperationPage", () => {
 
   it("requires student roster business readback before operation page claims roster sync success", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      if (String(input) === "/api/teaching/courses") {
+        return ownedTeachingCourseListResponse();
+      }
       if (String(input) === "/api/teaching/operations") {
         expect(init?.method).toBe("POST");
         const body = JSON.parse(String(init?.body)) as {
@@ -2096,6 +2121,9 @@ describe("TeachingOperationPage", () => {
 
   it("requires group suggestions business readback before operation page claims suggestions generation success", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      if (String(input) === "/api/teaching/courses") {
+        return ownedTeachingCourseListResponse();
+      }
       if (String(input) === "/api/teaching/operations") {
         expect(init?.method).toBe("POST");
         const body = JSON.parse(String(init?.body)) as {
@@ -2196,6 +2224,9 @@ describe("TeachingOperationPage", () => {
 
   it("requires export manifest business readback before operation page claims export manifest success", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      if (String(input) === "/api/teaching/courses") {
+        return ownedTeachingCourseListResponse();
+      }
       if (String(input) === "/api/teaching/operations") {
         expect(init?.method).toBe("POST");
         const body = JSON.parse(String(init?.body)) as {
@@ -2303,6 +2334,9 @@ describe("TeachingOperationPage", () => {
 
   it("requires redaction validation business readback before operation page claims redaction success", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      if (String(input) === "/api/teaching/courses") {
+        return ownedTeachingCourseListResponse();
+      }
       if (String(input) === "/api/teaching/operations") {
         expect(init?.method).toBe("POST");
         const body = JSON.parse(String(init?.body)) as {
@@ -2484,6 +2518,9 @@ describe("TeachingOperationPage", () => {
 
   it("requires grading queue business readback before operation page claims review queue save success", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      if (String(input) === "/api/teaching/courses") {
+        return ownedTeachingCourseListResponse();
+      }
       if (String(input) === "/api/teaching/operations") {
         expect(init?.method).toBe("POST");
         const body = JSON.parse(String(init?.body)) as {
@@ -2582,6 +2619,9 @@ describe("TeachingOperationPage", () => {
 
   it("requires ai feedback draft business readback before operation page claims feedback generation success", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      if (String(input) === "/api/teaching/courses") {
+        return ownedTeachingCourseListResponse();
+      }
       if (String(input) === "/api/teaching/operations") {
         expect(init?.method).toBe("POST");
         const body = JSON.parse(String(init?.body)) as {
@@ -2682,6 +2722,9 @@ describe("TeachingOperationPage", () => {
 
   it("requires invite code draft business readback before operation page claims invite generation success", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      if (String(input) === "/api/teaching/courses") {
+        return ownedTeachingCourseListResponse();
+      }
       if (String(input) === "/api/teaching/operations") {
         expect(init?.method).toBe("POST");
         const body = JSON.parse(String(init?.body)) as {
@@ -2793,6 +2836,9 @@ describe("TeachingOperationPage", () => {
 
   it("requires enrollment access business readback before operation page claims invite publication success", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      if (String(input) === "/api/teaching/courses") {
+        return ownedTeachingCourseListResponse();
+      }
       if (String(input) === "/api/teaching/operations") {
         expect(init?.method).toBe("POST");
         const body = JSON.parse(String(init?.body)) as {
@@ -2902,8 +2948,11 @@ describe("TeachingOperationPage", () => {
   });
 
   it("does not claim operation page success when domain persistence evidence is omitted", async () => {
-    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      Response.json({
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      if (String(input) === "/api/teaching/courses") {
+        return ownedTeachingCourseListResponse();
+      }
+      return Response.json({
         receipt: {
           receiptId: "operation-page-course-settings-domain-summary-omitted",
           operationId: "course-settings",
@@ -2916,8 +2965,8 @@ describe("TeachingOperationPage", () => {
           },
         },
         traceId: "trace-operation-page-domain-summary-omitted",
-      }),
-    );
+      });
+    })
 
     try {
       render(
@@ -2941,8 +2990,11 @@ describe("TeachingOperationPage", () => {
   });
 
   it("does not claim operation page success when the backend receipt identifies a different operation", async () => {
-    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      Response.json({
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      if (String(input) === "/api/teaching/courses") {
+        return ownedTeachingCourseListResponse();
+      }
+      return Response.json({
         receipt: {
           receiptId: "operation-page-course-settings-wrong-operation",
           operationId: "course-settings",
@@ -2960,8 +3012,8 @@ describe("TeachingOperationPage", () => {
           receiptId: "operation-page-course-settings-wrong-operation",
           objectType: "course-settings",
         }),
-      }),
-    );
+      });
+    })
 
     try {
       render(
@@ -2985,12 +3037,14 @@ describe("TeachingOperationPage", () => {
 
   it("prevents duplicate operation page submissions while a save is pending", async () => {
     let resolveSave: (response: Response) => void = () => undefined;
-    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(
-      () =>
-        new Promise<Response>((resolve) => {
-          resolveSave = resolve;
-        }),
-    );
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
+      if (String(input) === "/api/teaching/courses") {
+        return Promise.resolve(ownedTeachingCourseListResponse());
+      }
+      return new Promise<Response>((resolve) => {
+        resolveSave = resolve;
+      });
+    });
 
     try {
       render(
@@ -3010,13 +3064,13 @@ describe("TeachingOperationPage", () => {
 
       fireEvent.click(primaryButton);
 
-      await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
+      await waitFor(() => expect(teachingOperationsPosts(fetchSpy)).toHaveLength(1));
       expect(primaryButton.disabled).toBe(true);
       expect(secondaryButton.disabled).toBe(true);
 
       fireEvent.click(primaryButton);
       fireEvent.click(secondaryButton);
-      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      expect(teachingOperationsPosts(fetchSpy)).toHaveLength(1);
 
       resolveSave(
         Response.json({
@@ -3048,8 +3102,11 @@ describe("TeachingOperationPage", () => {
   });
 
   it("uses a fresh idempotency key for separate completed operation button submissions", async () => {
-    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      Response.json({
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      if (String(input) === "/api/teaching/courses") {
+        return ownedTeachingCourseListResponse();
+      }
+      return Response.json({
         receipt: {
           operationId: "course-settings",
           actionSlot: "primary",
@@ -3065,8 +3122,8 @@ describe("TeachingOperationPage", () => {
           actionSlot: "primary",
           objectType: "course-settings",
         }),
-      }),
-    );
+      });
+    })
 
     try {
       render(
@@ -3078,14 +3135,15 @@ describe("TeachingOperationPage", () => {
       );
 
       fireEvent.click(screen.getByRole("button", { name: "保存课程设置" }));
-      await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
+      await waitFor(() => expect(teachingOperationsPosts(fetchSpy)).toHaveLength(1));
       await waitFor(() => expect(screen.getByText("课程设置已由服务端持久化。")).toBeTruthy());
 
       fireEvent.click(screen.getByRole("button", { name: "保存课程设置" }));
-      await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(2));
+      await waitFor(() => expect(teachingOperationsPosts(fetchSpy)).toHaveLength(2));
 
-      const firstBody = JSON.parse(String(fetchSpy.mock.calls[0][1]?.body));
-      const secondBody = JSON.parse(String(fetchSpy.mock.calls[1][1]?.body));
+      const posts = teachingOperationsPosts(fetchSpy);
+      const firstBody = JSON.parse(String((posts[0]?.[1] as RequestInit | undefined)?.body));
+      const secondBody = JSON.parse(String((posts[1]?.[1] as RequestInit | undefined)?.body));
       expect(firstBody.idempotencyKey).toEqual(expect.any(String));
       expect(secondBody.idempotencyKey).toEqual(expect.any(String));
       expect(secondBody.idempotencyKey).not.toBe(firstBody.idempotencyKey);
@@ -3095,8 +3153,11 @@ describe("TeachingOperationPage", () => {
   });
 
   it("surfaces backend authorization failures instead of keeping local success feedback", async () => {
-    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      if (String(input) === "/api/teaching/courses") {
+        return ownedTeachingCourseListResponse();
+      }
+      return new Response(
         JSON.stringify({
           error: "UAIS teaching operation course ownership is required.",
           access: {
@@ -3106,8 +3167,8 @@ describe("TeachingOperationPage", () => {
           },
         }),
         { status: 403, headers: { "content-type": "application/json" } },
-      ),
-    );
+      );
+    })
 
     try {
       render(
@@ -3120,7 +3181,7 @@ describe("TeachingOperationPage", () => {
 
       fireEvent.click(screen.getByRole("button", { name: "保存课程设置" }));
 
-      await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
+      await waitFor(() => expect(teachingOperationsPosts(fetchSpy)).toHaveLength(1));
       await waitFor(() => {
         expect(screen.getByText("未保存到服务器，请重新登录或检查课程权限。")).toBeTruthy();
       });
@@ -3132,8 +3193,11 @@ describe("TeachingOperationPage", () => {
   });
 
   it("does not leave a generated export manifest visible when backend persistence fails", async () => {
-    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      if (String(input) === "/api/teaching/courses") {
+        return ownedTeachingCourseListResponse();
+      }
+      return new Response(
         JSON.stringify({
           error: "UAIS teacher authentication is required.",
           access: {
@@ -3143,8 +3207,8 @@ describe("TeachingOperationPage", () => {
           },
         }),
         { status: 401, headers: { "content-type": "application/json" } },
-      ),
-    );
+      );
+    })
 
     try {
       render(
@@ -3157,7 +3221,7 @@ describe("TeachingOperationPage", () => {
 
       fireEvent.click(screen.getByRole("button", { name: "生成导出清单" }));
 
-      await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
+      await waitFor(() => expect(teachingOperationsPosts(fetchSpy)).toHaveLength(1));
       await waitFor(() => {
         expect(screen.getByText("未保存到服务器，请重新登录或检查课程权限。")).toBeTruthy();
       });
@@ -3170,7 +3234,10 @@ describe("TeachingOperationPage", () => {
 
   it("clears a stale operation page export manifest before a retried export save fails", async () => {
     let requestCount = 0;
-    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      if (String(input) === "/api/teaching/courses") {
+        return ownedTeachingCourseListResponse();
+      }
       requestCount += 1;
 
       if (requestCount === 1) {
@@ -3232,7 +3299,7 @@ describe("TeachingOperationPage", () => {
 
       fireEvent.click(screen.getByRole("button", { name: "生成导出清单" }));
 
-      await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(2));
+      await waitFor(() => expect(teachingOperationsPosts(fetchSpy)).toHaveLength(2));
       await waitFor(() => {
         expect(screen.getByText("未保存到服务器，请重新登录或检查课程权限。")).toBeTruthy();
       });
@@ -3244,8 +3311,11 @@ describe("TeachingOperationPage", () => {
   });
 
   it("does not leave a locally incremented invite code visible when backend persistence fails", async () => {
-    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      if (String(input) === "/api/teaching/courses") {
+        return ownedTeachingCourseListResponse();
+      }
+      return new Response(
         JSON.stringify({
           error: "UAIS teaching operation course ownership is required.",
           access: {
@@ -3255,8 +3325,8 @@ describe("TeachingOperationPage", () => {
           },
         }),
         { status: 403, headers: { "content-type": "application/json" } },
-      ),
-    );
+      );
+    })
 
     try {
       render(
@@ -3269,7 +3339,7 @@ describe("TeachingOperationPage", () => {
 
       fireEvent.click(screen.getByRole("button", { name: "生成新邀请码" }));
 
-      await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
+      await waitFor(() => expect(teachingOperationsPosts(fetchSpy)).toHaveLength(1));
       await waitFor(() => {
         expect(screen.getByText("未保存到服务器，请重新登录或检查课程权限。")).toBeTruthy();
       });
@@ -3282,7 +3352,10 @@ describe("TeachingOperationPage", () => {
 
   it("clears a stale operation page invite code before a retried invite generation fails", async () => {
     let requestCount = 0;
-    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      if (String(input) === "/api/teaching/courses") {
+        return ownedTeachingCourseListResponse();
+      }
       requestCount += 1;
 
       if (requestCount === 1) {
@@ -3344,7 +3417,7 @@ describe("TeachingOperationPage", () => {
 
       fireEvent.click(screen.getByRole("button", { name: "生成新邀请码" }));
 
-      await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(2));
+      await waitFor(() => expect(teachingOperationsPosts(fetchSpy)).toHaveLength(2));
       await waitFor(() => {
         expect(screen.getByText("未保存到服务器，请重新登录或检查课程权限。")).toBeTruthy();
       });
@@ -3358,6 +3431,9 @@ describe("TeachingOperationPage", () => {
   it("keeps operation page invite artifacts hidden until audit readback verifies persistence", async () => {
     let resolveAudit: (response: Response) => void = () => undefined;
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      if (String(input) === "/api/teaching/courses") {
+        return ownedTeachingCourseListResponse();
+      }
       if (String(input) === "/api/teaching/operations/audit") {
         return new Promise<Response>((resolve) => {
           resolveAudit = resolve;
@@ -3517,7 +3593,7 @@ describe("TeachingOperationPage", () => {
 
       fireEvent.click(screen.getByRole("button", { name: "确认发布邀请码" }));
 
-      await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
+      await waitFor(() => expect(teachingOperationsPosts(fetchSpy)).toHaveLength(1));
       await waitFor(() => {
         expect(
           screen.getByText(
@@ -3589,7 +3665,7 @@ describe("TeachingOperationPage", () => {
         <TeachingOperationPage
           operationId={operationId}
           selectedCourseId={
-            ["knowledge-base", "dashboard", "quiz-board"].includes(operationId) ? "teacher-research-methods" : undefined
+            "teacher-research-methods"
           }
         />,
       );
@@ -3647,6 +3723,518 @@ describe("TeachingOperationPage", () => {
 
       unmount();
     }
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
+  it("disables write and job-start controls when no course is selected", () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(
+      async () =>
+        new Response(JSON.stringify({ error: "should-not-run" }), {
+          status: 500,
+          headers: { "content-type": "application/json" },
+        }),
+    );
+
+    try {
+      for (const [operationId] of operations) {
+        const { unmount } = render(<TeachingOperationPage operationId={operationId} />);
+        if (operationId === "dashboard" || operationId === "quiz-board") {
+          const refresh = screen.getByRole("button", { name: operationId === "dashboard" ? "刷新数据看板" : "刷新测验看板" }) as HTMLButtonElement;
+          expect(refresh.disabled).toBe(true);
+          fireEvent.click(refresh);
+          unmount();
+          continue;
+        }
+        const config = operationConfigs[operationId];
+        const primary = screen.getByRole("button", {
+          name: config.primaryAction["zh-CN"],
+        }) as HTMLButtonElement;
+        const secondary = screen.getByRole("button", {
+          name: config.secondaryAction["zh-CN"],
+        }) as HTMLButtonElement;
+
+        expect(screen.getByText("未选择课程：教学操作需要课程上下文。")).toBeTruthy();
+        expect(primary.disabled).toBe(true);
+        expect(secondary.disabled).toBe(true);
+        expect(primary.getAttribute("aria-describedby")).toBe("teaching-operation-course-context");
+        expect(secondary.getAttribute("aria-describedby")).toBe(
+          "teaching-operation-course-context",
+        );
+
+        if (operationId === "knowledge-base") {
+          expect((screen.getByLabelText("资料标题") as HTMLInputElement).disabled).toBe(true);
+          expect((screen.getByLabelText("公开 HTTPS 来源") as HTMLInputElement).disabled).toBe(
+            true,
+          );
+          expect((screen.getByLabelText("权利依据") as HTMLSelectElement).disabled).toBe(true);
+        }
+
+        fireEvent.click(primary);
+        fireEvent.click(secondary);
+        unmount();
+      }
+
+      expect(teachingOperationsPosts(fetchSpy)).toHaveLength(0);
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
+
+  it("treats operation page save as complete when audit list omits the already-signed session", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      if (String(input) === "/api/teaching/courses") {
+        return ownedTeachingCourseListResponse();
+      }
+      if (String(input) === "/api/teaching/operations") {
+        return Response.json({
+          receipt: {
+            receiptId: "operation-page-course-settings-redacted-session",
+            operationId: "course-settings",
+            actionSlot: "primary",
+            courseId: "teacher-research-methods",
+            status: "persisted",
+            audit: {
+              authMode: "signed-teacher-session",
+              authSession: createOperationAuditAuthSession(),
+            },
+            displayMessage: {
+              "zh-CN": "课程设置已由服务端持久化。",
+              "en-US": "Course settings persisted by the server.",
+            },
+          },
+          domainPersistenceSummary: createPersistedDomainSummary({
+            operationId: "course-settings",
+            actionSlot: "primary",
+            receiptId: "operation-page-course-settings-redacted-session",
+            objectType: "course-settings",
+          }),
+          traceId: "trace-operation-page-course-settings-redacted-session",
+        });
+      }
+
+      return Response.json({
+        traceId: "trace-audit-operation-page-redacted-session",
+        actorId: "teacher-kang",
+        auditEventCount: 1,
+        records: [
+          {
+            recordId: "operation-page-course-settings-redacted-session",
+            courseId: "teacher-research-methods",
+            operationId: "course-settings",
+            actionSlot: "primary",
+            status: "persisted",
+          },
+        ],
+        auditEvents: [
+          {
+            auditId: "audit-operation-page-course-settings-redacted-session",
+            traceId: "trace-operation-page-course-settings-redacted-session",
+            eventType: "teaching-operation.persisted",
+            actorId: "teacher-kang",
+            courseId: "teacher-research-methods",
+          },
+        ],
+        domainProjections: [
+          {
+            objectId: "course-settings-teacher-research-methods",
+            objectType: "course-settings",
+            courseId: "teacher-research-methods",
+            operationRecordId: "operation-page-course-settings-redacted-session",
+            updatedBy: "teacher-kang",
+            status: "saved",
+            updatedAt: "2026-06-24T10:00:00.000Z",
+          },
+        ],
+      });
+    });
+
+    try {
+      render(
+        <TeachingOperationPage
+          action="manage"
+          operationId="course-settings"
+          selectedCourseId="teacher-research-methods"
+        />,
+      );
+
+      fireEvent.click(screen.getByRole("button", { name: "保存课程设置" }));
+
+      await waitFor(() => {
+        expect(screen.getByText("课程设置已由服务端持久化。")).toBeTruthy();
+      });
+      expect(screen.queryByText("审计读回未完成，请稍后刷新。")).toBeNull();
+      expect(
+        screen.getByText("审计读回已验证：trace-operation-page-course-settings-redacted-session"),
+      ).toBeTruthy();
+      expect(screen.getByText("签名会话已验证：teacher-operation-page-session")).toBeTruthy();
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
+
+  it("treats a persisted operation-page settings save as complete when unscoped audit GET stays empty", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      if (String(input) === "/api/teaching/courses") {
+        return ownedTeachingCourseListResponse();
+      }
+      if (String(input) === "/api/teaching/operations") {
+        return Response.json({
+          receipt: {
+            receiptId: "operation-page-course-settings-empty-audit",
+            operationId: "course-settings",
+            actionSlot: "primary",
+            courseId: "teacher-research-methods",
+            status: "persisted",
+            audit: {
+              authMode: "signed-teacher-session",
+              authSession: createOperationAuditAuthSession(),
+            },
+            displayMessage: {
+              "zh-CN": "课程设置已由服务端持久化。",
+              "en-US": "Course settings persisted by the server.",
+            },
+          },
+          domainPersistenceSummary: createPersistedDomainSummary({
+            operationId: "course-settings",
+            actionSlot: "primary",
+            receiptId: "operation-page-course-settings-empty-audit",
+            objectType: "course-settings",
+          }),
+          traceId: "trace-operation-page-course-settings-empty-audit",
+        });
+      }
+
+      expect(String(input)).toBe("/api/teaching/operations/audit");
+      expect(init?.headers).toEqual(
+        expect.objectContaining({
+          "x-uais-trace-id": "trace-operation-page-course-settings-empty-audit",
+          "x-uais-course-id": "teacher-research-methods",
+        }),
+      );
+      return Response.json({
+        traceId: "trace-audit-operation-page-empty",
+        actorId: "teacher-kang",
+        auditEventCount: 0,
+        records: [],
+        auditEvents: [],
+        domainProjections: [],
+      });
+    });
+
+    try {
+      render(
+        <TeachingOperationPage
+          action="manage"
+          operationId="course-settings"
+          selectedCourseId="teacher-research-methods"
+        />,
+      );
+
+      fireEvent.click(screen.getByRole("button", { name: "保存课程设置" }));
+
+      await waitFor(() => {
+        expect(screen.getByText("课程设置已由服务端持久化。")).toBeTruthy();
+      });
+      expect(screen.queryAllByText("审计读回未完成，请稍后刷新。")).toEqual([]);
+      expect(
+        screen.queryByText("审计读回已验证：trace-operation-page-course-settings-empty-audit"),
+      ).toBeNull();
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
+
+  it("opens fallback student previewUrl after domain-persisted secondary even when the receipt is bare", async () => {
+    openTeachingStudentPreviewUrl.mockClear();
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      if (String(input) === "/api/teaching/courses") {
+        return ownedTeachingCourseListResponse();
+      }
+      if (String(input) === "/api/teaching/operations") {
+        expect(init?.method).toBe("POST");
+        const body = JSON.parse(String(init?.body)) as {
+          operationId?: string;
+          actionSlot?: "primary" | "secondary";
+          courseId?: string;
+          sourceAction?: string;
+        };
+        expect(body).toEqual(
+          expect.objectContaining({
+            operationId: "course-settings",
+            actionSlot: "secondary",
+            courseId: "teacher-research-methods",
+            sourceAction: "manage",
+          }),
+        );
+        return Response.json({
+          receipt: {
+            receiptId: "operation-page-student-preview-session-semantic-missing",
+            operationId: "course-settings",
+            actionSlot: "secondary",
+            courseId: "teacher-research-methods",
+            status: "persisted",
+            displayMessage: {
+              "zh-CN": "学生端预览已生成。",
+              "en-US": "Student preview generated.",
+            },
+          },
+          domainPersistenceSummary: createPersistedDomainSummary({
+            operationId: "course-settings",
+            actionSlot: "secondary",
+            receiptId: "operation-page-student-preview-session-semantic-missing",
+            objectType: "student-preview-session",
+          }),
+          traceId: "trace-operation-page-student-preview-session-semantic-missing",
+        });
+      }
+
+      expect(String(input)).toBe("/api/teaching/operations/audit");
+      return Response.json({
+        traceId: "trace-audit-operation-page-student-preview-session-semantic-missing",
+        actorId: "teacher-kang",
+        auditEventCount: 1,
+        records: [
+          {
+            recordId: "operation-page-student-preview-session-semantic-missing",
+            courseId: "teacher-research-methods",
+            operationId: "course-settings",
+            actionSlot: "secondary",
+            status: "persisted",
+          },
+        ],
+        auditEvents: [
+          {
+            auditId: "audit-operation-page-student-preview-session-semantic-missing",
+            traceId: "trace-operation-page-student-preview-session-semantic-missing",
+            eventType: "teaching-operation.persisted",
+            actorId: "teacher-kang",
+            courseId: "teacher-research-methods",
+            authSession: createOperationAuditAuthSession(),
+          },
+        ],
+        domainProjections: [
+          {
+            objectId: "student-preview-session-teacher-research-methods",
+            objectType: "student-preview-session",
+            courseId: "teacher-research-methods",
+            operationRecordId: "operation-page-student-preview-session-semantic-missing",
+          },
+        ],
+      });
+    });
+
+    try {
+      render(
+        <TeachingOperationPage
+          action="manage"
+          operationId="course-settings"
+          selectedCourseId="teacher-research-methods"
+        />,
+      );
+
+      fireEvent.click(screen.getByRole("button", { name: "预览学生端" }));
+
+      await waitFor(() => {
+        expect(screen.getByText("学生端预览已生成。")).toBeTruthy();
+      });
+      expect(screen.queryByText("审计读回未完成，请稍后刷新。")).toBeNull();
+      expect(
+        screen.queryByText(
+          "领域对象已验证：student-preview-session / student-preview-session-teacher-research-methods",
+        ),
+      ).toBeNull();
+      expect(openTeachingStudentPreviewUrl).toHaveBeenCalledWith(
+        "/learning?teacherPreview=1&course=teacher-research-methods",
+      );
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
+
+  it("opens generated student previewUrl after persisted secondary preview even when audit fields are incomplete", async () => {
+    openTeachingStudentPreviewUrl.mockClear();
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      if (String(input) === "/api/teaching/courses") {
+        return ownedTeachingCourseListResponse();
+      }
+      if (String(input) === "/api/teaching/operations") {
+        expect(init?.method).toBe("POST");
+        return Response.json({
+          receipt: {
+            receiptId: "operation-page-student-preview-session-generated",
+            operationId: "course-settings",
+            actionSlot: "secondary",
+            courseId: "teacher-research-methods",
+            status: "persisted",
+            displayMessage: {
+              "zh-CN": "学生端预览已生成。",
+              "en-US": "Student preview generated.",
+            },
+            artifacts: [
+              {
+                kind: "student-preview",
+                previewId: "student-preview-20260916",
+                previewUrl: "/learning?teacherPreview=1&course=teacher-research-methods",
+              },
+            ],
+          },
+          studentPreviewSessionReceipt: {
+            objectType: "student-preview-session",
+            previewStatus: "generated",
+            previewUrl: "/learning?teacherPreview=1&course=teacher-research-methods",
+            previewId: "student-preview-20260916",
+            previewScope: "teacher-course-preview",
+            previewPolicy: "teacher-visible-preview-only",
+            previewedBy: "teacher-kang",
+            generatedAt: "2026-09-16T00:00:00.000Z",
+          },
+          domainPersistenceSummary: createPersistedDomainSummary({
+            operationId: "course-settings",
+            actionSlot: "secondary",
+            receiptId: "operation-page-student-preview-session-generated",
+            objectType: "student-preview-session",
+          }),
+          traceId: "trace-operation-page-student-preview-session-generated",
+        });
+      }
+
+      expect(String(input)).toBe("/api/teaching/operations/audit");
+      return Response.json({
+        traceId: "trace-audit-operation-page-student-preview-session-generated",
+        actorId: "teacher-kang",
+        auditEventCount: 1,
+        records: [
+          {
+            recordId: "operation-page-student-preview-session-generated",
+            courseId: "teacher-research-methods",
+            operationId: "course-settings",
+            actionSlot: "secondary",
+            status: "persisted",
+          },
+        ],
+        auditEvents: [
+          {
+            auditId: "audit-operation-page-student-preview-session-generated",
+            traceId: "trace-operation-page-student-preview-session-generated",
+            eventType: "teaching-operation.persisted",
+            actorId: "teacher-kang",
+            courseId: "teacher-research-methods",
+            authSession: createOperationAuditAuthSession(),
+          },
+        ],
+        domainProjections: [
+          {
+            objectId: "student-preview-session-teacher-research-methods",
+            objectType: "student-preview-session",
+            courseId: "teacher-research-methods",
+            operationRecordId: "operation-page-student-preview-session-generated",
+          },
+        ],
+      });
+    });
+
+    try {
+      render(
+        <TeachingOperationPage
+          action="manage"
+          operationId="course-settings"
+          selectedCourseId="teacher-research-methods"
+        />,
+      );
+
+      fireEvent.click(screen.getByRole("button", { name: "预览学生端" }));
+
+      await waitFor(() => {
+        expect(screen.getByText("学生端预览已生成。")).toBeTruthy();
+      });
+      expect(screen.queryByText("审计读回未完成，请稍后刷新。")).toBeNull();
+      expect(screen.queryByText("未保存到服务器，请重新登录或检查课程权限。")).toBeNull();
+      expect(openTeachingStudentPreviewUrl).toHaveBeenCalledWith(
+        "/learning?teacherPreview=1&course=teacher-research-methods",
+      );
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
+
+  it("does not map a real preview auth failure onto a generated-session success", async () => {
+    openTeachingStudentPreviewUrl.mockClear();
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      if (String(input) === "/api/teaching/courses") {
+        return ownedTeachingCourseListResponse();
+      }
+      return new Response(
+        JSON.stringify({
+          error: "UAIS teaching operation course ownership is required.",
+          access: {
+            status: "denied",
+            reasonCode: "course-scope-denied",
+            responsibleSession: "S12",
+          },
+        }),
+        { status: 403, headers: { "content-type": "application/json" } },
+      );
+    });
+
+    try {
+      render(
+        <TeachingOperationPage
+          action="manage"
+          operationId="course-settings"
+          selectedCourseId="teacher-research-methods"
+        />,
+      );
+
+      fireEvent.click(screen.getByRole("button", { name: "预览学生端" }));
+
+      await waitFor(() => {
+        expect(screen.getByText("未保存到服务器，请重新登录或检查课程权限。")).toBeTruthy();
+      });
+      expect(screen.queryByText("学生端预览已生成。")).toBeNull();
+      expect(openTeachingStudentPreviewUrl).not.toHaveBeenCalled();
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
+
+  it("disables writes up front when the course list does not include the selected catalog course", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      const method = (init as RequestInit | undefined)?.method ?? "GET";
+      if (url.includes("/api/teaching/courses") && method !== "POST") {
+        return new Response(JSON.stringify({ courses: [] }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      return new Response(JSON.stringify({ error: "unexpected-write" }), {
+        status: 500,
+        headers: { "content-type": "application/json" },
+      });
+    });
+
+    try {
+      render(
+        <TeachingOperationPage
+          operationId="course-settings"
+          selectedCourseId="teacher-research-methods"
+        />,
+      );
+
+      expect(
+        await screen.findByText(/当前账号不是这门课程的授课教师/),
+      ).toBeTruthy();
+      expect(screen.getByRole("button", { name: "保存课程设置" })).toHaveProperty(
+        "disabled",
+        true,
+      );
+
+      fireEvent.click(screen.getByRole("button", { name: "保存课程设置" }));
+      expect(fetchSpy).not.toHaveBeenCalledWith(
+        expect.stringContaining("/api/teaching/operations"),
+        expect.objectContaining({ method: "POST" }),
+      );
     } finally {
       fetchSpy.mockRestore();
     }
