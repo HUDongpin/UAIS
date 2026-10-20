@@ -708,6 +708,9 @@ function LearningCompanionPanel({
   const [pendingGuideAgentId, setPendingGuideAgentId] =
     useState<LearningAiGuideAgentId | "multi-agent" | null>(null);
   const [expandedCheckpointId, setExpandedCheckpointId] = useState<string>();
+  const [subtitleQuery, setSubtitleQuery] = useState("");
+  const [currentPageSubtitlesOnly, setCurrentPageSubtitlesOnly] = useState(false);
+  const subtitleCopy = copy[locale].learning.subtitles;
   const guideRequestCounterRef = useRef(0);
   const guideInputRef = useRef<HTMLInputElement | null>(null);
   const guideTranscriptRef = useRef<HTMLDivElement | null>(null);
@@ -738,6 +741,14 @@ function LearningCompanionPanel({
       // education course, with fabricated timestamps that made them look like a
       // real recording. The panel renders an empty state instead.
       [];
+  const normalizedSubtitleQuery = subtitleQuery.trim().toLocaleLowerCase(locale);
+  const visibleTranscript = transcript.filter(
+    (line) =>
+      (!currentPageSubtitlesOnly || line.active) &&
+      [line.text, line.title, line.time].some((value) =>
+        value.toLocaleLowerCase(locale).includes(normalizedSubtitleQuery),
+      ),
+  );
 
   const primaryTabs = [
     { view: "ai" as const, label: locale === "zh-CN" ? "智能导学" : "AI Guide" },
@@ -1228,13 +1239,18 @@ function LearningCompanionPanel({
                     : "No subtitles yet. Narration text appears here once a lesson is published."}
                 </p>
               ) : null}
+              {transcript.length > 0 && visibleTranscript.length === 0 ? (
+                <p role="status" className="px-2 py-6 text-center text-sm leading-6 text-[var(--muted)]">
+                  {subtitleCopy.noMatches}
+                </p>
+              ) : null}
               {/*
                 Every row is now a real published slide, so every row is
                 clickable. The previous `isPublishedLine` branch existed only to
                 render the fabricated timestamped rows as inert <div>s; with
                 those gone it narrowed to `never`.
               */}
-              {transcript.map((line) => {
+              {visibleTranscript.map((line) => {
                 const rowClassName = [
                   "grid w-full grid-cols-[72px_minmax(0,1fr)] gap-3 rounded-lg px-2 py-1 text-left text-sm leading-6 outline-none transition hover:bg-[var(--accent-soft)] focus-visible:ring-2 focus-visible:ring-[var(--accent)]",
                   line.active ? "bg-[var(--accent-soft)] text-[var(--accent)]" : "text-[var(--muted)]",
@@ -1265,14 +1281,43 @@ function LearningCompanionPanel({
             </div>
             <div className="mt-5 flex items-center gap-2">
               <input
-                aria-label={locale === "zh-CN" ? "搜索当前页字幕" : "Search subtitles"}
-                placeholder={locale === "zh-CN" ? "搜索当前页字幕" : "Search subtitles"}
-                className="h-11 min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 text-sm outline-none placeholder:text-[var(--placeholder)] focus:ring-2 focus:ring-[var(--accent)]"
+                type="search"
+                aria-label={subtitleCopy.searchLabel}
+                placeholder={subtitleCopy.searchPlaceholder}
+                value={subtitleQuery}
+                onChange={(event) => setSubtitleQuery(event.target.value)}
+                disabled={transcript.length === 0}
+                className="h-11 min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 text-sm outline-none placeholder:text-[var(--placeholder)] focus:ring-2 focus:ring-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-50"
               />
-              <button type="button" className="grid size-11 place-items-center rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--accent)]" aria-label={locale === "zh-CN" ? "筛选字幕" : "Filter subtitles"}>
+              <button
+                type="button"
+                onClick={() => setCurrentPageSubtitlesOnly((current) => !current)}
+                aria-label={subtitleCopy.currentPageOnly}
+                aria-pressed={currentPageSubtitlesOnly}
+                disabled={transcript.length === 0}
+                className={`inline-flex h-11 shrink-0 items-center justify-center gap-1 rounded-lg border px-2 text-xs font-semibold text-[var(--accent)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-50 ${
+                  currentPageSubtitlesOnly
+                    ? "border-[var(--accent)] bg-[var(--accent-soft)]"
+                    : "border-[var(--border)] bg-[var(--surface)]"
+                }`}
+              >
                 <SlidersHorizontal size={18} weight="duotone" />
+                <span>{subtitleCopy.currentPageLabel}</span>
               </button>
             </div>
+            {subtitleQuery || currentPageSubtitlesOnly ? (
+              <button
+                type="button"
+                aria-label={subtitleCopy.resetFilters}
+                onClick={() => {
+                  setSubtitleQuery("");
+                  setCurrentPageSubtitlesOnly(false);
+                }}
+                className="mt-1 min-h-11 rounded-lg px-2 text-sm text-[var(--accent)] outline-none hover:underline focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+              >
+                {subtitleCopy.resetLabel}
+              </button>
+            ) : null}
           </div>
           ) : null}
 

@@ -76,6 +76,15 @@ export const copy = {
     learning: {
       title: "我的学习",
       summary: "查看已加入课程、当前单元和协作学习记录。",
+      subtitles: {
+        searchLabel: "搜索字幕",
+        searchPlaceholder: "搜索字幕、标题或页码",
+        currentPageLabel: "仅当前页",
+        currentPageOnly: "仅当前页字幕",
+        noMatches: "没有匹配的字幕，请调整关键词或关闭「仅当前页」筛选。",
+        resetFilters: "重置字幕搜索和筛选",
+        resetLabel: "重置",
+      },
       enrolled: "已加入课程",
       chatTitle: "人机协作聊天室",
       chatSummary: "小组成员可以随时 @智能体，围绕研究、方法、数学和写作问题协作。",
@@ -410,6 +419,15 @@ export const copy = {
     learning: {
       title: "My Learning",
       summary: "Review enrolled courses, current units, and collaborative study records.",
+      subtitles: {
+        searchLabel: "Search subtitles",
+        searchPlaceholder: "Search subtitles, titles, or pages",
+        currentPageLabel: "Current page",
+        currentPageOnly: "Current page subtitles only",
+        noMatches: "No matching subtitles. Change your search or turn off the current-page filter.",
+        resetFilters: "Reset subtitle search and filters",
+        resetLabel: "Reset",
+      },
       enrolled: "Enrolled Courses",
       chatTitle: "Human-AI Collaboration Chatroom",
       chatSummary:
