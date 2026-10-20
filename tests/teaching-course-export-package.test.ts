@@ -47,6 +47,49 @@ afterEach(() => {
 });
 
 describe("real teaching course export packages", () => {
+  it.each(["pptx", "classroom-zip"] as const)("binds click-to-play timing to each embedded audio shape in %s", async (format) => {
+    const output = await createTeachingCourseExportPackage({
+      source: { ...source, slides: [
+        source.slides[0],
+        { ...source.slides[1], audio: source.slides[0].audio },
+        source.slides[1],
+      ] },
+      format, locale: "en-US", now,
+    });
+    const packageZip = await JSZip.loadAsync(output.bytes);
+    const deck = format === "pptx" ? packageZip
+      : await JSZip.loadAsync(await packageZip.file("classroom.pptx")!.async("nodebuffer"));
+    for (const index of [1, 2]) {
+      const xml = new DOMParser().parseFromString(
+        await deck.file(`ppt/slides/slide${index}.xml`)!.async("string"), "application/xml",
+      );
+      expect(xml.getElementsByTagName("parsererror")).toHaveLength(0);
+      const audioShape = Array.from(xml.getElementsByTagName("p:pic"))
+        .find((picture) => picture.getElementsByTagName("p14:media").length)!;
+      const shapeId = audioShape.getElementsByTagName("p:cNvPr")[0].getAttribute("id");
+      expect(audioShape.getElementsByTagName("a:audioFile")).toHaveLength(1);
+      expect(audioShape.getElementsByTagName("a:videoFile")).toHaveLength(0);
+      const timing = xml.getElementsByTagName("p:timing")[0];
+      expect(timing).toBeDefined();
+      const trigger = Array.from(timing.getElementsByTagName("p:cTn"))
+        .find((node) => node.getAttribute("nodeType") === "interactiveSeq")!;
+      expect(trigger.getAttribute("evtFilter")).toBe("cancelBubble");
+      const condition = trigger.getElementsByTagName("p:stCondLst")[0].getElementsByTagName("p:cond")[0];
+      expect(condition.getAttribute("evt")).toBe("onClick");
+      expect(condition.getElementsByTagName("p:spTgt")[0].getAttribute("spid")).toBe(shapeId);
+      const command = timing.getElementsByTagName("p:cmd")[0];
+      expect(command.getAttribute("cmd")).toBe("playFrom(0.0)");
+      expect(command.getElementsByTagName("p:spTgt")[0].getAttribute("spid")).toBe(shapeId);
+      const mediaNode = timing.getElementsByTagName("p:audio")[0];
+      expect(mediaNode.getElementsByTagName("p:spTgt")[0].getAttribute("spid")).toBe(shapeId);
+      expect(mediaNode.getElementsByTagName("p:cond")[0].getAttribute("delay")).toBe("indefinite");
+      const ids = Array.from(timing.getElementsByTagName("p:cTn")).map((node) => node.getAttribute("id"));
+      expect(new Set(ids).size).toBe(ids.length);
+    }
+    const silentSlide = await deck.file("ppt/slides/slide3.xml")!.async("string");
+    expect(silentSlide).not.toContain("<p:timing>");
+  });
+
   it("creates an OOXML PPTX with ordered real slide content, image bytes, embedded WAV and complete speaker notes", async () => {
     const output = await createTeachingCourseExportPackage({ source, format: "pptx", locale: "en-US", now });
     expect(output.contentType).toBe("application/vnd.openxmlformats-officedocument.presentationml.presentation");

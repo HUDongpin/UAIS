@@ -41,6 +41,63 @@ function conciseText(text: string, limit: number) {
   return preview.length > limit ? `${preview.slice(0, limit).trimEnd()}…` : preview;
 }
 
+async function addAudioClickTiming(bytes: Buffer, source: TeachingCourseExportSource) {
+  if (!source.slides.some((slide) => slide.audio)) return bytes;
+  const archive = await JSZip.loadAsync(bytes);
+  for (const [index, content] of source.slides.entries()) {
+    if (!content.audio) continue;
+    const path = `ppt/slides/slide${index + 1}.xml`;
+    const xml = await archive.file(path)!.async("string");
+    // PptxGenJS embeds the WAV as videoFile and omits the slideshow trigger.
+    // Match our generated media picture, whose ID varies with slide content.
+    const media = xml.match(/<p:pic>[\s\S]*?<\/p:pic>/g)
+      ?.find((picture) => picture.includes("<p14:media "));
+    const shapeId = media?.match(/<p:cNvPr id="(\d+)"/)?.[1];
+    if (!shapeId || xml.includes("<p:timing")) {
+      throw new Error("PPTX audio timing could not be bound to its media shape.");
+    }
+    const target = `<p:tgtEl><p:spTgt spid="${shapeId}"/></p:tgtEl>`;
+    const duration = content.durationSeconds && Number.isFinite(content.durationSeconds) && content.durationSeconds > 0
+      ? Math.max(1, Math.round(content.durationSeconds * 1000)) : "indefinite";
+    // PowerPoint's native "When Clicked On" sequence: consume the icon click,
+    // play this shape, and leave narration idle until explicitly requested.
+    const timing = `<p:timing><p:tnLst><p:par>
+      <p:cTn id="1" dur="indefinite" restart="never" nodeType="tmRoot"><p:childTnLst>
+        <p:seq concurrent="1" nextAc="seek">
+          <p:cTn id="2" restart="whenNotActive" fill="hold" evtFilter="cancelBubble" nodeType="interactiveSeq">
+            <p:stCondLst><p:cond evt="onClick" delay="0">${target}</p:cond></p:stCondLst>
+            <p:endSync evt="end" delay="0"><p:rtn val="all"/></p:endSync>
+            <p:childTnLst><p:par><p:cTn id="3" fill="hold">
+              <p:stCondLst><p:cond delay="0"/></p:stCondLst>
+              <p:childTnLst><p:par><p:cTn id="4" fill="hold">
+                <p:stCondLst><p:cond delay="0"/></p:stCondLst>
+                <p:childTnLst><p:par>
+                  <p:cTn id="5" presetID="1" presetClass="mediacall" presetSubtype="0" fill="hold" nodeType="clickEffect">
+                    <p:stCondLst><p:cond delay="0"/></p:stCondLst>
+                    <p:childTnLst><p:cmd type="call" cmd="playFrom(0.0)"><p:cBhvr>
+                      <p:cTn id="6" dur="${duration}" fill="hold"/>${target}
+                    </p:cBhvr></p:cmd></p:childTnLst>
+                  </p:cTn>
+                </p:par></p:childTnLst>
+              </p:cTn></p:par></p:childTnLst>
+            </p:cTn></p:par></p:childTnLst>
+          </p:cTn>
+          <p:nextCondLst><p:cond evt="onClick" delay="0">${target}</p:cond></p:nextCondLst>
+        </p:seq>
+        <p:audio><p:cMediaNode>
+          <p:cTn id="7" fill="hold" display="0">
+            <p:stCondLst><p:cond delay="indefinite"/></p:stCondLst>
+            <p:endCondLst><p:cond evt="onStopAudio" delay="0"><p:tgtEl><p:sldTgt/></p:tgtEl></p:cond></p:endCondLst>
+          </p:cTn>${target}
+        </p:cMediaNode></p:audio>
+      </p:childTnLst></p:cTn>
+    </p:par></p:tnLst></p:timing>`;
+    const audioXml = xml.replace(media!, media!.replace("<a:videoFile ", "<a:audioFile "));
+    archive.file(path, audioXml.replace("</p:sld>", `${timing}</p:sld>`));
+  }
+  return archive.generateAsync({ type: "nodebuffer", compression: "DEFLATE" });
+}
+
 async function createPresentation(source: TeachingCourseExportSource, locale: ExportInput["locale"]) {
   const draft = source.sourceKind === "unit-draft" || (!source.sourceKind && Boolean(source.unitDraft));
   const draftLabel = locale === "zh-CN" ? "教学草稿 · 未发布" : "Teaching draft · Unpublished";
@@ -104,7 +161,7 @@ async function createPresentation(source: TeachingCourseExportSource, locale: Ex
   }
   const bytes = await presentation.write({ outputType: "nodebuffer", compression: true });
   if (!Buffer.isBuffer(bytes)) throw new Error("PPTX export did not produce a binary file.");
-  return bytes;
+  return addAudioClickTiming(bytes, source);
 }
 
 function publicDraft(draft: TeachingUnitDraftContent): TeachingUnitDraftContent {
