@@ -649,18 +649,18 @@ export function createTeachingCourseCollaboratorPostgresStore(
               principal.role AS principal_role,
               principal.status AS principal_status,
               owner.id AS owner_user_id,
-              grant.id,
-              grant.course_id,
-              grant.recipient_user_id,
-              grant.recipient_identifier_id,
-              grant.granted_by_user_id,
-              grant.role,
-              grant.scopes,
-              grant.revision,
-              grant.granted_at,
-              grant.expires_at,
-              grant.revoked_at,
-              grant.revoked_by_user_id
+              course_grant.id,
+              course_grant.course_id,
+              course_grant.recipient_user_id,
+              course_grant.recipient_identifier_id,
+              course_grant.granted_by_user_id,
+              course_grant.role,
+              course_grant.scopes,
+              course_grant.revision,
+              course_grant.granted_at,
+              course_grant.expires_at,
+              course_grant.revoked_at,
+              course_grant.revoked_by_user_id
             FROM requested_principal principal
             LEFT JOIN uais_teaching_course_management_snapshots snapshot
               ON snapshot.snapshot_key = ${courseId}
@@ -676,9 +676,9 @@ export function createTeachingCourseCollaboratorPostgresStore(
               ON LOWER(owner.account) = LOWER(course.record->>'ownerTeacherId')
               AND owner.role = 'teacher'
               AND owner.status = 'active'
-            LEFT JOIN uais_course_collaborator_grants grant
-              ON grant.course_id = snapshot.snapshot_key
-              AND grant.recipient_user_id = principal.id
+            LEFT JOIN uais_course_collaborator_grants course_grant
+              ON course_grant.course_id = snapshot.snapshot_key
+              AND course_grant.recipient_user_id = principal.id
             LIMIT 2
           `;
         });

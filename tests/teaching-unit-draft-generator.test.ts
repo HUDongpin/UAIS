@@ -69,6 +69,34 @@ describe("teaching unit content generator", () => {
     expect(String(error)).not.toContain("synthetic-unit-draft-key");
     expect(String(error)).not.toContain("private-provider-body");
   });
+
+  it("retains only safe provider HTTP diagnostics when generation fails", async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>(async () => Response.json(
+      { error: { message: "private-upstream-response synthetic-unit-draft-key" } },
+      { status: 402 },
+    ));
+    const error = await generateTeachingUnitDraftContent({
+      course, locale: "zh-CN", env: { DEEPSEEK_API_KEY: "synthetic-unit-draft-key" }, fetch,
+    }).catch((failure: unknown) => failure);
+    expect(error).toMatchObject({
+      status: 502,
+      diagnostics: { provider: "deepseek", phase: "provider", providerStatus: 402 },
+    });
+    expect(JSON.stringify(error)).not.toContain("private-upstream-response");
+    expect(JSON.stringify(error)).not.toContain("synthetic-unit-draft-key");
+  });
+
+  it.each([
+    { value: "```json\n{}\n```", phase: "parse" },
+    { value: JSON.stringify({ ...content, questions: [] }), phase: "validation" },
+  ])("distinguishes $phase failures without exposing generated content", async ({ value, phase }) => {
+    const error = await generateTeachingUnitDraftContent({
+      course, locale: "zh-CN", env: { DEEPSEEK_API_KEY: "synthetic-unit-draft-key" },
+      fetch: responseFetch(value),
+    }).catch((failure: unknown) => failure);
+    expect(error).toMatchObject({ status: 502, diagnostics: { provider: "deepseek", phase } });
+    expect(JSON.stringify(error)).not.toContain(value);
+  });
 });
 
 describe("teaching unit draft content validation", () => {

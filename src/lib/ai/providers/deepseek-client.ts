@@ -51,6 +51,13 @@ const DEFAULT_DEEPSEEK_TIMEOUT_MS = 15000;
 // classify a failed agent turn as "timeout" instead of "provider".
 export const deepSeekTimeoutErrorMessage = "DeepSeek request timed out.";
 
+export class DeepSeekHttpError extends Error {
+  constructor(readonly status: number, message: string) {
+    super(message);
+    this.name = "DeepSeekHttpError";
+  }
+}
+
 export function createDeepSeekTextClient(options: DeepSeekTextClientOptions) {
   const fetchImpl = options.fetch ?? fetch;
   const provider = getProviderForRole("text-reasoning");
@@ -90,7 +97,7 @@ export function createDeepSeekTextClient(options: DeepSeekTextClientOptions) {
       // must surface as a clean provider error, never a JSON SyntaxError.
       const body = parseDeepSeekResponseBody(rawBody);
       if (!response.ok) {
-        throw new Error(body?.error?.message ?? "DeepSeek request failed.");
+        throw new DeepSeekHttpError(response.status, body?.error?.message ?? "DeepSeek request failed.");
       }
 
       return {

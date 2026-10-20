@@ -1,4 +1,4 @@
-import { createDeepSeekTextClient } from "@/lib/ai/providers/deepseek-client";
+import { createDeepSeekTextClient, DeepSeekHttpError, deepSeekTimeoutErrorMessage } from "@/lib/ai/providers/deepseek-client";
 import {
   isTeachingUnitDraftContent,
   type TeachingUnitDraftContent,
@@ -20,6 +20,7 @@ export async function generateTeachingUnitDraftContent(input: {
     );
   }
 
+  let phase: "provider" | "parse" | "validation" = "provider";
   try {
     const client = createDeepSeekTextClient({
       apiKey,
@@ -60,16 +61,26 @@ export async function generateTeachingUnitDraftContent(input: {
         },
       ],
     });
+    phase = "parse";
     const parsed: unknown = JSON.parse(result.content);
+    phase = "validation";
     if (!isTeachingUnitDraftContent(parsed)) {
       throw new Error("Incomplete teaching unit content.");
     }
     return parsed;
-  } catch {
+  } catch (error) {
     // Provider errors may include request details. Return a stable error without
     // persisting raw responses or replacing an existing teacher draft.
     throw new TeachingCourseManagementStoreError(
       502, "Teaching unit draft generation failed.",
+      {
+        provider: "deepseek",
+        phase,
+        ...(error instanceof DeepSeekHttpError ? { providerStatus: error.status } : {}),
+        ...(error instanceof Error && error.message === deepSeekTimeoutErrorMessage
+          ? { timeout: true }
+          : {}),
+      },
     );
   }
 }

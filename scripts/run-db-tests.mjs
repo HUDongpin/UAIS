@@ -50,7 +50,7 @@ const testLanes = [
   {
     id: "legacy",
     testFiles: legacyTestFiles,
-    expectedTests: 26,
+    expectedTests: 27,
     useCoreDatabaseAlias: true,
   },
   {
