@@ -161,6 +161,8 @@ function getSelectedStudyToolView(view: CompanionView): StudyToolView {
 type LearningPageProps = {
   initialCourseId?: string;
   initialClassId?: string;
+  initialLessonKey?: string;
+  initialActivityId?: string;
 };
 
 type ApprovedInviteLearningContext = {
@@ -245,7 +247,7 @@ function findApprovedInviteLearningContext(
   };
 }
 
-export function LearningPage({ initialCourseId, initialClassId }: LearningPageProps = {}) {
+export function LearningPage({ initialCourseId, initialClassId, initialLessonKey, initialActivityId }: LearningPageProps = {}) {
   const { locale } = useAppPreferences();
   const sessionUser = useSessionUser();
   const learnerAccount =
@@ -265,7 +267,7 @@ export function LearningPage({ initialCourseId, initialClassId }: LearningPagePr
   } = usePublishedLearningPlayback({ courseId: playbackCourseId, locale });
   const [approvedInviteLearningContext, setApprovedInviteLearningContext] =
     useState<ApprovedInviteLearningContext>();
-  const [activeCompanionView, setActiveCompanionView] = useState<CompanionView>("ai");
+  const [activeCompanionView, setActiveCompanionView] = useState<CompanionView>(initialActivityId ? "practice" : "ai");
   const [studyToolsOpen, setStudyToolsOpen] = useState(false);
   const [guideDraft, setGuideDraft] = useState("");
   const [guideFocusSequence, setGuideFocusSequence] = useState(0);
@@ -545,7 +547,7 @@ export function LearningPage({ initialCourseId, initialClassId }: LearningPagePr
   // from the route's own props rather than `window.location`, so the href is the
   // same string on the server render and on the first client render.
   const playbackSignInHref = createLoginHandoffHref(
-    createLearningReturnPath({ courseId: initialCourseId, classId: initialClassId }),
+    createLearningReturnPath({ courseId: initialCourseId, classId: initialClassId, lessonKey: initialLessonKey, activityId: initialActivityId }),
   );
 
   return (
@@ -650,6 +652,8 @@ export function LearningPage({ initialCourseId, initialClassId }: LearningPagePr
         <LearningCompanionPanel
           locale={locale}
           courseId={selectedCourseId}
+          requestedLessonKey={initialLessonKey}
+          requestedActivityId={initialActivityId}
           approvedInviteContext={visibleApprovedInviteLearningContext}
           playback={playback}
           publishedPlayback={publishedPlayback}
@@ -674,6 +678,8 @@ export function LearningPage({ initialCourseId, initialClassId }: LearningPagePr
 function LearningCompanionPanel({
   locale,
   courseId,
+  requestedLessonKey,
+  requestedActivityId,
   approvedInviteContext,
   playback,
   publishedPlayback,
@@ -692,6 +698,8 @@ function LearningCompanionPanel({
 }: {
   locale: Locale;
   courseId: string;
+  requestedLessonKey?: string;
+  requestedActivityId?: string;
   approvedInviteContext?: { courseId: string; classId: string };
   playback: PlaybackContent;
   publishedPlayback?: LearningPptPlaybackManifest;
@@ -722,6 +730,9 @@ function LearningCompanionPanel({
     selectedCourseId: courseId,
     approvedMembershipCourseId: approvedInviteContext?.courseId,
   });
+  // A calendar task has its own authorized unit read and need not share the
+  // playback manifest's lesson. Keep it bound to the approved requested class.
+  const practiceCourseId = requestedActivityId ? approvedInviteContext?.courseId : eventCourseId;
   const [guideMessages, setGuideMessages] = useState<AiGuideMessage[]>([]);
   const [guideError, setGuideError] = useState("");
   const [activeGuideAgentId, setActiveGuideAgentId] =
@@ -1332,7 +1343,7 @@ function LearningCompanionPanel({
           ) : null}
 
           {!studyToolsOpen && activeView === "practice" ? (
-            coursewareAccessBlocked && publishedPlaybackError ? (
+            !requestedActivityId && coursewareAccessBlocked && publishedPlaybackError ? (
               <PublishedPlaybackAccessNotice
                 locale={locale}
                 error={publishedPlaybackError}
@@ -1340,9 +1351,10 @@ function LearningCompanionPanel({
             ) : (
             <LearningPracticePanel
               locale={locale}
-              courseId={eventCourseId}
-              classId={eventCourseId ? classIdForCourse(eventCourseId) : undefined}
-              lessonKey={publishedPlayback?.learningUnit.lessonKey}
+              courseId={practiceCourseId}
+              classId={practiceCourseId ? classIdForCourse(practiceCourseId) : undefined}
+              lessonKey={requestedLessonKey ?? publishedPlayback?.learningUnit.lessonKey}
+              requestedActivityId={requestedActivityId}
               signInHref={signInHref}
             />
             )

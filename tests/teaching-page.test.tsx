@@ -2678,7 +2678,7 @@ describe("TeachingPage", () => {
 
   it("opens fallback student previewUrl after domain-persisted secondary even when the receipt is bare", async () => {
     const assign = vi.fn();
-    vi.stubGlobal("location", { assign });
+    vi.stubGlobal("location", { assign, hash: "" });
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       if (String(input) === "/api/teaching/operations") {
         expect(init?.method).toBe("POST");
@@ -2789,7 +2789,7 @@ describe("TeachingPage", () => {
 
   it("opens generated student previewUrl after persisted secondary preview even when audit fields are incomplete", async () => {
     const assign = vi.fn();
-    vi.stubGlobal("location", { assign });
+    vi.stubGlobal("location", { assign, hash: "" });
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       if (String(input) === "/api/teaching/operations") {
         expect(init?.method).toBe("POST");
@@ -2911,7 +2911,7 @@ describe("TeachingPage", () => {
 
   it("does not map a real preview auth failure onto a generated-session success", async () => {
     const assign = vi.fn();
-    vi.stubGlobal("location", { assign });
+    vi.stubGlobal("location", { assign, hash: "" });
     const fetchMock = vi.fn(async () =>
       Response.json(
         {

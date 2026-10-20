@@ -1,5 +1,12 @@
 "use client";
 
+import { useSyncExternalStore } from "react";
+import {
+  clearClassRosterFragment,
+  hasClassRosterFragment,
+  noClassRosterFragment,
+  subscribeClassRosterFragment,
+} from "@/lib/teaching/class-roster-navigation";
 import { useTeachingWorkspace } from "./use-teaching-workspace";
 import { EnterpriseWorkspace } from "./teaching-page-enterprise-workspace";
 import { AgentWorkspace } from "./teaching-page-agent-workspace";
@@ -33,7 +40,7 @@ export function TeachingPage() {
     locale,
     t,
     courseCards,
-    activeWorkspaceItemId,
+    activeWorkspaceItemId: savedWorkspaceItemId,
     selectedCourseAction,
     setSelectedCourseAction,
     isNewCourseOpen,
@@ -74,12 +81,12 @@ export function TeachingPage() {
     rejectMembership,
     removeMembership,
     newClassCourse,
-    activeWorkspaceItem,
+    activeWorkspaceItem: savedWorkspaceItem,
     selectedActionCourse,
     selectedCourseActionLabel,
     activeCourseSettingsCourse,
     activeCourseSettingsDraft,
-    openWorkspaceItem,
+    openWorkspaceItem: selectWorkspaceItem,
     updateCourseSettingsDraft,
     runInlineWorkspaceAction,
     queueInlineWorkspaceAuditAlertNotifications,
@@ -95,6 +102,21 @@ export function TeachingPage() {
     updateInvitePolicyDraft,
     removePendingGroupSuggestion,
   } = useTeachingWorkspace();
+  const rosterFragment = useSyncExternalStore(
+    subscribeClassRosterFragment,
+    hasClassRosterFragment,
+    noClassRosterFragment,
+  );
+  const activeWorkspaceItemId = rosterFragment ? "course-settings" : savedWorkspaceItemId;
+  const activeWorkspaceItem = rosterFragment
+    ? teacherSidebarItems.find((item) => item.id === "course-settings") ?? savedWorkspaceItem
+    : savedWorkspaceItem;
+
+  function openWorkspaceItem(itemId: string) {
+    clearClassRosterFragment();
+    selectWorkspaceItem(itemId);
+  }
+
   // The workspace-wide course selector. `manage` is the action every inline
   // operation runs under; the label the context panel shows comes from it.
   function selectWorkspaceCourse(courseId: string) {

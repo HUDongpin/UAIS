@@ -105,6 +105,7 @@ export async function authorizeLearningLoopStudentCourse(input: {
   now?: Date;
   fetch?: typeof fetch;
   courseId: string;
+  classId?: string;
 }) {
   const access = await authorizeLearningPptPlaybackAccess({
     request: input.request,
@@ -112,6 +113,7 @@ export async function authorizeLearningLoopStudentCourse(input: {
     now: input.now,
     fetch: input.fetch,
     courseId: input.courseId,
+    ...(input.classId ? { classId: input.classId } : {}),
   });
   if (
     access.status === "authorized" &&

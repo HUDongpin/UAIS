@@ -1,4 +1,5 @@
 import { createUaisLearningLoopPostgresReadStore } from "@/lib/learning-loop/postgres-read-store";
+import { LearningLoopStoreError } from "@/lib/learning-loop/postgres-store";
 import { authorizeLearningLoopStudentCourse } from "@/lib/server/learning-loop-access";
 import {
   createLearningLoopAccessDeniedResponse,
@@ -24,12 +25,14 @@ type GetDeps = {
     now?: Date;
     fetch?: typeof fetch;
     courseId: string;
+    classId?: string;
   }) => Promise<LearningLoopStudentAccess>;
   readStudentUnit?: (input: {
     studentAccount: string;
     courseExternalId: string;
     classExternalId: string;
     lessonKey: string;
+    activityId?: string;
   }) => Promise<Record<string, unknown>>;
 };
 
@@ -43,15 +46,31 @@ function createLearningUnitGetHandler(deps: GetDeps = {}) {
     const traceId = readLearningLoopTraceId(request);
     try {
       const { courseId, lessonKey } = await context.params;
+      const query = new URL(request.url).searchParams;
+      const requestedActivityId = query.get("activityId");
+      const activityId = requestedActivityId?.trim();
+      if (requestedActivityId !== null && (!activityId ||
+        !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(activityId))) {
+        throw new LearningLoopStoreError(400, "learning-activity-id-invalid");
+      }
+      const requestedClassId = query.get("classId");
+      const classId = requestedClassId?.trim();
+      if (requestedClassId !== null && (!classId || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,159}$/.test(classId))) {
+        throw new LearningLoopStoreError(400, "learning-class-id-invalid");
+      }
       const access = await (deps.authorize ?? authorizeLearningLoopStudentCourse)({
         request,
         env,
         now: deps.now,
         fetch: deps.fetch,
         courseId,
+        ...(classId ? { classId } : {}),
       });
       if (access.status === "denied") {
         return createLearningLoopAccessDeniedResponse(access.reasonCode, traceId);
+      }
+      if (classId && access.classId !== classId) {
+        return createLearningLoopAccessDeniedResponse("student-activity-membership-required", traceId);
       }
       const store = deps.readStudentUnit
         ? undefined
@@ -61,6 +80,7 @@ function createLearningUnitGetHandler(deps: GetDeps = {}) {
         courseExternalId: courseId,
         classExternalId: access.classId,
         lessonKey,
+        ...(activityId ? { activityId } : {}),
       });
       return createLearningLoopJsonResponse(200, traceId, { ...result, traceId });
     } catch (error) {

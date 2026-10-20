@@ -61,6 +61,7 @@ export async function authorizeLearningPptPlaybackAccess(input: {
   request: Request;
   env: Record<string, string | undefined>;
   courseId: string;
+  classId?: string;
   now?: Date;
   fetch?: typeof fetch;
 }): Promise<LearningPptPlaybackAccessDecision> {
@@ -138,7 +139,8 @@ export async function authorizeLearningPptPlaybackAccess(input: {
   }
 
   const membership = database.memberships.find(
-    (item) => item.studentId === user.account && item.courseId === input.courseId,
+    (item) => item.studentId === user.account && item.courseId === input.courseId &&
+      (input.classId === undefined || item.classId === input.classId),
   );
   if (!membership) {
     return createDeniedAccess("student-course-membership-required", resource, actor);
