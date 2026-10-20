@@ -15,9 +15,13 @@ adaptive-learning site. The core product surfaces are:
 - `/teaching`
 - `/login`
 
-Keep the proof of concept focused on these routes until the missing foundations
-in the technical advisory are in place: real auth, durable storage, observability,
-and critical-flow tests.
+Unauthenticated visitors hitting `/` or those protected prefixes are redirected
+to `/login?from=…` by the navigation gate in `src/proxy.ts`. Do not bypass or
+weaken that gate without an owner-approved auth change and focused tests.
+
+Keep the proof of concept focused on these routes. Prefer hardening the existing
+auth/session path, durable storage, observability, and critical-flow coverage
+over expanding parked experimental surfaces.
 
 The authoritative scope boundary is `SCOPE.md`. Do not expand parked
 experimental surfaces without an owner-approved package and focused tests.

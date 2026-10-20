@@ -174,6 +174,18 @@ export async function storeTeachingCourseCoverAsset(input: {
   };
   createdAt?: string;
 }): Promise<TeachingCourseCoverAssetStoreReceipt> {
+  if (input.repository) {
+    return storeTeachingCourseCoverAssetLocked(input);
+  }
+  const dataDir = resolveTeachingCourseAssetsDataDir(input.dataDir);
+  return runWithLocalTeachingCourseAssetsWriteLock(dataDir, () =>
+    storeTeachingCourseCoverAssetLocked({ ...input, dataDir }),
+  );
+}
+
+async function storeTeachingCourseCoverAssetLocked(
+  input: Parameters<typeof storeTeachingCourseCoverAsset>[0],
+): Promise<TeachingCourseCoverAssetStoreReceipt> {
   const dataDir = resolveTeachingCourseAssetsDataDir(input.dataDir);
   const storage = input.repository?.storage ?? localTeachingCourseAssetsStorage;
   const createdAt = input.createdAt ?? new Date().toISOString();
@@ -214,10 +226,9 @@ export async function storeTeachingCourseCoverAsset(input: {
       })
     : undefined;
 
-  // The local JSON backend carries no revision - its atomic replace is the whole
-  // concurrency story - so there is nothing for a retry to be about and it keeps
-  // its single attempt. A repository-backed write is guarded by a revision, so
-  // it runs the shared five-attempt jittered ladder.
+  // Local writes read and replace the whole corpus under a filesystem lock,
+  // so they need only one attempt. Repository writes retain their revision
+  // guard and shared five-attempt jittered retry ladder.
   const writeRetry = createTeachingCourseAssetsWriteRetry();
   const maxAttempts = input.repository ? teachingCourseAssetsMaxWriteAttempts : 1;
   let conflicts = 0;
@@ -267,6 +278,40 @@ export async function storeTeachingCourseCoverAsset(input: {
   }
 
   throw createTeachingCourseAssetsContentionError();
+}
+
+async function runWithLocalTeachingCourseAssetsWriteLock<T>(
+  dataDir: string,
+  action: () => Promise<T>,
+): Promise<T> {
+  await mkdir(dataDir, { recursive: true });
+  const lockPath = resolve(dataDir, ".teaching-course-assets-write-lock");
+  ensureWithinBase(dataDir, lockPath);
+  const deadline = Date.now() + 5_000;
+
+  // Different courses share the same asset and audit file. Atomic replacement
+  // alone cannot preserve another writer's changes between the read and write.
+  for (;;) {
+    try {
+      await mkdir(lockPath);
+      break;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+      if (Date.now() >= deadline) {
+        throw new TeachingCourseAssetsStoreError(
+          503,
+          "Teaching course assets snapshot lock is unavailable.",
+        );
+      }
+      await new Promise<void>((resolveDelay) => setTimeout(resolveDelay, 10));
+    }
+  }
+
+  try {
+    return await action();
+  } finally {
+    await rm(lockPath, { recursive: true, force: true }).catch(() => undefined);
+  }
 }
 
 function createTeachingCourseCoverAssetPersistenceReceipt(input: {

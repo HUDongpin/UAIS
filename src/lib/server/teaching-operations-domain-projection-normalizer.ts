@@ -446,6 +446,7 @@ export function normalizeDomainProjection(value: unknown): TeachingOperationDoma
         : {}),
       releasePolicy: "teacher-confirmed-grade-release",
       updatedAt: requireIsoDate(value.updatedAt, "updatedAt"),
+      ...(value.releaseGenerationId ? { releaseGenerationId: requireSafeId(value.releaseGenerationId, "release generation id") } : {}),
       ...(value.releasedBy
         ? { releasedBy: requireSafeId(value.releasedBy, "released by") }
         : {}),

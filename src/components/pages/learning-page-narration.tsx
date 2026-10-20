@@ -52,7 +52,7 @@ export function NarrationDock({
   onSlideNarrationEnded,
 }: {
   locale: Locale;
-  playback: PlaybackContent;
+  playback?: PlaybackContent;
   publishedPlayback?: LearningPptPlaybackManifest;
   activePublishedSlide?: LearningPptPlaybackSlide;
   activePublishedSlideIndex: number;
@@ -74,15 +74,19 @@ export function NarrationDock({
     currentTime: 0,
   });
   const [isNarrationMuted, setIsNarrationMuted] = useState(false);
+  // The sample course's own default rate when the URL named one; otherwise the
+  // first supported rate. `playback` is undefined for a course with no published
+  // deck, and a default is the whole of what this needs from it.
+  const sourceSpeed = playback?.speed ?? formatNarrationPlaybackRate(NARRATION_PLAYBACK_RATES[0], locale);
   const [narrationPlaybackRateState, setNarrationPlaybackRateState] = useState(() => ({
-    sourceSpeed: playback.speed,
-    index: getNarrationPlaybackRateIndex(playback.speed),
+    sourceSpeed,
+    index: getNarrationPlaybackRateIndex(sourceSpeed),
   }));
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const narrationPlaybackRateIndex =
-    narrationPlaybackRateState.sourceSpeed === playback.speed
+    narrationPlaybackRateState.sourceSpeed === sourceSpeed
       ? narrationPlaybackRateState.index
-      : getNarrationPlaybackRateIndex(playback.speed);
+      : getNarrationPlaybackRateIndex(sourceSpeed);
   const narrationPlaybackRate =
     NARRATION_PLAYBACK_RATES[narrationPlaybackRateIndex] ?? NARRATION_PLAYBACK_RATES[0];
   const narrationSpeedLabel = formatNarrationPlaybackRate(narrationPlaybackRate, locale);
@@ -176,7 +180,7 @@ export function NarrationDock({
       audio.playbackRate = nextRate;
     }
     setNarrationPlaybackRateState({
-      sourceSpeed: playback.speed,
+      sourceSpeed,
       index: nextIndex,
     });
   }
@@ -207,15 +211,30 @@ export function NarrationDock({
       data-uais-learning-narration-dock="compact"
       className="mt-10 min-w-0 w-full rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-3 shadow-[0_18px_44px_var(--shadow)] xl:mt-20 xl:min-h-0"
     >
+      {/*
+        Wrapping flex row, not a rigid three-column grid.
+
+        The grid demanded 220 + 340 + 300 plus gaps — about 892px — inside a
+        stage column that is only `viewport - 640px` wide (the page reserves
+        156px for the chapter rail and 420px for the companion). So from `xl`
+        (1280px) up to roughly 1500px the third column was pushed past the
+        column edge and clipped by the companion panel: on an ordinary 13"-15"
+        laptop the learner could not see or reach Previous, Next, the speed
+        toggle or Study Tools at all, and the mute button underneath them
+        answered clicks with a slide change.
+
+        Wrapping keeps every control on screen at every width and simply moves
+        the segment controls onto a second line when the column is short.
+      */}
       <div
         data-uais-learning-narration-dock-layout="desktop"
-        className="grid gap-3 xl:grid-cols-[220px_minmax(340px,440px)_minmax(300px,1fr)] xl:items-center xl:gap-4"
+        className="flex flex-col gap-3 xl:flex-row xl:flex-wrap xl:items-center xl:gap-4"
       >
         <div
           data-uais-learning-narration-profile={
             publishedPlayback ? "published-teacher" : "fallback-teacher"
           }
-          className="flex min-w-0 items-center gap-3"
+          className="flex min-w-0 items-center gap-3 xl:w-[220px] xl:shrink-0"
         >
           <span
             data-uais-teacher-avatar={publishedPlayback ? "published-narration" : undefined}
@@ -265,23 +284,39 @@ export function NarrationDock({
                   className="h-full w-full object-cover"
                 />
               ) : (
-                "李"
+                <SpeakerSlash
+                  size={24}
+                  weight="duotone"
+                  aria-hidden="true"
+                  className="text-[var(--placeholder)]"
+                />
               )}
             </span>
           </span>
+          {/*
+            No deck, no teacher. This card used to introduce "李明远 教授" of
+            "机器学习导论" - a teacher and a course that exist nowhere in this
+            project - beside an honest "本课程暂无已发布课件" empty state on the
+            stage, so the one surface telling the learner the truth was flanked by
+            two that did not.
+          */}
           <div className="min-w-0">
             <p className="truncate text-lg font-semibold text-[var(--foreground)]">
               {publishedPlayback?.teacherName ??
-                (locale === "zh-CN" ? "李明远 教授" : "Prof. Li Mingyuan")}
+                (locale === "zh-CN" ? "讲解尚未发布" : "No narration yet")}
             </p>
             <p className="mt-1 truncate text-base text-[var(--muted)]">
               {publishedPlayback?.courseTitle ??
-                (locale === "zh-CN" ? "机器学习导论" : "Machine Learning")}
+                (locale === "zh-CN"
+                  ? "教师发布课件后可播放"
+                  : "Available once a lesson is published")}
             </p>
           </div>
         </div>
 
-        <div>
+        {/* `min-w-0`: a flex item defaults to `min-width:auto`, so without it this
+            column refuses to shrink below its content and overflows the row. */}
+        <div className="min-w-0 xl:min-w-[280px] xl:flex-1">
           {publishedPlayback && activePublishedSlide ? (
             <div>
               <audio
@@ -308,9 +343,20 @@ export function NarrationDock({
                   setIsNarrationMuted(event.currentTarget.muted);
                 }}
               />
+              {/*
+                The seek rail track is `minmax(0,...)`, not `minmax(160px,...)`,
+                and the mute track is the button's real 44px rather than 40px.
+                With hard minimums this row demanded ~410px inside a
+                `minmax(340px,440px)` dock column, so on every laptop width it
+                overflowed its column by ~78px and slid UNDER the segment
+                controls, which paint later. `elementFromPoint` on the speaker
+                icon returned the Next button: clicking mute advanced the slide
+                instead of muting, and the last 22px of the seek rail was
+                unhittable. Let the rail absorb the shortfall instead.
+              */}
               <div
                 data-uais-learning-audio-controls="custom"
-                className="grid gap-2 rounded-2xl border border-[var(--border)] bg-[var(--surface-elevated)] px-3 py-2 shadow-[inset_0_1px_0_var(--shadow)] sm:grid-cols-[44px_104px_minmax(160px,520px)_40px] sm:items-center sm:justify-start sm:gap-3"
+                className="grid min-w-0 gap-2 rounded-2xl border border-[var(--border)] bg-[var(--surface-elevated)] px-3 py-2 shadow-[inset_0_1px_0_var(--shadow)] sm:grid-cols-[44px_auto_minmax(0,1fr)_44px] sm:items-center sm:justify-start sm:gap-3"
               >
                 <button
                   type="button"
@@ -363,26 +409,28 @@ export function NarrationDock({
               </div>
             </div>
           ) : (
-            <>
-              <div className="flex h-16 items-center gap-1 overflow-hidden">
-                {[18, 32, 45, 58, 38, 64, 78, 42, 54, 70, 86, 48, 63, 74, 92, 56, 38, 28, 20, 18, 16, 14].map(
-                  (height, index) => (
-                    <span
-                      key={`${height}-${index}`}
-                      className={index < 15 ? "w-1.5 rounded-full bg-[var(--accent)]" : "w-1.5 rounded-full bg-[var(--border)]"}
-                      style={{ height }}
-                    />
-                  ),
-                )}
-              </div>
-              <p className="text-center text-sm text-[var(--muted)]">{locale === "zh-CN" ? "12:45 / 35:20" : "12:45 / 35:20"}</p>
-            </>
+            /*
+              An empty transport, not a fake one. This branch used to draw a
+              22-bar waveform with fifteen bars "played" and the readout
+              "12:45 / 35:20" - a recording that does not exist, over a course
+              with nothing published. Nothing here is playing, so nothing here
+              pretends to be.
+            */
+            <div
+              data-uais-learning-audio-controls="unavailable"
+              role="status"
+              className="flex min-h-16 items-center justify-center rounded-2xl border border-dashed border-[var(--border)] bg-[var(--surface-elevated)] px-4 py-3 text-center text-sm leading-6 text-[var(--muted)]"
+            >
+              {locale === "zh-CN"
+                ? "本课程暂无讲解音频。"
+                : "This course has no narration audio yet."}
+            </div>
           )}
         </div>
 
         <div
           data-uais-learning-segment-controls="compact"
-          className="grid min-w-0 grid-cols-[44px_44px_1px_72px_minmax(140px,1fr)] items-center justify-end gap-2 sm:pl-4"
+          className="grid min-w-0 grid-cols-[44px_44px_1px_auto_minmax(0,1fr)] items-center justify-end gap-2 sm:pl-4 xl:flex-1 xl:basis-[260px]"
         >
           <button
             type="button"
@@ -413,9 +461,17 @@ export function NarrationDock({
             <CaretRight size={18} weight="bold" />
           </button>
           <span className="h-9 w-px bg-[var(--border)]" />
+          {/* Disabled with the rest of the transport when there is no audio to
+              set a rate on, rather than reporting a speed for silence. */}
           <button
-            className="inline-flex h-11 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2 text-sm font-semibold text-[var(--foreground)] outline-none transition hover:border-[var(--accent)] hover:text-[var(--accent)] focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+            className={[
+              "inline-flex h-11 items-center justify-center rounded-lg border px-2 text-sm font-semibold outline-none transition focus-visible:ring-2 focus-visible:ring-[var(--accent)]",
+              publishedPlayback
+                ? "border-[var(--border)] bg-[var(--surface)] text-[var(--foreground)] hover:border-[var(--accent)] hover:text-[var(--accent)]"
+                : "cursor-not-allowed border-[var(--border)] bg-[var(--surface-elevated)] text-[var(--placeholder)]",
+            ].join(" ")}
             type="button"
+            disabled={!publishedPlayback}
             onClick={handleNarrationSpeedToggle}
             aria-label={narrationSpeedTitle}
             title={narrationSpeedTitle}

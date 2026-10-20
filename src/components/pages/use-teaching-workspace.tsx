@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   hasCompleteInlineTeachingAuthSession,
   hasSignedInlineTeachingOperationReceiptAudit,
+  isInlineAuditRecordForAction,
   isMismatchedOrIncompleteInlineTeachingOperationReceipt,
   isPersistedInlineTeachingOperationReceipt,
 } from "./teaching-page-inline-receipt-guards";
@@ -91,6 +92,7 @@ import {
   type TeachingCourseListResponse,
 } from "@/lib/teaching/course-readback";
 import { createTeachingOperationIdempotencyKey } from "@/lib/teaching-operation-idempotency";
+import { readVerifiedTeachingUnitDraft } from "@/components/teaching/teaching-unit-draft-editor";
 import {
   INVITE_CLASS_INVITATION_READBACK_MISMATCH_MESSAGE,
   INVITE_CODE_DRAFT_READBACK_MISMATCH_MESSAGE,
@@ -128,7 +130,6 @@ import {
   type InlineTeachingOperationBackendReceipt,
   type InlineTeachingOperationDomainPersistenceSummary,
   type InlineTeachingOperationErrorResponse,
-  type InlineTeachingOperationRecord,
   type InlineWorkspaceAlertNotificationStatus,
   type InlineWorkspaceAlertStatus,
   type InlineWorkspaceAuditStatus,
@@ -212,6 +213,7 @@ export function useTeachingWorkspace() {
     Record<string, TeacherGroupSuggestionDraft>
   >({});
   const inlineWorkspaceAttemptIdsRef = useRef<Partial<Record<TeachingOperationId, number>>>({});
+
   const [courseSettingsDrafts, setCourseSettingsDrafts] = useState<
     Record<string, CourseSettingsDraft>
   >({});
@@ -584,6 +586,7 @@ export function useTeachingWorkspace() {
           actionSlot,
           courseId,
           sourceAction,
+          ...(operationId === "content" && actionSlot === "secondary" ? { locale } : {}),
           ...(courseSettingsPatch ? { courseSettingsPatch } : {}),
           idempotencyKey: createTeachingOperationIdempotencyKey({
             operationId,
@@ -687,6 +690,10 @@ export function useTeachingWorkspace() {
           },
         }));
         return;
+      }
+      if (operationId === "content" && actionSlot === "secondary" &&
+        (!payload.traceId || !payload.receipt?.receiptId || payload.receipt.courseId !== courseId)) {
+        throw new Error("Unit generation requires course-bound audit and content readback.");
       }
       const receiptDisplayMessage = payload.receipt?.displayMessage;
       const confirmedStatusMessage = receiptDisplayMessage
@@ -901,6 +908,12 @@ export function useTeachingWorkspace() {
         );
       }
 
+      if (input.operationId === "content" && input.actionSlot === "secondary") {
+        if (!input.courseId) throw new Error("Unit draft course is missing.");
+        await readVerifiedTeachingUnitDraft(input.courseId, input.recordId);
+        if (!isCurrentInlineWorkspaceAttempt(input.operationId, input.attemptId)) return;
+      }
+
       applyVerifiedCourseSettingsPatch(
         matchingRecord?.courseId ?? input.courseId,
         input.courseSettingsPatch,
@@ -943,7 +956,9 @@ export function useTeachingWorkspace() {
       }
       setInlineWorkspaceStatuses((currentStatuses) => ({
         ...currentStatuses,
-        [input.operationId]: localizedText(TEACHING_OPERATION_AUDIT_FAILED_MESSAGE, locale),
+        [input.operationId]: input.operationId === "content" && input.actionSlot === "secondary"
+            ? getInlineDomainProjectionSemanticMismatchMessage("content", "secondary", locale)
+            : localizedText(TEACHING_OPERATION_AUDIT_FAILED_MESSAGE, locale),
       }));
       setInlineWorkspaceAuditStatuses((currentStatuses) => ({
         ...currentStatuses,
@@ -1042,26 +1057,6 @@ export function useTeachingWorkspace() {
     attemptId: number,
   ) {
     return inlineWorkspaceAttemptIdsRef.current[operationId] === attemptId;
-  }
-
-  function isInlineAuditRecordForAction(
-    record: InlineTeachingOperationRecord,
-    input: {
-      courseId?: string;
-      operationId: TeachingOperationId;
-      actionSlot: "primary" | "secondary";
-    },
-  ) {
-    if (input.courseId && record.courseId !== input.courseId) {
-      return false;
-    }
-    if (record.operationId && record.operationId !== input.operationId) {
-      return false;
-    }
-    if (record.actionSlot && record.actionSlot !== input.actionSlot) {
-      return false;
-    }
-    return true;
   }
 
   function isVerifiedInlineAuditAuthSession(

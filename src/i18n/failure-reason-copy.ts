@@ -109,8 +109,10 @@ export const failureReasonCopy: Record<string, LocalizedText> = {
     "en-US": "This course was being changed at the same time, so nothing was saved. Please retry.",
   },
   "teacher-course-ownership-required": {
-    "zh-CN": "只有课程的授课教师可以执行这个操作。",
-    "en-US": "Only the course's own teacher can perform this action.",
+    "zh-CN":
+      "只有课程的授课教师可以执行这个操作。演示课程卡片未绑定本账号所有权，不能保存学习任务；请打开已保存在你名下的课程，或先创建课程。",
+    "en-US":
+      "Only the course's own teacher can perform this action. Demo course cards are not owned by this account and cannot save learning activities. Open a course saved under your account, or create one first.",
   },
 } as const;
 

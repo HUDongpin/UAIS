@@ -108,6 +108,32 @@ afterEach(() => {
 });
 
 describe("LearningPage", () => {
+  it("forwards task query scope and remounts the workspace when the selected task changes", async () => {
+    const page = await LearningRoutePage({ searchParams: Promise.resolve({
+      courseId: ["course-1", "ignored"], classId: "class-1", lessonKey: ["lesson-1", "ignored"], activityId: ["activity-a", "ignored"],
+    }) });
+    expect(page.props).toMatchObject({ initialCourseId: "course-1", initialClassId: "class-1", initialLessonKey: "lesson-1", initialActivityId: "activity-a" });
+    const other = await LearningRoutePage({ searchParams: Promise.resolve({ courseId: "course-1", classId: "class-1", lessonKey: "lesson-1", activityId: "activity-b" }) });
+    expect(other.key).not.toBe(page.key);
+  });
+
+  it("opens the requested practice task without a deck and retains its sign-in return scope", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input) === "/api/teaching/courses") return Response.json({
+        courses: [{ courseId: "course-1", courseName: "真实课程" }], classes: [{ courseId: "course-1", classId: "class-1", className: "一班" }],
+        memberships: [{ courseId: "course-1", classId: "class-1", membershipStatus: "approved" }],
+      });
+      if (String(input).includes("/units/")) return Response.json({ reasonCode: "student-session-required" }, { status: 401 });
+      return Response.json({}, { status: 404 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<LearningPage initialCourseId="course-1" initialClassId="class-1" initialLessonKey="lesson-1" initialActivityId="activity-b" />);
+    const login = await screen.findByRole("link", { name: "重新登录并返回本单元" });
+    expect(fetchMock).toHaveBeenCalledWith("/api/learning/courses/course-1/units/lesson-1?activityId=activity-b", expect.anything());
+    expect(login.getAttribute("href")).toBe(`/login?from=${encodeURIComponent("/learning?courseId=course-1&classId=class-1&lessonKey=lesson-1&activityId=activity-b")}`);
+    expect(screen.queryByText("当前课程：大学研究方法")).toBeNull();
+  });
+
   it("receives the selected course id from the learning route query", async () => {
     const page = await LearningRoutePage({
       searchParams: Promise.resolve({
@@ -289,7 +315,13 @@ describe("LearningPage", () => {
       />,
     );
 
-    expect(await screen.findByText("AI Supported Mathematics Research")).toBeTruthy();
+    // The approved course now names itself once, as the context title: with no
+    // published deck there is no other course name to show, and the title used to
+    // read "当前课程：大学研究方法" — the demo course — above this learner's own
+    // class chip.
+    expect(
+      await screen.findByText("当前课程：AI Supported Mathematics Research"),
+    ).toBeTruthy();
     expect(screen.getByText("Research Methods Class 1")).toBeTruthy();
     expect(screen.getByText("已通过邀请码加入")).toBeTruthy();
   });
@@ -338,9 +370,142 @@ describe("LearningPage", () => {
       />,
     );
 
-    expect(await screen.findByText("当前课程：大学研究方法")).toBeTruthy();
+    // A pending membership is not a learning context, so neither the course nor
+    // the class may appear. The bar says the lesson has not loaded rather than
+    // naming the demo course, which is what it used to do here.
+    expect(await screen.findByText("尚未加载课程课件")).toBeTruthy();
+    expect(screen.queryByText(/大学研究方法/)).toBeNull();
     expect(screen.queryByText("Statistics Writing Studio")).toBeNull();
     expect(screen.queryByText("Statistics Writing Cohort")).toBeNull();
+  });
+
+  // E15: a real course with no published deck - the ordinary state of a course
+  // before its teacher uploads slides - used to be dressed in the demo course's
+  // identity on four surfaces at once, beside a stage honestly reporting that
+  // nothing was published.
+  it("never dresses an unpublished course in the demo course's lesson", async () => {
+    const approvedCourse = {
+      courses: [
+        {
+          courseId: "teacher-course-unpublished-20260901-090000",
+          courseName: "教育研究方法（真实课程）",
+          semester: "2026 秋季",
+        },
+      ],
+      classes: [
+        {
+          classId: "teacher-course-unpublished-20260901-090000-class-1",
+          courseId: "teacher-course-unpublished-20260901-090000",
+          className: "研一 1 班",
+          semester: "2026 秋季",
+        },
+      ],
+      memberships: [
+        {
+          membershipId: "membership-unpublished-1",
+          courseId: "teacher-course-unpublished-20260901-090000",
+          classId: "teacher-course-unpublished-20260901-090000-class-1",
+          studentId: "Peter",
+          studentDisplayName: "Peter",
+          membershipStatus: "approved",
+        },
+      ],
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) =>
+        String(input).includes("/api/teaching/courses")
+          ? Response.json(approvedCourse)
+          : Response.json({ error: "not published" }, { status: 404 }),
+      ),
+    );
+
+    const { container } = render(
+      <LearningPage
+        initialCourseId="teacher-course-unpublished-20260901-090000"
+        initialClassId="teacher-course-unpublished-20260901-090000-class-1"
+      />,
+    );
+
+    // The context bar names this learner's own course, never the demo course.
+    expect(
+      await screen.findByText("当前课程：教育研究方法（真实课程）"),
+    ).toBeTruthy();
+    expect(screen.queryByText(/大学研究方法/)).toBeNull();
+    expect(screen.queryByText(/把研究问题转化为可观察证据/)).toBeNull();
+
+    // The narration dock announces no teacher and no course of its own. It used
+    // to introduce "李明远 教授" of "机器学习导论" with a drawn waveform and a
+    // "12:45 / 35:20" readout for a recording that does not exist.
+    expect(screen.getByText("讲解尚未发布")).toBeTruthy();
+    expect(screen.queryByText(/李明远/)).toBeNull();
+    expect(screen.queryByText(/机器学习导论/)).toBeNull();
+    expect(screen.queryByText("12:45 / 35:20")).toBeNull();
+    expect(
+      container.querySelector('[data-uais-learning-audio-controls="unavailable"]'),
+    ).toBeTruthy();
+
+    // The five slide tools have no slide to act on, so they say so rather than
+    // generating notes, concept cards and a downloadable file for a lesson that
+    // belongs to another course.
+    const exportButton = screen.getByRole("button", { name: "导出笔记" });
+    expect((exportButton as HTMLButtonElement).disabled).toBe(true);
+    expect(exportButton.getAttribute("title")).toBe(
+      "教师发布课件后即可使用本页学习工具。",
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "学习工具" }));
+    expect(
+      container.querySelector('[data-uais-learning-study-tools="unavailable"]'),
+    ).toBeTruthy();
+  });
+
+  it("scopes an AI guide question to the learner's own course when no deck loaded", async () => {
+    const courseId = "teacher-course-unpublished-20260901-090000";
+    const classId = `${courseId}-class-1`;
+    const guideCalls: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url.includes("/api/teaching/courses")) {
+          return Response.json({
+            courses: [{ courseId, courseName: "教育研究方法（真实课程）", semester: "2026 秋季" }],
+            classes: [{ classId, courseId, className: "研一 1 班", semester: "2026 秋季" }],
+            memberships: [
+              {
+                membershipId: "membership-unpublished-2",
+                courseId,
+                classId,
+                studentId: "Peter",
+                membershipStatus: "approved",
+              },
+            ],
+          });
+        }
+        if (url.includes("/api/learning/ai-guide")) {
+          guideCalls.push(String(init?.body));
+          return Response.json({ message: { text: "这门课程还没有课件，我先按课程目标回答。" } });
+        }
+        return Response.json({ error: "not published" }, { status: 404 });
+      }),
+    );
+
+    render(<LearningPage initialCourseId={courseId} initialClassId={classId} />);
+    await screen.findByText("当前课程：教育研究方法（真实课程）");
+
+    const guideInput = screen.getByRole("textbox", { name: "向智能助教提问" });
+    fireEvent.change(guideInput, { target: { value: "这门课要学什么？" } });
+    fireEvent.submit(guideInput.closest("form") as HTMLFormElement);
+
+    await screen.findByText("这门课程还没有课件，我先按课程目标回答。");
+    const payload = JSON.parse(guideCalls[0] ?? "{}");
+    // The learner's own course, which the server can authorize - not the demo
+    // course id, which it refused as a course they never joined.
+    expect(payload.course.courseId).toBe(courseId);
+    expect(payload.course.courseTitle).toBe("教育研究方法（真实课程）");
+    // And no slide context invented from a deck that is not on screen.
+    expect(payload.slide).toEqual({});
   });
 
   it("keeps the full chatroom off the learning home page", () => {
@@ -367,7 +532,11 @@ describe("LearningPage", () => {
   });
 
   it("keeps study tools behind the narration dock learning-tools entry", () => {
-    const { container } = render(<LearningPage />);
+    // Rendered for the sample course the plaza links to, which is the only course
+    // whose slide content exists without a published deck.
+    const { container } = render(
+      <LearningPage initialCourseId="research-methods-learning" />,
+    );
 
     const switcher = screen.getByRole("group", { name: "我的学习右侧栏目切换" });
     expect(switcher.querySelectorAll("button").length).toBe(4);
@@ -547,7 +716,7 @@ describe("LearningPage", () => {
 
   it("keeps the learner question visible without a premature AI bubble", () => {
     vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => {})));
-    render(<LearningPage />);
+    render(<LearningPage initialCourseId="research-methods-learning" />);
 
     const input = screen.getByRole("textbox", { name: "向智能助教提问" }) as HTMLInputElement;
     fireEvent.change(input, {
@@ -575,7 +744,7 @@ describe("LearningPage", () => {
           : new Promise<Response>(() => {}),
       ),
     );
-    render(<LearningPage />);
+    render(<LearningPage initialCourseId="research-methods-learning" />);
 
     const question = "为什么梯度下降会失败？";
     const input = screen.getByRole("textbox", { name: "向智能助教提问" });
@@ -617,7 +786,7 @@ describe("LearningPage", () => {
           : new Promise<Response>(() => {}),
       ),
     );
-    render(<LearningPage />);
+    render(<LearningPage initialCourseId="research-methods-learning" />);
 
     const transcript = screen.getByRole("log", { name: "智能导学对话" });
     Object.defineProperty(transcript, "scrollHeight", { configurable: true, value: 640 });
@@ -665,7 +834,7 @@ describe("LearningPage", () => {
       return new Promise<Response>(() => {});
     });
     vi.stubGlobal("fetch", fetchMock);
-    render(<LearningPage />);
+    render(<LearningPage initialCourseId="research-methods-learning" />);
 
     fireEvent.click(screen.getByRole("button", { name: /概念解读/ }));
 
@@ -710,7 +879,7 @@ describe("LearningPage", () => {
       return new Promise<Response>(() => {});
     });
     vi.stubGlobal("fetch", fetchMock);
-    render(<LearningPage />);
+    render(<LearningPage initialCourseId="research-methods-learning" />);
 
     const input = screen.getByRole("textbox", { name: "向智能助教提问" }) as HTMLInputElement;
     fireEvent.change(input, {
@@ -814,7 +983,7 @@ describe("LearningPage", () => {
       return new Promise<Response>(() => {});
     });
     vi.stubGlobal("fetch", fetchMock);
-    const { container } = render(<LearningPage />);
+    const { container } = render(<LearningPage initialCourseId="research-methods-learning" />);
 
     const input = screen.getByRole("textbox", { name: "向智能助教提问" }) as HTMLInputElement;
     fireEvent.change(input, {
@@ -949,7 +1118,7 @@ describe("LearningPage", () => {
       return new Promise<Response>(() => {});
     });
     vi.stubGlobal("fetch", fetchMock);
-    render(<LearningPage />);
+    render(<LearningPage initialCourseId="research-methods-learning" />);
 
     const input = screen.getByRole("textbox", { name: "向智能助教提问" }) as HTMLInputElement;
     fireEvent.change(input, {
@@ -1374,7 +1543,15 @@ describe("LearningPage", () => {
     expect(workspace?.className).toContain("xl:max-h-[calc(100dvh-6.5rem)]");
     expect(pptStage?.className).toContain("min-w-0");
     expect(pptStage?.className).toContain("w-full");
-    expect(pptStage?.className).toContain("xl:min-h-[calc(100dvh-13.5rem)]");
+    // The stage fills the workspace row rather than declaring a taller
+    // min-height than that row can be. The old
+    // `xl:min-h-[calc(100dvh-13.5rem)]` was 66px taller than the row, so the
+    // card overflowed into the narration dock's top margin — harmless while the
+    // dock was one 98px row, a 45px overlap across the action bar once the dock
+    // wrapped to two rows at laptop widths.
+    expect(pptStage?.className).toContain("xl:h-full");
+    expect(pptStage?.className).toContain("xl:min-h-0");
+    expect(pptStage?.className).not.toContain("xl:min-h-[calc(100dvh-13.5rem)]");
     expect(pptStageBody?.className).toContain(
       "xl:grid-rows-[auto_minmax(0,1fr)]",
     );
@@ -1547,18 +1724,28 @@ describe("LearningPage", () => {
     const segmentControls = container.querySelector(
       '[data-uais-learning-segment-controls="compact"]',
     ) as HTMLElement | null;
-    expect(dockLayout?.className).toContain(
+    // The dock wraps instead of demanding ~892px in a stage column that is only
+    // `viewport - 640px` wide: below roughly 1500px the third column used to be
+    // pushed past the column edge, so Previous, Next, speed and Study Tools were
+    // clipped by the companion panel on an ordinary laptop.
+    expect(dockLayout?.className).toContain("xl:flex-row");
+    expect(dockLayout?.className).toContain("xl:flex-wrap");
+    expect(dockLayout?.className).not.toContain(
       "xl:grid-cols-[220px_minmax(340px,440px)_minmax(300px,1fr)]",
     );
     expect(dockLayout?.className).toContain("xl:gap-4");
+    // The seek rail absorbs the shortfall and the mute track is the button's
+    // real 44px. With `minmax(160px,520px)` and a 40px mute track this row
+    // demanded ~410px inside a 340px column, overflowed it, and slid under the
+    // segment controls: clicking the speaker icon hit the Next button.
     expect(customControls?.className).toContain(
-      "sm:grid-cols-[44px_104px_minmax(160px,520px)_40px]",
+      "sm:grid-cols-[44px_auto_minmax(0,1fr)_44px]",
     );
     expect(customControls?.className).not.toContain("rounded-full");
     expect(progressRail?.className).toContain("max-w-[520px]");
     expect(timeReadout?.className).toContain("min-w-[92px]");
     expect(segmentControls?.className).toContain(
-      "grid-cols-[44px_44px_1px_72px_minmax(140px,1fr)]",
+      "grid-cols-[44px_44px_1px_auto_minmax(0,1fr)]",
     );
     expect(segmentControls?.className).not.toContain("grid-rows-[38px_30px]");
     expect(segmentControls?.className).toContain("sm:pl-4");
@@ -1895,7 +2082,7 @@ describe("LearningPage", () => {
       value: revokeObjectUrl,
     });
 
-    render(<LearningPage />);
+    render(<LearningPage initialCourseId="research-methods-learning" />);
 
     fireEvent.click(screen.getByRole("button", { name: "问这页" }));
     const aiInput = screen.getByRole("textbox", { name: "向智能助教提问" }) as HTMLInputElement;

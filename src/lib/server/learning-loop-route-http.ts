@@ -51,6 +51,16 @@ export function readLearningLoopIdempotencyKey(request: Request) {
   return value;
 }
 
+export function readLearningLoopSubmissionVersionId(value: unknown, allowNull: true): string | null;
+export function readLearningLoopSubmissionVersionId(value: unknown, allowNull?: false): string;
+export function readLearningLoopSubmissionVersionId(value: unknown, allowNull = false) {
+  if (allowNull && value === null) return null;
+  if (typeof value !== "string" || !value.trim()) {
+    throw new LearningLoopStoreError(400, "submission-version-required");
+  }
+  return value.trim();
+}
+
 export function createLearningLoopAccessDeniedResponse(
   reasonCode: string,
   traceId: string,

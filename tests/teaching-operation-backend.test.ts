@@ -53,6 +53,12 @@ import { createUaisTeacherAuthSessionCookieHeader } from "@/lib/server/teacher-a
 import { normalizeResourceReviewItemRecord } from "@/lib/server/teaching-course-management-record-normalizers";
 import { normalizeDomainProjection } from "@/lib/server/teaching-operations-domain-projection-normalizer";
 
+import { teachingUnitDraftContent } from "./fixtures/teaching-unit-draft-content";
+
+const unitDraftProviderFetch: typeof fetch = async () => Response.json({
+  choices: [{ message: { content: JSON.stringify(teachingUnitDraftContent) } }],
+});
+
 const productionTeacherAuthIssuerSecret =
   "test-teacher-auth-issuer-secret-strong-fixture";
 
@@ -3552,13 +3558,13 @@ describe("teaching operation backend persistence", () => {
           },
         }),
       );
-      expect(externalRequests).toEqual([
-        {
-          method: "GET",
-          url: "https://external-storage.example.test/teaching-course-management/database",
-          authorization: "Bearer test-external-storage-access-token-with-32-chars",
-        },
-      ]);
+      // Manifest readback and canonical course-ownership authorization each
+      // read the external course-management snapshot.
+      expect(externalRequests).toEqual(Array.from({ length: 2 }, () => ({
+        method: "GET",
+        url: "https://external-storage.example.test/teaching-course-management/database",
+        authorization: "Bearer test-external-storage-access-token-with-32-chars",
+      })));
       expectNoLocalOrSecretValues(body, dataDir);
     } finally {
       await rm(dataDir, { recursive: true, force: true });
@@ -3958,13 +3964,11 @@ describe("teaching operation backend persistence", () => {
         }),
       );
       expect(JSON.stringify(body)).not.toContain(staleLocalCourseId);
-      expect(externalRequests).toEqual([
-        {
-          method: "GET",
-          url: "https://external-storage.example.test/teaching-course-management/database",
-          authorization: "Bearer test-external-storage-access-token-with-32-chars",
-        },
-      ]);
+      expect(externalRequests).toEqual(Array.from({ length: 2 }, () => ({
+        method: "GET",
+        url: "https://external-storage.example.test/teaching-course-management/database",
+        authorization: "Bearer test-external-storage-access-token-with-32-chars",
+      })));
       expectNoLocalOrSecretValues(body, dataDir);
     } finally {
       await rm(dataDir, { recursive: true, force: true });
@@ -7832,7 +7836,7 @@ describe("teaching operation backend persistence", () => {
     }
   });
 
-  it("uses external teaching operations storage for gradebook release and rollback without local JSON writes", async () => {
+  it("fails closed for external-only gradebook dispatch without local JSON writes", async () => {
     const dataDir = await mkdtemp(join(tmpdir(), "uais-teaching-gradebook-external-"));
     const ownershipDir = join(dataDir, "teacher-ai-ownership");
     const teacherAuthSecret = "test-teacher-auth-session-signing-secret";
@@ -8056,118 +8060,11 @@ describe("teaching operation backend persistence", () => {
       const rollbackBody = await rollbackResponse.json();
       const database = await readTeachingOperationDatabase({ dataDir });
 
-      expect(releaseResponse.status, JSON.stringify(releaseBody)).toBe(200);
-      expect(releaseResponse.headers.get("x-uais-trace-id")).toBe(
-        "trace-gradebook-external-release",
-      );
-      expect(releaseBody.gradebookUpdate).toMatchObject({
-        objectId: gradebookUpdateId,
-        courseId: "teacher-research-methods",
-        updateStatus: "released",
-        releasedBy: "teacher-kang",
-      });
-      expect(releaseBody.receipt).toMatchObject({
-        action: "release-gradebook-update",
-        actorId: "teacher-kang",
-        courseId: "teacher-research-methods",
-        gradebookUpdateId,
-        traceId: "trace-gradebook-external-release",
-        status: "persisted",
-        storagePolicy: "external-redacted-teaching-operation-append",
-        storageWritePolicy: "external-append-only-operation-log",
-      });
-
-      expect(rollbackResponse.status, JSON.stringify(rollbackBody)).toBe(200);
-      expect(rollbackResponse.headers.get("x-uais-trace-id")).toBe(
-        "trace-gradebook-external-rollback",
-      );
-      expect(rollbackBody.gradebookUpdate).toMatchObject({
-        objectId: gradebookUpdateId,
-        courseId: "teacher-research-methods",
-        updateStatus: "release-rolled-back",
-        releaseRolledBackBy: "teacher-kang",
-      });
-      expect(rollbackBody.receipt).toMatchObject({
-        action: "rollback-gradebook-release",
-        actorId: "teacher-kang",
-        courseId: "teacher-research-methods",
-        gradebookUpdateId,
-        traceId: "trace-gradebook-external-rollback",
-        status: "persisted",
-        storagePolicy: "external-redacted-teaching-operation-append",
-        storageWritePolicy: "external-append-only-operation-log",
-      });
-
-      expect(externalRequests).toEqual([
-        expect.objectContaining({
-          url: "https://external-storage.example.test/teaching-operations/teacher-kang/audit",
-          authorization: `Bearer ${externalToken}`,
-          method: "GET",
-        }),
-        expect.objectContaining({
-          url: "https://external-storage.example.test/teaching-operations/teacher-kang/append",
-          authorization: `Bearer ${externalToken}`,
-          method: "POST",
-          body: expect.objectContaining({
-            action: "append-teaching-operation",
-            record: expect.objectContaining({
-              actorId: "teacher-kang",
-              courseId: "teacher-research-methods",
-              status: "persisted",
-              storagePolicy: "external-redacted-teaching-operation-append",
-              domainProjections: expect.arrayContaining([
-                expect.objectContaining({
-                  objectId: gradebookUpdateId,
-                  updateStatus: "released",
-                }),
-                expect.objectContaining({
-                  objectType: "grade-release-notification",
-                  gradebookUpdateId,
-                }),
-              ]),
-            }),
-            auditEvent: expect.objectContaining({
-              traceId: "trace-gradebook-external-release",
-              eventType: "teaching-gradebook-update.released",
-              courseId: "teacher-research-methods",
-            }),
-          }),
-        }),
-        expect.objectContaining({
-          url: "https://external-storage.example.test/teaching-operations/teacher-kang/audit",
-          authorization: `Bearer ${externalToken}`,
-          method: "GET",
-        }),
-        expect.objectContaining({
-          url: "https://external-storage.example.test/teaching-operations/teacher-kang/append",
-          authorization: `Bearer ${externalToken}`,
-          method: "POST",
-          body: expect.objectContaining({
-            action: "append-teaching-operation",
-            record: expect.objectContaining({
-              actorId: "teacher-kang",
-              courseId: "teacher-research-methods",
-              status: "persisted",
-              storagePolicy: "external-redacted-teaching-operation-append",
-              domainProjections: expect.arrayContaining([
-                expect.objectContaining({
-                  objectId: gradebookUpdateId,
-                  updateStatus: "release-rolled-back",
-                }),
-                expect.objectContaining({
-                  objectType: "grade-release-rollback-notification",
-                  gradebookUpdateId,
-                }),
-              ]),
-            }),
-            auditEvent: expect.objectContaining({
-              traceId: "trace-gradebook-external-rollback",
-              eventType: "teaching-gradebook-update.release-rolled-back",
-              courseId: "teacher-research-methods",
-            }),
-          }),
-        }),
-      ]);
+      expect(releaseResponse.status, JSON.stringify(releaseBody)).toBe(503);
+      expect(releaseBody.reasonCode).toBe("gradebook-provider-claim-storage-unavailable");
+      expect(rollbackResponse.status).toBe(409); // The failed release left it pending.
+      expect(externalRequests).toHaveLength(2);
+      expect(externalRequests.every((request) => request.method === "GET")).toBe(true);
       expect(database.records).toHaveLength(0);
       expect(database.auditEvents).toHaveLength(0);
       expect(database.domainProjections).toHaveLength(0);
@@ -9862,7 +9759,9 @@ describe("teaching operation backend persistence", () => {
           UAIS_TEACHING_OPERATIONS_DATA_DIR: operationsDataDir,
           UAIS_TEACHING_COURSES_DATA_DIR: coursesDataDir,
           UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET: teacherAuthSecret,
+          DEEPSEEK_API_KEY: "unit-draft-test-provider-key",
         },
+        fetch: unitDraftProviderFetch,
         getTeachingOperationCourseOwnership: async () => ({
           teacherId: "teacher-collaborator",
           courseIds: [],
@@ -17111,7 +17010,9 @@ describe("teaching operation backend persistence", () => {
         UAIS_TEACHING_COURSES_DATA_DIR: coursesDataDir,
         UAIS_TEACHER_AI_OWNERSHIP_DIR: ownershipDir,
         UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET: teacherAuthSecret,
+        DEEPSEEK_API_KEY: "unit-draft-test-provider-key",
       },
+      fetch: unitDraftProviderFetch,
       now: new Date("2026-06-22T12:45:00.000Z"),
     });
 
@@ -17186,7 +17087,8 @@ describe("teaching operation backend persistence", () => {
           operationRecordId: body.receipt.receiptId,
           sourceAction: "inline-teaching-workspace",
           draftScope: "teacher-editable-unit-plan",
-          sourceSystems: ["course-knowledge-index", "teaching-objectives", "quiz-bank"],
+          sourceSystems: ["course-settings"],
+          content: teachingUnitDraftContent,
           reviewPolicy: "teacher-review-before-student-release",
           generatedAt: "2026-06-22T12:45:00.000Z",
           storagePolicy: "local-json-teaching-course-management",
@@ -17240,6 +17142,7 @@ describe("teaching operation backend persistence", () => {
       UAIS_TEACHING_COURSES_DATA_DIR: coursesDataDir,
       UAIS_TEACHER_AI_OWNERSHIP_DIR: ownershipDir,
       UAIS_TEACHER_AUTH_SESSION_SIGNING_SECRET: teacherAuthSecret,
+      DEEPSEEK_API_KEY: "unit-draft-test-provider-key",
     };
 
     try {
@@ -17274,10 +17177,12 @@ describe("teaching operation backend persistence", () => {
       };
       const firstPostOperation = createTeachingOperationActionPostHandler({
         env,
+        fetch: unitDraftProviderFetch,
         now: new Date("2026-06-22T12:45:00.000Z"),
       });
       const secondPostOperation = createTeachingOperationActionPostHandler({
         env,
+        fetch: unitDraftProviderFetch,
         now: new Date("2026-06-22T13:00:00.000Z"),
       });
 
@@ -17348,7 +17253,8 @@ describe("teaching operation backend persistence", () => {
           operationRecordId: firstBody.receipt.receiptId,
           draftStatus: "generated",
           draftScope: "teacher-editable-unit-plan",
-          sourceSystems: ["course-knowledge-index", "teaching-objectives", "quiz-bank"],
+          sourceSystems: ["course-settings"],
+          content: teachingUnitDraftContent,
           reviewPolicy: "teacher-review-before-student-release",
           generatedAt: "2026-06-22T12:45:00.000Z",
         }),
@@ -23857,6 +23763,9 @@ describe("teaching operation backend persistence", () => {
         ...productionTeacherAuthProviderEnv(teacherAuthSecret),
       },
       createTeacherAiOwnershipDatabase,
+      // This fixture exercises the derived ownership adapter and persistence
+      // gate; the canonical course store is deliberately empty.
+      readManagedCourseOwnership: async () => false,
       now: new Date("2026-06-22T11:05:00.000Z"),
     });
 

@@ -1,0 +1,15 @@
+# Release coordination reference
+
+Apply only to the release-intake conditions below. The [main contract](../../AGENTS.md) governs authorization and ordinary task scope. S01-S25 identify responsibilities; they do not require separate agents or repeated approval.
+
+## High-Intensity Release Coordination Protocol
+
+Use this protocol for assigned multi-owner release intake, unresolved ownership conflicts in a dirty integration tree, or reconciling release evidence across candidates. Ordinary scoped edits do not automatically require release intake or additional agents. Refine `S01`-`S25` before proposing permanent roles.
+
+1. S25 runs release intake first within this protocol. Before assigning dependent integration or release slices, S25 should produce a non-destructive dirty-tree and evidence inventory under `coordination/release-intake/`, mapping changed files to owning sessions, identifying stale/current release evidence, and recommending PR/commit slices. S25 must not stage, commit, branch, push, reset, delete, or revert unless the owner explicitly assigns that Git operation.
+2. S22 work must be split into small release packages. Each S22 package should target one release-chain segment only, such as Vercel project readiness, env-apply preflight binding, production deployment evidence, deployed page smoke, protected route smoke, external-storage readiness, or aggregate release-gate refresh. Avoid asking one S22 run to harden scripts, refresh all evidence, and diagnose live deployment at the same time.
+3. S10 keeps the coordination layer clean. S10 should own nightly assignment shape, president-report synthesis, and cross-session status summaries, but should not implement feature fixes inside S05/S12/S22/S24 scopes unless explicitly assigned by the owner.
+4. S11 owns regression-matrix clarity. When S22 adds or tightens release-gate tests, S11 should turn the coverage into a readable release-quality matrix and flag gaps, without fixing feature code unless assigned.
+5. S12, S19, S22, and S24 keep strict boundaries. S12 owns backend/API route contracts, S19 owns redacted env placement and parity, S22 owns release engineering and deployment proof, and S24 owns export/PPT/manual playback acceptance. If a release blocker requires work outside the assignment, document the handoff and pause that operation. Continue independent authorized work; an already explicit cross-role assignment needs no repeated approval, but does not override another active writer.
+6. Secret-like files are inventoried only by redacted category. If `git status` shows local credential documents, `.env*` files, deployment tokens, or other secret-like artifacts, logs may say `secret-like untracked local file present` but must not copy, print, summarize, stage, screenshot, or inspect values.
+7. New `S26+` roles require evidence and owner approval. Only add a permanent new role after S10 and S25 document that the work is durable, independent, not covered by `S01`-`S25`, and cannot be handled by narrowing an existing session package, and the owner explicitly approves it.

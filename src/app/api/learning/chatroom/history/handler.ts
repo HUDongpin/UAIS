@@ -11,6 +11,7 @@ import {
   type LearningChatroomGroupProjection,
 } from "@/lib/server/learning-ai-guide-access";
 import { isLearningChatroomGroupsEnabled } from "@/lib/server/learning-chatroom-groups-flag";
+import { createLearningGuideActor } from "@/lib/server/learning-guide-actor";
 import {
   readLearningChatroomHistory,
   type LearningChatroomHistoryResult,
@@ -95,9 +96,7 @@ export function createLearningChatroomHistoryGetHandler(
         );
       }
 
-      const actorId = `app-session-${readGraphRole(appSession.role)}-${toSafeActorIdSegment(
-        appSession.account,
-      )}`;
+      const { actorId } = createLearningGuideActor(appSession);
       const rateLimit = timing.measure("rate", () =>
         rateLimiter.check({ key: actorId, nowMs: now() }),
       );
@@ -401,16 +400,6 @@ function readSafeTraceId(request: Request) {
 
 function createHistoryRedaction() {
   return { secrets: "omitted", localFiles: "omitted", assets: "ids-only" };
-}
-
-function readGraphRole(role: "teacher" | "student" | "admin") {
-  if (role === "teacher") return "educator";
-  if (role === "student") return "learner";
-  return "admin";
-}
-
-function toSafeActorIdSegment(value: string) {
-  return value.trim().replace(/[^A-Za-z0-9._:-]+/g, "-").slice(0, 72) || "unknown";
 }
 
 function readString(value: unknown) {

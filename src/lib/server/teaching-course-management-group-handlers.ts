@@ -1,3 +1,4 @@
+import { isSameTeachingActorId } from "@/lib/server/teaching-actor-id";
 import { TeachingCourseManagementStoreError } from "./teaching-course-management-error";
 import {
   createRedaction,
@@ -189,14 +190,13 @@ export async function createTeachingLearningGroupRecord(input: {
       });
       return { group, receipt };
     } catch (error) {
-      if (input.repository && (await writeRetry.shouldRetry({ attempt, error }))) {
+      if (await writeRetry.shouldRetry({ attempt, error })) {
         continue;
       }
       // A conflict that survives the ladder is exhausted contention, not a
       // caller mistake: answer with the structured 409 rather than passing the
-      // backend's own revision-mismatch prose through. The local file path has no
-      // revisions and never lands here.
-      throw input.repository && writeRetry.isConflict(error)
+      // backend's own revision-mismatch prose through. Local snapshots use the same retry policy.
+      throw writeRetry.isConflict(error)
         ? createTeachingCourseManagementContentionError()
         : error;
     }
@@ -317,14 +317,13 @@ export async function autoSplitTeachingLearningGroups(input: {
         receipt,
       };
     } catch (error) {
-      if (input.repository && (await writeRetry.shouldRetry({ attempt, error }))) {
+      if (await writeRetry.shouldRetry({ attempt, error })) {
         continue;
       }
       // A conflict that survives the ladder is exhausted contention, not a
       // caller mistake: answer with the structured 409 rather than passing the
-      // backend's own revision-mismatch prose through. The local file path has no
-      // revisions and never lands here.
-      throw input.repository && writeRetry.isConflict(error)
+      // backend's own revision-mismatch prose through. Local snapshots use the same retry policy.
+      throw writeRetry.isConflict(error)
         ? createTeachingCourseManagementContentionError()
         : error;
     }
@@ -475,14 +474,13 @@ export async function updateTeachingLearningGroupMembers(input: {
       });
       return { group: nextGroup, receipt };
     } catch (error) {
-      if (input.repository && (await writeRetry.shouldRetry({ attempt, error }))) {
+      if (await writeRetry.shouldRetry({ attempt, error })) {
         continue;
       }
       // A conflict that survives the ladder is exhausted contention, not a
       // caller mistake: answer with the structured 409 rather than passing the
-      // backend's own revision-mismatch prose through. The local file path has no
-      // revisions and never lands here.
-      throw input.repository && writeRetry.isConflict(error)
+      // backend's own revision-mismatch prose through. Local snapshots use the same retry policy.
+      throw writeRetry.isConflict(error)
         ? createTeachingCourseManagementContentionError()
         : error;
     }
@@ -564,14 +562,13 @@ export async function renameTeachingLearningGroup(input: {
       });
       return { group: nextGroup, receipt };
     } catch (error) {
-      if (input.repository && (await writeRetry.shouldRetry({ attempt, error }))) {
+      if (await writeRetry.shouldRetry({ attempt, error })) {
         continue;
       }
       // A conflict that survives the ladder is exhausted contention, not a
       // caller mistake: answer with the structured 409 rather than passing the
-      // backend's own revision-mismatch prose through. The local file path has no
-      // revisions and never lands here.
-      throw input.repository && writeRetry.isConflict(error)
+      // backend's own revision-mismatch prose through. Local snapshots use the same retry policy.
+      throw writeRetry.isConflict(error)
         ? createTeachingCourseManagementContentionError()
         : error;
     }
@@ -644,14 +641,13 @@ export async function deleteTeachingLearningGroup(input: {
       });
       return { group, receipt };
     } catch (error) {
-      if (input.repository && (await writeRetry.shouldRetry({ attempt, error }))) {
+      if (await writeRetry.shouldRetry({ attempt, error })) {
         continue;
       }
       // A conflict that survives the ladder is exhausted contention, not a
       // caller mistake: answer with the structured 409 rather than passing the
-      // backend's own revision-mismatch prose through. The local file path has no
-      // revisions and never lands here.
-      throw input.repository && writeRetry.isConflict(error)
+      // backend's own revision-mismatch prose through. Local snapshots use the same retry policy.
+      throw writeRetry.isConflict(error)
         ? createTeachingCourseManagementContentionError()
         : error;
     }
@@ -735,7 +731,7 @@ function requireOwnedCourse(
   if (!course) {
     throw new TeachingCourseManagementStoreError(404, "Teaching course was not found.");
   }
-  if (course.ownerTeacherId !== actorId) {
+  if (!isSameTeachingActorId(course.ownerTeacherId, actorId)) {
     throw new TeachingCourseManagementStoreError(403, "Teaching course ownership is required.");
   }
   return course;
@@ -753,7 +749,7 @@ function requireOwnedClass(
   if (!classItem) {
     throw new TeachingCourseManagementStoreError(404, "Teaching class was not found.");
   }
-  if (classItem.ownerTeacherId !== actorId) {
+  if (!isSameTeachingActorId(classItem.ownerTeacherId, actorId)) {
     throw new TeachingCourseManagementStoreError(403, "Teaching class ownership is required.");
   }
   return classItem;
@@ -773,7 +769,7 @@ function requireOwnedLearningGroup(
     throw new TeachingCourseManagementStoreError(404, "Teaching learning group was not found.");
   }
   const group = learningGroups[groupIndex];
-  if (group.ownerTeacherId !== actorId) {
+  if (!isSameTeachingActorId(group.ownerTeacherId, actorId)) {
     throw new TeachingCourseManagementStoreError(
       403,
       "Teaching learning group ownership is required.",

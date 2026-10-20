@@ -32,9 +32,13 @@ export function createLoginHandoffHref(returnPath: string) {
 export function createLearningReturnPath({
   courseId,
   classId,
+  lessonKey,
+  activityId,
 }: {
   courseId?: string;
   classId?: string;
+  lessonKey?: string;
+  activityId?: string;
 } = {}) {
   const params = new URLSearchParams();
   if (courseId) {
@@ -43,6 +47,8 @@ export function createLearningReturnPath({
   if (classId) {
     params.set("classId", classId);
   }
+  if (lessonKey) params.set("lessonKey", lessonKey);
+  if (activityId) params.set("activityId", activityId);
   const query = params.toString();
   return query ? `/learning?${query}` : "/learning";
 }

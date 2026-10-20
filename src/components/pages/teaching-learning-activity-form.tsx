@@ -115,14 +115,14 @@ export function TeachingLearningActivityForm({
           <fieldset className="space-y-3 rounded-xl border border-[var(--border)] p-4">
             <legend className="px-2 font-semibold text-[var(--foreground)]">{zh ? "非数字量规（3–5 项）" : "Non-numeric rubric (3–5 dimensions)"}</legend>
             {form.rubric.map((dimension, index) => (
-              <div key={dimension.id} className="grid gap-2 sm:grid-cols-[110px_1fr_1fr_auto]">
+              <div key={index} className="grid gap-2 sm:grid-cols-[110px_1fr_1fr_auto]">
                 <input aria-label={`${zh ? "量规 ID" : "Rubric ID"} ${index + 1}`} required value={dimension.id} onChange={(event) => setForm({ ...form, rubric: replaceAt(form.rubric, index, { ...dimension, id: safeIdentifier(event.target.value) }) })} className={inputClassName} />
                 <input aria-label={`量规 ${index + 1} zh-CN`} required placeholder="zh-CN" value={dimension.zh} onChange={(event) => setForm({ ...form, rubric: replaceAt(form.rubric, index, { ...dimension, zh: event.target.value }) })} className={inputClassName} />
                 <input aria-label={`Rubric ${index + 1} en-US`} required placeholder="en-US" value={dimension.en} onChange={(event) => setForm({ ...form, rubric: replaceAt(form.rubric, index, { ...dimension, en: event.target.value }) })} className={inputClassName} />
                 <button type="button" disabled={form.rubric.length <= 3} onClick={() => setForm({ ...form, rubric: form.rubric.filter((_, itemIndex) => itemIndex !== index) })} className="rounded-lg border border-[var(--border)] px-3 text-sm font-semibold disabled:opacity-40">{zh ? "移除" : "Remove"}</button>
               </div>
             ))}
-            <button type="button" disabled={form.rubric.length >= 5} onClick={() => setForm({ ...form, rubric: [...form.rubric, { id: `criterion-${form.rubric.length + 1}`, zh: "", en: "" }] })} className="rounded-full border border-[var(--accent)] px-4 py-2 text-sm font-semibold text-[var(--accent)] disabled:opacity-40">{zh ? "增加量规维度" : "Add rubric dimension"}</button>
+            <button type="button" disabled={form.rubric.length >= 5} onClick={() => setForm({ ...form, rubric: [...form.rubric, { id: nextRubricDimensionId(form.rubric), zh: "", en: "" }] })} className="rounded-full border border-[var(--accent)] px-4 py-2 text-sm font-semibold text-[var(--accent)] disabled:opacity-40">{zh ? "增加量规维度" : "Add rubric dimension"}</button>
           </fieldset>
 
           <div className="grid gap-4 sm:grid-cols-2">
@@ -180,6 +180,13 @@ function createInitialState(lessonKey: string, classes: TeacherCourseClass[], so
 function createActivityDraft(form: FormState): LearningActivityDraft {
   const checkpoint = form.checkpointKind === "single-choice" ? { kind: "single-choice" as const, prompt: { "zh-CN": form.checkpointPromptZh, "en-US": form.checkpointPromptEn }, explanation: { "zh-CN": form.checkpointExplanationZh, "en-US": form.checkpointExplanationEn }, options: form.options.map((item) => ({ id: item.id, label: { "zh-CN": item.zh, "en-US": item.en } })), correctOptionId: form.correctOptionId } : { kind: "short-answer" as const, prompt: { "zh-CN": form.checkpointPromptZh, "en-US": form.checkpointPromptEn }, explanation: { "zh-CN": form.checkpointExplanationZh, "en-US": form.checkpointExplanationEn } };
   return { lessonKey: form.lessonKey, targetClassId: form.targetClassId, title: { "zh-CN": form.titleZh, "en-US": form.titleEn }, instructions: { "zh-CN": form.instructionsZh, "en-US": form.instructionsEn }, checkpoint, rubric: form.rubric.map((item) => ({ id: item.id, label: { "zh-CN": item.zh, "en-US": item.en } })), ...(form.dueAtLocal ? { dueAt: parseHongKongDateTimeInput(form.dueAtLocal) } : {}), aiPolicy: form.aiPolicy, revisionPolicy: "teacher-requested", status: "draft", version: 1 };
+}
+
+function nextRubricDimensionId(rubric: FormState["rubric"]) {
+  const ids = new Set(rubric.map((dimension) => dimension.id));
+  let number = rubric.length + 1;
+  while (ids.has(`criterion-${number}`)) number += 1;
+  return `criterion-${number}`;
 }
 
 function defaultOptions() { return [{ id: "option-a", zh: "", en: "" }, { id: "option-b", zh: "", en: "" }, { id: "option-c", zh: "", en: "" }]; }

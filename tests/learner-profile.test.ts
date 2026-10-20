@@ -258,7 +258,7 @@ describe("B-17 learner profile projection", () => {
       },
       query: {
         targeted: true,
-        filters: ["agent"],
+        filters: ["agent", "activity", "related_activities"],
       },
       summary: {
         target: "learner-profile",

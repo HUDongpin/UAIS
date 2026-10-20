@@ -53,6 +53,16 @@ export async function replaceLearningChatroomSharesSnapshot(input: {
   expectedRevision: string;
   database: LearningChatroomShareDatabase;
 }) {
+  return runWithLearningChatroomSharesWriteLock(input.dataDir, () =>
+    replaceLearningChatroomSharesSnapshotLocked(input),
+  );
+}
+
+async function replaceLearningChatroomSharesSnapshotLocked(input: {
+  dataDir: string;
+  expectedRevision: string;
+  database: LearningChatroomShareDatabase;
+}) {
   const current = await readLearningChatroomSharesSnapshot(input.dataDir);
   if (current.revision !== input.expectedRevision) {
     throw new HttpError(409, "Learning chatroom shares snapshot revision mismatch.");
@@ -84,4 +94,41 @@ export async function replaceLearningChatroomSharesSnapshot(input: {
     responsibleSession: "S12" as const,
     redaction: createRedaction(),
   };
+}
+
+// Atomic rename protects readers from partial JSON, but only a lock around the
+// read/check/write sequence prevents a stale mint from undoing a revocation.
+// Match the transcript store's cross-process lock and fail closed if a crashed
+// writer left its lock behind; never guess that an existing lock is abandoned.
+async function runWithLearningChatroomSharesWriteLock<T>(
+  dataDir: string,
+  action: () => Promise<T>,
+) {
+  const snapshotDir = resolve(dataDir, "learning-chatroom-shares");
+  ensureWithinBase(dataDir, snapshotDir);
+  await mkdir(snapshotDir, { recursive: true });
+  const lockPath = resolve(snapshotDir, ".write-lock");
+  ensureWithinBase(dataDir, lockPath);
+  const deadline = Date.now() + 5_000;
+
+  for (;;) {
+    try {
+      await mkdir(lockPath);
+      break;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
+        throw error;
+      }
+      if (Date.now() >= deadline) {
+        throw new HttpError(503, "Learning chatroom shares snapshot lock is unavailable.");
+      }
+      await new Promise<void>((resolveDelay) => setTimeout(resolveDelay, 10));
+    }
+  }
+
+  try {
+    return await action();
+  } finally {
+    await rm(lockPath, { force: true, recursive: true }).catch(() => undefined);
+  }
 }

@@ -529,6 +529,42 @@ describe("student PPT playback API", () => {
     }
   });
 
+  it("authorizes a teacher whose session account only differs in owner casing", async () => {
+    const fixture = await createApprovedLearningPptPlaybackFixture("Peter", {
+      classOwnerTeacherId: "Phoebe",
+    });
+    const handler = createLearningPptPlaybackManifestGetHandler({
+      env: {
+        ...fixture.env,
+        // Keep the local-demo Phoebe shortcut off so this asserts snapshot
+        // ownership casing, not the published-demo teacher path.
+        UAIS_APP_AUTH_PROVIDER: "database-accounts",
+      },
+      readStoredManifest: async () => createStoredKangXiaManifest(),
+    });
+
+    try {
+      const response = await handler(
+        new Request("http://localhost/api/learning/ppt-playback/elementary-math-research", {
+          headers: { cookie: createTeacherCookie("phoebe") },
+        }),
+        { params: { courseId: "elementary-math-research" } },
+      );
+      const body = await response.json();
+
+      expect(response.status, JSON.stringify(body)).toBe(200);
+      expect(body.access).toEqual(
+        expect.objectContaining({
+          status: "authorized",
+          reasonCode: "teacher-course-ownership-approved",
+          actor: { actorId: "phoebe", role: "teacher" },
+        }),
+      );
+    } finally {
+      await rm(fixture.dataDir, { recursive: true, force: true });
+    }
+  });
+
   it("restores the published Kang Xia PPT for the local demo teacher without seeded course ownership", async () => {
     const dataDir = await mkdtemp(join(tmpdir(), "uais-learning-ppt-local-demo-"));
     const handler = createLearningPptPlaybackManifestGetHandler({
@@ -563,6 +599,39 @@ describe("student PPT playback API", () => {
           teacherName: "康霞博士",
           voiceLabel: "康霞博士克隆声音",
           slideCount: 19,
+        }),
+      );
+    } finally {
+      await rm(dataDir, { recursive: true, force: true });
+    }
+  });
+
+  it("restores local-demo published playback when the teacher account is lowercase phoebe", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "uais-learning-ppt-local-demo-phoebe-"));
+    const handler = createLearningPptPlaybackManifestGetHandler({
+      env: {
+        NODE_ENV: "development",
+        UAIS_APP_AUTH_PROVIDER: "local-demo",
+        UAIS_APP_SESSION_SIGNING_SECRET: appSessionSigningSecret,
+        UAIS_TEACHING_COURSES_DATA_DIR: dataDir,
+      },
+    });
+
+    try {
+      const response = await handler(
+        new Request("http://localhost/api/learning/ppt-playback/elementary-math-research", {
+          headers: { cookie: createTeacherCookie("phoebe") },
+        }),
+        { params: { courseId: "elementary-math-research" } },
+      );
+      const body = await response.json();
+
+      expect(response.status, JSON.stringify(body)).toBe(200);
+      expect(body.access).toEqual(
+        expect.objectContaining({
+          status: "authorized",
+          reasonCode: "teacher-demo-published-playback-approved",
+          actor: { actorId: "phoebe", role: "teacher" },
         }),
       );
     } finally {

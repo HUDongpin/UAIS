@@ -4,6 +4,7 @@ import { createServer, type Server } from "node:http";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { createRequire } from "node:module";
 import { describe, expect, it } from "vitest";
 
 describe("deployed teaching operation detail browser smoke", () => {
@@ -209,9 +210,14 @@ describe("deployed teaching operation detail browser smoke", () => {
           "verify-main-inline-student-group-suggestions-submitted",
           "open-main-inline-dashboard-workspace",
           "click-main-inline-dashboard-refresh",
-          "verify-main-inline-dashboard-refresh-submitted",
-          "click-main-inline-dashboard-snapshot",
-          "verify-main-inline-dashboard-snapshot-submitted",
+          "verify-main-inline-dashboard-learning-insights-readback",
+          "verify-main-inline-dashboard-refresh-readback",
+          "verify-main-inline-dashboard-activities-link",
+          "open-main-inline-quiz-board-workspace",
+          "click-main-inline-quiz-board-refresh",
+          "verify-main-inline-quiz-board-learning-insights-readback",
+          "verify-main-inline-quiz-board-refresh-readback",
+          "verify-main-inline-quiz-board-activities-link",
           "open-main-inline-agents-workspace",
           "click-main-inline-agent-plan-save",
           "verify-main-inline-agent-plan-submitted",
@@ -232,11 +238,6 @@ describe("deployed teaching operation detail browser smoke", () => {
           "verify-main-inline-export-manifest-submitted",
           "click-main-inline-export-redaction-validation",
           "verify-main-inline-export-redaction-validation-submitted",
-          "open-main-inline-quiz-board-workspace",
-          "click-main-inline-quiz-board-refresh",
-          "verify-main-inline-quiz-board-refresh-submitted",
-          "click-main-inline-quiz-item-review",
-          "verify-main-inline-quiz-item-review-submitted",
           "open-main-inline-grading-workspace",
           "click-main-inline-grading-queue-save",
           "verify-main-inline-grading-queue-submitted",
@@ -257,7 +258,7 @@ describe("deployed teaching operation detail browser smoke", () => {
           "verify-main-invite-publish-audit-readback",
           "verify-main-invite-publish-artifact",
           "verify-main-invite-publish-class-readback",
-          "verify-all-operation-detail-pages-primary-secondary",
+          "verify-all-operation-detail-page-contracts",
         ],
         apiInterceptionPolicy: {
           operationApi: "fixture-backed-contract",
@@ -316,13 +317,13 @@ describe("deployed teaching operation detail browser smoke", () => {
             operationId: "dashboard",
             route: "/teaching/dashboard",
             primaryAction: "Refresh Dashboard",
-            secondaryAction: "Lock Daily Snapshot",
+            secondaryAction: "View real learning activities",
           },
           {
             operationId: "quiz-board",
             route: "/teaching/quiz-board",
             primaryAction: "Refresh Quiz Board",
-            secondaryAction: "Flag Low-quality Items",
+            secondaryAction: "View real learning activities",
           },
           {
             operationId: "grading",
@@ -606,12 +607,12 @@ describe("deployed teaching operation detail browser smoke", () => {
     expect(output).not.toContain("/Users/");
   });
 
-  it("continues live teaching operation API calls after issuing signed teacher auth cookies", async () => {
+  it.each(["current", "current-zh", "stale-metrics", "wrong-course", "forbidden"])("checks learning-insights readback alongside signed teaching API calls (%s)", async (insightsScenario) => {
     const tmpDir = mkdtempSync(join(tmpdir(), "uais-operation-browser-live-api-runtime-"));
     const nodeModulesDir = join(tmpDir, "node_modules");
     const markerPath = join(tmpDir, "operation-api-marker.json");
     const envFile = join(tmpDir, "operation-browser-live-api.env");
-    writeLiveTeachingOperationsPlaywrightRuntimeForTest({ nodeModulesDir, markerPath });
+    writeLiveTeachingOperationsPlaywrightRuntimeForTest({ nodeModulesDir, markerPath, insightsScenario });
 
     const requests: string[] = [];
     const server = createServer((request, response) => {
@@ -642,7 +643,7 @@ describe("deployed teaching operation detail browser smoke", () => {
     );
 
     try {
-      const output = await execFileForTest(
+      const execution = execFileForTest(
         "node",
         [
           "scripts/teaching-operation-detail-browser-smoke.mjs",
@@ -665,6 +666,17 @@ describe("deployed teaching operation detail browser smoke", () => {
           },
         },
       );
+      if (!insightsScenario.startsWith("current")) {
+        await expect(execution).rejects.toThrow(/"status": "failed"/);
+        await expect(execution).rejects.toThrow('"lastInteraction": "verify-main-inline-dashboard-learning-insights"');
+        const marker = JSON.parse(readFileSync(markerPath, "utf8"));
+        expect(marker.learningInsightsFetchCount).toBe(1);
+        expect(marker.learningInsightsDomReadCount).toBe(insightsScenario === "stale-metrics" ? 1 : 0);
+        expect(marker.mainInlineDashboardSnapshotSubmitted).toBe(false);
+        expect(marker.mainInlineQuizItemReviewSubmitted).toBe(false);
+        return;
+      }
+      const output = await execution;
       const body = JSON.parse(output);
       const marker = JSON.parse(readFileSync(markerPath, "utf8"));
 
@@ -693,7 +705,9 @@ describe("deployed teaching operation detail browser smoke", () => {
           mainInlineOperationReceiptAuthSessionReturned: true,
           mainInlineKnowledgeIndexSyncSubmitted: true,
           mainInlineStudentRosterSyncSubmitted: true,
-          mainInlineDashboardRefreshSubmitted: true,
+          learningInsightsFetchCount: 8,
+          learningInsightsDomReadCount: 8,
+          mainInlineDashboardRefreshSubmitted: false,
           mainInlineStudentPreviewSubmitted: true,
           mainInlineAgentPermissionPreflightSubmitted: true,
           mainKnowledgeSourceRegistrationSubmitted: true,
@@ -701,14 +715,14 @@ describe("deployed teaching operation detail browser smoke", () => {
           mainInlineCollaborationInviteSubmitted: true,
           mainInlineStudentGroupSuggestionSubmitted: true,
           mainInlineExportRedactionValidationSubmitted: true,
-          mainInlineDashboardSnapshotSubmitted: true,
-          mainInlineQuizItemReviewSubmitted: true,
+          mainInlineDashboardSnapshotSubmitted: false,
+          mainInlineQuizItemReviewSubmitted: false,
           mainInlineGradingFeedbackDraftSubmitted: true,
           mainInlineAgentPlanSubmitted: true,
           mainInlineContentPublishSubmitted: true,
           mainInlineAdminSettingsSubmitted: true,
           mainInlineExportManifestSubmitted: true,
-          mainInlineQuizBoardRefreshSubmitted: true,
+          mainInlineQuizBoardRefreshSubmitted: false,
           mainInlineGradingQueueSubmitted: true,
           mainInviteDraftSubmitted: true,
           mainInvitePublishSubmitted: true,
@@ -716,9 +730,9 @@ describe("deployed teaching operation detail browser smoke", () => {
           operationInviteDraftSubmitted: true,
           secondaryOperationSubmitted: true,
           operationApiContinueCount: 0,
-          operationApiFetchCount: 44,
-          auditReadbackContinueCount: 44,
-          auditAlertReadbackContinueCount: 19,
+          operationApiFetchCount: 36,
+          auditReadbackContinueCount: 36,
+          auditAlertReadbackContinueCount: 15,
           alertNotificationPostContinueCount: 1,
           alertNotificationReadbackContinueCount: 1,
           rollbackApiContinueCount: 1,
@@ -790,7 +804,8 @@ describe("deployed teaching operation detail browser smoke", () => {
             "mainInlineAlertPendingBeforeSuccess",
             "mainInlineKnowledgeIndexSyncSubmitted",
             "mainInlineStudentRosterSyncSubmitted",
-            "mainInlineDashboardRefreshSubmitted",
+            "mainInlineDashboardReadbackVerified",
+            "mainInlineDashboardRefreshReadbackVerified",
             "mainInlineStudentPreviewSubmitted",
             "mainInlineAgentPermissionPreflightSubmitted",
             "mainKnowledgeSourceRegistrationSubmitted",
@@ -798,14 +813,15 @@ describe("deployed teaching operation detail browser smoke", () => {
             "mainInlineCollaborationInviteSubmitted",
             "mainInlineStudentGroupSuggestionSubmitted",
             "mainInlineExportRedactionValidationSubmitted",
-            "mainInlineDashboardSnapshotSubmitted",
-            "mainInlineQuizItemReviewSubmitted",
+            "mainInlineDashboardActivitiesLinkVerified",
+            "mainInlineQuizBoardActivitiesLinkVerified",
             "mainInlineGradingFeedbackDraftSubmitted",
             "mainInlineAgentPlanSubmitted",
             "mainInlineContentPublishSubmitted",
             "mainInlineAdminSettingsSubmitted",
             "mainInlineExportManifestSubmitted",
-            "mainInlineQuizBoardRefreshSubmitted",
+            "mainInlineQuizBoardReadbackVerified",
+            "mainInlineQuizBoardRefreshReadbackVerified",
             "mainInlineGradingQueueSubmitted",
             "mainInlineAuditAlertReadbackVerified",
             "mainInlineAlertNotificationButtonClick",
@@ -838,10 +854,16 @@ describe("deployed teaching operation detail browser smoke", () => {
           ].map((operationId) => ({
             operationId,
             route: `/teaching/${operationId}`,
-            primaryButtonClick: "passed",
-            primaryPostPersisted: "passed",
-            secondaryButtonClick: "passed",
-            secondaryPostPersisted: "passed",
+            ...(["dashboard", "quiz-board"].includes(operationId) ? {
+              learningInsightsReadbackVerified: "passed",
+              refreshReadbackVerified: "passed",
+              activitiesLinkVerified: "passed",
+            } : {
+              primaryButtonClick: "passed",
+              primaryPostPersisted: "passed",
+              secondaryButtonClick: "passed",
+              secondaryPostPersisted: "passed",
+            }),
           })),
         }),
       );
@@ -1064,6 +1086,7 @@ function createDeploymentFingerprintForTest(baseUrl: string) {
 function writeLiveTeachingOperationsPlaywrightRuntimeForTest(input: {
   nodeModulesDir: string;
   markerPath: string;
+  insightsScenario?: string;
 }) {
   const playwrightDir = join(input.nodeModulesDir, "playwright");
   mkdirSync(playwrightDir, { recursive: true });
@@ -1075,9 +1098,14 @@ function writeLiveTeachingOperationsPlaywrightRuntimeForTest(input: {
     join(playwrightDir, "index.js"),
 `
 const fs = require("fs");
+const { JSDOM } = require(${JSON.stringify(createRequire(import.meta.url).resolve("jsdom"))});
+const insightsScenario = ${JSON.stringify(input.insightsScenario || "current")};
+let learningInsightsDom;
 const markerPath = ${JSON.stringify(input.markerPath)};
 const marker = {
   cookiesAdded: false,
+  learningInsightsFetchCount: 0,
+  learningInsightsDomReadCount: 0,
   operationApiContinued: false,
   auditReadbackContinued: false,
   auditAlertReadbackContinued: false,
@@ -1324,6 +1352,20 @@ function createRouteRequest(pathname, method, body) {
     },
     fallback: async () => undefined,
     fetch: async () => {
+      if (pathname.endsWith("/learning-insights") && method === "GET") {
+        marker.learningInsightsFetchCount += 1;
+        const refresh = marker.learningInsightsFetchCount % 2 === 0;
+        const responseBody = {
+          courseId: insightsScenario === "wrong-course" ? "other-course" : "research-methods",
+          counts: refresh
+            ? { notStarted: 4, draft: 2, submitted: 6, revisionRequested: 2, resubmitted: 2, accepted: 4, overdue: 3 }
+            : { notStarted: 5, draft: 2, submitted: 3, revisionRequested: 1, resubmitted: 1, accepted: 8, overdue: 6 },
+          projectionVersion: marker.learningInsightsFetchCount,
+          dataFreshAt: refresh ? "2026-10-20T02:00:00.000Z" : "2026-10-20T01:00:00.000Z",
+        };
+        writeMarker();
+        return { status: () => insightsScenario === "forbidden" ? 403 : 200, json: async () => responseBody };
+      }
       if (pathname === "/api/teaching/operations") {
         marker.operationApiFetched = true;
         marker.operationApiFetchCount = (marker.operationApiFetchCount || 0) + 1;
@@ -1531,6 +1573,29 @@ function createRouteRequest(pathname, method, body) {
       }
       if (!responseBody && options && options.response && typeof options.response.json === "function") {
         responseBody = await options.response.json().catch(() => undefined);
+      }
+      if (pathname.endsWith("/learning-insights")) {
+        const refresh = marker.learningInsightsFetchCount % 2 === 0;
+        const metrics = currentWorkspace === "dashboard"
+          ? [["Task Start Rate", refresh ? "80%" : "75%"], ["Task Acceptance Rate", refresh ? "20%" : "40%"], ["Overdue Tasks", refresh ? "3" : "6"]]
+          : [["Task Submission Rate", refresh ? "70%" : "65%"], ["Low-Quality Items", "Unavailable"], ["Error Clusters", "Unavailable"]];
+        if (insightsScenario === "stale-metrics") metrics[0][1] = "88%";
+        const states = insightsScenario === "current-zh"
+          ? ["未开始", "草稿中", "已提交", "要求修订", "已重新提交", "已接受"]
+          : ["Not started", "Draft", "Submitted", "Revision requested", "Resubmitted", "Accepted"];
+        if (insightsScenario === "current-zh") {
+          const labels = currentWorkspace === "dashboard" ? ["任务启动率", "任务接受率", "逾期任务"] : ["任务提交率", "低质题", "错因簇"];
+          metrics.forEach((metric, index) => {
+            metric[0] = labels[index];
+            if (metric[1] === "Unavailable") metric[1] = "暂不可用";
+          });
+        }
+        const counts = ["notStarted", "draft", "submitted", "revisionRequested", "resubmitted", "accepted"];
+        learningInsightsDom = new JSDOM('<section>' +
+          metrics.map(([label, value]) => '<article><p>' + label + '</p><p>' + value + '</p></article>').join('') +
+          '<dl>' + counts.map((key, index) => '<div><dt>' + states[index] + '</dt><dd>' + responseBody.counts[key] + '</dd></div>').join('') + '</dl>' +
+          '<time datetime="' + responseBody.dataFreshAt + '"></time><time datetime="2026-10-20T03:00:00.000Z"></time>' +
+          '<a href="/teaching/courses/research-methods/activities">View real learning activities</a></section>');
       }
       if (pathname === "/api/teaching/operations") {
         emitRouteResponse(pathname, method, responseBody || createTeachingOperationResponse(body));
@@ -1742,6 +1807,9 @@ const page = {
       : currentSurface === "operation-detail"
       ? currentWorkspace
       : "";
+    if (["dashboard", "quiz-board"].includes(currentWorkspace)) {
+      await apiHandler(createRouteRequest("/api/teaching/courses/research-methods/learning-insights", "GET"));
+    }
   },
   getByText: () => ({
     count: async () => 0,
@@ -1776,6 +1844,13 @@ const page = {
     inputValue: async () => currentCourseSettingsName,
   }),
   getByRole: (role, options) => {
+    if (role === "region") {
+      return { evaluate: async (callback) => {
+        marker.learningInsightsDomReadCount += 1;
+        writeMarker();
+        return callback(learningInsightsDom.window.document.querySelector("section"));
+      } };
+    }
     if (role === "heading") {
       return {
         count: async () => {
@@ -1813,6 +1888,7 @@ const page = {
           }
           if (name.includes("Data Dashboard") || name.includes("数据看板")) {
             currentWorkspace = "dashboard";
+            await apiHandler(createRouteRequest("/api/teaching/courses/research-methods/learning-insights", "GET"));
           }
           if (name.includes("Agent Setup") || name.includes("智能体配置")) {
             currentWorkspace = "agents";
@@ -1828,6 +1904,7 @@ const page = {
           }
           if (name.includes("Quiz Board") || name.includes("测验看板")) {
             currentWorkspace = "quiz-board";
+            await apiHandler(createRouteRequest("/api/teaching/courses/research-methods/learning-insights", "GET"));
           }
           if (name.includes("Assignment Review") || name.includes("作业批改")) {
             currentWorkspace = "grading";
@@ -1843,6 +1920,10 @@ const page = {
       return {
         click: async () => {
           const buttonName = String(options && options.name);
+          if (buttonName.includes("Refresh Dashboard") || buttonName.includes("Refresh Quiz Board")) {
+            await apiHandler(createRouteRequest("/api/teaching/courses/research-methods/learning-insights", "GET"));
+            return;
+          }
           if (buttonName.includes("New Course") || buttonName.includes("新增课程")) {
             currentDialog = "new-course";
             return;

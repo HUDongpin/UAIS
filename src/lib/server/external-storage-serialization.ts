@@ -506,11 +506,100 @@ export function normalizeArtifactValue(value: unknown): unknown {
   throw new HttpError(400, "Teaching operation artifact contains unsupported data.");
 }
 
-export function normalizeTeachingOperationAuditEvent(value: unknown) {
+function readOptionalTeachingOperationAuditAuthSession(value: unknown) {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+  const sessionId =
+    typeof value.sessionId === "string" &&
+    /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(value.sessionId.trim())
+      ? value.sessionId.trim()
+      : undefined;
+  const authenticatedAt =
+    typeof value.authenticatedAt === "string" &&
+    Number.isFinite(Date.parse(value.authenticatedAt))
+      ? new Date(Date.parse(value.authenticatedAt)).toISOString()
+      : undefined;
+  const expiresAt =
+    typeof value.expiresAt === "string" && Number.isFinite(Date.parse(value.expiresAt))
+      ? new Date(Date.parse(value.expiresAt)).toISOString()
+      : undefined;
+  if (!sessionId || !authenticatedAt || !expiresAt) {
+    return undefined;
+  }
+  return { sessionId, authenticatedAt, expiresAt };
+}
+
+type TeachingOperationAuditAuthSessionValue = NonNullable<
+  ReturnType<typeof readOptionalTeachingOperationAuditAuthSession>
+>;
+
+type TeachingOperationAuditRequestSourceValue = {
+  userAgent: string;
+  ipAddress: "redacted";
+};
+
+type NormalizedTeachingOperationAuditEvent =
+  | {
+      auditId: string;
+      traceId: string;
+      eventType:
+        | "teaching-gradebook-update.released"
+        | "teaching-gradebook-update.release-rolled-back";
+      actorId: string;
+      actorRole: "teacher";
+      authMode: "signed-teacher-session";
+      authSession?: TeachingOperationAuditAuthSessionValue;
+      courseId: string;
+      gradebookUpdateId: string;
+      requestSource: TeachingOperationAuditRequestSourceValue;
+      createdAt: string;
+      redaction: ReturnType<typeof createRedaction>;
+    }
+  | {
+      auditId: string;
+      traceId: string;
+      eventType: "teaching-operation.rolled-back";
+      actorId: string;
+      actorRole: "teacher";
+      authMode: "signed-teacher-session";
+      authSession?: TeachingOperationAuditAuthSessionValue;
+      courseId: string;
+      targetRecordId: string;
+      operationId: string;
+      actionSlot: "primary" | "secondary";
+      actionId: string;
+      rollbackReason: string;
+      requestSource: TeachingOperationAuditRequestSourceValue;
+      createdAt: string;
+      redaction: ReturnType<typeof createRedaction>;
+    }
+  | {
+      auditId: string;
+      traceId: string;
+      eventType: "teaching-operation.persisted";
+      actorId: string;
+      actorRole: "teacher";
+      authMode: "signed-teacher-session";
+      authSession?: TeachingOperationAuditAuthSessionValue;
+      operationId: string;
+      actionSlot: "primary" | "secondary";
+      actionId: string;
+      courseId?: string;
+      sourceAction?: string;
+      requestSource: TeachingOperationAuditRequestSourceValue;
+      createdAt: string;
+      redaction: ReturnType<typeof createRedaction>;
+    };
+
+export function normalizeTeachingOperationAuditEvent(
+  value: unknown,
+): NormalizedTeachingOperationAuditEvent {
   if (!isRecord(value)) {
     throw new HttpError(400, "Teaching operation audit event must be an object.");
   }
   requireRecord(value.requestSource, "teaching operation audit request source");
+  const authSession = readOptionalTeachingOperationAuditAuthSession(value.authSession);
   if (
     (value.eventType === "teaching-gradebook-update.released" ||
       value.eventType === "teaching-gradebook-update.release-rolled-back") &&
@@ -525,6 +614,7 @@ export function normalizeTeachingOperationAuditEvent(value: unknown) {
       actorId: requireSafeId(value.actorId, "actor id"),
       actorRole: "teacher" as const,
       authMode: "signed-teacher-session" as const,
+      ...(authSession ? { authSession } : {}),
       courseId: requireSafeId(value.courseId, "course id"),
       gradebookUpdateId: requireSafeId(value.gradebookUpdateId, "gradebook update id"),
       requestSource: {
@@ -554,6 +644,7 @@ export function normalizeTeachingOperationAuditEvent(value: unknown) {
       actorId: requireSafeId(value.actorId, "actor id"),
       actorRole: "teacher" as const,
       authMode: "signed-teacher-session" as const,
+      ...(authSession ? { authSession } : {}),
       courseId: requireSafeId(value.courseId, "course id"),
       targetRecordId: requireSafeId(value.targetRecordId, "target record id"),
       operationId: requireSafeId(value.operationId, "teaching operation id"),
@@ -587,6 +678,7 @@ export function normalizeTeachingOperationAuditEvent(value: unknown) {
     actorId: requireSafeId(value.actorId, "actor id"),
     actorRole: "teacher" as const,
     authMode: "signed-teacher-session" as const,
+    ...(authSession ? { authSession } : {}),
     operationId: requireSafeId(value.operationId, "teaching operation id"),
     actionSlot: requireTeachingOperationActionSlot(value.actionSlot),
     actionId: requireSafeId(value.actionId, "teaching operation action id"),
@@ -605,6 +697,15 @@ export function normalizeTeachingOperationAuditEvent(value: unknown) {
     createdAt: requireIsoDate(value.createdAt, "createdAt"),
     redaction: createRedaction(),
   };
+}
+
+export function isPersistedTeachingOperationAuditEventWithoutCourseId(
+  event: NormalizedTeachingOperationAuditEvent,
+): event is Extract<
+  NormalizedTeachingOperationAuditEvent,
+  { eventType: "teaching-operation.persisted" }
+> {
+  return event.eventType === "teaching-operation.persisted" && !event.courseId;
 }
 
 export function normalizeTeachingOperationRollbackRequest(value: unknown) {

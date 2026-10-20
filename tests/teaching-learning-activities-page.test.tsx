@@ -2,6 +2,8 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { TeachingLearningActivitiesPage } from "@/components/pages/teaching-learning-activities-page";
+import { TeachingLearningActivityForm } from "@/components/pages/teaching-learning-activity-form";
+import { normalizeLearningActivityDraft } from "@/lib/learning-loop/domain";
 
 vi.mock("next/link", () => ({
   default: ({ href, children, ...props }: { href: string; children: ReactNode }) => <a href={href} {...props}>{children}</a>,
@@ -46,6 +48,69 @@ afterEach(() => {
 });
 
 describe("TeachingLearningActivitiesPage", () => {
+  it("keeps rubric ID editing focused while its value changes", () => {
+    render(<TeachingLearningActivityForm locale="zh-CN" lessonKey="lesson-1" classes={[{ classId: "class-1", className: "一班" }]} intent="create" onSubmit={vi.fn(async () => {})} />);
+    const rubricId = screen.getByRole("textbox", { name: "量规 ID 1" });
+    rubricId.focus();
+    fireEvent.change(rubricId, { target: { value: "claim-a" } });
+    expect(screen.getByRole("textbox", { name: "量规 ID 1" })).toBe(document.activeElement);
+  });
+
+  it("assigns a unique rubric ID after removing and re-adding a dimension", () => {
+    render(<TeachingLearningActivityForm locale="zh-CN" lessonKey="lesson-1" classes={[{ classId: "class-1", className: "一班" }]} intent="create" onSubmit={vi.fn(async () => {})} />);
+    const add = screen.getByRole("button", { name: "增加量规维度" });
+    fireEvent.click(add);
+    fireEvent.click(add);
+    fireEvent.click(screen.getAllByRole("button", { name: "移除" })[3]);
+    fireEvent.click(add);
+    const ids = screen.getAllByRole("textbox", { name: /^量规 ID / }).map((field) => (field as HTMLInputElement).value);
+    expect(ids).toHaveLength(5);
+    expect(new Set(ids).size).toBe(5);
+  });
+
+  it("initializes the first activity draft from the asynchronously loaded lesson and class", async () => {
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (init?.method === "POST") {
+        normalizeLearningActivityDraft(JSON.parse(String(init.body)));
+        return json({ status: "persisted", activity });
+      }
+      if (url === "/api/teaching/courses") return json({ classes: [{ courseId: "course-1", classId: "class-1", className: "一班" }] });
+      if (url.includes("ppt-playback")) return json({ playback: { learningUnit: { lessonKey: "lesson-1", position: 1 } } });
+      if (url.includes("learning-insights")) return json({}, 404);
+      return json({ activities: [] });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<TeachingLearningActivitiesPage courseId="course-1" />);
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "保存任务草稿" })).toHaveProperty("disabled", false));
+    expect(screen.getByRole("textbox", { name: "课件单元键" })).toHaveProperty("value", "lesson-1");
+    expect(screen.getByRole("combobox", { name: "目标班级" })).toHaveProperty("value", "class-1");
+    const title = screen.getByRole("textbox", { name: "标题 · zh-CN" });
+    fireEvent.change(title, { target: { value: "保留正在编辑的标题" } });
+    fireEvent.click(screen.getByRole("button", { name: "刷新真实数据" }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(8));
+    const refreshedTitle = screen.getByRole("textbox", { name: "标题 · zh-CN" });
+    expect(refreshedTitle).toHaveProperty("value", "保留正在编辑的标题");
+    for (const [name, value] of [
+      ["Title · en-US", "Evidence activity"],
+      ["说明 · zh-CN", "提交证据。"],
+      ["Instructions · en-US", "Submit evidence."],
+      ["问题 · zh-CN", "什么是证据？"],
+      ["Prompt · en-US", "What is evidence?"],
+      ["解释 · zh-CN", "证据支持主张。"],
+      ["Explanation · en-US", "Evidence supports claims."],
+      ...[1, 2, 3].flatMap((index) => [[`量规 ${index} zh-CN`, `量规${index}`], [`Rubric ${index} en-US`, `Criterion ${index}`]]),
+    ]) {
+      fireEvent.change(screen.getByRole("textbox", { name }), { target: { value } });
+    }
+    fireEvent.submit(refreshedTitle.closest("form")!);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      "/api/teaching/courses/course-1/activities",
+      expect.objectContaining({ method: "POST", body: expect.stringContaining('"lessonKey":"lesson-1","targetClassId":"class-1"') }),
+    ));
+    expect(await screen.findByText("任务草稿已由服务端持久化。")).toBeTruthy();
+  });
+
   it("renders real activities and insights, then publishes with server readback", async () => {
     const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
       if (init?.method === "PATCH") {
@@ -97,5 +162,28 @@ describe("TeachingLearningActivitiesPage", () => {
     expect(await screen.findByText(/尚无可绑定的已发布课件单元/)).toBeTruthy();
     expect(screen.getByText(/尚无真实班级/)).toBeTruthy();
     expect(screen.getByRole("button", { name: "保存任务草稿" })).toHaveProperty("disabled", true);
+  });
+
+  it("hides authoring controls when the server reports teacher-course-ownership-required", async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url === "/api/teaching/courses") {
+        return json({ courses: [], classes: [] });
+      }
+      if (url.includes("ppt-playback")) return json({ reasonCode: "published-playback-required" }, 404);
+      if (url.includes("learning-insights")) return json({}, 404);
+      if (url.includes("/activities")) {
+        return json({ reasonCode: "teacher-course-ownership-required" }, 403);
+      }
+      return json({}, 404);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<TeachingLearningActivitiesPage courseId="teacher-research-methods" />);
+
+    expect(await screen.findByRole("alert")).toBeTruthy();
+    expect(screen.getByText("工作台只读：当前账号不是这门课程的授课教师。")).toBeTruthy();
+    expect(screen.getByText(/演示课程卡片未绑定本账号所有权/)).toBeTruthy();
+    expect(screen.queryByText(/工作台暂不可用：teacher-course-ownership-required/)).toBeNull();
+    expect(screen.queryByText(/还没有真实任务。请在下方创建第一项任务草稿/)).toBeNull();
+    expect(screen.queryByRole("button", { name: "保存任务草稿" })).toBeNull();
   });
 });

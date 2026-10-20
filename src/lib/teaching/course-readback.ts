@@ -154,6 +154,7 @@ export type TeachingCourseListResponse = {
     unit?: string;
     department?: string;
     semester?: string;
+    description?: string;
     students?: number;
   }>;
   classes?: Array<{
@@ -317,9 +318,11 @@ function readPersistedCourseSettingsValue(
   if (field === "semester") {
     return extractCourseSemester(course, locale).trim();
   }
-  // The description field has no persisted baseline: the form opens it empty in
-  // every locale, so it carries no stale-localized-string failure mode.
-  return "";
+  // Catalog demo cards have no persisted description. Owned courses carry the
+  // last saved settings description so refresh can round-trip the form.
+  return course.description
+    ? readLocalizedText(course.description, locale).trim()
+    : "";
 }
 
 // Stamps the current locale onto each edited field so the draft records what the
@@ -442,6 +445,13 @@ export function applyCourseSettingsPatchToTeacherCourse(
   const semester = patch.semester?.trim();
   const description = patch.description?.trim();
 
+  const localizedDescription = description
+    ? {
+        "zh-CN": description,
+        "en-US": description,
+      }
+    : undefined;
+
   return {
     ...course,
     title: courseName
@@ -456,12 +466,8 @@ export function applyCourseSettingsPatchToTeacherCourse(
           "en-US": `${semester} / Saved course`,
         }
       : course.status,
-    currentFocus: description
-      ? {
-          "zh-CN": description,
-          "en-US": description,
-        }
-      : course.currentFocus,
+    currentFocus: localizedDescription ?? course.currentFocus,
+    ...(localizedDescription ? { description: localizedDescription } : {}),
   };
 }
 
@@ -520,6 +526,17 @@ export function createTeacherCourseFromPersistedCourse(
   const instructor = course.instructor?.trim() || "Teacher";
   const department = course.department?.trim() || "Department";
   const unit = course.unit?.trim() || "Unit";
+  const description = course.description?.trim();
+  const localizedDescription = description
+    ? {
+        "zh-CN": description,
+        "en-US": description,
+      }
+    : undefined;
+  const metadataFocus = {
+    "zh-CN": `${instructor} · ${department} · ${unit}`,
+    "en-US": `${instructor} · ${department} · ${unit}`,
+  };
 
   return {
     id: courseId,
@@ -532,10 +549,8 @@ export function createTeacherCourseFromPersistedCourse(
       "en-US": `${semester} / Saved course`,
     },
     students: course.students ?? 0,
-    currentFocus: {
-      "zh-CN": `${instructor} · ${department} · ${unit}`,
-      "en-US": `${instructor} · ${department} · ${unit}`,
-    },
+    currentFocus: localizedDescription ?? metadataFocus,
+    ...(localizedDescription ? { description: localizedDescription } : {}),
   };
 }
 

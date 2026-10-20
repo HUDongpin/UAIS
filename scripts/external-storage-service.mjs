@@ -14,7 +14,6 @@ const EXTERNAL_STORAGE_SERVICE_TARGETS = {
   production: "uais-external-storage-production-service",
 };
 const MIN_PRODUCTION_ACCESS_TOKEN_LENGTH = 32;
-const teachingOperationAppendWriteQueues = new Map();
 
 try {
   const options = parseArgs(process.argv.slice(2));
@@ -182,9 +181,15 @@ function createExternalStorageServer(config) {
         if (incoming.teacherId !== teacherId) {
           throw new HttpError(400, "Teacher AI ownership record id mismatch.");
         }
-        const existing = await readTeacherOwnership({ dataDir: config.dataDir, teacherId });
-        const merged = mergeOwnership(existing, incoming);
-        await writeTeacherOwnership({ dataDir: config.dataDir, ownership: merged });
+        await runWithExternalStorageFileWriteLock(
+          resolveTeacherOwnershipPath(config.dataDir, teacherId),
+          "Teacher AI ownership merge lock is unavailable.",
+          async () => {
+            const existing = await readTeacherOwnership({ dataDir: config.dataDir, teacherId });
+            const merged = mergeOwnership(existing, incoming);
+            await writeTeacherOwnership({ dataDir: config.dataDir, ownership: merged });
+          },
+        );
         sendJson(response, 200, {
           teacherId,
           status: "merged",
@@ -771,37 +776,43 @@ async function readTeachingCourseManagementSnapshot(dataDir) {
 }
 
 async function replaceTeachingCourseManagementSnapshot({ dataDir, expectedRevision, database }) {
-  const current = await readTeachingCourseManagementSnapshot(dataDir);
-  if (current.revision !== expectedRevision) {
-    throw new HttpError(409, "Teaching course management snapshot revision mismatch.");
-  }
+  return runWithExternalStorageFileWriteLock(
+    resolveTeachingCourseManagementSnapshotPath(dataDir),
+    "Teaching course management snapshot lock is unavailable.",
+    async () => {
+      const current = await readTeachingCourseManagementSnapshot(dataDir);
+      if (current.revision !== expectedRevision) {
+        throw new HttpError(409, "Teaching course management snapshot revision mismatch.");
+      }
 
-  const snapshot = createTeachingCourseManagementSnapshot(database);
-  const snapshotDir = resolve(dataDir, "teaching-course-management");
-  ensureWithinBase(dataDir, snapshotDir);
-  await mkdir(snapshotDir, { recursive: true });
-  const filePath = resolveTeachingCourseManagementSnapshotPath(dataDir);
-  const tempPath = resolve(snapshotDir, `.database.${Date.now()}.${randomUUID()}.tmp`);
-  ensureWithinBase(dataDir, tempPath);
-  try {
-    await writeFile(tempPath, JSON.stringify(snapshot, null, 2), {
-      encoding: "utf8",
-      flag: "wx",
-    });
-    await rename(tempPath, filePath);
-  } catch (error) {
-    await rm(tempPath, { force: true }).catch(() => undefined);
-    throw error;
-  }
+      const snapshot = createTeachingCourseManagementSnapshot(database);
+      const snapshotDir = resolve(dataDir, "teaching-course-management");
+      ensureWithinBase(dataDir, snapshotDir);
+      await mkdir(snapshotDir, { recursive: true });
+      const filePath = resolveTeachingCourseManagementSnapshotPath(dataDir);
+      const tempPath = resolve(snapshotDir, `.database.${Date.now()}.${randomUUID()}.tmp`);
+      ensureWithinBase(dataDir, tempPath);
+      try {
+        await writeFile(tempPath, JSON.stringify(snapshot, null, 2), {
+          encoding: "utf8",
+          flag: "wx",
+        });
+        await rename(tempPath, filePath);
+      } catch (error) {
+        await rm(tempPath, { force: true }).catch(() => undefined);
+        throw error;
+      }
 
-  return {
-    status: "persisted",
-    revision: snapshot.revision,
-    storagePolicy: "external-redacted-teaching-course-management-snapshot",
-    storageWritePolicy: "external-optimistic-snapshot-replace",
-    responsibleSession: "S12",
-    redaction: createRedaction(),
-  };
+      return {
+        status: "persisted",
+        revision: snapshot.revision,
+        storagePolicy: "external-redacted-teaching-course-management-snapshot",
+        storageWritePolicy: "external-optimistic-snapshot-replace",
+        responsibleSession: "S12",
+        redaction: createRedaction(),
+      };
+    },
+  );
 }
 
 function createTeachingCourseManagementSnapshot(database, revision = createTeachingCourseManagementRevision(database)) {
@@ -861,37 +872,43 @@ async function readTeachingCourseAssetsSnapshot(dataDir) {
 }
 
 async function replaceTeachingCourseAssetsSnapshot({ dataDir, expectedRevision, database }) {
-  const current = await readTeachingCourseAssetsSnapshot(dataDir);
-  if (current.revision !== expectedRevision) {
-    throw new HttpError(409, "Teaching course assets snapshot revision mismatch.");
-  }
+  return runWithExternalStorageFileWriteLock(
+    resolveTeachingCourseAssetsSnapshotPath(dataDir),
+    "Teaching course assets snapshot lock is unavailable.",
+    async () => {
+      const current = await readTeachingCourseAssetsSnapshot(dataDir);
+      if (current.revision !== expectedRevision) {
+        throw new HttpError(409, "Teaching course assets snapshot revision mismatch.");
+      }
 
-  const snapshot = createTeachingCourseAssetsSnapshot(database);
-  const snapshotDir = resolve(dataDir, "teaching-course-assets");
-  ensureWithinBase(dataDir, snapshotDir);
-  await mkdir(snapshotDir, { recursive: true });
-  const filePath = resolveTeachingCourseAssetsSnapshotPath(dataDir);
-  const tempPath = resolve(snapshotDir, `.database.${Date.now()}.${randomUUID()}.tmp`);
-  ensureWithinBase(dataDir, tempPath);
-  try {
-    await writeFile(tempPath, JSON.stringify(snapshot, null, 2), {
-      encoding: "utf8",
-      flag: "wx",
-    });
-    await rename(tempPath, filePath);
-  } catch (error) {
-    await rm(tempPath, { force: true }).catch(() => undefined);
-    throw error;
-  }
+      const snapshot = createTeachingCourseAssetsSnapshot(database);
+      const snapshotDir = resolve(dataDir, "teaching-course-assets");
+      ensureWithinBase(dataDir, snapshotDir);
+      await mkdir(snapshotDir, { recursive: true });
+      const filePath = resolveTeachingCourseAssetsSnapshotPath(dataDir);
+      const tempPath = resolve(snapshotDir, `.database.${Date.now()}.${randomUUID()}.tmp`);
+      ensureWithinBase(dataDir, tempPath);
+      try {
+        await writeFile(tempPath, JSON.stringify(snapshot, null, 2), {
+          encoding: "utf8",
+          flag: "wx",
+        });
+        await rename(tempPath, filePath);
+      } catch (error) {
+        await rm(tempPath, { force: true }).catch(() => undefined);
+        throw error;
+      }
 
-  return {
-    status: "persisted",
-    revision: snapshot.revision,
-    storagePolicy: "external-redacted-teaching-course-cover-assets",
-    storageWritePolicy: "external-optimistic-snapshot-replace",
-    responsibleSession: "S12",
-    redaction: createRedaction(),
-  };
+      return {
+        status: "persisted",
+        revision: snapshot.revision,
+        storagePolicy: "external-redacted-teaching-course-cover-assets",
+        storageWritePolicy: "external-optimistic-snapshot-replace",
+        responsibleSession: "S12",
+        redaction: createRedaction(),
+      };
+    },
+  );
 }
 
 function createTeachingCourseAssetsSnapshot(
@@ -1174,6 +1191,7 @@ async function appendTeachingOperation({ dataDir, teacherId, record, auditEvent 
         areTeachingOperationRecordsEquivalent(existingRecord, record) ||
         areIdempotentTeachingOperationRecordsEquivalent(existingRecord, record)
       ) {
+        await repairTeachingOperationAuditEvent({ dataDir, teacherId, recordId: existingRecord.recordId });
         return {
           idempotencyStatus: "already-persisted",
           appendSequence: existingRecordIndex + 1,
@@ -1207,22 +1225,59 @@ async function appendTeachingOperation({ dataDir, teacherId, record, auditEvent 
 }
 
 async function runWithTeachingOperationAppendWriteLock(operationPath, action) {
-  const previous = teachingOperationAppendWriteQueues.get(operationPath) ?? Promise.resolve();
-  let releaseCurrent = () => undefined;
-  const current = new Promise((resolveCurrent) => {
-    releaseCurrent = resolveCurrent;
-  });
-  const queued = previous.catch(() => undefined).then(() => current);
-  teachingOperationAppendWriteQueues.set(operationPath, queued);
+  return runWithExternalStorageFileWriteLock(
+    operationPath,
+    "Teaching operation append lock is unavailable.",
+    action,
+  );
+}
 
-  await previous.catch(() => undefined);
+async function runWithExternalStorageFileWriteLock(filePath, unavailableMessage, action) {
+  await mkdir(resolve(filePath, ".."), { recursive: true });
+  const lockPath = `${filePath}.write-lock`;
+  const deadline = Date.now() + 5_000;
+  // Keep the revision/idempotency check and write under one cross-process claim.
+  for (;;) {
+    try {
+      await mkdir(lockPath);
+      break;
+    } catch (error) {
+      if (error?.code !== "EEXIST") throw error;
+      if (Date.now() >= deadline) throw new HttpError(503, unavailableMessage);
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, 10));
+    }
+  }
   try {
     return await action();
   } finally {
-    releaseCurrent();
-    if (teachingOperationAppendWriteQueues.get(operationPath) === queued) {
-      teachingOperationAppendWriteQueues.delete(operationPath);
+    // Abandoned locks are not stolen; their bounded wait fails closed.
+    await rm(lockPath, { recursive: true, force: true }).catch(() => undefined);
+  }
+}
+
+async function repairTeachingOperationAuditEvent({ dataDir, teacherId, recordId, ledgerKind }) {
+  // Recover the durable original event after a failed second append, preserving
+  // its original trace even when the retry supplies a different audit event.
+  const path = ledgerKind === "rollback"
+    ? resolveTeachingOperationRollbackLogPath(dataDir, teacherId)
+    : resolveTeachingOperationLogPath(dataDir, teacherId);
+  const raw = await readFile(path, "utf8");
+  for (const line of raw.split(/\r?\n/).filter((entry) => entry.trim())) {
+    const value = JSON.parse(line);
+    const storedRecordId = ledgerKind === "rollback"
+      ? normalizeTeachingOperationRollbackLedgerEntry(value, teacherId).targetRecordId
+      : normalizeTeachingOperationLogEntry(value, teacherId).record.recordId;
+    if (storedRecordId !== recordId) continue;
+    if (!value.auditEvent) return;
+    const auditEvent = normalizeTeachingOperationAuditEvent(value.auditEvent);
+    if (auditEvent.actorId !== teacherId) {
+      throw new Error("Stored teaching operation audit actor id mismatch.");
     }
+    const ledger = await listTeachingOperationAuditEvents(dataDir, teacherId);
+    if (!ledger.events.some((event) => JSON.stringify(event) === JSON.stringify(auditEvent))) {
+      await appendTeachingOperationAuditEvent({ dataDir, teacherId, auditEvent });
+    }
+    return;
   }
 }
 
@@ -1302,56 +1357,55 @@ async function rollbackTeachingOperation({
   requestedAt,
   requestSource,
 }) {
-  const record = await findTeachingOperationRecord({ dataDir, teacherId, recordId });
-  if (!record) {
-    throw new HttpError(404, "Teaching operation record was not found.");
-  }
-  if (!record.courseId) {
-    throw new HttpError(409, "Teaching operation record has no course scope.");
-  }
-  if (record.courseId !== courseId) {
-    throw new HttpError(409, "Teaching operation rollback course id mismatch.");
-  }
-  const existingRollbacks = await listTeachingOperationRollbackRecords(dataDir, teacherId);
-  if (existingRollbacks.some((rollback) => rollback.targetRecordId === recordId)) {
-    throw new HttpError(409, "Teaching operation record has already been rolled back.");
-  }
+  return runWithExternalStorageFileWriteLock(
+    resolveTeachingOperationLogPath(dataDir, teacherId),
+    "Teaching operation rollback lock is unavailable.",
+    async () => {
+      const record = await findTeachingOperationRecord({ dataDir, teacherId, recordId });
+      if (!record) {
+        throw new HttpError(404, "Teaching operation record was not found.");
+      }
+      if (!record.courseId) {
+        throw new HttpError(409, "Teaching operation record has no course scope.");
+      }
+      if (record.courseId !== courseId) {
+        throw new HttpError(409, "Teaching operation rollback course id mismatch.");
+      }
+      const existingRollbacks = await listTeachingOperationRollbackRecords(dataDir, teacherId);
+      if (existingRollbacks.some((rollback) => rollback.targetRecordId === recordId)) {
+        await repairTeachingOperationAuditEvent({ dataDir, teacherId, recordId, ledgerKind: "rollback" });
+        throw new HttpError(409, "Teaching operation record has already been rolled back.");
+      }
 
-  const rollback = {
-    rollbackId: requireSafeId(
-      `teaching-operation-rollback-${recordId}`,
-      "teaching operation rollback id",
-    ),
-    action: "rollback-teaching-operation-record",
-    teacherId,
-    targetRecordId: recordId,
-    courseId: record.courseId,
-    targetOperationId: record.operationId,
-    targetActionSlot: record.actionSlot,
-    targetActionId: record.actionId,
-    rollbackReason,
-    status: "persisted",
-    rolledBackAt: requestedAt,
-    storagePolicy: "external-redacted-teaching-operation-rollback",
-    storageWritePolicy: "external-append-only-rollback-log",
-    responsibleSession: "S12",
-    redaction: createRedaction(),
-  };
-  await appendTeachingOperationRollback({ dataDir, teacherId, rollback });
-  await appendTeachingOperationAuditEvent({
-    dataDir,
-    teacherId,
-    auditEvent: createTeachingOperationRollbackAuditEvent({
-      teacherId,
-      record,
-      rollbackReason,
-      traceId,
-      requestedAt,
-      requestSource,
-    }),
-  });
+      const rollback = {
+        rollbackId: requireSafeId(
+          `teaching-operation-rollback-${recordId}`,
+          "teaching operation rollback id",
+        ),
+        action: "rollback-teaching-operation-record",
+        teacherId,
+        targetRecordId: recordId,
+        courseId: record.courseId,
+        targetOperationId: record.operationId,
+        targetActionSlot: record.actionSlot,
+        targetActionId: record.actionId,
+        rollbackReason,
+        status: "persisted",
+        rolledBackAt: requestedAt,
+        storagePolicy: "external-redacted-teaching-operation-rollback",
+        storageWritePolicy: "external-append-only-rollback-log",
+        responsibleSession: "S12",
+        redaction: createRedaction(),
+      };
+      const auditEvent = createTeachingOperationRollbackAuditEvent({
+        teacherId, record, rollbackReason, traceId, requestedAt, requestSource,
+      });
+      await appendTeachingOperationRollback({ dataDir, teacherId, rollback, auditEvent });
+      await appendTeachingOperationAuditEvent({ dataDir, teacherId, auditEvent });
 
-  return rollback;
+      return rollback;
+    },
+  );
 }
 
 async function verifyTeachingOperationBackupRestoreDrill({
@@ -1495,7 +1549,7 @@ async function appendTeachingOperationRestoreDrill({ dataDir, teacherId, drill }
   );
 }
 
-async function appendTeachingOperationRollback({ dataDir, teacherId, rollback }) {
+async function appendTeachingOperationRollback({ dataDir, teacherId, rollback, auditEvent }) {
   const rollbackDir = resolve(dataDir, "teaching-operation-rollbacks");
   ensureWithinBase(dataDir, rollbackDir);
   await mkdir(rollbackDir, { recursive: true });
@@ -1503,6 +1557,7 @@ async function appendTeachingOperationRollback({ dataDir, teacherId, rollback })
     resolveTeachingOperationRollbackLogPath(dataDir, teacherId),
     `${JSON.stringify({
       rollback,
+      ...(auditEvent ? { auditEvent } : {}),
       storagePolicy: "external-redacted-teaching-operation-rollback",
       storageWritePolicy: "external-append-only-rollback-log",
       responsibleSession: "S12",

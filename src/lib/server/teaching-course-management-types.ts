@@ -1,3 +1,5 @@
+import type { TeachingUnitDraftContent } from "@/lib/teaching/unit-draft";
+
 export type TeachingCourseManagementRedaction = {
   secrets: "omitted";
   localFiles: "omitted";
@@ -69,6 +71,7 @@ export type TeachingCourseManagementAction =
   | "publish-course-content"
   | "publish-course-content-provider"
   | "generate-course-unit-draft"
+  | "update-course-unit-draft"
   | "refresh-dashboard"
   | "lock-dashboard-snapshot"
   | "refresh-quiz-assessment"
@@ -425,13 +428,16 @@ export type TeachingCourseUnitDraftRecord = {
   courseId: string;
   ownerTeacherId: string;
   generatedBy: string;
-  draftStatus: "generated";
+  draftStatus: "generated" | "incomplete";
+  content?: TeachingUnitDraftContent;
+  revision: number;
   operationRecordId: string;
   sourceAction?: string;
   draftScope: "teacher-editable-unit-plan";
-  sourceSystems: ["course-knowledge-index", "teaching-objectives", "quiz-bank"];
+  sourceSystems: string[];
   reviewPolicy: "teacher-review-before-student-release";
   generatedAt: string;
+  updatedAt?: string;
   storagePolicy: TeachingCourseManagementRecordStoragePolicy;
   storageWritePolicy: TeachingCourseManagementStorageWritePolicy;
   responsibleSession: "S12";

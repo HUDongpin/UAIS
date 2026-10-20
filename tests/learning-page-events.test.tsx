@@ -272,7 +272,7 @@ describe("learning page learning-record emission", () => {
   // the events route refuses them anyway
   // (`learner-course-membership-required`), so the calls were pure noise.
   it("emits no learning record on a bare /learning the student is not enrolled in", async () => {
-    const { learningEventCalls } = stubFetch({ playback: "pending" });
+    const { fetchMock, learningEventCalls } = stubFetch({ playback: "pending" });
     render(
       <SessionUserProvider initialSessionUser={studentUser}>
         <LearningPage />
@@ -283,14 +283,21 @@ describe("learning page learning-record emission", () => {
     fireEvent.change(guideInput, { target: { value: "什么是梯度下降？" } });
     fireEvent.submit(guideInput.closest("form") as HTMLFormElement);
 
-    // The guide answer proves the interaction completed; the record did not.
-    await screen.findByText("好的，我来解释。");
-    expect(learningEventCalls).toHaveLength(0);
+    // No deck loaded and no course in the URL: nothing on this page can say which
+    // course the question belongs to, so the guide says so and sends nothing. It
+    // used to send `research-methods-learning` - the demo course - which the
+    // server refused as a course this learner has never joined, and the refusal
+    // reached the learner as "智能服务暂时不可用".
     expect(
-      learningEventCalls.some((call) =>
-        JSON.stringify(call.body).includes("research-methods-learning"),
+      await screen.findByText(/本课程暂无已发布课件，智能导学还无法确定要回答哪门课程。/),
+    ).toBeTruthy();
+    expect(screen.queryByText("好的，我来解释。")).toBeNull();
+    expect(
+      fetchMock.mock.calls.some(([input]) =>
+        String(input).includes("/api/learning/ai-guide"),
       ),
     ).toBe(false);
+    expect(learningEventCalls).toHaveLength(0);
   });
 
   it("emits narration progress and course.completed once every slide narration finishes", async () => {

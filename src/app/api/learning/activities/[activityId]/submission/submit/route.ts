@@ -10,6 +10,7 @@ import {
   readLearningLoopJsonBody,
   readLearningLoopRecord,
   readLearningLoopRevision,
+  readLearningLoopSubmissionVersionId,
   readLearningLoopTraceId,
 } from "@/lib/server/learning-loop-route-http";
 import {
@@ -43,6 +44,7 @@ type PostDeps = {
     activityId: string;
     classExternalId: string;
     expectedDraftRevision: number;
+    expectedSubmissionVersionId: string;
     idempotencyKey: string;
     traceId: string;
   }) => Promise<LearningLoopPersistedReceipt>;
@@ -64,6 +66,7 @@ function createSubmissionSubmitPostHandler(deps: PostDeps = {}) {
         "submission-draft-revision-required",
         1,
       );
+      const expectedSubmissionVersionId = readLearningLoopSubmissionVersionId(body.expectedSubmissionVersionId);
       const idempotencyKey = readLearningLoopIdempotencyKey(request);
       const { access } = await authorizeLearningLoopStudentActivity({
         request,
@@ -85,6 +88,7 @@ function createSubmissionSubmitPostHandler(deps: PostDeps = {}) {
         activityId,
         classExternalId: access.classId,
         expectedDraftRevision,
+        expectedSubmissionVersionId,
         idempotencyKey,
         traceId,
       });

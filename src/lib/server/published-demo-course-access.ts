@@ -1,5 +1,6 @@
 import { findPublishedPlaybackByCourseId } from "@/lib/learning/ppt-playback-catalog";
 import { resolveUaisAppAuthProviderContract } from "@/lib/server/uais-app-auth-provider";
+import { isSameTeachingActorId } from "@/lib/server/teaching-actor-id";
 import { isUaisAppDeployedRuntime } from "@/lib/server/uais-app-session";
 
 export function isPublishedDemoTeacherCourseAccess(input: {
@@ -12,7 +13,7 @@ export function isPublishedDemoTeacherCourseAccess(input: {
 }) {
   if (
     input.actor.role !== "teacher" ||
-    input.actor.actorId !== "Phoebe" ||
+    !isSameTeachingActorId(input.actor.actorId, "Phoebe") ||
     !findPublishedPlaybackByCourseId(input.courseId)
   ) {
     return false;

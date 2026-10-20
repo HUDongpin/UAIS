@@ -82,7 +82,29 @@ describe("UAIS app health endpoint", () => {
       deploymentHostFingerprint: expect.stringMatching(/^[0-9a-f]{64}$/),
       valuesRedacted: true,
     });
+    expect(body.gitCommitSha).toBe(candidateGitSha.slice(0, 7));
     expect(serialized).not.toContain(immutableStagingHost);
+    expect(serialized).not.toContain(coreDatabase.UAIS_CORE_DATABASE_URL);
+  });
+
+  it("exposes a short Vercel git SHA for deploy proof without leaking full env", async () => {
+    const deployedSha = "e6f0dd3a1b2c3d4e5f60718293a4b5c6d7e8f901";
+    const getHealth = createUaisHealthGetHandler({
+      now: checkedAt,
+      env: {
+        ...coreDatabase,
+        VERCEL_GIT_COMMIT_SHA: deployedSha,
+      },
+      probeDatabase: currentDatabase,
+    });
+
+    const response = await getHealth();
+    const body = await response.json();
+    const serialized = JSON.stringify(body);
+
+    expect(response.status).toBe(200);
+    expect(body.gitCommitSha).toBe("e6f0dd3");
+    expect(serialized).not.toContain(deployedSha);
     expect(serialized).not.toContain(coreDatabase.UAIS_CORE_DATABASE_URL);
   });
 

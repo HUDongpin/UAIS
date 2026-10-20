@@ -32,9 +32,9 @@ const maximumAccountCleanupFreshnessGapMs = 60_000;
 const immutableDeploymentIdPattern = /^dpl_[A-Za-z0-9]{20,64}$/;
 const digestPattern = /^[0-9a-f]{64}$/;
 const fixedDistributionSourceRef =
-  "/Volumes/Starship/UAIS-evidence/private-credentials/uais-staging/rum-exact-distribution-source.json";
+  "/Volumes/Mars/UAIS-evidence/private-credentials/uais-staging/rum-exact-distribution-source.json";
 const fixedCollectorPrivateKeySourceRef =
-  "/Volumes/Starship/UAIS-evidence/private-credentials/uais-staging/rum-field-data-collector-ed25519-private.pem";
+  "/Volumes/Mars/UAIS-evidence/private-credentials/uais-staging/rum-field-data-collector-ed25519-private.pem";
 const percentileAlgorithm =
   "postgresql-percentile-cont-linear-interpolation-v1";
 const distributionSignatureDomain =

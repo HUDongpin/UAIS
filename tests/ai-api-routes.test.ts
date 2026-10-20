@@ -55,6 +55,7 @@ import {
 import { storeTeacherVoiceSampleAsset } from "@/lib/ai/voice/sample-assets";
 import type { UaisAppSessionUser } from "@/lib/auth/uais-app-session";
 import { createUaisAppSessionCookie } from "@/lib/server/uais-app-session";
+import { createLearningGuideActor } from "@/lib/server/learning-guide-actor";
 import {
   listQwenClonedVoiceLifecycleAuditRecords,
   revokeAndDeleteQwenClonedVoiceReference,
@@ -1243,7 +1244,7 @@ describe("UAIS AI API route contracts", () => {
       }),
     ]);
     expect(body.orchestration.runtimeEvents[0].actor).toEqual({
-      actorId: "app-session-learner-Peter",
+      actorId: createLearningGuideActor({ account: "Peter", role: "student" }).actorId,
       role: "learner",
     });
     expect(body.progress[0].responsibleAgent.name).toBe("学习顾问");

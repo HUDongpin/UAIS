@@ -162,6 +162,9 @@ export type LearningChatroomController = {
    */
   agentsPending: boolean;
   composerDisabled: boolean;
+  exportDisabled: boolean;
+  shareDisabled: boolean;
+  shareExportDisabledReason: string | null;
   /** Teacher-only hide/freeze controls for the open room. */
   moderation: LearningChatroomModerationController;
   /** The last minted share link, so the room can show its expiry beside it. */
@@ -252,6 +255,12 @@ export function useLearningChatroom(): LearningChatroomController {
   // delete uses, rather than a browser dialog the room has nowhere else.
   const [shareRevokeConfirming, setShareRevokeConfirming] = useState(false);
   const [shareRevokePending, setShareRevokePending] = useState(false);
+  const shareMintRequestRef = useRef<{ roomToken: string } | null>(null);
+  const shareRevokeRequestRef = useRef<{
+    roomToken: string;
+    shareId: string;
+  } | null>(null);
+  const displayedShareIdRef = useRef<string | null>(null);
   // The ids the previous server replay carried. A row that the room used to
   // replay and now does not has been moderated away (or evicted), so it must
   // leave this thread too - see `mergeRoomTranscript`, whose tail would
@@ -413,16 +422,18 @@ export function useLearningChatroom(): LearningChatroomController {
       ? groupOptions.find((group) => group.groupId === groupSelection.groupId)
       : undefined;
 
-  // Students auto-enter their only group; a teacher enters a group room only
-  // through an explicit `?groupId=` deep link (Phase 4 generates those), so
-  // opening the chatroom never silently drops a teacher into observation.
+  // Students auto-enter their only group. A teacher with groups must pick one
+  // instead of landing in a course-level room that looks empty. Opening the
+  // chatroom still never silently drops a teacher into a group.
   const autoGroup =
     !groupSelection && sessionUser?.role === "student" && groupOptions.length === 1
       ? groupOptions[0]
       : undefined;
   const activeGroup = selectedGroup ?? autoGroup ?? null;
   const needsGroupChoice =
-    !activeGroup && sessionUser?.role === "student" && groupOptions.length > 1;
+    !activeGroup &&
+    ((sessionUser?.role === "student" && groupOptions.length > 1) ||
+      (sessionUser?.role === "teacher" && groupOptions.length > 0));
 
   // Groups are live for this caller (they hold at least one) but not in the room
   // they landed in — or a deep link named a group they cannot see. With no group
@@ -462,6 +473,18 @@ export function useLearningChatroom(): LearningChatroomController {
     needsGroupChoice ||
     roomAccessNotice !== null ||
     frozenForViewer;
+  const roomUnbound = demoPreviewOnly || needsGroupChoice || resolution.status !== "ready" || !activeCourse;
+  const exportDisabled = roomUnbound || roomAccessNotice !== null;
+  const shareDisabled = exportDisabled || isInstructor;
+  const shareExportDisabledReason = demoPreviewOnly
+    ? t.learning.chatroomShareRequiresBinding
+    : needsGroupChoice
+      ? t.learning.chatroomShareRequiresGroupChoice
+      : isInstructor
+        ? t.learning.chatroomShareTeacherMemberOnly
+        : exportDisabled
+          ? t.learning.chatroomExportRequiresBinding
+          : null;
   const fallbackNotice =
     fallbackReason === "load-failed"
       ? t.learning.chatroomCourseLoadFailed
@@ -525,7 +548,12 @@ export function useLearningChatroom(): LearningChatroomController {
     // learner just walked into.
     setWindowAtCapacity(false);
     setRoomFrozen(false);
+    shareMintRequestRef.current = null;
+    shareRevokeRequestRef.current = null;
+    displayedShareIdRef.current = null;
     setShareLink(null);
+    setShareRevokeConfirming(false);
+    setShareRevokePending(false);
     previousServerMessageIdsRef.current = new Set();
   }, [roomKey]);
 
@@ -1101,18 +1129,16 @@ export function useLearningChatroom(): LearningChatroomController {
   // a download: the browser's print dialog is the PDF generator, so there is no
   // service, no credential and no server render to wait for.
   function handleExport() {
-    // The print view enforces the same room access the chatroom does, so a
-    // reader the route could only refuse is told here instead of being sent to a
-    // page that refuses them. Every export/share outcome - success or not - is
-    // written to `notice`, because that is the line the room header renders next
-    // to these two buttons; `error` belongs to the composer and would put an
-    // export failure under the wrong control.
     if (!sessionUser) {
       setNotice(t.learning.exportSignInRequired);
       return;
     }
-    if (!activeCourse || demoPreviewOnly) {
-      setNotice(t.learning.exportAccessDenied);
+    if (exportDisabled || !activeCourse) {
+      setNotice(
+        demoPreviewOnly || needsGroupChoice
+          ? t.learning.chatroomExportRequiresBinding
+          : t.learning.exportAccessDenied,
+      );
       return;
     }
 
@@ -1139,11 +1165,20 @@ export function useLearningChatroom(): LearningChatroomController {
       setNotice(t.learning.shareSignInRequired);
       return;
     }
-    if (!activeCourse || demoPreviewOnly) {
-      setNotice(t.learning.exportAccessDenied);
+    if (shareDisabled || !activeCourse) {
+      setNotice(
+        isInstructor && !exportDisabled
+          ? t.learning.chatroomShareTeacherMemberOnly
+          : t.learning.chatroomShareRequiresBinding,
+      );
       return;
     }
 
+    const request = { roomToken: currentRoomToken() };
+    if (shareMintRequestRef.current?.roomToken === request.roomToken) {
+      return;
+    }
+    shareMintRequestRef.current = request;
     const result = await requestLearningChatroomShareLink(
       {
         courseId: activeCourse.courseId,
@@ -1152,8 +1187,14 @@ export function useLearningChatroom(): LearningChatroomController {
       },
       { origin: window.location.origin },
     );
+    if (
+      shareMintRequestRef.current !== request ||
+      currentRoomToken() !== request.roomToken
+    ) {
+      return;
+    }
+    shareMintRequestRef.current = null;
     if (result.status === "failed") {
-      setShareLink(null);
       setNotice(t.learning.shareFailed);
       return;
     }
@@ -1161,6 +1202,7 @@ export function useLearningChatroom(): LearningChatroomController {
     // Every link ends on its own, so the room says when. Kept beside the copied
     // URL rather than folded into the one-line notice: the notice is transient
     // and the expiry is the thing whoever pastes this link needs to remember.
+    displayedShareIdRef.current = result.shareId;
     setShareLink({
       shareId: result.shareId,
       url: result.url,
@@ -1170,7 +1212,12 @@ export function useLearningChatroom(): LearningChatroomController {
     });
     // A fresh mint replaces whatever the previous link's revoke prompt was
     // asking about.
+    shareRevokeRequestRef.current = null;
     setShareRevokeConfirming(false);
+    setShareRevokePending(false);
+    const isCurrentShare = () =>
+      currentRoomToken() === request.roomToken &&
+      displayedShareIdRef.current === result.shareId;
 
     // An insecure context (or a browser without the Clipboard API) exposes no
     // `navigator.clipboard`: nothing is copied, so report the fallback and let
@@ -1184,8 +1231,14 @@ export function useLearningChatroom(): LearningChatroomController {
 
     try {
       await navigator.clipboard.writeText(result.url);
+      if (!isCurrentShare()) {
+        return;
+      }
       setNotice(`${t.learning.copied} ${result.url}`);
     } catch {
+      if (!isCurrentShare()) {
+        return;
+      }
       setNotice(`${t.learning.copiedFallback} ${result.url}`);
     }
     setError("");
@@ -1209,12 +1262,25 @@ export function useLearningChatroom(): LearningChatroomController {
   // link - both are separate work, and neither is a reason to leave the one link
   // the learner is looking at un-revocable.
   async function confirmShareRevoke() {
-    if (!shareLink || shareRevokePending) {
+    if (!shareLink || shareRevokePending || shareRevokeRequestRef.current) {
       return;
     }
 
+    const request = {
+      roomToken: currentRoomToken(),
+      shareId: shareLink.shareId,
+    };
+    shareRevokeRequestRef.current = request;
     setShareRevokePending(true);
-    const result = await revokeLearningChatroomShareLink(shareLink.shareId);
+    const result = await revokeLearningChatroomShareLink(request.shareId);
+    if (
+      shareRevokeRequestRef.current !== request ||
+      currentRoomToken() !== request.roomToken ||
+      displayedShareIdRef.current !== request.shareId
+    ) {
+      return;
+    }
+    shareRevokeRequestRef.current = null;
     setShareRevokePending(false);
     if (result.status === "failed") {
       // The link is still live, so the URL and its expiry stay exactly where
@@ -1224,6 +1290,7 @@ export function useLearningChatroom(): LearningChatroomController {
     }
 
     setShareRevokeConfirming(false);
+    displayedShareIdRef.current = null;
     setShareLink(null);
     setNotice(t.learning.shareRevoked);
     setError("");
@@ -1293,6 +1360,9 @@ export function useLearningChatroom(): LearningChatroomController {
     frozenNotice: frozenForViewer ? t.learning.chatroomFrozenNotice : null,
     agentsPending,
     composerDisabled,
+    exportDisabled,
+    shareDisabled,
+    shareExportDisabledReason,
     moderation,
     shareLink,
     shareRevokeConfirming,

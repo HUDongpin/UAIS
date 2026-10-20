@@ -98,6 +98,10 @@ import {
   readStudentRosterSyncProviderConfig,
 } from "./provider-config";
 import {
+  createTeachingManagedCourseOwnershipAdapter,
+  type ReadManagedTeachingCourseOwnership,
+} from "@/lib/server/teacher-managed-course-ownership";
+import {
   assertProductionTeachingOperationCourseOwnershipAccessConfigured,
   authorizeTeachingOperationCourseAccess,
   createDeniedAccess,
@@ -126,6 +130,7 @@ type TeachingOperationActionPostHandlerDeps = {
   now?: Date;
   fetch?: typeof fetch;
   getTeachingOperationCourseOwnership?: GetTeachingOperationCourseOwnership;
+  readManagedCourseOwnership?: ReadManagedTeachingCourseOwnership;
   readTeachingCourseCapability?: ReadTeachingCourseCapability;
   createTeacherAiOwnershipDatabase?: UaisTeacherAiOwnershipPostgresClientFactory;
   appendExternalTeachingOperation?: TeachingOperationExternalAppendAdapter;
@@ -148,6 +153,11 @@ export function createTeachingOperationActionPostHandler(
       fetch: deps.fetch,
       createDatabase: deps.createTeacherAiOwnershipDatabase,
     });
+  const readManagedCourseOwnership =
+    deps.readManagedCourseOwnership ??
+    (usesDefaultTeachingOperationCourseOwnership
+      ? createTeachingManagedCourseOwnershipAdapter({ env, fetch: deps.fetch })
+      : undefined);
   const readTeachingCourseCapability =
     deps.readTeachingCourseCapability ??
     createTeachingCourseCapabilityAdapter({ env, now: deps.now });
@@ -217,6 +227,7 @@ export function createTeachingOperationActionPostHandler(
         operationId,
         actionSlot: body.actionSlot,
         getTeachingOperationCourseOwnership,
+        readManagedCourseOwnership,
         readTeachingCourseCapability,
       });
       if (access.status === "denied") {

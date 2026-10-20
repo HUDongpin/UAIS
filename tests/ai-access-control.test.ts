@@ -808,6 +808,38 @@ describe("UAIS AI signed access session claims", () => {
     expect(issued.claims.expiresAt).toBe("2026-06-16T12:02:00.000Z");
   });
 
+  it.each([1, 500, 999])("refuses to mint one second of AI authority with only %ims remaining", (remainingMs) => {
+    expect(() => createUaisAiAccessSessionFromAuthenticatedTeacher({
+      secret: signingSecret,
+      now,
+      action: "live-chat",
+      authenticatedSession: {
+        sessionId: "synthetic-expiring-teacher-session",
+        actorId: "teacher-kang",
+        role: "teacher",
+        authenticatedAt: "2026-06-16T11:55:00.000Z",
+        expiresAt: new Date(now.getTime() + remainingMs).toISOString(),
+        grants: { teacherIds: ["teacher-kang"] },
+      },
+      requestedScopes: { teacherIds: ["teacher-kang"] },
+    })).toThrow("Authenticated teacher session cannot mint a positive AI session lifetime.");
+  });
+
+  it("allows the final complete second without extending the teacher session", () => {
+    const expiresAt = new Date(now.getTime() + 1000).toISOString();
+    const issued = createUaisAiAccessSessionFromAuthenticatedTeacher({
+      secret: signingSecret, now, action: "live-chat", ttlSeconds: 600,
+      authenticatedSession: {
+        sessionId: "synthetic-final-second-teacher-session",
+        actorId: "teacher-kang", role: "teacher",
+        authenticatedAt: "2026-06-16T11:55:00.000Z", expiresAt,
+        grants: { teacherIds: ["teacher-kang"] },
+      },
+      requestedScopes: { teacherIds: ["teacher-kang"] },
+    });
+    expect(issued.claims.expiresAt).toBe(expiresAt);
+  });
+
   it("derives minimal signed AI scopes from teacher-owned PPT narration resources", () => {
     const ownership: UaisTeacherAiResourceOwnership = {
       teacherId: " teacher-kang ",

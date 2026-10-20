@@ -5,7 +5,7 @@
 - **Prepared for:** Dr. Peter Hu, Founder / Project Owner
 - **Question answered:** *What is still unfinished or malfunctional in UAIS today, and what is the plan to close those gaps before the September 2026 launch (~200 university students, chatroom + lesson learning MVP)?*
 - **Method:** read-only multi-agent workflow over the **current dirty working tree** (HEAD `54dacb4` + ~1,600 uncommitted lines): nine parallel subsystem audits (student auth, teacher auth, chatroom, storage, content pipeline, enrolment ops, deployment/env, UX/i18n, quality gates), adversarial verification of the top five blocker claims (4 CONFIRMED, 1 ADJUSTED, 0 refuted — including one **live probe of www.uais.top**), and a completeness pass for non-code launch gates. 15 agents, 568 tool calls. No feature code was changed.
-- **Relationship to prior report:** this supersedes the gap portions of `20260811_Unfinished Functions of UAIS.md`. Roughly **half of that report's blockers are now substantially fixed in uncommitted working-tree code** — this report credits those fixes explicitly, then plans the remainder.
+- **Relationship to prior report:** this supersedes the gap portions of `2026-08-11-unfinished-functions-of-uais.md`. Roughly **half of that report's blockers are now substantially fixed in uncommitted working-tree code** — this report credits those fixes explicitly, then plans the remainder.
 
 ---
 

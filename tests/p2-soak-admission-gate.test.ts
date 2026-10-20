@@ -10,7 +10,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { computeUaisStagingCandidateContentSha } from "../scripts/p2-staging-candidate-content.mjs";
 import {
   createSoakEvidenceIndexSigningPayload,
@@ -66,7 +66,15 @@ const sourceAuthorityRoles: Record<(typeof receiptSchemas)[number], string> = {
 };
 const temporaryDirectories: string[] = [];
 
+beforeEach(() => {
+  // These synthetic packets carry the owner's fixed September 10 mitigation
+  // expiry. Keep their baseline clock inside that window; expiry cases pass an
+  // explicit evaluation time and still exercise the real fail-closed gate.
+  vi.spyOn(Date, "now").mockReturnValue(Date.parse("2026-09-09T12:00:00Z"));
+});
+
 afterEach(() => {
+  vi.restoreAllMocks();
   for (const directory of temporaryDirectories.splice(0)) {
     rmSync(directory, { recursive: true, force: true });
   }

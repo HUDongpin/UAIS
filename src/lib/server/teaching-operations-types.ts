@@ -1,3 +1,4 @@
+import type { TeachingGradebookProviderOperation } from "./teaching-gradebook-provider-operation-types";
 import type { TeachingOperationId } from "@/components/teaching/teaching-operation-data";
 import type { LocalizedText } from "@/i18n/copy";
 // Type-only, so the pure-type module stays free of runtime imports and no cycle
@@ -514,6 +515,7 @@ export type TeachingOperationGradebookUpdateProjection = {
   sourceAction?: string;
   releasePolicy: "teacher-confirmed-grade-release";
   updatedAt: string;
+  releaseGenerationId?: string;
   releasedBy?: string;
   releasedAt?: string;
   providerStatus?: "gradebook-provider-released";
@@ -899,6 +901,7 @@ export type TeachingOperationExportManifest = {
 };
 
 export type TeachingOperationDatabase = {
+  providerOperations?: TeachingGradebookProviderOperation[];
   schemaVersion: "uais-teaching-operations-v1";
   updatedAt: string;
   records: TeachingOperationRecord[];

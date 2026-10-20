@@ -22,6 +22,7 @@ import {
   type LearningChatroomGroupProjection,
 } from "@/lib/server/learning-ai-guide-access";
 import { isLearningChatroomGroupsEnabled } from "@/lib/server/learning-chatroom-groups-flag";
+import { createLearningGuideActor as createLearningChatroomGraphActor } from "@/lib/server/learning-guide-actor";
 import {
   createLearningChatroomAgentSystemPrompt,
   wrapLearningChatroomUntrustedContent,
@@ -1519,24 +1520,6 @@ function createLearningChatroomProgress(events: UaisOrchestrationEvent[]) {
   ]);
 }
 
-function createLearningChatroomGraphActor(appSession: {
-  account: string;
-  role: "teacher" | "student" | "admin";
-}) {
-  let role: "admin" | "educator" | "learner";
-  if (appSession.role === "teacher") {
-    role = "educator";
-  } else if (appSession.role === "student") {
-    role = "learner";
-  } else {
-    role = "admin";
-  }
-  return {
-    actorId: `app-session-${role}-${toSafeActorIdSegment(appSession.account)}`,
-    role,
-  } as const;
-}
-
 // GET carries the room key in the query string. An absent courseId is answered
 // with the same course-context-required denial POST uses, so both handlers say
 // the same thing when the client has not resolved a course yet.
@@ -1938,11 +1921,6 @@ function createLearningChatroomRedaction() {
     localFiles: "omitted",
     assets: "ids-only",
   };
-}
-
-function toSafeActorIdSegment(value: string) {
-  const safeSegment = value.trim().replace(/[^A-Za-z0-9._:-]+/g, "-").slice(0, 72);
-  return safeSegment || "unknown";
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

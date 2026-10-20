@@ -144,8 +144,8 @@ describe("P1 closed learning loop on real Postgres", () => {
     });
 
     const concurrentDrafts = await Promise.allSettled([
-      command.saveSubmissionDraft({ studentAccount, activityId, classExternalId: classId, contentText: "设备 A 的 V1 正文", expectedDraftRevision: 0, traceId: `${tracePrefix}-draft-a` }),
-      command.saveSubmissionDraft({ studentAccount, activityId, classExternalId: classId, contentText: "设备 B 的 V1 正文", expectedDraftRevision: 0, traceId: `${tracePrefix}-draft-b` }),
+      command.saveSubmissionDraft({ studentAccount, activityId, classExternalId: classId, contentText: "设备 A 的 V1 正文", expectedDraftRevision: 0, expectedSubmissionVersionId: null, traceId: `${tracePrefix}-draft-a` }),
+      command.saveSubmissionDraft({ studentAccount, activityId, classExternalId: classId, contentText: "设备 B 的 V1 正文", expectedDraftRevision: 0, expectedSubmissionVersionId: null, traceId: `${tracePrefix}-draft-b` }),
     ]);
     expect(concurrentDrafts.filter((result) => result.status === "fulfilled")).toHaveLength(1);
     expect(concurrentDrafts.filter((result) => result.status === "rejected")).toHaveLength(1);
@@ -159,6 +159,7 @@ describe("P1 closed learning loop on real Postgres", () => {
       activityId,
       classExternalId: classId,
       expectedDraftRevision: draftReceipt.value.revision,
+      expectedSubmissionVersionId: draftReceipt.value.submissionVersionId!,
       idempotencyKey: `submit-v1-${suffix}`,
       traceId: `${tracePrefix}-submit-v1`,
     });
@@ -167,6 +168,7 @@ describe("P1 closed learning loop on real Postgres", () => {
       activityId,
       classExternalId: classId,
       expectedDraftRevision: draftReceipt.value.revision,
+      expectedSubmissionVersionId: draftReceipt.value.submissionVersionId!,
       idempotencyKey: `submit-v1-${suffix}`,
       traceId: `${tracePrefix}-submit-v1-replay`,
     });
@@ -206,6 +208,7 @@ describe("P1 closed learning loop on real Postgres", () => {
       classExternalId: classId,
       contentText: "V2 已补充证据与推理。",
       expectedDraftRevision: 0,
+      expectedSubmissionVersionId: detailV1.currentVersionId,
       traceId: `${tracePrefix}-draft-v2`,
     });
     await command.submitSubmission({
@@ -213,6 +216,7 @@ describe("P1 closed learning loop on real Postgres", () => {
       activityId,
       classExternalId: classId,
       expectedDraftRevision: draftV2.revision,
+      expectedSubmissionVersionId: draftV2.submissionVersionId!,
       idempotencyKey: `submit-v2-${suffix}`,
       traceId: `${tracePrefix}-submit-v2`,
     });

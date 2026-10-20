@@ -1,3 +1,4 @@
+import { isSameTeachingActorId } from "@/lib/server/teaching-actor-id";
 import { createHash } from "node:crypto";
 import { TeachingCourseManagementStoreError } from "./teaching-course-management-error";
 import { isTeachingCourseManagementActorAuthorized } from "./teaching-course-management-authorization";
@@ -84,7 +85,7 @@ export async function rollbackTeachingCourseCreation(input: {
     schemaVersion: "uais-teaching-course-management-v1",
     updatedAt: rolledBackAt,
     courses: database.courses.filter(
-      (course) => !(course.courseId === courseId && course.ownerTeacherId === actorId),
+      (course) => !(course.courseId === courseId && isSameTeachingActorId(course.ownerTeacherId, actorId)),
     ),
     classes: database.classes.filter((classItem) => classItem.courseId !== courseId),
     memberships: database.memberships.filter((membership) => membership.courseId !== courseId),
@@ -440,14 +441,13 @@ export async function saveTeachingClassInviteCodeDraftRecord(input: {
         receipt,
       };
     } catch (error) {
-      if (input.repository && (await writeRetry.shouldRetry({ attempt, error }))) {
+      if (await writeRetry.shouldRetry({ attempt, error })) {
         continue;
       }
       // A conflict that survives the ladder is exhausted contention, not a
       // caller mistake: answer with the structured 409 rather than passing the
-      // backend's own revision-mismatch prose through. The local file path has no
-      // revisions and never lands here.
-      throw input.repository && writeRetry.isConflict(error)
+      // backend's own revision-mismatch prose through. Local snapshots use the same retry policy.
+      throw writeRetry.isConflict(error)
         ? createTeachingCourseManagementContentionError()
         : error;
     }
@@ -636,14 +636,13 @@ export async function publishTeachingClassInviteCode(input: {
         receipt,
       };
     } catch (error) {
-      if (input.repository && (await writeRetry.shouldRetry({ attempt, error }))) {
+      if (await writeRetry.shouldRetry({ attempt, error })) {
         continue;
       }
       // A conflict that survives the ladder is exhausted contention, not a
       // caller mistake: answer with the structured 409 rather than passing the
-      // backend's own revision-mismatch prose through. The local file path has no
-      // revisions and never lands here.
-      throw input.repository && writeRetry.isConflict(error)
+      // backend's own revision-mismatch prose through. Local snapshots use the same retry policy.
+      throw writeRetry.isConflict(error)
         ? createTeachingCourseManagementContentionError()
         : error;
     }
@@ -912,14 +911,13 @@ export async function joinTeachingClassByInviteCode(input: {
       });
       return { membership, receipt };
     } catch (error) {
-      if (input.repository && (await writeRetry.shouldRetry({ attempt, error }))) {
+      if (await writeRetry.shouldRetry({ attempt, error })) {
         continue;
       }
       // A conflict that survives the ladder is exhausted contention, not a
       // caller mistake: answer with the structured 409 rather than passing the
-      // backend's own revision-mismatch prose through. The local file path has no
-      // revisions and never lands here.
-      throw input.repository && writeRetry.isConflict(error)
+      // backend's own revision-mismatch prose through. Local snapshots use the same retry policy.
+      throw writeRetry.isConflict(error)
         ? createTeachingCourseManagementContentionError()
         : error;
     }
@@ -992,7 +990,7 @@ export async function approveTeachingClassMembership(input: {
     }
 
     const classItem = database.classes[classIndex];
-    if (classItem.ownerTeacherId !== actorId) {
+    if (!isSameTeachingActorId(classItem.ownerTeacherId, actorId)) {
       throw new TeachingCourseManagementStoreError(403, "Teaching class ownership is required.");
     }
 
@@ -1028,6 +1026,15 @@ export async function approveTeachingClassMembership(input: {
           storage,
         }),
       };
+    }
+
+    if (existingMembership.membershipStatus !== "pending-teacher-review") {
+      throw new TeachingCourseManagementStoreError(
+        409,
+        "Teaching class membership can only be approved while it waits for review.",
+        { membershipStatus: existingMembership.membershipStatus },
+        "membership-transition-not-allowed",
+      );
     }
 
     const membership: TeachingClassMembershipRecord = {
@@ -1091,14 +1098,13 @@ export async function approveTeachingClassMembership(input: {
         receipt,
       };
     } catch (error) {
-      if (input.repository && (await writeRetry.shouldRetry({ attempt, error }))) {
+      if (await writeRetry.shouldRetry({ attempt, error })) {
         continue;
       }
       // A conflict that survives the ladder is exhausted contention, not a
       // caller mistake: answer with the structured 409 rather than passing the
-      // backend's own revision-mismatch prose through. The local file path has no
-      // revisions and never lands here.
-      throw input.repository && writeRetry.isConflict(error)
+      // backend's own revision-mismatch prose through. Local snapshots use the same retry policy.
+      throw writeRetry.isConflict(error)
         ? createTeachingCourseManagementContentionError()
         : error;
     }

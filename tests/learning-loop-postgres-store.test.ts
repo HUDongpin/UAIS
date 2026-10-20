@@ -193,7 +193,7 @@ describe("P1 learning-loop Postgres store", () => {
       activityId: ids.activity,
       classExternalId: "class-1",
       contentText: "new text",
-      expectedDraftRevision: 1,
+      expectedDraftRevision: 1, expectedSubmissionVersionId: ids.version,
       traceId: "trace-draft-pipeline-1",
     });
 
@@ -231,7 +231,7 @@ describe("P1 learning-loop Postgres store", () => {
       activityId: ids.activity,
       classExternalId: "class-1",
       contentText: "new draft text",
-      expectedDraftRevision: 0,
+      expectedDraftRevision: 0, expectedSubmissionVersionId: null,
       traceId: "trace-draft-side-effects-pipeline-1",
     });
 
@@ -283,7 +283,7 @@ describe("P1 learning-loop Postgres store", () => {
       studentAccount: "student-1",
       activityId: ids.activity,
       classExternalId: "class-1",
-      expectedDraftRevision: 2,
+      expectedDraftRevision: 2, expectedSubmissionVersionId: ids.version,
       idempotencyKey: "submit-pipeline-1",
       traceId: "trace-submit-pipeline-1",
     });
@@ -686,7 +686,7 @@ describe("P1 learning-loop Postgres store", () => {
         activityId: ids.activity,
         classExternalId: "class-1",
         contentText: "local-unsaved-text",
-        expectedDraftRevision: 3,
+        expectedDraftRevision: 3, expectedSubmissionVersionId: ids.version,
         traceId: "trace-save-1",
       }),
     ).rejects.toMatchObject({
@@ -747,7 +747,7 @@ describe("P1 learning-loop Postgres store", () => {
       studentAccount: "student-1",
       activityId: ids.activity,
       classExternalId: "class-1",
-      expectedDraftRevision: 2,
+      expectedDraftRevision: 2, expectedSubmissionVersionId: ids.version,
       idempotencyKey: "submit-1",
       traceId: "trace-submit-1",
     });

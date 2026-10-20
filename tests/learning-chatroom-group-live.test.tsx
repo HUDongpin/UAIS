@@ -850,19 +850,28 @@ describe("learner chatroom group room UI", () => {
     expect(roster?.textContent).toContain("林若晨");
     expect(roster?.textContent).not.toContain("LinRuochen");
     expect(historyCalls(calls)[0].url).toContain("groupId=group-three");
+
+    const shareButton = screen.getByRole("button", { name: "生成分享链接" }) as HTMLButtonElement;
+    const exportButton = screen.getByRole("button", { name: "导出文档" }) as HTMLButtonElement;
+    expect(shareButton.disabled).toBe(true);
+    expect(exportButton.disabled).toBe(false);
+    expect(screen.getByText("分享链接由小组成员生成。教师请使用导出或打印。")).toBeTruthy();
   });
 
-  it("keeps a teacher out of group rooms unless a deep link asks for one", async () => {
+  it("shows a group picker for a teacher with groups instead of opening a silent course-level room", async () => {
     const { calls } = stubFetch({
       teachingCourses: () => teacherCoursesResponse([courseA]),
     });
 
-    renderChatroom(teacherUser);
+    const { container } = renderChatroom(teacherUser);
     await screen.findByText("当前课程：大学研究方法 · 2026春");
     await settle();
 
+    expect(screen.getByText(groupPickerCopy)).toBeTruthy();
+    expect(screen.getByRole("button", { name: /第三小组/ })).toBeTruthy();
     expect(screen.queryByText(instructorRowCopy)).toBeNull();
-    expect(historyCalls(calls)[0].url).not.toContain("groupId");
+    expect(composerOf(container).disabled).toBe(true);
+    expect(historyCalls(calls)).toHaveLength(0);
   });
 
   it("marks the teacher's turn as instructor guidance for a member", async () => {

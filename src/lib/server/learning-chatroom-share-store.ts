@@ -537,6 +537,28 @@ async function mutateLearningChatroomShareDatabase(input: {
     shares: LearningChatroomShareRecord[],
   ) => LearningChatroomShareRecord[] | undefined;
 }) {
+  if (input.repository) {
+    return mutateLearningChatroomShareDatabaseLocked(input);
+  }
+  if (!input.dataDir) {
+    throw new LearningChatroomShareStoreError(
+      500,
+      "Learning chatroom share data directory is required.",
+    );
+  }
+  return runWithLocalLearningChatroomShareWriteLock(input.dataDir, () =>
+    mutateLearningChatroomShareDatabaseLocked(input),
+  );
+}
+
+async function mutateLearningChatroomShareDatabaseLocked(input: {
+  dataDir?: string;
+  repository?: LearningChatroomShareRepository;
+  now: string;
+  mutate: (
+    shares: LearningChatroomShareRecord[],
+  ) => LearningChatroomShareRecord[] | undefined;
+}) {
   const maxAttempts = input.repository ? learningChatroomShareMaxWriteAttempts : 1;
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     const snapshot = await readLearningChatroomShareSnapshot({
@@ -577,6 +599,43 @@ async function mutateLearningChatroomShareDatabase(input: {
     409,
     "Learning chatroom share snapshot changed; retry required.",
   );
+}
+
+async function runWithLocalLearningChatroomShareWriteLock<T>(
+  dataDir: string,
+  action: () => Promise<T>,
+) {
+  await mkdir(dataDir, { recursive: true });
+  const lockPath = resolve(dataDir, ".learning-chatroom-shares-write-lock");
+  ensureWithinBase(dataDir, lockPath);
+  const deadline = Date.now() + 5_000;
+
+  // Serialize the entire mutation, not just its atomic rename. Separate Node
+  // processes share this directory lock, so local mint and revoke cannot each
+  // succeed from the same stale snapshot and lose one another's changes.
+  for (;;) {
+    try {
+      await mkdir(lockPath);
+      break;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
+        throw error;
+      }
+      if (Date.now() >= deadline) {
+        throw new LearningChatroomShareStoreError(
+          503,
+          "Learning chatroom share snapshot lock is unavailable.",
+        );
+      }
+      await new Promise<void>((resolveDelay) => setTimeout(resolveDelay, 10));
+    }
+  }
+
+  try {
+    return await action();
+  } finally {
+    await rm(lockPath, { force: true, recursive: true }).catch(() => undefined);
+  }
 }
 
 async function writeLearningChatroomShareSnapshot(input: {

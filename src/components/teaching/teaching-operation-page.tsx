@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { TeachingUnitDraftEditor, readVerifiedTeachingUnitDraft } from "./teaching-unit-draft-editor";
 import Link from "next/link";
 import { ArrowLeft } from "@phosphor-icons/react/dist/ssr/ArrowLeft";
 import { CheckCircle } from "@phosphor-icons/react/dist/ssr/CheckCircle";
@@ -9,6 +10,7 @@ import { Lightning } from "@phosphor-icons/react/dist/ssr/Lightning";
 import { ShieldCheck } from "@phosphor-icons/react/dist/ssr/ShieldCheck";
 import { SquaresFour } from "@phosphor-icons/react/dist/ssr/SquaresFour";
 import { useAppPreferences } from "@/components/providers/app-preferences";
+import { TeachingDashboardInsights } from "@/components/pages/teaching-dashboard-insights";
 import {
   getTeachingOperationHrefWithCourse,
   isTeachingOperationId,
@@ -16,7 +18,7 @@ import {
 } from "@/components/teaching/teaching-operation-data";
 import { localizedText } from "@/components/ui/localized-text";
 import { teacherCourses, teacherSidebarItems } from "@/data/uais";
-import type { LocalizedText, Locale } from "@/i18n/copy";
+import { copy, type LocalizedText, type Locale } from "@/i18n/copy";
 import { createTeachingOperationIdempotencyKey } from "@/lib/teaching-operation-idempotency";
 import { defaultExportManifest } from "@/components/teaching/teaching-operation-page-data";
 import {
@@ -285,7 +287,11 @@ const TEACHING_OPERATION_COURSE_CONTEXT_MISSING_MESSAGE: LocalizedText = {
   "en-US": "Not saved to the server: course context is missing. Please enter from a course card.",
 };
 
-export function TeachingOperationPage({
+export function TeachingOperationPage(props: TeachingOperationPageProps) {
+  return <TeachingOperationPageContent key={`${props.operationId}:${props.selectedCourseId ?? "none"}`} {...props} />;
+}
+
+function TeachingOperationPageContent({
   operationId,
   selectedCourseId,
   selectedClassId,
@@ -298,12 +304,14 @@ export function TeachingOperationPage({
   const title = operation ? localizedText(operation.title, locale) : safeOperationId;
   const description = operation ? localizedText(operation.description, locale) : "";
   const selectedCourse = teacherCourses.find((course) => course.id === selectedCourseId);
+  const isInsightsWorkspace = safeOperationId === "dashboard" || safeOperationId === "quiz-board";
   const [statusMessage, setStatusMessage] = useState(localizedText(config.readyMessage, locale));
   const [manifestReady, setManifestReady] = useState(false);
   const [exportManifest, setExportManifest] =
     useState<ExportManifestState>(defaultExportManifest);
   const [inviteCode, setInviteCode] = useState(defaultInviteCode);
   const [auditStatus, setAuditStatus] = useState<OperationAuditStatus>();
+  const [verifiedUnitDraftRecordId, setVerifiedUnitDraftRecordId] = useState<string>();
   const [knowledgeResourceTitle, setKnowledgeResourceTitle] = useState("");
   const [knowledgeResourceUrl, setKnowledgeResourceUrl] = useState("");
   const [knowledgeResourceRightsBasis, setKnowledgeResourceRightsBasis] =
@@ -383,6 +391,7 @@ export function TeachingOperationPage({
           operationId: safeOperationId,
           actionSlot,
           courseId: selectedCourseId,
+          ...(safeOperationId === "content" && actionSlot === "secondary" ? { locale } : {}),
           ...(targetClassId ? { targetClassId } : {}),
           sourceAction,
           ...(knowledgeResource ? { knowledgeResource } : {}),
@@ -431,6 +440,11 @@ export function TeachingOperationPage({
       if (domainPersistenceFailureMessage) {
         setStatusMessage(localizedText(domainPersistenceFailureMessage, locale));
         return;
+      }
+
+      if (safeOperationId === "content" && actionSlot === "secondary" &&
+        (!payload.traceId || !receipt.receiptId || receipt.courseId !== selectedCourseId)) {
+        throw new Error("Unit generation requires course-bound audit and content readback.");
       }
 
       const verifiedStatusMessage = receipt.displayMessage
@@ -547,6 +561,12 @@ export function TeachingOperationPage({
         })
       ) {
         throw new Error("Teaching operation audit readback did not include the saved operation.");
+      }
+
+      if (safeOperationId === "content" && input.actionSlot === "secondary") {
+        if (!input.courseId) throw new Error("Unit draft course is missing.");
+        await readVerifiedTeachingUnitDraft(input.courseId, input.recordId);
+        setVerifiedUnitDraftRecordId(input.recordId);
       }
 
       setAuditStatus({
@@ -1015,7 +1035,11 @@ export function TeachingOperationPage({
               {title}
             </h1>
             <p className="mt-3 max-w-3xl text-base leading-7 text-[var(--muted)]">
-              {description || localizedText(config.summary, locale)}
+              {isInsightsWorkspace
+                ? copy[locale].teachingInsights[safeOperationId === "dashboard" ? "dashboardDescription" : "quizDescription"]
+                : safeOperationId === "data-export"
+                  ? localizedText(config.summary, locale)
+                  : description || localizedText(config.summary, locale)}
             </p>
           </div>
           <div className="rounded-2xl border border-[var(--accent-border)] bg-[var(--accent-soft)] px-4 py-3 text-sm text-[var(--foreground)]">
@@ -1078,8 +1102,20 @@ export function TeachingOperationPage({
           </nav>
         </aside>
 
-        <div className="space-y-5">
-          <section className="grid gap-5 xl:grid-cols-[minmax(0,1.05fr)_360px]">
+        {safeOperationId === "dashboard" || safeOperationId === "quiz-board" ? (
+          <section className="min-w-0 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5">
+            {selectedCourseId ? <p className="break-words text-sm font-semibold text-[var(--foreground)]">
+              {locale === "zh-CN" ? "已选择课程" : "Selected course"}：{selectedCourse ? localizedText(selectedCourse.title, locale) : selectedCourseId}
+            </p> : null}
+            <TeachingDashboardInsights
+              operationId={safeOperationId}
+              courseId={selectedCourseId}
+              classId={selectedClassId}
+              locale={locale}
+            />
+          </section>
+        ) : <div className="space-y-5">
+          <section className={safeOperationId === "data-export" ? "grid min-w-0 gap-5" : "grid gap-5 xl:grid-cols-[minmax(0,1.05fr)_360px]"}>
             <div className="space-y-5">
               <section className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5 shadow-[0_18px_42px_var(--shadow)]">
             <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
@@ -1300,13 +1336,22 @@ export function TeachingOperationPage({
               </div>
             ) : null}
 
-            <OperationSpecificPreview
+            {safeOperationId === "content" && selectedCourseId ? (
+              <TeachingUnitDraftEditor
+                courseId={selectedCourseId}
+                locale={locale}
+                expectedOperationRecordId={verifiedUnitDraftRecordId}
+                generationPending={isActionPending || isAuditPending}
+              />
+            ) : null}
+            {safeOperationId !== "content" ? <OperationSpecificPreview
               config={config}
               exportManifest={exportManifest}
               inviteCode={inviteCode}
               locale={locale}
               manifestReady={manifestReady}
-            />
+              selectedCourseId={selectedCourseId}
+            /> : null}
               </section>
             </div>
 
@@ -1359,7 +1404,7 @@ export function TeachingOperationPage({
               </section>
             </aside>
           </section>
-        </div>
+        </div>}
       </section>
     </div>
   );

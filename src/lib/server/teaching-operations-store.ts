@@ -1,3 +1,6 @@
+import { runWithTeachingOperationLocalWriteLock } from "./teaching-operations-local-write-lock";
+import { gradebookProviderGeneration } from "./teaching-gradebook-provider-generation";
+import { normalizeGradebookProviderOperations } from "./teaching-gradebook-provider-operation-types";
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -142,7 +145,6 @@ export {
   rollbackExternalTeachingGradebookRelease,
 } from "./teaching-operations-gradebook-external-handlers";
 
-const localTeachingOperationWriteQueues = new Map<string, Promise<void>>();
 
 export async function executeTeachingOperationAction(
   input: ExecuteTeachingOperationActionInput,
@@ -197,7 +199,7 @@ export async function executeTeachingOperationAction(
         input: validatedInput,
         dataDir,
         usingExternalPersistence,
-      }),
+      }), { env, repository: input.repository },
     );
   }
 
@@ -509,28 +511,6 @@ function findPersistedAuditEventForRecord(
   );
 }
 
-async function runWithTeachingOperationLocalWriteLock<T>(
-  dataDir: string,
-  action: () => Promise<T>,
-): Promise<T> {
-  const previous = localTeachingOperationWriteQueues.get(dataDir) ?? Promise.resolve();
-  let releaseCurrent: () => void = () => undefined;
-  const current = new Promise<void>((resolveCurrent) => {
-    releaseCurrent = resolveCurrent;
-  });
-  const queued = previous.catch(() => undefined).then(() => current);
-  localTeachingOperationWriteQueues.set(dataDir, queued);
-
-  await previous.catch(() => undefined);
-  try {
-    return await action();
-  } finally {
-    releaseCurrent();
-    if (localTeachingOperationWriteQueues.get(dataDir) === queued) {
-      localTeachingOperationWriteQueues.delete(dataDir);
-    }
-  }
-}
 
 export async function readTeachingOperationDatabase(
   input: ReadTeachingOperationDatabaseInput = {},
@@ -600,8 +580,7 @@ export async function loadTeachingOperationDatabase(
 // hands the revision back to `persistTeachingOperationDatabase`, so a writer that
 // read a snapshot another writer has since replaced is told to start over rather
 // than overwriting work it never saw. The file backend has no revisions - its
-// atomic replace plus the local write lock already serialize writers in one
-// process - so it answers without one and the guard below is a no-op there.
+// atomic replace plus the local write lock already serialize writers across processes sharing that file - so it answers without one and the guard below is a no-op there.
 export async function loadTeachingOperationSnapshot(
   input: TeachingOperationSnapshotAccessInput = {},
 ): Promise<{ database: TeachingOperationDatabase; revision?: string }> {
@@ -621,8 +600,7 @@ export async function persistTeachingOperationDatabase(
     database: TeachingOperationDatabase;
     // Absent means "I read no stored revision", which on the FILE backend is
     // still an unconditional write - that backend has no revisions, and its
-    // atomic replace plus the local write lock already serialize writers in one
-    // process. On the managed backend it now means "I am the first writer", and
+    // atomic replace plus the local write lock already serialize writers across processes sharing that file. On the managed backend it now means "I am the first writer", and
     // a row that exists proves otherwise, so the write is refused rather than
     // replacing a snapshot this caller never read. A caller that means to
     // replace a snapshot it did not derive from - the backup restore - reads the
@@ -780,6 +758,11 @@ export function collectTeachingOperationDatabaseCourseIds(
   for (const inviteCode of database.inviteCodes) addCourseId(inviteCode.courseId);
   for (const outboxItem of database.outbox) addCourseId(outboxItem.courseId);
   for (const manifest of database.exportManifests) addCourseId(manifest.courseId);
+  for (const event of database.auditEvents) {
+    const eventCourseIds = event.eventType === "teaching-operations-backup.restored"
+      ? event.impactedCourseIds : [event.courseId];
+    for (const courseId of eventCourseIds) addCourseId(courseId);
+  }
 
   return [...courseIds].sort();
 }
@@ -787,10 +770,11 @@ export function collectTeachingOperationDatabaseCourseIds(
 export async function readTeachingGradebookUpdate(input: {
   dataDir?: string;
   objectId: string;
+  env?: Record<string, string | undefined>;
 }): Promise<TeachingOperationGradebookUpdateProjection | undefined> {
-  const database = await loadTeachingOperationDatabase({ dataDir: input.dataDir });
+  const database = await loadTeachingOperationDatabase({ dataDir: input.dataDir, env: input.env });
   const objectId = requireSafeId(input.objectId, "gradebook update id");
-  const projection = database.domainProjections.find(
+  const projection = database.domainProjections.findLast(
     (item): item is TeachingOperationGradebookUpdateProjection =>
       item.objectType === "gradebook-update" && item.objectId === objectId,
   );
@@ -805,6 +789,9 @@ export async function restoreTeachingOperationDatabaseBackup(input: {
   repository?: TeachingOperationRepository;
   backupId: string;
   actorId: string;
+  // Request handlers supply their authorized scope; trusted internal callers
+  // can restore a complete snapshot without an end-user authorization context.
+  authorizedCourseIds?: readonly string[];
   audit: TeachingGradebookReleaseAuditInput;
   now?: Date;
 }): Promise<{
@@ -822,7 +809,23 @@ export async function restoreTeachingOperationDatabaseBackup(input: {
     const actorId = requireSafeId(input.actorId, "actor id");
     const now = input.now ?? new Date();
     const restoredAt = now.toISOString();
-    const impactedCourseIds = collectTeachingOperationDatabaseCourseIds(backup.database);
+    // Check both the restored and displaced courses after acquiring the write
+    // lock: another course may have been added since this backup was created
+    // or while the restore request was waiting for an earlier writer.
+    const access = createTeachingOperationSnapshotAccess(dataDir, input.repository);
+    const current = await loadTeachingOperationSnapshot(access);
+    const impactedCourseIds = [...new Set([
+      ...collectTeachingOperationDatabaseCourseIds(backup.database),
+      ...collectTeachingOperationDatabaseCourseIds(current.database),
+    ])].sort();
+    const authorizedCourseIds = input.authorizedCourseIds && new Set(input.authorizedCourseIds);
+    if (authorizedCourseIds && impactedCourseIds.some((courseId) => !authorizedCourseIds.has(courseId))) {
+      throw new TeachingOperationStoreError(
+        403,
+        "UAIS teaching operation course ownership is required.",
+        "course-scope-denied",
+      );
+    }
     const auditEvent = createBackupRestoreAuditEvent({
       audit: input.audit,
       actorId,
@@ -851,15 +854,8 @@ export async function restoreTeachingOperationDatabaseBackup(input: {
       redaction: createRedaction(),
     };
 
-    // A restore is the one write that does NOT derive its database from the
-    // snapshot it replaces - it comes from a backup file - so it has to name the
-    // revision it is displacing explicitly. Without it the managed backend reads
-    // this as a first write and refuses. Read as late as possible, so the window
-    // between the read and the replace is only this call. The file backend has
-    // no revisions and answers `undefined`, which leaves its behaviour exactly
-    // as it was.
-    const access = createTeachingOperationSnapshotAccess(dataDir, input.repository);
-    const current = await loadTeachingOperationSnapshot(access);
+    // The managed backend must replace exactly the snapshot whose scope was
+    // checked above. Its revision guard rejects any intervening durable write.
     await persistTeachingOperationDatabase({
       ...access,
       database: restoredDatabase,
@@ -869,11 +865,12 @@ export async function restoreTeachingOperationDatabaseBackup(input: {
       receipt,
       database: restoredDatabase,
     };
-  });
+  }, { repository: input.repository });
 }
 
 export async function rollbackTeachingOperationRecord(input: {
   dataDir?: string;
+  env?: Record<string, string | undefined>;
   repository?: TeachingOperationRepository;
   recordId: string;
   actorId: string;
@@ -885,7 +882,7 @@ export async function rollbackTeachingOperationRecord(input: {
   database: TeachingOperationDatabase;
 }> {
   const dataDir = resolveTeachingOperationDataDir(input.dataDir);
-  const access = createTeachingOperationSnapshotAccess(dataDir, input.repository);
+  const access = createTeachingOperationSnapshotAccess(dataDir, input.repository, input.env);
   return runWithTeachingOperationLocalWriteLock(dataDir, () =>
     runGuardedTeachingOperationSnapshotWrite({
       access,
@@ -973,12 +970,15 @@ export async function rollbackTeachingOperationRecord(input: {
           result: { receipt, database: nextDatabase },
         };
       },
-    }),
+    }), access,
   );
 }
 
 export async function releaseTeachingGradebookUpdate(input: {
   dataDir?: string;
+  env?: Record<string, string | undefined>;
+  expectedGeneration?: string;
+  releaseGenerationId?: string;
   repository?: TeachingOperationRepository;
   objectId: string;
   actorId: string;
@@ -991,8 +991,8 @@ export async function releaseTeachingGradebookUpdate(input: {
   receipt: TeachingGradebookReleaseReceipt;
 }> {
   const dataDir = resolveTeachingOperationDataDir(input.dataDir);
-  const access = createTeachingOperationSnapshotAccess(dataDir, input.repository);
-  return runGuardedTeachingOperationSnapshotWrite({
+  const access = createTeachingOperationSnapshotAccess(dataDir, input.repository, input.env);
+  return runWithTeachingOperationLocalWriteLock(dataDir, () => runGuardedTeachingOperationSnapshotWrite({
     access,
     apply: async (database) => {
       const objectId = requireSafeId(input.objectId, "gradebook update id");
@@ -1000,7 +1000,7 @@ export async function releaseTeachingGradebookUpdate(input: {
       const providerRelease = input.providerRelease
         ? normalizeTeachingGradebookReleaseProviderReceipt(input.providerRelease)
         : undefined;
-      const projectionIndex = database.domainProjections.findIndex(
+      const projectionIndex = database.domainProjections.findLastIndex(
         (item) => item.objectType === "gradebook-update" && item.objectId === objectId,
       );
       if (projectionIndex < 0) {
@@ -1011,11 +1011,15 @@ export async function releaseTeachingGradebookUpdate(input: {
       if (existingProjection.objectType !== "gradebook-update") {
         throw new TeachingOperationStoreError(500, "Gradebook update projection is invalid.");
       }
+      if (input.expectedGeneration && input.expectedGeneration !== gradebookProviderGeneration(existingProjection)) {
+        throw new TeachingOperationStoreError(409, "Gradebook generation changed while the provider operation was pending.");
+      }
       const now = input.now ?? new Date();
       const releasedAt = now.toISOString();
       const gradebookUpdate: TeachingOperationGradebookUpdateProjection = {
         ...existingProjection,
         updateStatus: "released",
+        releaseGenerationId: input.releaseGenerationId ?? randomUUID(),
         releasedBy: existingProjection.releasedBy ?? actorId,
         releasedAt: existingProjection.releasedAt ?? releasedAt,
         ...(providerRelease ?? {}),
@@ -1075,11 +1079,14 @@ export async function releaseTeachingGradebookUpdate(input: {
         result: { gradebookUpdate, notification, receipt },
       };
     },
-  });
+  }), access);
 }
 
 export async function rollbackTeachingGradebookRelease(input: {
   dataDir?: string;
+  env?: Record<string, string | undefined>;
+  expectedGeneration?: string;
+  releaseGenerationId?: string;
   repository?: TeachingOperationRepository;
   objectId: string;
   actorId: string;
@@ -1092,13 +1099,13 @@ export async function rollbackTeachingGradebookRelease(input: {
   receipt: TeachingGradebookReleaseRollbackReceipt;
 }> {
   const dataDir = resolveTeachingOperationDataDir(input.dataDir);
-  const access = createTeachingOperationSnapshotAccess(dataDir, input.repository);
-  return runGuardedTeachingOperationSnapshotWrite({
+  const access = createTeachingOperationSnapshotAccess(dataDir, input.repository, input.env);
+  return runWithTeachingOperationLocalWriteLock(dataDir, () => runGuardedTeachingOperationSnapshotWrite({
     access,
     apply: async (database) => {
       const objectId = requireSafeId(input.objectId, "gradebook update id");
       const actorId = requireSafeId(input.actorId, "actor id");
-      const projectionIndex = database.domainProjections.findIndex(
+      const projectionIndex = database.domainProjections.findLastIndex(
         (item) => item.objectType === "gradebook-update" && item.objectId === objectId,
       );
       if (projectionIndex < 0) {
@@ -1113,6 +1120,9 @@ export async function rollbackTeachingGradebookRelease(input: {
         throw new TeachingOperationStoreError(409, "Gradebook update is not released.");
       }
 
+      if (input.expectedGeneration && input.expectedGeneration !== gradebookProviderGeneration(existingProjection)) {
+        throw new TeachingOperationStoreError(409, "Gradebook generation changed while the provider operation was pending.");
+      }
       const now = input.now ?? new Date();
       const rolledBackAt = now.toISOString();
       const providerRollback = input.providerRollback
@@ -1183,7 +1193,7 @@ export async function rollbackTeachingGradebookRelease(input: {
         result: { gradebookUpdate, notification, receipt },
       };
     },
-  });
+  }), access);
 }
 
 export async function readTeachingOperationExportManifest(
@@ -1598,6 +1608,7 @@ function normalizeDatabase(value: unknown): TeachingOperationDatabase {
 
   return {
     schemaVersion: "uais-teaching-operations-v1",
+    ...(value.providerOperations !== undefined ? { providerOperations: normalizeGradebookProviderOperations(value.providerOperations) } : {}),
     updatedAt: typeof value.updatedAt === "string" ? value.updatedAt : new Date(0).toISOString(),
     records: Array.isArray(value.records)
       ? value.records.map(normalizeRecord)

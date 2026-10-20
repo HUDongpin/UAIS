@@ -1,5 +1,6 @@
 import { createPublishedLearningPptPlaybackManifestForCourse } from "@/lib/learning/ppt-playback";
 import { authorizeLearningPptPlaybackAccess } from "@/lib/server/learning-ppt-playback-access";
+import { isSameTeachingActorId, teachingActorOwnsCourse } from "@/lib/server/teaching-actor-id";
 import { createUaisTeachingCourseManagementRepository } from "@/lib/server/teaching-course-management-external-store";
 import {
   assertTeachingCourseManagementLocalJsonRuntimeAllowed,
@@ -67,7 +68,7 @@ export async function authorizeLearningLoopTeacherCourse(input: {
   if (!teacherSession) {
     return { status: "denied", reasonCode: "teacher-write-session-required" };
   }
-  if (teacherSession.actorId !== appClaims.account) {
+  if (!isSameTeachingActorId(teacherSession.actorId, appClaims.account)) {
     return { status: "denied", reasonCode: "teacher-session-identity-mismatch" };
   }
 
@@ -192,9 +193,13 @@ async function readDefaultTeacherCourseScope(input: {
     repository,
     courseId: input.courseId,
   });
-  const course = database.courses.find(
-    (item) =>
-      item.courseId === input.courseId && item.ownerTeacherId === input.teacherAccount,
+  const course = database.courses.find((item) =>
+    teachingActorOwnsCourse({
+      ownerTeacherId: item.ownerTeacherId,
+      actorId: input.teacherAccount,
+      courseId: input.courseId,
+      candidateCourseId: item.courseId,
+    }),
   );
   if (!course) return undefined;
   const playback = createPublishedLearningPptPlaybackManifestForCourse(input.courseId);
@@ -210,10 +215,13 @@ async function readDefaultTeacherCourseScope(input: {
   return {
     course: { externalId: course.courseId, title: course.courseName },
     classes: database.classes
-      .filter(
-        (item) =>
-          item.courseId === course.courseId &&
-          item.ownerTeacherId === input.teacherAccount,
+      .filter((item) =>
+        teachingActorOwnsCourse({
+          ownerTeacherId: item.ownerTeacherId,
+          actorId: input.teacherAccount,
+          courseId: course.courseId,
+          candidateCourseId: item.courseId,
+        }),
       )
       .map((item) => ({
         externalId: item.classId,

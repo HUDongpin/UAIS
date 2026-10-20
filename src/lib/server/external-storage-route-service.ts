@@ -63,6 +63,7 @@ import {
   replaceTeachingCourseAssetsSnapshot,
   replaceTeachingCourseManagementSnapshot,
   rollbackTeachingOperation,
+  runWithTeacherOwnershipWriteLock,
   summarizeTeachingOperationAuditAlerts,
   verifyTeachingCourseAssetsBackupRestoreDrill,
   verifyTeachingCourseManagementBackupRestoreDrill,
@@ -220,12 +221,15 @@ export function createExternalStorageTeacherOwnershipMergePostHandler(
       if (incoming.teacherId !== teacherId) {
         throw new HttpError(400, "Teacher AI ownership record id mismatch.");
       }
-      const existing = await readTeacherOwnership({
-        dataDir: config.dataDir,
-        teacherId,
-      });
-      const merged = mergeOwnership(existing, incoming);
-      await writeTeacherOwnership({ dataDir: config.dataDir, ownership: merged });
+      const merged = await runWithTeacherOwnershipWriteLock(
+        { dataDir: config.dataDir, teacherId },
+        async () => {
+          const existing = await readTeacherOwnership({ dataDir: config.dataDir, teacherId });
+          const ownership = mergeOwnership(existing, incoming);
+          await writeTeacherOwnership({ dataDir: config.dataDir, ownership });
+          return ownership;
+        },
+      );
 
       return jsonResponse(200, {
         teacherId,

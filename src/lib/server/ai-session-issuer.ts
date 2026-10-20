@@ -38,10 +38,12 @@ export function createUaisAiAccessSessionFromAuthenticatedTeacher(input: {
   }
 
   const authenticatedSessionExpiresAt = Date.parse(input.authenticatedSession.expiresAt);
-  const ttlSeconds = Math.max(
-    1,
-    Math.floor((authenticatedSessionExpiresAt - now.getTime()) / 1000),
-  );
+  const ttlSeconds = Math.floor((authenticatedSessionExpiresAt - now.getTime()) / 1000);
+  // The signer issues whole seconds and clamps its minimum to one. Refuse the
+  // fractional final second instead of extending the teacher's authority.
+  if (ttlSeconds < 1) {
+    throw new Error("Authenticated teacher session cannot mint a positive AI session lifetime.");
+  }
   const issued = createUaisAiAccessSessionForTrustedActor({
     actor: {
       actorId: input.authenticatedSession.actorId,

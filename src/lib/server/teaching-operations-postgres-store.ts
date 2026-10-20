@@ -1,3 +1,5 @@
+import { isRecord } from "./teaching-operations-guards";
+import { normalizeGradebookProviderOperations } from "./teaching-gradebook-provider-operation-types";
 import { createHash } from "node:crypto";
 import type { TransactionSql } from "postgres";
 import {
@@ -11,7 +13,6 @@ import {
   type TeachingOperationDatabase,
 } from "@/lib/server/teaching-operations-store";
 
-const snapshotKey = "default";
 
 // Test seam, matching teaching-course-management-postgres-store.ts and the two
 // chatroom stores. The revision guard below is a statement shape - a FOR UPDATE
@@ -70,7 +71,9 @@ export function createUaisTeachingOperationRepository(input: {
 export function createUaisTeachingOperationPostgresRepository(input: {
   env: Record<string, string | undefined>;
   createDatabase?: TeachingOperationPostgresClientFactory;
+  snapshotKey?: "gradebook-provider-operations";
 }): TeachingOperationRepository {
+  const snapshotKey = input.snapshotKey ?? "default";
   const readiness = getUaisCoreDatabaseReadiness(input.env);
   if (readiness.status !== "ready") {
     throw new TeachingOperationStoreError(
@@ -95,6 +98,12 @@ export function createUaisTeachingOperationPostgresRepository(input: {
 
         const row = rows[0] as { database?: unknown; revision?: unknown };
         const revision = typeof row.revision === "string" ? row.revision.trim() : "";
+        if (input.snapshotKey === "gradebook-provider-operations") {
+          if (!revision || !isRecord(row.database) || !Object.hasOwn(row.database, "providerOperations")) {
+            throw new TeachingOperationStoreError(503, "Gradebook provider operation snapshot evidence is incomplete.");
+          }
+          normalizeGradebookProviderOperations(row.database.providerOperations);
+        }
         return {
           database: normalizeTeachingOperationDatabase(row.database),
           ...(revision ? { revision } : {}),

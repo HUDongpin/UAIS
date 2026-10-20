@@ -641,7 +641,7 @@ export function createTeachingCourseCollaboratorPostgresStore(
             WITH requested_principal AS (
               SELECT principal.id, principal.account, principal.role, principal.status
               FROM uais_users principal
-              WHERE principal.account = ${principalAccount}
+              WHERE LOWER(principal.account) = LOWER(${principalAccount})
             )
             SELECT
               principal.id AS principal_user_id,
@@ -673,7 +673,7 @@ export function createTeachingCourseCollaboratorPostgresStore(
             ) AS course(record)
               ON course.record->>'courseId' = ${courseId}
             LEFT JOIN uais_users owner
-              ON owner.account = course.record->>'ownerTeacherId'
+              ON LOWER(owner.account) = LOWER(course.record->>'ownerTeacherId')
               AND owner.role = 'teacher'
               AND owner.status = 'active'
             LEFT JOIN uais_course_collaborator_grants grant
@@ -682,7 +682,7 @@ export function createTeachingCourseCollaboratorPostgresStore(
             LIMIT 2
           `;
         });
-        if (rows.length !== 1) {
+        if (rows.length === 0) {
           return authorizeTeachingCourseCapability({
             principal: undefined,
             course: { courseId, ownerUserId: "" },
@@ -693,6 +693,22 @@ export function createTeachingCourseCollaboratorPostgresStore(
         const row = readRecord(rows[0], "capability-readback-invalid");
         const principal = readCapabilityPrincipal(row);
         const ownerUserId = readOptionalUuid(row.owner_user_id) ?? "";
+        if (principal && ownerUserId && principal.userId === ownerUserId) {
+          return authorizeTeachingCourseCapability({
+            principal,
+            course: { courseId, ownerUserId },
+            capability: input.capability,
+            now: readNow(),
+          });
+        }
+        if (rows.length !== 1) {
+          return authorizeTeachingCourseCapability({
+            principal: undefined,
+            course: { courseId, ownerUserId: "" },
+            capability: input.capability,
+            now: readNow(),
+          });
+        }
         const grant = readOptionalUuid(row.id)
           ? toSafeGrant(readGrantRow(row, readNow()))
           : undefined;
@@ -731,10 +747,10 @@ async function requireCourseOwner(input: {
             END
           ) AS course(record)
           JOIN uais_users owner
-            ON owner.account = course.record->>'ownerTeacherId'
+            ON LOWER(owner.account) = LOWER(course.record->>'ownerTeacherId')
           WHERE snapshot.snapshot_key = ${input.courseId}
             AND course.record->>'courseId' = ${input.courseId}
-            AND owner.account = ${input.actorAccount}
+            AND LOWER(owner.account) = LOWER(${input.actorAccount})
             AND owner.role = 'teacher'
             AND owner.status = 'active'
           LIMIT 2
@@ -754,10 +770,10 @@ async function requireCourseOwner(input: {
             END
           ) AS course(record)
           JOIN uais_users owner
-            ON owner.account = course.record->>'ownerTeacherId'
+            ON LOWER(owner.account) = LOWER(course.record->>'ownerTeacherId')
           WHERE snapshot.snapshot_key = ${input.courseId}
             AND course.record->>'courseId' = ${input.courseId}
-            AND owner.account = ${input.actorAccount}
+            AND LOWER(owner.account) = LOWER(${input.actorAccount})
             AND owner.role = 'teacher'
             AND owner.status = 'active'
           LIMIT 2

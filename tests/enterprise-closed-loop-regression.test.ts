@@ -1195,7 +1195,8 @@ describe("enterprise closed-loop regression guards", () => {
         "function areTeachingOperationRecordsEquivalent",
       );
 
-      expect(serviceSource, label).toContain("teachingOperationAppendWriteQueues");
+      // Cross-instance behavior is covered by external-storage-store-concurrency:
+      // the former process-local queue is replaced by a shared filesystem lock.
       expect(serviceSource, label).toContain("runWithTeachingOperationAppendWriteLock");
       expect(appendSection, label).toContain("runWithTeachingOperationAppendWriteLock");
       expect(appendSection.indexOf("runWithTeachingOperationAppendWriteLock"), label).toBeLessThan(
@@ -1670,7 +1671,7 @@ describe("enterprise closed-loop regression guards", () => {
       route.indexOf("appendExternalTeachingOperation && externalAudit"),
     );
     expect(route.indexOf("const provider = input.env.UAIS_GRADEBOOK_RELEASE_PROVIDER")).toBeLessThan(
-      route.indexOf("const response = await input.fetch"),
+      route.indexOf("const providerReceipt = await readGradebookProviderReceipt"),
     );
   });
 
@@ -1690,7 +1691,7 @@ describe("enterprise closed-loop regression guards", () => {
       route.indexOf("const providerRollback = await syncGradebookReleaseRollbackProvider"),
     ).toBeLessThan(route.indexOf("appendExternalTeachingOperation && externalAudit"));
     expect(route.indexOf("const provider = input.env.UAIS_GRADEBOOK_RELEASE_PROVIDER")).toBeLessThan(
-      route.indexOf("const response = await input.fetch"),
+      route.indexOf("const providerReceipt = await readGradebookProviderReceipt"),
     );
   });
 

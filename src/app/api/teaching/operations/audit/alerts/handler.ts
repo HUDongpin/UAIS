@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import {
   isTeachingOperationProductionDatabaseAdapterEvidence,
-  readTeachingOperationDatabase,
+  loadTeachingOperationDatabase,
   resolveTeachingOperationDataDir,
   TeachingOperationStoreError,
   type TeachingOperationAuditEvent,
@@ -289,8 +289,9 @@ async function summarizeLocalTeachingOperationAuditAlerts(input: {
   env: Record<string, string | undefined>;
   teacherId: string;
 }): Promise<TeachingOperationAuditAlertSummary> {
-  const database = await readTeachingOperationDatabase({
+  const database = await loadTeachingOperationDatabase({
     dataDir: resolveTeachingOperationDataDir(input.env.UAIS_TEACHING_OPERATIONS_DATA_DIR),
+    env: input.env,
   });
   const sourceEvents = database.auditEvents.filter(
     (event) =>

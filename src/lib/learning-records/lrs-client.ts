@@ -272,19 +272,44 @@ export async function postXapiStatement(input: {
   fetch?: typeof fetch;
 }): Promise<LrsPostResult> {
   const fetchImpl = input.fetch ?? fetch;
-  const response = await fetchImpl(createStatementsUrl(input.config.endpoint), {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Experience-API-Version": input.config.xapiVersion,
-      Authorization: createBasicAuthorization(
-        input.config.username,
-        input.config.password,
-      ),
-    },
-    body: JSON.stringify(input.statement),
+  const controller = new AbortController();
+  let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<never>((_resolve, reject) => {
+    deadlineTimer = setTimeout(() => {
+      const error = new Error("LRS statement write timed out.");
+      error.name = "AbortError";
+      controller.abort(error);
+      reject(error);
+    }, 10_000);
   });
-  const responseText = await response.text();
+  let response: Response;
+  let responseText: string;
+  try {
+    // Bound the whole delivery, including a stalled response body. Abort the
+    // actual transport, while the race also bounds injected/custom transports
+    // that ignore the signal, so the outbox can record a failed attempt.
+    ({ response, responseText } = await Promise.race([
+      (async () => {
+        const response = await fetchImpl(createStatementsUrl(input.config.endpoint), {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Experience-API-Version": input.config.xapiVersion,
+            Authorization: createBasicAuthorization(
+              input.config.username,
+              input.config.password,
+            ),
+          },
+          body: JSON.stringify(input.statement),
+          signal: controller.signal,
+        });
+        return { response, responseText: await response.text() };
+      })(),
+      deadline,
+    ]));
+  } finally {
+    clearTimeout(deadlineTimer);
+  }
 
   if (!response.ok) {
     throw new LrsWriteError(

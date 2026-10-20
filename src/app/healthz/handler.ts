@@ -99,12 +99,14 @@ export function createUaisHealthGetHandler(deps: UaisHealthGetHandlerDeps = {}) 
       env,
       deps.compiledStagingContentSha,
     );
+    const gitCommitSha = readShortGitCommitSha(env);
 
     return Response.json(
       {
         status: healthy ? "ok" : "degraded",
         service: "uais",
         checkedAt: (deps.now ?? (() => new Date()))().toISOString(),
+        ...(gitCommitSha ? { gitCommitSha } : {}),
         checks: {
           app: "ok",
           database: probe.database,
@@ -197,6 +199,14 @@ async function probeUaisCoreDatabase(input: {
 
 function isNonEmptyText(value: unknown): value is string {
   return typeof value === "string" && value.trim() !== "";
+}
+
+function readShortGitCommitSha(env: Record<string, string | undefined>) {
+  const sha = env.VERCEL_GIT_COMMIT_SHA?.trim();
+  if (!sha || !/^[0-9a-f]{7,40}$/i.test(sha)) {
+    return undefined;
+  }
+  return sha.slice(0, 7);
 }
 
 async function withProbeTimeout(

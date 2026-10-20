@@ -28,6 +28,30 @@ afterEach(() => {
 });
 
 describe("student P1 real dashboard", () => {
+  it("links every independent activity in one lesson and targets the recommended activity", async () => {
+    window.history.replaceState(null, "", "/student-dashboard");
+    const units = ["activity-a", "activity-b"].map((activityId) => ({
+      lessonKey: "lesson-1", position: 1, activityId,
+      formative: { attempted: true }, submission: { state: "draft" }, feedback: { status: "none" },
+      completion: { completed: false, basis: "teacher-accepted-current-version" },
+    }));
+    const nextAction = { type: "continue-draft", lessonKey: "lesson-1", activityId: "activity-b", reasonCode: "submission-draft-exists" };
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => String(input) === "/api/teaching/courses" ? response(membershipBody) : response({
+      courses: [{ courseId: "course-1", courseTitle: "真实课程", classId: "class-1", units,
+        counts: { notStarted: 0, draft: 2, submitted: 0, revisionRequested: 0, resubmitted: 0, accepted: 0, completedUnits: 0, overdue: 0 },
+        nextAction, projectionVersion: 2, dataFreshAt: "2026-08-21T01:00:00.000Z" }],
+      nextAction, dataFreshAt: "2026-08-21T01:00:00.000Z",
+    })));
+    const { container } = render(<StudentDashboardPage />);
+    await waitFor(() => expect(container.querySelector("[data-uais-real-learning-dashboard='true']")).toBeTruthy());
+    const snapshot = within(container.querySelector("[data-uais-real-learning-dashboard='true']") as HTMLElement);
+    expect(snapshot.getAllByRole("link", { name: "打开学习任务" }).map((link) => link.getAttribute("href"))).toEqual([
+      "/learning?courseId=course-1&classId=class-1&lessonKey=lesson-1&activityId=activity-a",
+      "/learning?courseId=course-1&classId=class-1&lessonKey=lesson-1&activityId=activity-b",
+    ]);
+    expect(snapshot.getByRole("link", { name: "继续草稿" }).getAttribute("href")).toBe("/learning?courseId=course-1&classId=class-1&lessonKey=lesson-1&activityId=activity-b");
+  });
+
   it("separates checkpoint, submission, feedback and teacher acceptance from playback", async () => {
     window.history.replaceState(null, "", "/student-dashboard");
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {

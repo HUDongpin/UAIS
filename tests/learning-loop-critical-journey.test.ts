@@ -239,6 +239,7 @@ describe("P1 critical closed-loop route journey", () => {
       saveSubmissionDraft: async (input) => {
         expect(state.checkpointAttempted).toBe(true);
         let version = currentVersion();
+        expect(input.expectedSubmissionVersionId).toBe(version?.id ?? null);
         if (!version) {
           expect(input.expectedDraftRevision).toBe(0);
           version = { id: "version-1", versionNo: 1, status: "draft", contentText: "", draftRevision: 0 };
@@ -266,14 +267,14 @@ describe("P1 critical closed-loop route journey", () => {
         expect(input.expectedDraftRevision).toBe(version.draftRevision);
         version.contentText = input.contentText;
         version.draftRevision += 1;
-        return receipt(submissionId, "draft", version.draftRevision);
+        return { ...receipt(submissionId, "draft", version.draftRevision), submissionVersionId: version.id };
       },
     });
     const firstSave = await responseBody(
       await saveDraft(
         writeRequest(`/api/learning/activities/${activityId}/submission`, "PUT", {
           contentText: "V1 claim with evidence and reasoning.",
-          expectedDraftRevision: 0,
+          expectedDraftRevision: 0, expectedSubmissionVersionId: currentVersion()?.id ?? null,
         }),
         { params: { activityId } },
       ),
@@ -288,6 +289,7 @@ describe("P1 critical closed-loop route journey", () => {
         const version = currentVersion();
         expect(version?.status).toBe("draft");
         expect(input.expectedDraftRevision).toBe(version?.draftRevision);
+        expect(input.expectedSubmissionVersionId).toBe(version?.id);
         const nextState = version?.versionNo === 1 ? "submitted" : "resubmitted";
         assertSubmissionTransition({ from: "draft", to: nextState, versionNo: version?.versionNo ?? 0 });
         version!.status = "sealed";
@@ -299,7 +301,7 @@ describe("P1 critical closed-loop route journey", () => {
     await responseBody(
       await submitDraft(
         writeRequest(`/api/learning/activities/${activityId}/submission/submit`, "POST", {
-          expectedDraftRevision: 1,
+          expectedDraftRevision: 1, expectedSubmissionVersionId: currentVersion()?.id,
         }, "submit-v1"),
         { params: { activityId } },
       ),
@@ -427,7 +429,7 @@ describe("P1 critical closed-loop route journey", () => {
       await saveDraft(
         writeRequest(`/api/learning/activities/${activityId}/submission`, "PUT", {
           contentText: "V2 now links the evidence directly to the claim.",
-          expectedDraftRevision: 0,
+          expectedDraftRevision: 0, expectedSubmissionVersionId: currentVersion()?.id ?? null,
         }),
         { params: { activityId } },
       ),
@@ -435,7 +437,7 @@ describe("P1 critical closed-loop route journey", () => {
     await responseBody(
       await submitDraft(
         writeRequest(`/api/learning/activities/${activityId}/submission/submit`, "POST", {
-          expectedDraftRevision: 1,
+          expectedDraftRevision: 1, expectedSubmissionVersionId: currentVersion()?.id,
         }, "submit-v2"),
         { params: { activityId } },
       ),

@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Header } from "@/components/layout/header";
 
 let mockPathname = "/courses";
+let mockLocale = "zh-CN";
 const replace = vi.fn();
 const assign = vi.fn();
 
@@ -58,7 +59,7 @@ vi.mock("next/navigation", () => ({
 
 vi.mock("@/components/providers/app-preferences", () => ({
   useAppPreferences: () => ({
-    locale: "zh-CN",
+    locale: mockLocale,
     theme: "light",
     toggleLocale: vi.fn(),
     toggleTheme: vi.fn(),
@@ -67,6 +68,7 @@ vi.mock("@/components/providers/app-preferences", () => ({
 
 describe("Header", () => {
   beforeEach(() => {
+    mockLocale = "zh-CN";
     replace.mockClear();
     assign.mockClear();
     vi.unstubAllGlobals();
@@ -249,21 +251,41 @@ describe("Header", () => {
     cookieSetter.mockRestore();
   });
 
-  it("still leaves for login when the session-clearing request fails", async () => {
-    const fetchMock = vi.fn(async () => {
-      throw new Error("network down");
-    });
+  it.each([
+    { locale: "zh-CN", surface: "desktop", failure: "network" },
+    { locale: "en-US", surface: "desktop", failure: "http" },
+    { locale: "en-US", surface: "mobile", failure: "network" },
+    { locale: "zh-CN", surface: "mobile", failure: "http" },
+  ])("keeps the session visible after $surface $failure logout failure in $locale, then retries", async ({ locale, surface, failure }) => {
+    mockLocale = locale;
+    const fetchMock = vi.fn()
+      .mockImplementationOnce(async () => {
+        if (failure === "network") throw new Error("synthetic network failure");
+        return Response.json({ error: "synthetic unavailable" }, { status: 503 });
+      })
+      .mockResolvedValueOnce(Response.json({ status: "signed-out" }));
     vi.stubGlobal("fetch", fetchMock);
     stubLocationAssign();
     mockPathname = "/teaching";
     render(<Header initialSessionUser={teacherSession} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "教师账号" }));
-    fireEvent.click(screen.getByRole("menuitem", { name: "退出账号" }));
+    const chinese = locale === "zh-CN";
+    if (surface === "desktop") {
+      fireEvent.click(screen.getByRole("button", { name: chinese ? "教师账号" : "Teacher" }));
+      fireEvent.click(screen.getByRole("menuitem", { name: chinese ? "退出账号" : "Sign Out" }));
+    } else {
+      fireEvent.click(screen.getByRole("button", { name: chinese ? "打开导航菜单" : "Open navigation menu" }));
+      fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: chinese ? "退出账号" : "Sign Out" }));
+    }
 
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toContain(locale === "zh-CN" ? "退出失败，您仍处于登录状态" : "Sign out failed. You are still signed in");
+    expect(assign).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: chinese ? "教师账号" : "Teacher" })).toBeTruthy();
+    fireEvent.click(within(alert).getByRole("button", { name: locale === "zh-CN" ? "重试退出" : "Try signing out again" }));
     await waitFor(() => expect(assign).toHaveBeenCalledWith("/login"));
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(replace).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 
   it("does not show the global search button in the header", () => {
@@ -271,6 +293,39 @@ describe("Header", () => {
     render(<Header />);
 
     expect(screen.queryByRole("button", { name: "全局搜索" })).toBeNull();
+  });
+
+  it("opens course data panels for calendar and notifications", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({
+      courses: [], classes: [], memberships: [],
+      receipt: { status: "read", action: "list-courses", actorId: teacherSession.account },
+    })));
+    Object.defineProperty(HTMLDialogElement.prototype, "showModal", {
+      configurable: true, value() { this.setAttribute("open", ""); },
+    });
+    Object.defineProperty(HTMLDialogElement.prototype, "close", {
+      configurable: true, value() { this.removeAttribute("open"); this.dispatchEvent(new Event("close")); },
+    });
+    mockPathname = "/teaching";
+    render(<Header initialSessionUser={teacherSession} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "日历" }));
+    const calendarPanel = screen.getByRole("dialog", { name: "课程日历" });
+    await within(calendarPanel).findByText("暂无已发布任务的截止时间。");
+    fireEvent.click(within(calendarPanel).getByRole("button", { name: "关闭" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "通知" }));
+    const notificationsPanel = screen.getByRole("dialog", { name: "通知中心" });
+    await within(notificationsPanel).findByText("暂无可显示的班级申请或学习反馈。");
+    fireEvent.click(within(notificationsPanel).getByRole("button", { name: "关闭" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("does not offer personal course data controls without a session", () => {
+    render(<Header />);
+    expect(screen.queryByRole("button", { name: "日历" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "通知" })).toBeNull();
   });
 
   // E12/PKG-7: the header had 30 hardcoded light hex classes and no dark
@@ -294,7 +349,7 @@ describe("Header", () => {
   // E12/PKG-7 mobile navigation. jsdom has no viewport matching, and this suite
   // has never stubbed `matchMedia`, so the drawer is asserted the way the rest of
   // the suite asserts responsive behaviour: on the rendered structure, plus the
-  // `md:hidden` / `md:flex` classes that decide which of the two surfaces a
+  // `xl:hidden` / `xl:flex` classes that decide which of the two surfaces a
   // phone actually sees.
   describe("mobile navigation drawer", () => {
     it("keeps the drawer trigger below md and the desktop nav from md up", () => {
@@ -304,10 +359,10 @@ describe("Header", () => {
       const trigger = screen.getByRole("button", { name: "打开导航菜单" });
       expect(trigger.getAttribute("aria-expanded")).toBe("false");
       expect(trigger.getAttribute("aria-controls")).toBe("uais-mobile-nav-panel");
-      expect(trigger.parentElement?.className).toContain("md:hidden");
+      expect(trigger.parentElement?.className).toContain("xl:hidden");
       expect(
         screen.getByRole("navigation", { name: "Primary" }).className,
-      ).toContain("md:flex");
+      ).toContain("xl:flex");
       expect(container.querySelector("[data-uais-mobile-nav]")).toBeNull();
     });
 

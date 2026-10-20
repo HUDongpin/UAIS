@@ -113,6 +113,7 @@ export function PptStage({
   publishedPlaybackError,
   isPublishedPlaybackLoading,
   conceptCount,
+  hasStudyContent = true,
   onStudyAction,
   signInHref,
   onRetryPublishedPlayback,
@@ -123,6 +124,9 @@ export function PptStage({
   publishedPlaybackError?: PublishedPlaybackError;
   isPublishedPlaybackLoading?: boolean;
   conceptCount: number;
+  /** False when no lesson is on screen: there is no slide to ask about, take
+   *  notes on, or export, so the bar disables itself and says why. */
+  hasStudyContent?: boolean;
   onStudyAction: (action: StudyAction) => void;
   /** Where a signed-out deck refusal sends the learner, with a return path. */
   signInHref?: string;
@@ -211,9 +215,16 @@ export function PptStage({
     );
 
     return (
+      // `xl:h-full` inside the workspace's `minmax(0,1fr)` row, and no fixed
+      // min-height. The old `xl:min-h-[calc(100dvh-13.5rem)]` was 66px taller
+      // than the row the workspace grid could give it, so this card always
+      // overflowed downward into the narration dock's top margin. That was
+      // invisible while the dock was a single 98px row, and became a 45px
+      // overlap across the study action bar the moment the dock wrapped to two
+      // rows on a laptop-width screen. The row owns the height now.
       <section
         data-uais-learning-ppt-stage="compact"
-        className="flex min-h-0 min-w-0 w-full flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-[0_18px_44px_var(--shadow)] xl:h-full xl:min-h-[calc(100dvh-13.5rem)]"
+        className="flex min-h-0 min-w-0 w-full flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-[0_18px_44px_var(--shadow)] xl:h-full xl:min-h-0"
       >
         <div
           data-uais-learning-ppt-stage-body="expanded-slide"
@@ -327,11 +338,14 @@ export function PptStage({
   }
 
   return (
+    // Same column shape as the published stage: the card fills the workspace row
+    // and the empty body absorbs whatever height is left, so the study action bar
+    // below it is never pushed past the card's own clipped edge.
     <section
       aria-busy={isPublishedPlaybackLoading || undefined}
-      className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-[0_18px_44px_var(--shadow)]"
+      className="flex min-h-0 w-full flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-[0_18px_44px_var(--shadow)] xl:h-full"
     >
-      <div className="relative min-h-[470px] p-7 lg:p-9 xl:min-h-[555px]">
+      <div className="relative min-h-[470px] flex-1 p-7 lg:p-9 xl:min-h-0">
         {publishedPlaybackError ? (
           <div
             role="alert"
@@ -401,6 +415,7 @@ export function PptStage({
       <StudyActionBar
         locale={locale}
         conceptCount={conceptCount}
+        hasStudyContent={hasStudyContent}
         onStudyAction={onStudyAction}
       />
     </section>
@@ -516,14 +531,22 @@ function StudyActionBar({
   locale,
   conceptCount,
   compact = false,
+  hasStudyContent = true,
   onStudyAction,
 }: {
   locale: Locale;
   conceptCount: number;
   compact?: boolean;
+  hasStudyContent?: boolean;
   onStudyAction: (action: StudyAction) => void;
 }) {
   const zh = locale === "zh-CN";
+  // Without a lesson these five actions have nothing to act on. They used to run
+  // against the demo course's slide 3 and hand the learner notes, concept cards
+  // and a downloadable `.md` for a lesson that is not theirs.
+  const unavailableTitle = zh
+    ? "教师发布课件后即可使用本页学习工具。"
+    : "These slide tools become available once a lesson is published.";
   const actions = [
     { action: "ask" as const, label: zh ? "问这页" : "Ask", icon: ChatTeardropText },
     { action: "notes" as const, label: zh ? "生成笔记" : "Notes", icon: Notebook },
@@ -541,7 +564,10 @@ function StudyActionBar({
     <div
       data-uais-learning-study-actions={compact ? "compact" : "standard"}
       className={[
-        "grid border-t border-[var(--border)] bg-[var(--surface)] sm:grid-cols-5",
+        // `shrink-0`: in the card's flex column this bar must keep its height
+        // whatever the stage above it does, or it is squeezed under the card's
+        // `overflow-hidden` edge and disappears.
+        "grid shrink-0 border-t border-[var(--border)] bg-[var(--surface)] sm:grid-cols-5",
         compact ? "gap-2 p-3 xl:grid-cols-5" : "gap-3 p-4",
       ].join(" ")}
     >
@@ -552,10 +578,13 @@ function StudyActionBar({
             key={action.action}
             type="button"
             aria-label={action.label}
+            disabled={!hasStudyContent}
+            title={hasStudyContent ? undefined : unavailableTitle}
             onClick={() => onStudyAction(action.action)}
             className={[
               "relative inline-flex min-w-0 items-center justify-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 text-sm font-semibold text-[var(--foreground)] outline-none transition hover:border-[var(--accent)] hover:text-[var(--accent)] focus-visible:ring-2 focus-visible:ring-[var(--accent)]",
               "h-11",
+              hasStudyContent ? "" : "cursor-not-allowed opacity-60 hover:border-[var(--border)] hover:text-[var(--foreground)]",
             ].join(" ")}
           >
             <Icon size={17} weight="duotone" />

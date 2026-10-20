@@ -723,7 +723,7 @@ describe("learning chatroom share postgres store", () => {
   });
 
   it("writes shares with the same transactional guard", async () => {
-    const client = createRecordingClient({ rows: [[]] });
+    const client = createRecordingClient({ rows: [[], [{ snapshot_key: "default" }]] });
     const repository = createUaisLearningChatroomSharePostgresRepository({
       env,
       createDatabase: client.factory,
@@ -738,6 +738,66 @@ describe("learning chatroom share postgres store", () => {
     expect(client.queries[1].text).toContain("::text::jsonb");
     expect(client.ended).toBe(1);
   });
+
+  it.each([
+    { currentRows: [{ revision: "rev-current" }], expectedRevision: undefined },
+    { currentRows: [], expectedRevision: "rev-deleted" },
+  ])("refuses a share write when snapshot existence changed ($expectedRevision)", async ({ currentRows, expectedRevision }) => {
+    const client = createRecordingClient({ rows: [currentRows] });
+    const repository = createUaisLearningChatroomSharePostgresRepository({
+      env,
+      createDatabase: client.factory,
+    });
+
+    await expect(repository.write({
+      database: createEmptyLearningChatroomShareDatabase(),
+      expectedRevision,
+    })).rejects.toMatchObject({ status: 409 });
+    expect(client.queries.some((query) => query.text.includes("INSERT"))).toBe(false);
+    expect(client.ended).toBe(1);
+  });
+
+  it("rejects a concurrent first share insert instead of overwriting its links", async () => {
+    const client = createRecordingClient({ rows: [[], []] });
+    const repository = createUaisLearningChatroomSharePostgresRepository({
+      env,
+      createDatabase: client.factory,
+    });
+
+    await expect(repository.write({
+      database: createEmptyLearningChatroomShareDatabase(),
+    })).rejects.toMatchObject({ status: 409 });
+    expect(client.queries[1].text).toContain(
+      "WHERE uais_learning_chatroom_share_snapshots.revision IS NOT DISTINCT FROM ?::text",
+    );
+    expect(client.queries[1].text).toContain("RETURNING snapshot_key");
+    expect(client.queries[1].values.at(-1)).toBeNull();
+    expect(client.ended).toBe(1);
+  });
+
+  it.each([[undefined], [null], ["  "], ["rev/invalid"], ["rev-empty"]])(
+    "fails closed when an existing share snapshot has an invalid revision (%s)",
+    async (revision) => {
+      const client = createRecordingClient({
+        rows: [[{ database: createEmptyLearningChatroomShareDatabase(), revision }]],
+      });
+      const repository = createUaisLearningChatroomSharePostgresRepository({
+        env,
+        createDatabase: client.factory,
+      });
+      await expect(repository.read()).rejects.toMatchObject({ status: 503 });
+
+      const writer = createRecordingClient({ rows: [[{ revision }]] });
+      const writeRepository = createUaisLearningChatroomSharePostgresRepository({
+        env,
+        createDatabase: writer.factory,
+      });
+      await expect(writeRepository.write({
+        database: createEmptyLearningChatroomShareDatabase(),
+      })).rejects.toMatchObject({ status: 503 });
+      expect(writer.queries.some((query) => query.text.includes("INSERT"))).toBe(false);
+    },
+  );
 
   // Shares stay global by decision: one small, rarely written capability list
   // with no per-room contention. The transcript re-key must not have dragged it

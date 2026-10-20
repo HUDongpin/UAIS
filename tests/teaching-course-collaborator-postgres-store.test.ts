@@ -1316,6 +1316,54 @@ describe("teaching-course collaborator Postgres store", () => {
     ]);
   });
 
+  it("authorizes the canonical owner even when extra collaborator grant rows exist", async () => {
+    const fake = createFakeDatabase(({ text }) => {
+      if (text.includes("AS principal_user_id") && text.includes("LEFT JOIN uais_course_collaborator_grants")) {
+        return [
+          {
+            principal_user_id: ids.owner,
+            principal_account: "teacher-kang",
+            principal_role: "teacher",
+            principal_status: "active",
+            owner_user_id: ids.owner,
+            ...grantRow({
+              recipient_user_id: ids.recipient,
+            }),
+          },
+          {
+            principal_user_id: ids.owner,
+            principal_account: "teacher-kang",
+            principal_role: "teacher",
+            principal_status: "active",
+            owner_user_id: ids.owner,
+            ...grantRow({
+              id: ids.otherGrant,
+              recipient_user_id: ids.otherRecipient,
+            }),
+          },
+        ];
+      }
+      return [];
+    });
+    const store = createTeachingCourseCollaboratorPostgresStore({
+      env: {},
+      createDatabase: fake.factory,
+      now: () => now,
+    });
+
+    await expect(
+      store.readCapability({
+        principalAccount: "Teacher-Kang",
+        courseId: "course-research-methods",
+        capability: "course.settings.manage",
+      }),
+    ).resolves.toMatchObject({
+      authorized: true,
+      reasonCode: "course-owner-implicit",
+    });
+    expect(fake.queries[0]?.text).toContain("LOWER(principal.account) = LOWER(");
+  });
+
   it("denies capability readback when the canonical owner principal is missing", async () => {
     const fake = createFakeDatabase(({ text }) =>
       text.includes("AS principal_user_id")
