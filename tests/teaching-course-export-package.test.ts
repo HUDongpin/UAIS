@@ -168,6 +168,34 @@ describe("real teaching course export packages", () => {
     }
   });
 
+  it("bounds text-slide previews without carrying lecture paragraph spacing into the slide", async () => {
+    const title = "较长的中文教学单元标题".repeat(12);
+    const notes = Array.from({ length: 80 }, (_, index) => `第${index + 1}段：保留完整讲稿和参考说明。`).join("\n\n");
+    const output = await createTeachingCourseExportPackage({
+      source: { ...source, slides: [{ id: "long-text", title, notes }] },
+      format: "pptx", locale: "zh-CN", now,
+    });
+    const deck = await JSZip.loadAsync(output.bytes);
+    const slide = new DOMParser().parseFromString(
+      await deck.file("ppt/slides/slide1.xml")!.async("string"), "application/xml",
+    );
+    const textShapes = Array.from(slide.getElementsByTagName("p:txBody"));
+    const textOf = (shape: Element) => Array.from(shape.getElementsByTagName("a:t"))
+      .map((node) => node.textContent).join("");
+    expect(textShapes).toHaveLength(3);
+    expect(textOf(textShapes[0]).length).toBeLessThanOrEqual(57);
+    expect(textOf(textShapes[1]).length).toBeLessThanOrEqual(281);
+    expect(textShapes[1].getElementsByTagName("a:p")).toHaveLength(1);
+    expect(textShapes[1].getElementsByTagName("a:br")).toHaveLength(0);
+    expect(textOf(textShapes[1])).toContain("第1段");
+    expect(textOf(textShapes[1])).toContain("第2段");
+    const speakerNotes = await deck.file("ppt/notesSlides/notesSlide1.xml")!.async("string");
+    const notesDocument = new DOMParser().parseFromString(speakerNotes, "application/xml");
+    const noteLines = notesDocument.getElementsByTagName("a:t")[0].textContent!
+      .split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+    expect(noteLines).toEqual([title, ...notes.split(/\n+/)]);
+  });
+
   it.each(["pptx", "resource-zip", "classroom-zip"] as const)("rejects an empty source instead of a %s preview", async (format) => {
     await expect(createTeachingCourseExportPackage({ source: { ...source, slides: [] }, format, locale: "en-US", now }))
       .rejects.toThrow("Course export requires saved slides.");

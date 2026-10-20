@@ -37,7 +37,8 @@ type ExportScene = {
 };
 
 function conciseText(text: string, limit: number) {
-  return text.length > limit ? `${text.slice(0, limit).trimEnd()}…` : text;
+  const preview = text.replace(/\s+/g, " ").trim();
+  return preview.length > limit ? `${preview.slice(0, limit).trimEnd()}…` : preview;
 }
 
 async function createPresentation(source: TeachingCourseExportSource, locale: ExportInput["locale"]) {
@@ -75,13 +76,15 @@ async function createPresentation(source: TeachingCourseExportSource, locale: Ex
         });
       }
     } else {
-      slide.addText(conciseText(content.title, 120), {
+      // Office does not consistently apply automatic shrinking on first open.
+      // Keep the preview within the text boxes; the full text stays in notes.
+      slide.addText(conciseText(content.title, 56), {
         x: 0.65, y: 0.55, w: 12, h: 1.3, fontFace: "Arial", fontSize: 30,
         color: "172A36", bold: true, margin: 0, breakLine: false, fit: "shrink", lang: locale,
       });
-      slide.addText(conciseText(content.notes, 420), {
+      slide.addText(conciseText(content.notes, 280), {
         x: 0.65, y: 2.0, w: 12, h: 4.35, fontFace: "Arial", fontSize: 20,
-        color: "263B48", margin: 0, valign: "top", fit: "shrink", paraSpaceAfter: 10, lang: locale,
+        color: "263B48", margin: 0, valign: "top", fit: "shrink", paraSpaceAfter: 0, lang: locale,
       });
       const notesLabel = locale === "zh-CN" ? "完整讲稿见演讲者备注" : "Full teaching notes are in speaker notes";
       slide.addText(`${index + 1} / ${source.slides.length}    ${draft ? `${draftLabel}    ` : ""}${notesLabel}`, {
