@@ -688,3 +688,30 @@ describe("B-14 teaching course readback helpers", () => {
     ).toBe(true);
   });
 });
+
+  it("round-trips a persisted owned-course description through the settings form", () => {
+    const persistedCourse = createTeacherCourseFromPersistedCourse({
+      courseId: "teacher-course-uais-qa-test-owned",
+      courseName: "UAIS-QA-TEST-owned",
+      semester: "2026",
+      description: "Owned course description",
+    });
+    expect(persistedCourse).toBeDefined();
+    expect(resolveCourseSettingsDraftValues(persistedCourse!, undefined, "zh-CN")).toEqual({
+      courseName: "UAIS-QA-TEST-owned",
+      semester: "2026",
+      description: "Owned course description",
+    });
+    expect(
+      createCourseSettingsPatchFromDraft(persistedCourse!, {
+        description: typedIn("Owned course description", "zh-CN"),
+      }),
+    ).toBeUndefined();
+    expect(
+      createCourseSettingsPatchFromDraft(persistedCourse!, {
+        description: typedIn("Updated owned description", "zh-CN"),
+      }),
+    ).toEqual({
+      description: "Updated owned description",
+    });
+  });

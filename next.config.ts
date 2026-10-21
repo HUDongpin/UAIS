@@ -41,6 +41,13 @@ const nextConfig: NextConfig = {
     // cwd-relative directory, which the tracer cannot follow any more than it
     // could follow the font or the narration audio.
     "/api/learning/ppt-playback/[courseId]": ["./data/learning-ppt-playback/**/*.json"],
+    // Native exports read both static slide images and narration audio in the
+    // server function, unlike the learner's image requests.
+    "/api/teaching/courses/*/export/*": [
+      "./data/learning-ppt-playback/**/*.json",
+      "./public/learning/ppt-playback/slides/**/*",
+      "./public/learning/ppt-playback/audio/**/*",
+    ],
   },
 };
 

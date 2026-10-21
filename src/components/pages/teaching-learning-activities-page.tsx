@@ -169,7 +169,7 @@ export function TeachingLearningActivitiesPage({ courseId }: { courseId: string 
       </section>
 
       {actionMessage ? <p aria-live="polite" className="rounded-xl bg-[var(--surface-elevated)] p-3 text-sm font-medium">{actionMessage}</p> : null}
-      {ownershipBlocked ? null : <TeachingLearningActivityForm key={editor.key} locale={locale} lessonKey={editor.source?.lessonKey ?? lessonKey} classes={classes} intent={editor.intent} source={editor.source} onSubmit={saveEditorDraft} onCancel={editor.intent === "create" ? undefined : () => setEditor({ intent: "create", key: `create-${crypto.randomUUID()}` })} />}
+      {ownershipBlocked ? null : <TeachingLearningActivityForm key={`${courseId}:${editor.key}:${editor.source?.lessonKey ?? lessonKey}`} locale={locale} lessonKey={editor.source?.lessonKey ?? lessonKey} classes={classes} intent={editor.intent} source={editor.source} onSubmit={saveEditorDraft} onCancel={editor.intent === "create" ? undefined : () => setEditor({ intent: "create", key: `create-${crypto.randomUUID()}` })} />}
     </div>
   );
 }

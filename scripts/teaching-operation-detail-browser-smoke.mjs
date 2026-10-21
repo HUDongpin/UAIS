@@ -92,17 +92,15 @@ const detailOperationCoveragePlan = [
     operationId: "dashboard",
     route: "/teaching/dashboard",
     primaryAction: "Refresh Dashboard",
-    secondaryAction: "Lock Daily Snapshot",
+    secondaryAction: "View real learning activities",
     primaryButtonName: /刷新数据看板|Refresh Dashboard/,
-    secondaryButtonName: /锁定日报快照|Lock Daily Snapshot/,
   },
   {
     operationId: "quiz-board",
     route: "/teaching/quiz-board",
     primaryAction: "Refresh Quiz Board",
-    secondaryAction: "Flag Low-quality Items",
+    secondaryAction: "View real learning activities",
     primaryButtonName: /刷新测验看板|Refresh Quiz Board/,
-    secondaryButtonName: /标记低质题复核|Flag Low-quality Items/,
   },
   {
     operationId: "grading",
@@ -176,9 +174,14 @@ const browserInteractions = [
   "verify-main-inline-student-group-suggestions-submitted",
   "open-main-inline-dashboard-workspace",
   "click-main-inline-dashboard-refresh",
-  "verify-main-inline-dashboard-refresh-submitted",
-  "click-main-inline-dashboard-snapshot",
-  "verify-main-inline-dashboard-snapshot-submitted",
+  "verify-main-inline-dashboard-learning-insights-readback",
+  "verify-main-inline-dashboard-refresh-readback",
+  "verify-main-inline-dashboard-activities-link",
+  "open-main-inline-quiz-board-workspace",
+  "click-main-inline-quiz-board-refresh",
+  "verify-main-inline-quiz-board-learning-insights-readback",
+  "verify-main-inline-quiz-board-refresh-readback",
+  "verify-main-inline-quiz-board-activities-link",
   "open-main-inline-agents-workspace",
   "click-main-inline-agent-plan-save",
   "verify-main-inline-agent-plan-submitted",
@@ -199,11 +202,6 @@ const browserInteractions = [
   "verify-main-inline-export-manifest-submitted",
   "click-main-inline-export-redaction-validation",
   "verify-main-inline-export-redaction-validation-submitted",
-  "open-main-inline-quiz-board-workspace",
-  "click-main-inline-quiz-board-refresh",
-  "verify-main-inline-quiz-board-refresh-submitted",
-  "click-main-inline-quiz-item-review",
-  "verify-main-inline-quiz-item-review-submitted",
   "open-main-inline-grading-workspace",
   "click-main-inline-grading-queue-save",
   "verify-main-inline-grading-queue-submitted",
@@ -224,7 +222,7 @@ const browserInteractions = [
   "verify-main-invite-publish-audit-readback",
   "verify-main-invite-publish-artifact",
   "verify-main-invite-publish-class-readback",
-  "verify-all-operation-detail-pages-primary-secondary",
+  "verify-all-operation-detail-page-contracts",
 ];
 const requiredResultKeys = [
   "openOperationPage",
@@ -269,7 +267,8 @@ const requiredResultKeys = [
   "mainInlineAlertPendingBeforeSuccess",
   "mainInlineKnowledgeIndexSyncSubmitted",
   "mainInlineStudentRosterSyncSubmitted",
-  "mainInlineDashboardRefreshSubmitted",
+  "mainInlineDashboardReadbackVerified",
+  "mainInlineDashboardRefreshReadbackVerified",
   "mainInlineStudentPreviewSubmitted",
   "mainInlineAgentPermissionPreflightSubmitted",
   "mainKnowledgeSourceRegistrationSubmitted",
@@ -277,14 +276,15 @@ const requiredResultKeys = [
   "mainInlineCollaborationInviteSubmitted",
   "mainInlineStudentGroupSuggestionSubmitted",
   "mainInlineExportRedactionValidationSubmitted",
-  "mainInlineDashboardSnapshotSubmitted",
-  "mainInlineQuizItemReviewSubmitted",
+  "mainInlineDashboardActivitiesLinkVerified",
+  "mainInlineQuizBoardActivitiesLinkVerified",
   "mainInlineGradingFeedbackDraftSubmitted",
   "mainInlineAgentPlanSubmitted",
   "mainInlineContentPublishSubmitted",
   "mainInlineAdminSettingsSubmitted",
   "mainInlineExportManifestSubmitted",
-  "mainInlineQuizBoardRefreshSubmitted",
+  "mainInlineQuizBoardReadbackVerified",
+  "mainInlineQuizBoardRefreshReadbackVerified",
   "mainInlineGradingQueueSubmitted",
   "mainInlineAuditAlertReadbackVerified",
   "mainInlineAlertNotificationButtonClick",
@@ -609,6 +609,7 @@ async function executeLiveBrowserSmoke({ baseUrl, env, apiMode }) {
   const mainInlineFailureProbeState = { armed: false };
   const detailOperationCoverage = createPendingDetailOperationCoverage();
   const detailOperationSubmissions = new Set();
+  const learningInsightsReadbacks = [];
   let operationPostCount = 0;
   let auditReadCount = 0;
   let auditAlertReadCount = 0;
@@ -619,7 +620,6 @@ async function executeLiveBrowserSmoke({ baseUrl, env, apiMode }) {
   let mainInlineCourseSettingsPatchSubmitted = false;
   let mainInlineKnowledgeIndexSyncSubmitted = false;
   let mainInlineStudentRosterSyncSubmitted = false;
-  let mainInlineDashboardRefreshSubmitted = false;
   let mainInlineStudentPreviewSubmitted = false;
   let mainInlineAgentPermissionPreflightSubmitted = false;
   let mainKnowledgeSourceRegistrationSubmitted = false;
@@ -627,14 +627,11 @@ async function executeLiveBrowserSmoke({ baseUrl, env, apiMode }) {
   let mainInlineCollaborationInviteSubmitted = false;
   let mainInlineStudentGroupSuggestionSubmitted = false;
   let mainInlineExportRedactionValidationSubmitted = false;
-  let mainInlineDashboardSnapshotSubmitted = false;
-  let mainInlineQuizItemReviewSubmitted = false;
   let mainInlineGradingFeedbackDraftSubmitted = false;
   let mainInlineAgentPlanSubmitted = false;
   let mainInlineContentPublishSubmitted = false;
   let mainInlineAdminSettingsSubmitted = false;
   let mainInlineExportManifestSubmitted = false;
-  let mainInlineQuizBoardRefreshSubmitted = false;
   let mainInlineGradingQueueSubmitted = false;
   let mainCourseCoverGenerated = false;
   let mainCourseCoverAssetAuditGated = false;
@@ -654,8 +651,8 @@ async function executeLiveBrowserSmoke({ baseUrl, env, apiMode }) {
   let auth = apiMode === "live-teaching-operations" ? "missing" : "signed-teacher-auth-cookie";
   const remainingMainInlinePrimaryChecks = [
     {
-      primaryPostCount: 11,
-      secondaryPostCount: 12,
+      primaryPostCount: 9,
+      secondaryPostCount: 10,
       linkName: /智能体配置(?:工作台)?|Agent Setup(?: Workspace)?/,
       workspaceText: [/智能体配置工作台/, /Agent Setup Workspace/],
       primaryButtonName: /保存智能体方案|Save Agent Plan/,
@@ -666,8 +663,8 @@ async function executeLiveBrowserSmoke({ baseUrl, env, apiMode }) {
       secondarySubmitted: () => mainInlineAgentPermissionPreflightSubmitted,
     },
     {
-      primaryPostCount: 13,
-      secondaryPostCount: 14,
+      primaryPostCount: 11,
+      secondaryPostCount: 12,
       linkName: /课程内容(?:工作台)?|Course Content(?: Workspace)?/,
       workspaceText: [/课程内容工作台/, /Course Content Workspace/],
       primaryButtonName: /发布课程内容|Publish Course Content/,
@@ -678,8 +675,8 @@ async function executeLiveBrowserSmoke({ baseUrl, env, apiMode }) {
       secondarySubmitted: () => mainInlineUnitDraftSubmitted,
     },
     {
-      primaryPostCount: 15,
-      secondaryPostCount: 16,
+      primaryPostCount: 13,
+      secondaryPostCount: 14,
       linkName: /管理员设置(?:工作台)?|Admin Settings(?: Workspace)?/,
       workspaceText: [/管理员设置工作台/, /Admin Settings Workspace/],
       primaryButtonName: /保存管理员设置|Save Admin Settings/,
@@ -690,8 +687,8 @@ async function executeLiveBrowserSmoke({ baseUrl, env, apiMode }) {
       secondarySubmitted: () => mainInlineCollaborationInviteSubmitted,
     },
     {
-      primaryPostCount: 17,
-      secondaryPostCount: 18,
+      primaryPostCount: 15,
+      secondaryPostCount: 16,
       linkName: /数据导出(?:工作台)?|Data Export(?: Workspace)?/,
       workspaceText: [/数据导出工作台/, /Data Export Workspace/],
       primaryButtonName: /生成导出清单|Create Export Manifest/,
@@ -702,20 +699,8 @@ async function executeLiveBrowserSmoke({ baseUrl, env, apiMode }) {
       secondarySubmitted: () => mainInlineExportRedactionValidationSubmitted,
     },
     {
-      primaryPostCount: 19,
-      secondaryPostCount: 20,
-      linkName: /测验看板(?:工作台)?|Quiz Board(?: Workspace)?/,
-      workspaceText: [/测验看板工作台/, /Quiz Board Workspace/],
-      primaryButtonName: /刷新测验看板|Refresh Quiz Board/,
-      primaryResultKey: "mainInlineQuizBoardRefreshSubmitted",
-      primarySubmitted: () => mainInlineQuizBoardRefreshSubmitted,
-      secondaryButtonName: /标记低质题复核|Flag Low-quality Items/,
-      secondaryResultKey: "mainInlineQuizItemReviewSubmitted",
-      secondarySubmitted: () => mainInlineQuizItemReviewSubmitted,
-    },
-    {
-      primaryPostCount: 21,
-      secondaryPostCount: 22,
+      primaryPostCount: 17,
+      secondaryPostCount: 18,
       linkName: /作业批改(?:工作台)?|Assignment Review(?: Workspace)?/,
       workspaceText: [/作业批改工作台/, /Assignment Review Workspace/],
       primaryButtonName: /保存批改队列|Save Review Queue/,
@@ -754,6 +739,7 @@ async function executeLiveBrowserSmoke({ baseUrl, env, apiMode }) {
       actorId,
       authSessionId,
       courseId,
+      recordLearningInsightsReadback: (readback) => learningInsightsReadbacks.push(readback),
       waitForOperationPostRelease: (postCount) => {
         const gate = operationPostGates[postCount - 1];
         return gate ? gate.promise : Promise.resolve();
@@ -761,7 +747,7 @@ async function executeLiveBrowserSmoke({ baseUrl, env, apiMode }) {
       waitForAuditReadRelease: (readCount) =>
         readCount === 3
           ? mainInlineAuditReadGate.promise
-          : readCount === 25
+          : readCount === 21
             ? operationInviteAuditReadGate.promise
             : Promise.resolve(),
       waitForAuditAlertReadRelease: (readCount) =>
@@ -788,9 +774,6 @@ async function executeLiveBrowserSmoke({ baseUrl, env, apiMode }) {
       markMainInlineStudentRosterSyncSubmitted: () => {
         mainInlineStudentRosterSyncSubmitted = true;
       },
-      markMainInlineDashboardRefreshSubmitted: () => {
-        mainInlineDashboardRefreshSubmitted = true;
-      },
       markMainInlineStudentPreviewSubmitted: () => {
         mainInlineStudentPreviewSubmitted = true;
       },
@@ -812,12 +795,6 @@ async function executeLiveBrowserSmoke({ baseUrl, env, apiMode }) {
       markMainInlineExportRedactionValidationSubmitted: () => {
         mainInlineExportRedactionValidationSubmitted = true;
       },
-      markMainInlineDashboardSnapshotSubmitted: () => {
-        mainInlineDashboardSnapshotSubmitted = true;
-      },
-      markMainInlineQuizItemReviewSubmitted: () => {
-        mainInlineQuizItemReviewSubmitted = true;
-      },
       markMainInlineGradingFeedbackDraftSubmitted: () => {
         mainInlineGradingFeedbackDraftSubmitted = true;
       },
@@ -832,9 +809,6 @@ async function executeLiveBrowserSmoke({ baseUrl, env, apiMode }) {
       },
       markMainInlineExportManifestSubmitted: () => {
         mainInlineExportManifestSubmitted = true;
-      },
-      markMainInlineQuizBoardRefreshSubmitted: () => {
-        mainInlineQuizBoardRefreshSubmitted = true;
       },
       markMainInlineGradingQueueSubmitted: () => {
         mainInlineGradingQueueSubmitted = true;
@@ -1317,25 +1291,22 @@ async function executeLiveBrowserSmoke({ baseUrl, env, apiMode }) {
       isSubmitted: () => mainInlineStudentGroupSuggestionSubmitted,
     });
 
-    const mainInlineDashboardLink = page.getByRole("link", {
-      name: /数据看板(?:工作台)?|Data Dashboard(?: Workspace)?/,
-    });
-    lastInteraction = "open-main-inline-dashboard-workspace";
-    await mainInlineDashboardLink.click({ timeout: 15_000 });
-    lastInteraction = "wait-for-main-inline-dashboard-workspace";
-    await waitForAnyText(page, [/数据看板工作台/, /Data Dashboard Workspace/]);
-    await clickMainInlineActionButton({
-      buttonName: /刷新数据看板|Refresh Dashboard/,
-      postCount: 9,
-      resultKey: "mainInlineDashboardRefreshSubmitted",
-      isSubmitted: () => mainInlineDashboardRefreshSubmitted,
-    });
-    await clickMainInlineActionButton({
-      buttonName: /锁定日报快照|Lock Daily Snapshot/,
-      postCount: 10,
-      resultKey: "mainInlineDashboardSnapshotSubmitted",
-      isSubmitted: () => mainInlineDashboardSnapshotSubmitted,
-    });
+    for (const dashboard of [
+      { operationId: "dashboard", linkName: /数据看板(?:工作台)?|Data Dashboard(?: Workspace)?/, resultPrefix: "mainInlineDashboard" },
+      { operationId: "quiz-board", linkName: /测验看板(?:工作台)?|Quiz Board(?: Workspace)?/, resultPrefix: "mainInlineQuizBoard" },
+    ]) {
+      const beforeReadCount = learningInsightsReadbacks.length;
+      lastInteraction = `open-main-inline-${dashboard.operationId}-workspace`;
+      await page.getByRole("link", { name: dashboard.linkName }).click({ timeout: 15_000 });
+      lastInteraction = `verify-main-inline-${dashboard.operationId}-learning-insights`;
+      const verified = await verifyDashboardReadback({
+        page, operationId: dashboard.operationId, courseId, beforeReadCount,
+        learningInsightsReadbacks, getOperationPostCount: () => operationPostCount,
+      });
+      results[`${dashboard.resultPrefix}ReadbackVerified`] = verified.learningInsightsReadbackVerified;
+      results[`${dashboard.resultPrefix}RefreshReadbackVerified`] = verified.refreshReadbackVerified;
+      results[`${dashboard.resultPrefix}ActivitiesLinkVerified`] = verified.activitiesLinkVerified;
+    }
 
     for (const check of remainingMainInlinePrimaryChecks) {
       const workspaceLink = page.getByRole("link", {
@@ -1395,19 +1366,19 @@ async function executeLiveBrowserSmoke({ baseUrl, env, apiMode }) {
       name: /生成新邀请码|Generate New Invite Code/,
     });
     const mainInviteGenerateClick = mainInviteGenerateButton.click({ timeout: 15_000 });
-    await waitUntil(() => operationPostCount === 23, 5_000);
+    await waitUntil(() => operationPostCount === 19, 5_000);
     results.mainInviteGenerateButtonClick = "passed";
-    operationPostGates[22]?.resolve();
+    operationPostGates[18]?.resolve();
     if (apiMode === "live-teaching-operations") {
       await mainInviteGenerateClick.catch((error) => {
-        if (operationPostCount < 23) {
+        if (operationPostCount < 19) {
           throw error;
         }
       });
       results.mainInviteAuditPendingBeforeArtifact = "passed";
       results.mainInviteAuditReadbackVerified = "passed";
     } else {
-      await waitUntil(() => auditReadCount === 23, 5_000);
+      await waitUntil(() => auditReadCount === 19, 5_000);
       await waitForAnyText(page, [/正在读取审计证据/, /Reading audit evidence/]);
       const generatedInviteVisibleDuringAudit = await page
         .getByText(new RegExp(mainInviteArtifactCode))
@@ -1416,7 +1387,7 @@ async function executeLiveBrowserSmoke({ baseUrl, env, apiMode }) {
         generatedInviteVisibleDuringAudit === 0 ? "passed" : "failed";
       await mainInviteGenerateClick;
       results.mainInviteAuditReadbackVerified =
-        auditReadCount === 23 ? "passed" : "failed";
+        auditReadCount === 19 ? "passed" : "failed";
       await waitForAnyText(page, [
         new RegExp(mainInviteArtifactCode),
         /服务端保存已验证/,
@@ -1430,20 +1401,20 @@ async function executeLiveBrowserSmoke({ baseUrl, env, apiMode }) {
       name: /确认发布邀请码|Publish Invite Code/,
     });
     const mainInvitePublishClick = mainInvitePublishButton.click({ timeout: 15_000 });
-    await waitUntil(() => operationPostCount === 24, 5_000);
+    await waitUntil(() => operationPostCount === 20, 5_000);
     results.mainInvitePublishButtonClick = "passed";
-    operationPostGates[23]?.resolve();
+    operationPostGates[19]?.resolve();
     if (apiMode === "live-teaching-operations") {
       await mainInvitePublishClick.catch((error) => {
-        if (operationPostCount < 24) {
+        if (operationPostCount < 20) {
           throw error;
         }
       });
       results.mainInvitePublishAuditReadbackVerified = "passed";
     } else {
-      await waitUntil(() => auditReadCount === 24, 5_000);
+      await waitUntil(() => auditReadCount === 20, 5_000);
       results.mainInvitePublishAuditReadbackVerified =
-        auditReadCount === 24 ? "passed" : "failed";
+        auditReadCount === 20 ? "passed" : "failed";
       await mainInvitePublishClick;
       await waitForAnyText(page, [
         new RegExp(mainInviteArtifactCode),
@@ -1475,10 +1446,10 @@ async function executeLiveBrowserSmoke({ baseUrl, env, apiMode }) {
       timeout: 15_000,
     });
     lastInteraction = "wait-for-operation-invite-post";
-    await waitUntil(() => operationPostCount === 25, 15_000);
-    operationPostGates[24]?.resolve();
+    await waitUntil(() => operationPostCount === 21, 15_000);
+    operationPostGates[20]?.resolve();
     lastInteraction = "wait-for-operation-invite-audit-readback";
-    await waitUntil(() => auditReadCount === 25, 5_000);
+    await waitUntil(() => auditReadCount === 21, 5_000);
     lastInteraction = "verify-operation-invite-audit-gating";
     await waitForAnyText(page, [/正在读取审计证据/, /Reading audit evidence/]);
     const operationInviteVisibleDuringAudit =
@@ -1490,7 +1461,7 @@ async function executeLiveBrowserSmoke({ baseUrl, env, apiMode }) {
     operationInviteAuditReadGate.resolve();
     lastInteraction = "wait-for-operation-invite-click-complete";
     await operationInviteGenerateClick.catch((error) => {
-      if (operationPostCount < 25 || auditReadCount < 25) {
+      if (operationPostCount < 21 || auditReadCount < 21) {
         throw error;
       }
     });
@@ -1514,13 +1485,13 @@ async function executeLiveBrowserSmoke({ baseUrl, env, apiMode }) {
       operationInviteVisibleDuringAudit === 0 &&
       (apiMode === "fixture-backed-contract"
         ? operationInviteDraftSubmitted
-        : operationPostCount === 25)
+        : operationPostCount === 21)
         ? "passed"
         : "failed";
     updateDetailOperationCoverage(detailOperationCoverage, {
       operationId: "invite-code",
       actionSlot: "primary",
-      buttonClick: operationPostCount >= 25 ? "passed" : "failed",
+      buttonClick: operationPostCount >= 21 ? "passed" : "failed",
       postPersisted:
         results.operationInviteArtifactAuditGated === "passed" &&
         detailOperationSubmissions.has(createDetailOperationSubmissionKey("invite-code", "primary"))
@@ -1538,6 +1509,7 @@ async function executeLiveBrowserSmoke({ baseUrl, env, apiMode }) {
       getAuditReadCount: () => auditReadCount,
       detailOperationCoverage,
       detailOperationSubmissions,
+      learningInsightsReadbacks,
     });
     results.operationDetailCoverageVerified = isDetailOperationCoveragePassed(
       detailOperationCoverage,
@@ -1730,14 +1702,110 @@ async function waitForButtonEnabled(button, timeoutMs) {
   throw new Error("Timed out waiting for teaching operation browser button.");
 }
 
+function isDashboardOperation(operationId) {
+  return operationId === "dashboard" || operationId === "quiz-board";
+}
+
+async function verifyDashboardReadback({
+  page,
+  operationId,
+  courseId,
+  beforeReadCount,
+  learningInsightsReadbacks,
+  getOperationPostCount,
+}) {
+  const buttonName = operationId === "dashboard"
+    ? /刷新数据看板|Refresh Dashboard/
+    : /刷新测验看板|Refresh Quiz Board/;
+  const button = page.getByRole("button", { name: buttonName });
+  const initialPostCount = getOperationPostCount();
+  const verifyReadback = async (afterReadCount) => {
+    await waitUntil(() => learningInsightsReadbacks.length > afterReadCount, 5_000);
+    const readback = learningInsightsReadbacks.at(-1);
+    const body = readback?.body;
+    const stateKeys = ["notStarted", "draft", "submitted", "revisionRequested", "resubmitted", "accepted"];
+    if (
+      readback?.status !== 200 || readback.courseId !== courseId || readback.classId !== undefined ||
+      !isRecord(body) || body.courseId !== courseId || body.classId !== undefined ||
+      !isRecord(body.counts) ||
+      ![...stateKeys, "overdue"].every((key) => Number.isSafeInteger(body.counts[key]) && body.counts[key] >= 0) ||
+      !Number.isSafeInteger(body.projectionVersion) || body.projectionVersion < 0 ||
+      typeof body.dataFreshAt !== "string" || !Number.isFinite(Date.parse(body.dataFreshAt))
+    ) {
+      throw new Error("Learning insights did not return valid authorized course statistics.");
+    }
+    await waitForButtonEnabled(button, 5_000);
+    const rendered = await page.getByRole("region", { name: buttonName }).evaluate((region) => ({
+      metrics: [...region.querySelectorAll("article")].map((article) => ({
+        label: article.querySelectorAll("p")[0]?.textContent?.trim(),
+        value: article.querySelectorAll("p")[1]?.textContent?.trim(),
+      })),
+      states: [...region.querySelectorAll("dl > div")].map((item) => ({
+        label: item.querySelector("dt")?.textContent?.trim(),
+        value: item.querySelector("dd")?.textContent?.trim(),
+      })),
+      timestamps: [...region.querySelectorAll("time")].map((time) => time.getAttribute("datetime")),
+      activityHref: region.querySelector('a[href$="/activities"]')?.getAttribute("href"),
+    }));
+    const counts = body.counts;
+    const total = stateKeys.reduce((sum, key) => sum + counts[key], 0);
+    const rate = (count) => total === 0 ? "—" : `${Math.round(count / total * 100)}%`;
+    const metricLabels = operationId === "dashboard"
+      ? [/^(任务启动率|Task Start Rate)$/, /^(任务接受率|Task Acceptance Rate)$/, /^(逾期任务|Overdue Tasks)$/]
+      : [/^(任务提交率|Task Submission Rate)$/, /^(低质题|Low-Quality Items)$/, /^(错因簇|Error Clusters)$/];
+    const expectedValues = operationId === "dashboard"
+      ? [rate(total - counts.notStarted), rate(counts.accepted), String(counts.overdue)]
+      : [rate(counts.submitted + counts.revisionRequested + counts.resubmitted + counts.accepted), /^(暂不可用|Unavailable)$/, /^(暂不可用|Unavailable)$/];
+    const stateLabels = [
+      /^(未开始|Not started)$/, /^(草稿中|Draft)$/, /^(已提交|Submitted)$/,
+      /^(要求修订|Revision requested)$/, /^(已重新提交|Resubmitted)$/, /^(已接受|Accepted)$/,
+    ];
+    if (
+      !Number.isSafeInteger(total) ||
+      rendered.metrics.length !== 3 ||
+      !rendered.metrics.every((metric, index) => metricLabels[index].test(metric.label) &&
+        (expectedValues[index] instanceof RegExp
+          ? expectedValues[index].test(metric.value)
+          : metric.value === expectedValues[index])) ||
+      rendered.states.length !== stateKeys.length ||
+      !rendered.states.every((state, index) => stateLabels[index].test(state.label) &&
+        state.value === String(counts[stateKeys[index]])) ||
+      rendered.timestamps[0] !== body.dataFreshAt ||
+      !Number.isFinite(Date.parse(rendered.timestamps[1])) ||
+      rendered.activityHref !== `/teaching/courses/${encodeURIComponent(courseId)}/activities`
+    ) {
+      throw new Error("Dashboard DOM does not match learning insights readback.");
+    }
+  };
+
+  await verifyReadback(beforeReadCount);
+  const beforeRefreshCount = learningInsightsReadbacks.length;
+  await button.click({ timeout: 15_000 });
+  await verifyReadback(beforeRefreshCount);
+  if (getOperationPostCount() !== initialPostCount) {
+    throw new Error("Dashboard refresh unexpectedly submitted a teaching operation.");
+  }
+  return {
+    learningInsightsReadbackVerified: "passed",
+    refreshReadbackVerified: "passed",
+    activitiesLinkVerified: "passed",
+  };
+}
+
 function createPendingDetailOperationCoverage() {
   return detailOperationCoveragePlan.map(({ operationId, route }) => ({
     operationId,
     route,
-    primaryButtonClick: "pending",
-    primaryPostPersisted: "pending",
-    secondaryButtonClick: "pending",
-    secondaryPostPersisted: "pending",
+    ...(isDashboardOperation(operationId) ? {
+      learningInsightsReadbackVerified: "pending",
+      refreshReadbackVerified: "pending",
+      activitiesLinkVerified: "pending",
+    } : {
+      primaryButtonClick: "pending",
+      primaryPostPersisted: "pending",
+      secondaryButtonClick: "pending",
+      secondaryPostPersisted: "pending",
+    }),
   }));
 }
 
@@ -1764,8 +1832,11 @@ function updateDetailOperationCoverage(
 
 function isDetailOperationCoveragePassed(coverage) {
   return coverage.every(
-    (entry) =>
-      entry.primaryButtonClick === "passed" &&
+    (entry) => isDashboardOperation(entry.operationId)
+      ? entry.learningInsightsReadbackVerified === "passed" &&
+        entry.refreshReadbackVerified === "passed" &&
+        entry.activitiesLinkVerified === "passed"
+      : entry.primaryButtonClick === "passed" &&
       entry.primaryPostPersisted === "passed" &&
       entry.secondaryButtonClick === "passed" &&
       entry.secondaryPostPersisted === "passed",
@@ -1781,6 +1852,7 @@ async function verifyRemainingDetailOperationCoverage({
   getAuditReadCount,
   detailOperationCoverage,
   detailOperationSubmissions,
+  learningInsightsReadbacks,
 }) {
   const steps = detailOperationCoveragePlan.flatMap((operation) => [
     {
@@ -1794,6 +1866,7 @@ async function verifyRemainingDetailOperationCoverage({
       buttonName: operation.secondaryButtonName,
     },
   ]).filter(({ operation, actionSlot }) => {
+    if (isDashboardOperation(operation.operationId)) return false;
     if (operation.operationId === "course-settings") {
       return false;
     }
@@ -1802,6 +1875,18 @@ async function verifyRemainingDetailOperationCoverage({
     }
     return true;
   });
+
+  for (const operation of detailOperationCoveragePlan.filter((item) => isDashboardOperation(item.operationId))) {
+    const beforeReadCount = learningInsightsReadbacks.length;
+    await page.goto(`${stripTrailingSlashes(baseUrl)}${operation.route}?course=${encodeURIComponent(courseId)}`, {
+      waitUntil: "networkidle", timeout: 30_000,
+    });
+    const verified = await verifyDashboardReadback({
+      page, operationId: operation.operationId, courseId, beforeReadCount,
+      learningInsightsReadbacks, getOperationPostCount,
+    });
+    Object.assign(detailOperationCoverage.find((item) => item.operationId === operation.operationId), verified);
+  }
 
   for (const step of steps) {
     await page.goto(
@@ -1856,6 +1941,7 @@ async function installTeachingOperationApiHandler(
     actorId,
     authSessionId,
     courseId,
+    recordLearningInsightsReadback,
     waitForOperationPostRelease,
     waitForAuditReadRelease,
     waitForAuditAlertReadRelease,
@@ -1871,7 +1957,6 @@ async function installTeachingOperationApiHandler(
     markMainInlineCourseSettingsPatchSubmitted,
     markMainInlineKnowledgeIndexSyncSubmitted,
     markMainInlineStudentRosterSyncSubmitted,
-    markMainInlineDashboardRefreshSubmitted,
     markMainInlineStudentPreviewSubmitted,
     markMainInlineAgentPermissionPreflightSubmitted,
     markMainKnowledgeSourceRegistrationSubmitted,
@@ -1879,14 +1964,11 @@ async function installTeachingOperationApiHandler(
     markMainInlineCollaborationInviteSubmitted,
     markMainInlineStudentGroupSuggestionSubmitted,
     markMainInlineExportRedactionValidationSubmitted,
-    markMainInlineDashboardSnapshotSubmitted,
-    markMainInlineQuizItemReviewSubmitted,
     markMainInlineGradingFeedbackDraftSubmitted,
     markMainInlineAgentPlanSubmitted,
     markMainInlineContentPublishSubmitted,
     markMainInlineAdminSettingsSubmitted,
     markMainInlineExportManifestSubmitted,
-    markMainInlineQuizBoardRefreshSubmitted,
     markMainInlineGradingQueueSubmitted,
     markMainCourseCoverGenerated,
     markMainCourseCreateBoundGeneratedCoverAsset,
@@ -1935,6 +2017,28 @@ async function installTeachingOperationApiHandler(
     const url = new URL(request.url());
     const pathname = url.pathname;
     const method = request.method();
+    const insightsRoute = pathname.match(/^\/api\/teaching\/courses\/([^/]+)\/learning-insights$/);
+    if (insightsRoute && method === "GET") {
+      const requestedCourseId = decodeURIComponent(insightsRoute[1]);
+      const requestedClassId = url.searchParams.get("class") || undefined;
+      if (apiMode === "live-teaching-operations") {
+        const response = await routeRequest.fetch();
+        const body = await response.json().catch(() => undefined);
+        recordLearningInsightsReadback({ courseId: requestedCourseId, classId: requestedClassId, status: response.status(), body });
+        await routeRequest.fulfill({ response });
+      } else {
+        const body = {
+          courseId: requestedCourseId,
+          ...(requestedClassId ? { classId: requestedClassId } : {}),
+          counts: { notStarted: 5, draft: 2, submitted: 3, revisionRequested: 1, resubmitted: 1, accepted: 8, overdue: 6 },
+          projectionVersion: 1,
+          dataFreshAt: "2026-10-20T01:00:00.000Z",
+        };
+        recordLearningInsightsReadback({ courseId: requestedCourseId, classId: requestedClassId, status: 200, body });
+        await fulfillJson(routeRequest, body);
+      }
+      return;
+    }
     if (pathname === "/api/teaching/course-cover" && method === "POST") {
       const body = await readRouteRequestJsonBody(request);
       if (
@@ -2326,52 +2430,40 @@ async function installTeachingOperationApiHandler(
       if (postCount === 8 && hasTeachingOperationBody(body, "students", "secondary")) {
         markMainInlineStudentGroupSuggestionSubmitted();
       }
-      if (postCount === 9 && hasTeachingOperationBody(body, "dashboard", "primary")) {
-        markMainInlineDashboardRefreshSubmitted();
-      }
-      if (postCount === 10 && hasTeachingOperationBody(body, "dashboard", "secondary")) {
-        markMainInlineDashboardSnapshotSubmitted();
-      }
-      if (postCount === 11 && hasTeachingOperationBody(body, "agents", "primary")) {
+      if (postCount === 9 && hasTeachingOperationBody(body, "agents", "primary")) {
         markMainInlineAgentPlanSubmitted();
       }
-      if (postCount === 12 && hasTeachingOperationBody(body, "agents", "secondary")) {
+      if (postCount === 10 && hasTeachingOperationBody(body, "agents", "secondary")) {
         markMainInlineAgentPermissionPreflightSubmitted();
       }
-      if (postCount === 13 && hasTeachingOperationBody(body, "content", "primary")) {
+      if (postCount === 11 && hasTeachingOperationBody(body, "content", "primary")) {
         markMainInlineContentPublishSubmitted();
       }
-      if (postCount === 14 && hasTeachingOperationBody(body, "content", "secondary")) {
+      if (postCount === 12 && hasTeachingOperationBody(body, "content", "secondary")) {
         markMainInlineUnitDraftSubmitted();
       }
-      if (postCount === 15 && hasTeachingOperationBody(body, "admins", "primary")) {
+      if (postCount === 13 && hasTeachingOperationBody(body, "admins", "primary")) {
         markMainInlineAdminSettingsSubmitted();
       }
-      if (postCount === 16 && hasTeachingOperationBody(body, "admins", "secondary")) {
+      if (postCount === 14 && hasTeachingOperationBody(body, "admins", "secondary")) {
         markMainInlineCollaborationInviteSubmitted();
       }
-      if (postCount === 17 && hasTeachingOperationBody(body, "data-export", "primary")) {
+      if (postCount === 15 && hasTeachingOperationBody(body, "data-export", "primary")) {
         markMainInlineExportManifestSubmitted();
       }
-      if (postCount === 18 && hasTeachingOperationBody(body, "data-export", "secondary")) {
+      if (postCount === 16 && hasTeachingOperationBody(body, "data-export", "secondary")) {
         markMainInlineExportRedactionValidationSubmitted();
       }
-      if (postCount === 19 && hasTeachingOperationBody(body, "quiz-board", "primary")) {
-        markMainInlineQuizBoardRefreshSubmitted();
-      }
-      if (postCount === 20 && hasTeachingOperationBody(body, "quiz-board", "secondary")) {
-        markMainInlineQuizItemReviewSubmitted();
-      }
-      if (postCount === 21 && hasTeachingOperationBody(body, "grading", "primary")) {
+      if (postCount === 17 && hasTeachingOperationBody(body, "grading", "primary")) {
         markMainInlineGradingQueueSubmitted();
       }
-      if (postCount === 22 && hasTeachingOperationBody(body, "grading", "secondary")) {
+      if (postCount === 18 && hasTeachingOperationBody(body, "grading", "secondary")) {
         markMainInlineGradingFeedbackDraftSubmitted();
       }
-      if (postCount === 23 && hasTeachingOperationBody(body, "invite-code", "primary")) {
+      if (postCount === 19 && hasTeachingOperationBody(body, "invite-code", "primary")) {
         markMainInviteDraftSubmitted();
       }
-      if (postCount === 24 && hasTeachingOperationBody(body, "invite-code", "secondary")) {
+      if (postCount === 20 && hasTeachingOperationBody(body, "invite-code", "secondary")) {
         markMainInvitePublishSubmitted();
         if (typeof body.courseId === "string" && body.courseId.trim()) {
           mainInvitePublishedCourseId = body.courseId.trim();
@@ -2380,7 +2472,7 @@ async function installTeachingOperationApiHandler(
           mainInvitePublishedClassId = body.targetClassId.trim();
         }
       }
-      if (postCount === 25 && hasTeachingOperationBody(body, "invite-code", "primary")) {
+      if (postCount === 21 && hasTeachingOperationBody(body, "invite-code", "primary")) {
         markOperationInviteDraftSubmitted();
       }
       await waitForOperationPostRelease(postCount);
@@ -2420,7 +2512,7 @@ async function installTeachingOperationApiHandler(
             ? { error: responseBody.error }
             : {}),
         });
-        if (postCount === 24 && hasTeachingOperationBody(body, "invite-code", "secondary")) {
+        if (postCount === 20 && hasTeachingOperationBody(body, "invite-code", "secondary")) {
           mainInvitePublishedCode = readInviteArtifactCode(responseBody?.receipt);
         }
         await routeRequest.fulfill({ response });
@@ -2443,15 +2535,15 @@ async function installTeachingOperationApiHandler(
           ? {
               kind: "invite-code",
               code:
-                postCount === 25 ? operationInviteArtifactCode : mainInviteArtifactCode,
+                postCount === 21 ? operationInviteArtifactCode : mainInviteArtifactCode,
               status: receiptActionSlot === "secondary" ? "published" : "generated",
               joinUrl:
-                postCount === 25
+                postCount === 21
                   ? `/courses/join?code=${operationInviteArtifactCode}`
                   : `/courses/join?code=${mainInviteArtifactCode}`,
             }
           : undefined;
-      if (postCount === 24 && inviteArtifact?.code) {
+      if (postCount === 20 && inviteArtifact?.code) {
         mainInvitePublishedCode = inviteArtifact.code;
       }
       lastTeachingOperationAuditContext = {

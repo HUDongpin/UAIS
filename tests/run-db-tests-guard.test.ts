@@ -24,7 +24,7 @@ const legacyTestFiles = [
   "tests/learning-loop-postgres-integration.test.ts",
   "tests/teaching-course-collaborator-postgres-integration.test.ts",
 ];
-const legacyExpectedTests = 26;
+const legacyExpectedTests = 27;
 const inpTestFile = "tests/staging-inp-rum-postgres-integration.test.ts";
 
 function createValidGuardEnv(

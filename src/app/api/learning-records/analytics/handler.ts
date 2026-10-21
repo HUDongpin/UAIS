@@ -9,6 +9,8 @@ import {
   summarizeTeacherClassInsights,
 } from "@/lib/learning-records/lrs-analytics";
 import { createLearnerProfileFromXapiStatements } from "@/lib/learning-records/learner-profile";
+import { resolveLearningRecordLearnerActorIds } from "@/lib/learning-records/learner-actor-identities";
+import type { XapiStatement } from "@/lib/learning-records/lrs-client";
 import {
   createClassActivityId,
   createCourseActivityId,
@@ -18,6 +20,7 @@ import {
   isUaisAiAccessDeniedError,
 } from "@/lib/server/ai-access-control";
 import { createUaisTeachingCourseManagementRepository } from "@/lib/server/teaching-course-management-external-store";
+import { isSameTeachingActorId } from "@/lib/server/teaching-actor-id";
 import {
   assertTeachingCourseManagementLocalJsonRuntimeAllowed,
   readTeachingCourseManagementSnapshot,
@@ -73,6 +76,10 @@ type LearningRecordAnalyticsGetHandlerDeps = {
     fetch?: typeof fetch;
     query: XapiStatementsQuery;
   }) => Promise<XapiStatementsResult>;
+  resolveLearnerActorIds?: (input: {
+    account: string;
+    env: Record<string, string | undefined>;
+  }) => Promise<string[]>;
 };
 
 export function createLearningRecordAnalyticsGetHandler(
@@ -150,20 +157,40 @@ export function createLearningRecordAnalyticsGetHandler(
       classId,
     });
     const statementReader = deps.getStatements ?? getXapiStatements;
-    const result = await statementReader({
+    let actorIds: string[] | undefined;
+    if (query.agent) {
+      try {
+        actorIds = await (deps.resolveLearnerActorIds ?? resolveLearningRecordLearnerActorIds)({
+          account: query.agent.id,
+          env,
+        });
+      } catch {
+        return createAnalyticsJsonResponse(503, {
+          target: "learning-record-analytics",
+          status: "unavailable",
+          reasonCode: "learning-record-identity-unavailable",
+          redaction: createRedaction(),
+        });
+      }
+    }
+    const queries = actorIds
+      ? [...new Set(actorIds)].map((id) => ({ ...query, agent: { role: "learner" as const, id } }))
+      : [query];
+    const results = await Promise.all(queries.map((targetedQuery) => statementReader({
       env,
       fetch: deps.fetch,
-      query,
-    });
+      query: targetedQuery,
+    })));
+    const statements = mergeLearningRecordStatements(results, query.limit ?? 100);
     const summary =
       scope === "learner-profile"
         ? createLearnerProfileFromXapiStatements({
-            statements: result.statements,
+            statements,
             ...(courseId ? { courseId } : {}),
           })
         : scope === "learner-timeline"
-          ? summarizeLearnerTimeline(result.statements)
-          : summarizeTeacherClassInsights(result.statements);
+          ? summarizeLearnerTimeline(statements)
+          : summarizeTeacherClassInsights(statements);
 
     return createAnalyticsJsonResponse(200, {
       target: "learning-record-analytics",
@@ -178,6 +205,25 @@ export function createLearningRecordAnalyticsGetHandler(
       redaction: createRedaction(),
     });
   };
+}
+
+function mergeLearningRecordStatements(results: XapiStatementsResult[], limit: number) {
+  const unique = new Map<string, XapiStatement>();
+  for (const result of results) {
+    for (const statement of result.statements) {
+      if (!unique.has(statement.id)) unique.set(statement.id, statement);
+    }
+  }
+  // LRS history can retain ISO timestamps with different offsets. Compare
+  // instants before applying the shared page limit; invalid dates cannot
+  // establish chronological evidence. Canonical timestamps also keep the
+  // downstream profile/timeline summaries consistent with this ordering.
+  return [...unique.values()]
+    .map((statement) => ({ statement, timestamp: Date.parse(statement.timestamp) }))
+    .filter((item) => Number.isFinite(item.timestamp))
+    .sort((left, right) => right.timestamp - left.timestamp || left.statement.id.localeCompare(right.statement.id))
+    .slice(0, limit)
+    .map(({ statement, timestamp }) => ({ ...statement, timestamp: new Date(timestamp).toISOString() }));
 }
 
 async function defaultAuthorizeAnalyticsQuery(input: {
@@ -261,7 +307,7 @@ async function defaultAuthorizeAnalyticsQuery(input: {
   const classRecord = database.classes.find(
     (item) =>
       item.classId === input.classId &&
-      item.ownerTeacherId === user.account &&
+      isSameTeachingActorId(item.ownerTeacherId, user.account) &&
       (!input.courseId || item.courseId === input.courseId),
   );
   if (!classRecord) {
@@ -295,13 +341,18 @@ function createAnalyticsQuery(input: {
     if (!input.actorId) {
       throw new Error("Learner analytics require an actor id.");
     }
+    const activity = input.classId
+      ? createClassActivityId(input.classId)
+      : input.courseId
+        ? createCourseActivityId(input.courseId)
+        : undefined;
     return {
       agent: {
         role: "learner",
         id: input.actorId,
       },
-      ...(input.classId ? { activity: createClassActivityId(input.classId) } : {}),
-      relatedActivities: Boolean(input.classId),
+      ...(activity ? { activity } : {}),
+      relatedActivities: Boolean(activity),
       limit: 100,
     };
   }

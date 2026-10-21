@@ -198,14 +198,13 @@ export async function saveTeachingGradingQueueRecord(input: {
         receipt,
       };
     } catch (error) {
-      if (input.repository && (await writeRetry.shouldRetry({ attempt, error }))) {
+      if (await writeRetry.shouldRetry({ attempt, error })) {
         continue;
       }
       // A conflict that survives the ladder is exhausted contention, not a
       // caller mistake: answer with the structured 409 rather than passing the
-      // backend's own revision-mismatch prose through. The local file path has no
-      // revisions and never lands here.
-      throw input.repository && writeRetry.isConflict(error)
+      // backend's own revision-mismatch prose through. Local snapshots use the same retry policy.
+      throw writeRetry.isConflict(error)
         ? createTeachingCourseManagementContentionError()
         : error;
     }
@@ -357,14 +356,13 @@ export async function saveTeachingGradingFeedbackDraftRecord(input: {
         receipt,
       };
     } catch (error) {
-      if (input.repository && (await writeRetry.shouldRetry({ attempt, error }))) {
+      if (await writeRetry.shouldRetry({ attempt, error })) {
         continue;
       }
       // A conflict that survives the ladder is exhausted contention, not a
       // caller mistake: answer with the structured 409 rather than passing the
-      // backend's own revision-mismatch prose through. The local file path has no
-      // revisions and never lands here.
-      throw input.repository && writeRetry.isConflict(error)
+      // backend's own revision-mismatch prose through. Local snapshots use the same retry policy.
+      throw writeRetry.isConflict(error)
         ? createTeachingCourseManagementContentionError()
         : error;
     }
@@ -489,14 +487,13 @@ export async function markTeachingGradingFeedbackProviderGenerated(input: {
         receipt,
       };
     } catch (error) {
-      if (input.repository && (await writeRetry.shouldRetry({ attempt, error }))) {
+      if (await writeRetry.shouldRetry({ attempt, error })) {
         continue;
       }
       // A conflict that survives the ladder is exhausted contention, not a
       // caller mistake: answer with the structured 409 rather than passing the
-      // backend's own revision-mismatch prose through. The local file path has no
-      // revisions and never lands here.
-      throw input.repository && writeRetry.isConflict(error)
+      // backend's own revision-mismatch prose through. Local snapshots use the same retry policy.
+      throw writeRetry.isConflict(error)
         ? createTeachingCourseManagementContentionError()
         : error;
     }

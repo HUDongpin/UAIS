@@ -1,6 +1,8 @@
 "use client";
 
 import { useRef, useState } from "react";
+import type { TeachingOperationBackendArtifact, TeachingOperationBackendReceipt, TeachingOperationDomainPersistenceSummary, TeachingOperationAuditReadbackResponse, TeachingOperationPartialFailure, TeachingOperationBackendResponse } from "./teaching-operation-backend-types";
+import { TeachingUnitDraftEditor, readVerifiedTeachingUnitDraft } from "./teaching-unit-draft-editor";
 import Link from "next/link";
 import { ArrowLeft } from "@phosphor-icons/react/dist/ssr/ArrowLeft";
 import { CheckCircle } from "@phosphor-icons/react/dist/ssr/CheckCircle";
@@ -9,6 +11,7 @@ import { Lightning } from "@phosphor-icons/react/dist/ssr/Lightning";
 import { ShieldCheck } from "@phosphor-icons/react/dist/ssr/ShieldCheck";
 import { SquaresFour } from "@phosphor-icons/react/dist/ssr/SquaresFour";
 import { useAppPreferences } from "@/components/providers/app-preferences";
+import { TeachingDashboardInsights } from "@/components/pages/teaching-dashboard-insights";
 import {
   getTeachingOperationHrefWithCourse,
   isTeachingOperationId,
@@ -16,14 +19,13 @@ import {
 } from "@/components/teaching/teaching-operation-data";
 import { localizedText } from "@/components/ui/localized-text";
 import { teacherCourses, teacherSidebarItems } from "@/data/uais";
-import type { LocalizedText, Locale } from "@/i18n/copy";
+import { copy, type LocalizedText, type Locale } from "@/i18n/copy";
 import { createTeachingOperationIdempotencyKey } from "@/lib/teaching-operation-idempotency";
 import { fetchTeachingOperationAuditReadbackWithRetry } from "@/components/pages/teaching-page-inline-audit-readback";
 import {
   openTeachingStudentPreviewUrl,
   resolveCourseSettingsPersistConfirmation,
 } from "@/components/pages/teaching-student-preview";
-import type { InlineStudentPreviewSessionReceipt } from "@/components/pages/teaching-page-types";
 import { defaultExportManifest } from "@/components/teaching/teaching-operation-page-data";
 import { useOwnedTeachingCourseAccess } from "@/components/teaching/use-owned-teaching-course";
 import {
@@ -54,179 +56,6 @@ type KnowledgeResourceAuditExpectation = {
   title: string;
   rightsBasis: Exclude<KnowledgeResourceRightsBasis, "">;
   visibility: "course-only";
-};
-
-type TeachingOperationBackendArtifact =
-  | {
-      kind: "export-file";
-      manifestId: string;
-      downloadUrl: string;
-      contentType: "application/json";
-    }
-  | {
-      kind: "invite-code";
-      code: string;
-      status: "generated" | "published";
-      joinUrl: string;
-    }
-  | {
-      kind: string;
-      [key: string]: unknown;
-    };
-
-type TeachingOperationBackendReceipt = {
-  receiptId?: string;
-  operationId?: string;
-  actionSlot?: "primary" | "secondary";
-  courseId?: string;
-  displayMessage?: LocalizedText;
-  artifacts?: TeachingOperationBackendArtifact[];
-  audit?: {
-    authMode?: string;
-    authSession?: {
-      sessionId?: string;
-      authenticatedAt?: string;
-      expiresAt?: string;
-    };
-  };
-};
-
-type TeachingOperationDomainPersistenceSummary = {
-  status?: "persisted" | "missing-domain-objects" | "not-required";
-  required?: boolean;
-  operationReceiptId?: string;
-  expectedObjectTypes?: string[];
-  persistedObjectTypes?: string[];
-  missingObjectTypes?: string[];
-};
-
-type TeachingOperationAuditReadbackResponse = {
-  actorId?: string;
-  auditEventCount?: number;
-  records?: Array<{
-    recordId?: string;
-    courseId?: string;
-  }>;
-  auditEvents?: Array<{
-    traceId?: string;
-    actorId?: string;
-    courseId?: string;
-    authSession?: {
-      sessionId?: string;
-      authenticatedAt?: string;
-      expiresAt?: string;
-    };
-  }>;
-  domainProjections?: Array<{
-    objectId?: string;
-    objectType?: string;
-    courseId?: string;
-    operationRecordId?: string;
-    status?: string;
-    updatedBy?: string;
-    updatedAt?: string;
-    previewedBy?: string;
-    previewStatus?: string;
-    previewId?: string;
-    previewUrl?: string;
-    previewScope?: string;
-    previewPolicy?: string;
-    generatedAt?: string;
-    savedBy?: string;
-    planStatus?: string;
-    enabledAgents?: string[];
-    governancePolicy?: string;
-    savedAt?: string;
-    checkedBy?: string;
-    preflightStatus?: string;
-    checkedPermissions?: string[];
-    preflightPolicy?: string;
-    checkedAt?: string;
-    syncedBy?: string;
-    syncStatus?: string;
-    sourceSystems?: string[];
-    pendingTeacherReviewCount?: number;
-    syncedAt?: string;
-    queuedBy?: string;
-    reviewStatus?: string;
-    resourceSource?: string;
-    title?: string;
-    sourceFingerprint?: string;
-    rightsBasis?: string;
-    visibility?: string;
-    reviewPolicy?: string;
-    queuedAt?: string;
-    publishedBy?: string;
-    publicationStatus?: string;
-    releaseScope?: string;
-    publishedAt?: string;
-    generatedBy?: string;
-    suggestionStatus?: string;
-    groupingBasis?: string[];
-    draftStatus?: string;
-    artifactId?: string;
-    settingsStatus?: string;
-    adminScopes?: string[];
-    notificationStatus?: string;
-    deliveryChannel?: string;
-    outboxId?: string;
-    deliveryPolicy?: string;
-    createdBy?: string;
-    exportStatus?: string;
-    manifestId?: string;
-    datasetScopes?: string[];
-    exportPolicy?: string;
-    createdAt?: string;
-    validatedBy?: string;
-    validationStatus?: string;
-    checkedScopes?: string[];
-    validationPolicy?: string;
-    validatedAt?: string;
-    refreshedBy?: string;
-    refreshStatus?: string;
-    visibleMetrics?: string[];
-    refreshPolicy?: string;
-    refreshedAt?: string;
-    lockedBy?: string;
-    snapshotStatus?: string;
-    snapshotId?: string;
-    snapshotScope?: string;
-    retentionPolicy?: string;
-    lockedAt?: string;
-    flaggedBy?: string;
-    flaggedSignals?: string[];
-    flaggedAt?: string;
-    queueStatus?: string;
-    feedbackStatus?: string;
-    feedbackScope?: string;
-    inviteCode?: string;
-    joinUrl?: string;
-    invitePolicy?: string;
-    enrollmentPolicy?: string;
-  }>;
-};
-
-type TeachingOperationPartialFailure = {
-  operationReceiptId?: string;
-  rollbackRoute?: string;
-  compensation?: {
-    status?: string;
-    receipt?: {
-      targetRecordId?: string;
-    };
-  };
-};
-
-type TeachingOperationBackendResponse = {
-  receipt?: TeachingOperationBackendReceipt;
-  domainPersistenceSummary?: TeachingOperationDomainPersistenceSummary;
-  studentPreviewSessionReceipt?: InlineStudentPreviewSessionReceipt;
-  partialFailure?: TeachingOperationPartialFailure;
-  access?: {
-    reasonCode?: string;
-  };
-  error?: string;
-  traceId?: string;
 };
 
 const defaultInviteCode = "55395057";
@@ -308,7 +137,11 @@ const TEACHING_OPERATION_COURSE_NOT_OWNED_MESSAGE: LocalizedText = {
     "This account is not the course owner. Demo course cards cannot be saved. Open a course saved under your account, or create one first.",
 };
 
-export function TeachingOperationPage({
+export function TeachingOperationPage(props: TeachingOperationPageProps) {
+  return <TeachingOperationPageContent key={`${props.operationId}:${props.selectedCourseId ?? "none"}`} {...props} />;
+}
+
+function TeachingOperationPageContent({
   operationId,
   selectedCourseId,
   selectedClassId,
@@ -321,7 +154,8 @@ export function TeachingOperationPage({
   const title = operation ? localizedText(operation.title, locale) : safeOperationId;
   const description = operation ? localizedText(operation.description, locale) : "";
   const selectedCourse = teacherCourses.find((course) => course.id === selectedCourseId);
-  const ownedCourseAccess = useOwnedTeachingCourseAccess(selectedCourseId);
+  const isInsightsWorkspace = safeOperationId === "dashboard" || safeOperationId === "quiz-board";
+  const ownedCourseAccess = useOwnedTeachingCourseAccess(isInsightsWorkspace ? undefined : selectedCourseId);
   // No course id is not the same as an unresolved ownership list: unknown stays
   // writable, but a missing course must match the empty-state banner.
   const isSelectedCourseWritable = Boolean(selectedCourseId?.trim()) && ownedCourseAccess !== "unowned";
@@ -331,6 +165,7 @@ export function TeachingOperationPage({
     useState<ExportManifestState>(defaultExportManifest);
   const [inviteCode, setInviteCode] = useState(defaultInviteCode);
   const [auditStatus, setAuditStatus] = useState<OperationAuditStatus>();
+  const [verifiedUnitDraftRecordId, setVerifiedUnitDraftRecordId] = useState<string>();
   const [knowledgeResourceTitle, setKnowledgeResourceTitle] = useState("");
   const [knowledgeResourceUrl, setKnowledgeResourceUrl] = useState("");
   const [knowledgeResourceRightsBasis, setKnowledgeResourceRightsBasis] =
@@ -414,6 +249,7 @@ export function TeachingOperationPage({
           operationId: safeOperationId,
           actionSlot,
           courseId: selectedCourseId,
+          ...(safeOperationId === "content" && actionSlot === "secondary" ? { locale } : {}),
           ...(targetClassId ? { targetClassId } : {}),
           sourceAction,
           ...(knowledgeResource ? { knowledgeResource } : {}),
@@ -464,6 +300,10 @@ export function TeachingOperationPage({
         return;
       }
 
+      if (safeOperationId === "content" && actionSlot === "secondary" &&
+        (!payload.traceId || !receipt.receiptId || receipt.courseId !== selectedCourseId)) {
+        throw new Error("Unit generation requires course-bound audit and content readback.");
+      }
       const { persistConfirmed, previewUrl } = resolveCourseSettingsPersistConfirmation({
         operationId: safeOperationId,
         actionSlot,
@@ -628,6 +468,12 @@ export function TeachingOperationPage({
           return;
         }
         throw new Error("Teaching operation audit readback did not include the saved operation.");
+      }
+
+      if (safeOperationId === "content" && input.actionSlot === "secondary") {
+        if (!input.courseId) throw new Error("Unit draft course is missing.");
+        await readVerifiedTeachingUnitDraft(input.courseId, input.recordId);
+        setVerifiedUnitDraftRecordId(input.recordId);
       }
 
       setAuditStatus({
@@ -1108,7 +954,11 @@ export function TeachingOperationPage({
               {title}
             </h1>
             <p className="mt-3 max-w-3xl text-base leading-7 text-[var(--muted)]">
-              {description || localizedText(config.summary, locale)}
+              {isInsightsWorkspace
+                ? copy[locale].teachingInsights[safeOperationId === "dashboard" ? "dashboardDescription" : "quizDescription"]
+                : safeOperationId === "data-export"
+                  ? localizedText(config.summary, locale)
+                  : description || localizedText(config.summary, locale)}
             </p>
           </div>
           <div className="rounded-2xl border border-[var(--accent-border)] bg-[var(--accent-soft)] px-4 py-3 text-sm text-[var(--foreground)]">
@@ -1171,8 +1021,20 @@ export function TeachingOperationPage({
           </nav>
         </aside>
 
-        <div className="space-y-5">
-          <section className="grid gap-5 xl:grid-cols-[minmax(0,1.05fr)_360px]">
+        {safeOperationId === "dashboard" || safeOperationId === "quiz-board" ? (
+          <section className="min-w-0 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5">
+            {selectedCourseId ? <p className="break-words text-sm font-semibold text-[var(--foreground)]">
+              {locale === "zh-CN" ? "已选择课程" : "Selected course"}：{selectedCourse ? localizedText(selectedCourse.title, locale) : selectedCourseId}
+            </p> : null}
+            <TeachingDashboardInsights
+              operationId={safeOperationId}
+              courseId={selectedCourseId}
+              classId={selectedClassId}
+              locale={locale}
+            />
+          </section>
+        ) : <div className="space-y-5">
+          <section className={safeOperationId === "data-export" ? "grid min-w-0 gap-5" : "grid gap-5 xl:grid-cols-[minmax(0,1.05fr)_360px]"}>
             <div className="space-y-5">
               <section className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5 shadow-[0_18px_42px_var(--shadow)]">
             <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
@@ -1401,13 +1263,22 @@ export function TeachingOperationPage({
               </div>
             ) : null}
 
-            <OperationSpecificPreview
+            {safeOperationId === "content" && selectedCourseId ? (
+              <TeachingUnitDraftEditor
+                courseId={selectedCourseId}
+                locale={locale}
+                expectedOperationRecordId={verifiedUnitDraftRecordId}
+                generationPending={isActionPending || isAuditPending}
+              />
+            ) : null}
+            {safeOperationId !== "content" ? <OperationSpecificPreview
               config={config}
               exportManifest={exportManifest}
               inviteCode={inviteCode}
               locale={locale}
               manifestReady={manifestReady}
-            />
+              selectedCourseId={selectedCourseId}
+            /> : null}
               </section>
             </div>
 
@@ -1460,7 +1331,7 @@ export function TeachingOperationPage({
               </section>
             </aside>
           </section>
-        </div>
+        </div>}
       </section>
     </div>
   );

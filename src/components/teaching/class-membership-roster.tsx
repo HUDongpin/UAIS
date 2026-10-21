@@ -16,12 +16,16 @@
 // in a modal: the row being acted on stays on screen and readable, which is the
 // whole point of asking.
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Check } from "@phosphor-icons/react/dist/ssr/Check";
 import { MagnifyingGlass } from "@phosphor-icons/react/dist/ssr/MagnifyingGlass";
 import { UserMinus } from "@phosphor-icons/react/dist/ssr/UserMinus";
 import { X } from "@phosphor-icons/react/dist/ssr/X";
 import { copy } from "@/i18n/copy";
+import {
+  getClassRosterFragmentId,
+  subscribeClassRosterFragment,
+} from "@/lib/teaching/class-roster-navigation";
 import type { Locale } from "@/i18n/copy";
 import type { TeacherClassItem, TeacherClassMembershipItem } from "@/lib/teaching/course-readback";
 
@@ -66,6 +70,31 @@ export function ClassMembershipRoster({
     membership: TeacherClassMembershipItem,
   ) => void;
 }) {
+  const fragmentId = getClassRosterFragmentId(classItem.id);
+  const fragmentTarget = useRef<HTMLDivElement>(null);
+  const focusedFragment = useRef("");
+  useEffect(() => {
+    function focusTarget() {
+      const expectedHash = `#${encodeURIComponent(fragmentId)}`;
+      if (
+        window.location.hash !== expectedHash ||
+        focusedFragment.current === expectedHash ||
+        !fragmentTarget.current
+      ) {
+        return;
+      }
+      fragmentTarget.current.scrollIntoView({ block: "start" });
+      fragmentTarget.current.focus({ preventScroll: true });
+      focusedFragment.current = expectedHash;
+    }
+    function onFragmentChange() {
+      focusedFragment.current = "";
+      focusTarget();
+    }
+    focusTarget();
+    return subscribeClassRosterFragment(onFragmentChange);
+  }, [fragmentId, memberships.length, classRosterStatus]);
+
   const t = copy[locale].teaching;
   const [nameFilter, setNameFilter] = useState("");
   const [isConfirmingApproveAll, setIsConfirmingApproveAll] = useState(false);
@@ -118,8 +147,11 @@ export function ClassMembershipRoster({
 
   return (
     <div
+      id={fragmentId}
+      ref={fragmentTarget}
+      tabIndex={-1}
       data-uais-class-roster={classItem.id}
-      className="rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3"
+      className="scroll-mt-24 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3"
     >
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h5 className="text-sm font-semibold text-[var(--foreground)]">

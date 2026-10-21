@@ -141,6 +141,7 @@ export function createUaisLearningLoopPostgresReadStore(options: ReadStoreOption
       courseExternalId: string;
       classExternalId: string;
       lessonKey: string;
+      activityId?: string;
     }) {
       const client = createDatabase({ env: options.env, max: 1 });
       let result: Record<string, unknown> | undefined;
@@ -165,6 +166,8 @@ export function createUaisLearningLoopPostgresReadStore(options: ReadStoreOption
             WHERE c.slug = ${input.courseExternalId}
               AND cl.external_key = ${input.classExternalId}
               AND l.external_key = ${input.lessonKey}
+              AND (${input.activityId ?? null}::uuid IS NULL
+                OR a.id = ${input.activityId ?? null}::uuid)
               AND (
                 a.status = 'published'
                 OR (
@@ -183,7 +186,7 @@ export function createUaisLearningLoopPostgresReadStore(options: ReadStoreOption
                   AND existing_submission.user_id = ${studentId}
               ) DESC,
               (a.status = 'published') DESC,
-              a.version DESC
+              a.version DESC, a.id
             LIMIT 1
           `;
           const activity = firstRow(activityRows);
@@ -414,6 +417,7 @@ export function createUaisLearningLoopPostgresReadStore(options: ReadStoreOption
           const nextAction = recommendNextLearningAction({
             units: courseRows.map((row) => ({
               lessonKey: row.lessonKey,
+              activityId: row.activityId,
               position: row.position,
               checkpointAttempted: row.checkpointAttempted,
               ...(row.submissionState

@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { cwd } from "node:process";
@@ -7,6 +7,7 @@ import {
   normalizeTeachingCourseManagementDatabase,
 } from "./teaching-course-management-database-normalizer";
 import { ensureWithinBase, requireSafeId } from "./teaching-course-management-guards";
+import { TeachingCourseManagementStoreError } from "./teaching-course-management-error";
 import type {
   TeachingCourseManagementDatabase,
   TeachingCourseManagementRepository,
@@ -30,6 +31,12 @@ export const localTeachingCourseManagementStorage: TeachingCourseManagementStora
 export async function readTeachingCourseManagementDatabase(input: {
   dataDir?: string;
 }): Promise<TeachingCourseManagementDatabase> {
+  return (await readLocalTeachingCourseManagementSnapshot(input)).database;
+}
+
+async function readLocalTeachingCourseManagementSnapshot(input: {
+  dataDir?: string;
+}): Promise<TeachingCourseManagementRepositorySnapshot> {
   const dataDir = resolveTeachingCourseManagementDataDir(input.dataDir);
   const filePath = resolveDatabasePath(dataDir);
   const raw = await readFile(filePath, "utf8").catch((error: NodeJS.ErrnoException) => {
@@ -38,10 +45,10 @@ export async function readTeachingCourseManagementDatabase(input: {
     }
     throw error;
   });
-  if (!raw) {
-    return createEmptyDatabase();
-  }
-  return normalizeTeachingCourseManagementDatabase(JSON.parse(raw));
+  return {
+    database: raw ? normalizeTeachingCourseManagementDatabase(JSON.parse(raw)) : createEmptyDatabase(),
+    revision: raw ? createHash("sha256").update(raw).digest("hex") : "local-snapshot-absent",
+  };
 }
 
 // `courseId` narrows the call to one course's row on a backend that keeps one -
@@ -64,9 +71,7 @@ export async function readTeachingCourseManagementSnapshot(input: {
     };
   }
 
-  return {
-    database: await readTeachingCourseManagementDatabase({ dataDir: input.dataDir }),
-  };
+  return readLocalTeachingCourseManagementSnapshot({ dataDir: input.dataDir });
 }
 
 export async function writeTeachingCourseManagementSnapshot(input: {
@@ -88,6 +93,7 @@ export async function writeTeachingCourseManagementSnapshot(input: {
   await writeTeachingCourseManagementDatabase({
     dataDir: input.dataDir,
     database: input.database,
+    expectedRevision: input.expectedRevision,
   });
 }
 
@@ -104,15 +110,55 @@ export function resolveTeachingCourseManagementDataDir(configuredDataDir?: strin
 export async function writeTeachingCourseManagementDatabase(input: {
   dataDir: string;
   database: TeachingCourseManagementDatabase;
+  expectedRevision?: string;
 }) {
-  await mkdir(input.dataDir, { recursive: true });
-  const filePath = resolveDatabasePath(input.dataDir);
-  await writeAtomicJsonFile({
-    dataDir: input.dataDir,
-    filePath,
-    fileNamePrefix: "teaching-course-management",
-    value: input.database,
+  const dataDir = resolveTeachingCourseManagementDataDir(input.dataDir);
+  await runWithLocalTeachingCourseManagementWriteLock(dataDir, async () => {
+    const current = await readLocalTeachingCourseManagementSnapshot({ dataDir });
+    if (input.expectedRevision !== current.revision) {
+      throw new TeachingCourseManagementStoreError(
+        409, "Teaching course management snapshot changed; retry required.",
+        undefined, "snapshot-contention",
+      );
+    }
+    await writeAtomicJsonFile({
+      dataDir,
+      filePath: resolveDatabasePath(dataDir),
+      fileNamePrefix: "teaching-course-management",
+      value: input.database,
+    });
   });
+}
+
+async function runWithLocalTeachingCourseManagementWriteLock<T>(
+  dataDir: string,
+  action: () => Promise<T>,
+): Promise<T> {
+  await mkdir(dataDir, { recursive: true });
+  const lockPath = resolve(dataDir, ".teaching-course-management-write-lock");
+  ensureWithinBase(dataDir, lockPath);
+  const deadline = Date.now() + 5_000;
+  // Readers may run concurrently; compare and replace must share one lock
+  // across processes because every local course lives in this single file.
+  for (;;) {
+    try {
+      await mkdir(lockPath);
+      break;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+      if (Date.now() >= deadline) {
+        throw new TeachingCourseManagementStoreError(
+          503, "Teaching course management snapshot lock is unavailable.",
+        );
+      }
+      await new Promise<void>((resolveDelay) => setTimeout(resolveDelay, 10));
+    }
+  }
+  try {
+    return await action();
+  } finally {
+    await rm(lockPath, { force: true, recursive: true }).catch(() => undefined);
+  }
 }
 
 export function resolveDatabasePath(dataDir: string) {

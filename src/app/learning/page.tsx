@@ -17,6 +17,8 @@ const metadataByLocale = {
 type LearningRouteSearchParams = Promise<{
   courseId?: string | string[] | undefined;
   classId?: string | string[] | undefined;
+  lessonKey?: string | string[] | undefined;
+  activityId?: string | string[] | undefined;
 }>;
 
 export function generateMetadata(): Promise<Metadata> {
@@ -36,8 +38,11 @@ export default async function Page({
 
   return (
     <LearningPage
+      key={JSON.stringify([query.courseId, query.classId, query.lessonKey, query.activityId].map(getFirstQueryValue))}
       initialCourseId={getFirstQueryValue(query.courseId)}
       initialClassId={getFirstQueryValue(query.classId)}
+      initialLessonKey={getFirstQueryValue(query.lessonKey)}
+      initialActivityId={getFirstQueryValue(query.activityId)}
     />
   );
 }

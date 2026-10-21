@@ -371,6 +371,15 @@ describe("teaching operation audit snapshot ownership readback", () => {
       readManagedCourseOwnership: async ({ actorId, courseId }) =>
         actorId === "phoebe" && courseId === ownedCourseId,
       readSnapshotTeachingOperationDatabase: async () => snapshot,
+      // Provider evidence lives in its own managed namespace. Keep both reads
+      // synthetic; this fixture deliberately has no database credentials.
+      providerOperationsRepository: {
+        read: async () => ({
+          database: { ...snapshot, records: [], auditEvents: [], domainProjections: [], providerOperations: [] },
+          revision: "synthetic-empty-provider-journal",
+        }),
+        write: async () => { throw new Error("Audit GET must not write provider evidence."); },
+      },
       now: new Date("2026-09-15T14:10:00.000Z"),
     });
 
@@ -387,6 +396,7 @@ describe("teaching operation audit snapshot ownership readback", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
+      expect(body.providerOperations).toEqual([]);
       expect(body.auditEvents).toEqual([
         expect.objectContaining({
           traceId: "trace-snapshot-not-file-course-settings",

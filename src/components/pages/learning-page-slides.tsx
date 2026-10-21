@@ -26,6 +26,7 @@ import type {
 import { copy, type Locale } from "@/i18n/copy";
 import {
   getPublishedPlaybackStageCopy,
+  getPublishedPlaybackErrorLabel,
   type PublishedPlaybackError,
   type StudyAction,
 } from "./learning-page-helpers";
@@ -111,8 +112,7 @@ export function PptStage({
   publishedPlaybackError,
   isPublishedPlaybackLoading,
   conceptCount,
-  studyActionsEnabled,
-  studyActionNotice,
+  hasStudyContent = true,
   onStudyAction,
   signInHref,
   onRetryPublishedPlayback,
@@ -123,8 +123,9 @@ export function PptStage({
   publishedPlaybackError?: PublishedPlaybackError;
   isPublishedPlaybackLoading?: boolean;
   conceptCount: number;
-  studyActionsEnabled: boolean;
-  studyActionNotice?: string;
+  /** False when no lesson is on screen: there is no slide to ask about, take
+   *  notes on, or export, so the bar disables itself and says why. */
+  hasStudyContent?: boolean;
   onStudyAction: (action: StudyAction) => void;
   /** Where a signed-out deck refusal sends the learner, with a return path. */
   signInHref?: string;
@@ -213,9 +214,16 @@ export function PptStage({
     );
 
     return (
+      // `xl:h-full` inside the workspace's `minmax(0,1fr)` row, and no fixed
+      // min-height. The old `xl:min-h-[calc(100dvh-13.5rem)]` was 66px taller
+      // than the row the workspace grid could give it, so this card always
+      // overflowed downward into the narration dock's top margin. That was
+      // invisible while the dock was a single 98px row, and became a 45px
+      // overlap across the study action bar the moment the dock wrapped to two
+      // rows on a laptop-width screen. The row owns the height now.
       <section
         data-uais-learning-ppt-stage="compact"
-        className="flex min-h-0 min-w-0 w-full flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-[0_18px_44px_var(--shadow)] xl:h-full xl:min-h-[calc(100dvh-13.5rem)]"
+        className="flex min-h-0 min-w-0 w-full flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-[0_18px_44px_var(--shadow)] xl:h-full xl:min-h-0"
       >
         <div
           data-uais-learning-ppt-stage-body="expanded-slide"
@@ -322,42 +330,22 @@ export function PptStage({
           locale={locale}
           conceptCount={conceptCount}
           compact
-          enabled={studyActionsEnabled}
-          notice={studyActionNotice}
           onStudyAction={onStudyAction}
         />
       </section>
     );
   }
 
-  const stageCopy = getPublishedPlaybackStageCopy(locale, publishedPlaybackError);
-  const cornerAction =
-    publishedPlaybackError === "auth-required" && signInHref ? (
-      <Link
-        href={signInHref}
-        data-uais-learning-ppt-sign-in="true"
-        className="inline-flex h-11 items-center gap-1 rounded-full bg-[var(--accent)] px-2.5 text-xs font-semibold text-white outline-none transition hover:bg-[var(--accent-strong)] focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]"
-      >
-        <SignIn size={13} weight="bold" aria-hidden="true" />
-        {copy[locale].auth.signIn}
-      </Link>
-    ) : publishedPlaybackError === "unavailable" && onRetryPublishedPlayback ? (
-      <button
-        type="button"
-        className="inline-flex min-h-11 items-center rounded-full bg-[var(--accent)] px-3 text-xs font-semibold text-white outline-none transition hover:bg-[var(--accent-strong)] focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]"
-        onClick={onRetryPublishedPlayback}
-      >
-        {locale === "zh-CN" ? "重新加载课件" : "Retry loading slides"}
-      </button>
-    ) : null;
-
   return (
+    // Same column shape as the published stage: the card fills the workspace row
+    // and the empty body absorbs whatever height is left, so the study action bar
+    // below it is never pushed past the card's own clipped edge.
     <section
       aria-busy={isPublishedPlaybackLoading || undefined}
-      className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-[0_18px_44px_var(--shadow)]"
+      className="flex min-h-0 w-full flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-[0_18px_44px_var(--shadow)] xl:h-full"
     >
-      <div className="relative min-h-[470px] p-7 lg:p-9 xl:min-h-[555px]">
-        {cornerAction ? (
+      <div className="relative min-h-[470px] flex-1 p-7 lg:p-9 xl:min-h-0">
+        {publishedPlaybackError && publishedPlaybackError !== "not-published" ? (
           <div
             role="alert"
             data-uais-learning-ppt-error={publishedPlaybackError}
@@ -368,7 +356,28 @@ export function PptStage({
                 : "border-[#fed7aa] bg-[#fff7ed] text-[#c2410c] dark:border-[#7c4a1d] dark:bg-[#3a2410] dark:text-[#fdba74]",
             ].join(" ")}
           >
-            {cornerAction}
+            {getPublishedPlaybackErrorLabel(locale, publishedPlaybackError)}
+            {/* "Sign in again to access the PPT" with nowhere to sign in is
+                where this pill used to end. */}
+            {publishedPlaybackError === "auth-required" && signInHref ? (
+              <Link
+                href={signInHref}
+                data-uais-learning-ppt-sign-in="true"
+                className="inline-flex h-11 items-center gap-1 rounded-full bg-[var(--accent)] px-2.5 text-xs font-semibold text-white outline-none transition hover:bg-[var(--accent-strong)] focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]"
+              >
+                <SignIn size={13} weight="bold" aria-hidden="true" />
+                {copy[locale].auth.signIn}
+              </Link>
+            ) : null}
+            {publishedPlaybackError === "unavailable" && onRetryPublishedPlayback ? (
+              <button
+                type="button"
+                className="inline-flex min-h-11 items-center rounded-full bg-[var(--accent)] px-3 text-xs font-semibold text-white outline-none transition hover:bg-[var(--accent-strong)] focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]"
+                onClick={onRetryPublishedPlayback}
+              >
+                {locale === "zh-CN" ? "重新加载课件" : "Retry loading slides"}
+              </button>
+            ) : null}
           </div>
         ) : isPublishedPlaybackLoading ? (
           <div
@@ -391,14 +400,13 @@ export function PptStage({
         */}
         <div
           data-uais-learning-ppt-empty="true"
-          data-uais-learning-ppt-error={publishedPlaybackError}
           className="flex min-h-[380px] flex-col items-center justify-center gap-3 px-6 text-center xl:min-h-[465px]"
         >
           <h1 className="text-[22px] font-semibold tracking-tight text-[var(--foreground)]">
-            {stageCopy.title}
+            {getPublishedPlaybackStageCopy(locale, publishedPlaybackError).title}
           </h1>
           <p className="max-w-md text-base leading-7 text-[var(--muted)]">
-            {stageCopy.description}
+            {getPublishedPlaybackStageCopy(locale, publishedPlaybackError).description}
           </p>
         </div>
       </div>
@@ -406,8 +414,7 @@ export function PptStage({
       <StudyActionBar
         locale={locale}
         conceptCount={conceptCount}
-        enabled={studyActionsEnabled}
-        notice={studyActionNotice}
+        hasStudyContent={hasStudyContent}
         onStudyAction={onStudyAction}
       />
     </section>
@@ -523,18 +530,22 @@ function StudyActionBar({
   locale,
   conceptCount,
   compact = false,
-  enabled = true,
-  notice,
+  hasStudyContent = true,
   onStudyAction,
 }: {
   locale: Locale;
   conceptCount: number;
   compact?: boolean;
-  enabled?: boolean;
-  notice?: string;
+  hasStudyContent?: boolean;
   onStudyAction: (action: StudyAction) => void;
 }) {
   const zh = locale === "zh-CN";
+  // Without a lesson these five actions have nothing to act on. They used to run
+  // against the demo course's slide 3 and hand the learner notes, concept cards
+  // and a downloadable `.md` for a lesson that is not theirs.
+  const unavailableTitle = zh
+    ? "教师发布课件后即可使用本页学习工具。"
+    : "These slide tools become available once a lesson is published.";
   const actions = [
     { action: "ask" as const, label: zh ? "问这页" : "Ask", icon: ChatTeardropText },
     { action: "notes" as const, label: zh ? "生成笔记" : "Notes", icon: Notebook },
@@ -547,13 +558,15 @@ function StudyActionBar({
     },
     { action: "export" as const, label: zh ? "导出笔记" : "Export", icon: FilePdf },
   ];
-  const disabledTitle = copy[locale].learning.studyToolsRequireCourseware;
 
   return (
     <div
       data-uais-learning-study-actions={compact ? "compact" : "standard"}
       className={[
-        "grid border-t border-[var(--border)] bg-[var(--surface)] sm:grid-cols-5",
+        // `shrink-0`: in the card's flex column this bar must keep its height
+        // whatever the stage above it does, or it is squeezed under the card's
+        // `overflow-hidden` edge and disappears.
+        "grid shrink-0 border-t border-[var(--border)] bg-[var(--surface)] sm:grid-cols-5",
         compact ? "gap-2 p-3 xl:grid-cols-5" : "gap-3 p-4",
       ].join(" ")}
     >
@@ -564,20 +577,18 @@ function StudyActionBar({
             key={action.action}
             type="button"
             aria-label={action.label}
-            title={enabled ? action.label : disabledTitle}
-            disabled={!enabled}
+            disabled={!hasStudyContent}
+            title={hasStudyContent ? undefined : unavailableTitle}
             onClick={() => onStudyAction(action.action)}
             className={[
-              "relative inline-flex min-w-0 items-center justify-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 text-sm font-semibold text-[var(--foreground)] outline-none transition focus-visible:ring-2 focus-visible:ring-[var(--accent)]",
+              "relative inline-flex min-w-0 items-center justify-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 text-sm font-semibold text-[var(--foreground)] outline-none transition hover:border-[var(--accent)] hover:text-[var(--accent)] focus-visible:ring-2 focus-visible:ring-[var(--accent)]",
               "h-11",
-              enabled
-                ? "hover:border-[var(--accent)] hover:text-[var(--accent)]"
-                : "cursor-not-allowed text-[var(--placeholder)]",
+              hasStudyContent ? "" : "cursor-not-allowed opacity-60 hover:border-[var(--border)] hover:text-[var(--foreground)]",
             ].join(" ")}
           >
             <Icon size={17} weight="duotone" />
             {action.label}
-            {action.badge && enabled ? (
+            {action.badge ? (
               <span
                 aria-hidden="true"
                 className="absolute -right-1.5 -top-2 flex size-5 items-center justify-center rounded-full bg-[var(--accent)] text-[11px] text-white"
@@ -588,15 +599,6 @@ function StudyActionBar({
           </button>
         );
       })}
-      {notice ? (
-        <p
-          role="status"
-          data-uais-learning-study-notice="true"
-          className="col-span-full text-sm font-medium text-[var(--accent)]"
-        >
-          {notice}
-        </p>
-      ) : null}
     </div>
   );
 }

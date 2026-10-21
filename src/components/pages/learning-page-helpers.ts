@@ -10,7 +10,6 @@ import type {
 } from "@/lib/learning/ppt-playback-types";
 import type { Locale } from "@/i18n/copy";
 import {
-  fallbackCourseId,
   playbackByCourseId,
   type PlaybackContent,
 } from "./learning-page-content";
@@ -32,20 +31,37 @@ export type SlideStudyContent = {
   }[];
 };
 
-export function getPlaybackContent(courseId: string, locale: Locale) {
-  return (
-    playbackByCourseId[courseId]?.[locale] ??
-    playbackByCourseId[fallbackCourseId][locale]
-  );
+// The template's own sample courses — `research-methods-learning` and
+// `math-pedagogy-learning` — are real destinations the course plaza links to, and
+// this is their content.
+//
+// It is NOT a substitute for any other course. Returning the demo course whenever
+// a courseId was unknown meant that a real course with no published deck yet - the
+// ordinary state of a course before its teacher uploads slides - announced itself
+// as 《大学研究方法》, captioned the stage "把研究问题转化为可观察证据", named
+// 李明远 教授 / 机器学习导论 in the narration dock, generated study notes and an
+// export file for that invented lesson, and sent `research-methods-learning` as
+// the course id on every AI-guide question, which the server then refused as a
+// course the learner is not enrolled in. A learner cannot tell an invented lesson
+// from their own. `undefined` is the honest answer, and every caller renders an
+// empty state for it.
+export function getPlaybackContent(courseId: string | undefined, locale: Locale) {
+  return courseId ? playbackByCourseId[courseId]?.[locale] : undefined;
 }
 
-export function getFallbackCourseTitle(playback: PlaybackContent, locale: Locale) {
-  return playback.liveHint.replace(
+export function getFallbackCourseTitle(
+  playback: PlaybackContent | undefined,
+  locale: Locale,
+) {
+  return playback?.liveHint.replace(
     locale === "zh-CN" ? "当前课程：" : "Current course: ",
     "",
   );
 }
 
+// `undefined` when there is no slide to study: no published slide on the stage and
+// no sample course behind it. The study tools then say so rather than describing a
+// slide nobody is looking at.
 export function createSlideStudyContent({
   locale,
   playback,
@@ -53,29 +69,36 @@ export function createSlideStudyContent({
   activePublishedSlide,
 }: {
   locale: Locale;
-  playback: PlaybackContent;
+  playback?: PlaybackContent;
   publishedPlayback?: LearningPptPlaybackManifest;
   activePublishedSlide?: LearningPptPlaybackSlide;
-}): SlideStudyContent {
+}): SlideStudyContent | undefined {
+  if (!activePublishedSlide && !playback) {
+    return undefined;
+  }
+
   const zh = locale === "zh-CN";
-  const courseTitle = publishedPlayback?.courseTitle ?? getFallbackCourseTitle(playback, locale);
-  const slideTitle = activePublishedSlide?.slideTitle ?? playback.slideTitle;
+  const courseTitle =
+    publishedPlayback?.courseTitle ??
+    getFallbackCourseTitle(playback, locale) ??
+    (zh ? "本课程" : "this course");
+  const slideTitle = activePublishedSlide?.slideTitle ?? playback!.slideTitle;
   const slideLabel = activePublishedSlide
     ? zh
       ? `第 ${activePublishedSlide.slideNumber} 页`
       : `Slide ${activePublishedSlide.slideNumber}`
-    : playback.slideLabel;
+    : playback!.slideLabel;
   const narrationCue =
     activePublishedSlide?.narrationText ??
-    playback.subtitles.find((subtitle) => subtitle.active)?.text ??
-    playback.slideSubtitle;
+    playback!.subtitles.find((subtitle) => subtitle.active)?.text ??
+    playback!.slideSubtitle;
   const takeaways = activePublishedSlide
     ? [
         zh ? `围绕「${slideTitle}」先复述本页主张。` : `Restate the main claim of "${slideTitle}".`,
         zh ? `用讲解线索核对关键词和例子。` : "Use the narration cue to check keywords and examples.",
         zh ? "把本页内容转成一个可向同伴解释的问题。" : "Turn the slide into one peer-explainable question.",
       ]
-    : playback.slidePoints;
+    : playback!.slidePoints;
   const concepts = activePublishedSlide
     ? [
         {
@@ -95,10 +118,10 @@ export function createSlideStudyContent({
             : "Turn the slide narration into a question, example, or group task.",
         },
       ]
-    : playback.conceptPins.map((concept, index) => ({
+    : playback!.conceptPins.map((concept, index) => ({
         title: concept,
         description:
-          playback.slidePoints[index] ??
+          playback!.slidePoints[index] ??
           (zh ? "请用本页讲解线索补充解释。" : "Use the current narration cue to explain it."),
       }));
 
@@ -394,13 +417,14 @@ export function getPublishedPlaybackEmptyDescription(locale: Locale) {
 // membership for the very course on screen is the other legitimate attribution.
 export function resolveLearningEventCourseId(input: {
   publishedPlaybackCourseId?: string;
-  selectedCourseId: string;
+  selectedCourseId?: string;
   approvedMembershipCourseId?: string;
 }): string | undefined {
   if (input.publishedPlaybackCourseId) {
     return input.publishedPlaybackCourseId;
   }
-  return input.approvedMembershipCourseId === input.selectedCourseId
+  return input.selectedCourseId !== undefined &&
+    input.approvedMembershipCourseId === input.selectedCourseId
     ? input.selectedCourseId
     : undefined;
 }

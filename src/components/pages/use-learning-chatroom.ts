@@ -255,6 +255,12 @@ export function useLearningChatroom(): LearningChatroomController {
   // delete uses, rather than a browser dialog the room has nowhere else.
   const [shareRevokeConfirming, setShareRevokeConfirming] = useState(false);
   const [shareRevokePending, setShareRevokePending] = useState(false);
+  const shareMintRequestRef = useRef<{ roomToken: string } | null>(null);
+  const shareRevokeRequestRef = useRef<{
+    roomToken: string;
+    shareId: string;
+  } | null>(null);
+  const displayedShareIdRef = useRef<string | null>(null);
   // The ids the previous server replay carried. A row that the room used to
   // replay and now does not has been moderated away (or evicted), so it must
   // leave this thread too - see `mergeRoomTranscript`, whose tail would
@@ -542,7 +548,12 @@ export function useLearningChatroom(): LearningChatroomController {
     // learner just walked into.
     setWindowAtCapacity(false);
     setRoomFrozen(false);
+    shareMintRequestRef.current = null;
+    shareRevokeRequestRef.current = null;
+    displayedShareIdRef.current = null;
     setShareLink(null);
+    setShareRevokeConfirming(false);
+    setShareRevokePending(false);
     previousServerMessageIdsRef.current = new Set();
   }, [roomKey]);
 
@@ -1163,6 +1174,11 @@ export function useLearningChatroom(): LearningChatroomController {
       return;
     }
 
+    const request = { roomToken: currentRoomToken() };
+    if (shareMintRequestRef.current?.roomToken === request.roomToken) {
+      return;
+    }
+    shareMintRequestRef.current = request;
     const result = await requestLearningChatroomShareLink(
       {
         courseId: activeCourse.courseId,
@@ -1171,8 +1187,14 @@ export function useLearningChatroom(): LearningChatroomController {
       },
       { origin: window.location.origin },
     );
+    if (
+      shareMintRequestRef.current !== request ||
+      currentRoomToken() !== request.roomToken
+    ) {
+      return;
+    }
+    shareMintRequestRef.current = null;
     if (result.status === "failed") {
-      setShareLink(null);
       setNotice(t.learning.shareFailed);
       return;
     }
@@ -1180,6 +1202,7 @@ export function useLearningChatroom(): LearningChatroomController {
     // Every link ends on its own, so the room says when. Kept beside the copied
     // URL rather than folded into the one-line notice: the notice is transient
     // and the expiry is the thing whoever pastes this link needs to remember.
+    displayedShareIdRef.current = result.shareId;
     setShareLink({
       shareId: result.shareId,
       url: result.url,
@@ -1189,7 +1212,12 @@ export function useLearningChatroom(): LearningChatroomController {
     });
     // A fresh mint replaces whatever the previous link's revoke prompt was
     // asking about.
+    shareRevokeRequestRef.current = null;
     setShareRevokeConfirming(false);
+    setShareRevokePending(false);
+    const isCurrentShare = () =>
+      currentRoomToken() === request.roomToken &&
+      displayedShareIdRef.current === result.shareId;
 
     // An insecure context (or a browser without the Clipboard API) exposes no
     // `navigator.clipboard`: nothing is copied, so report the fallback and let
@@ -1203,8 +1231,14 @@ export function useLearningChatroom(): LearningChatroomController {
 
     try {
       await navigator.clipboard.writeText(result.url);
+      if (!isCurrentShare()) {
+        return;
+      }
       setNotice(`${t.learning.copied} ${result.url}`);
     } catch {
+      if (!isCurrentShare()) {
+        return;
+      }
       setNotice(`${t.learning.copiedFallback} ${result.url}`);
     }
     setError("");
@@ -1228,12 +1262,25 @@ export function useLearningChatroom(): LearningChatroomController {
   // link - both are separate work, and neither is a reason to leave the one link
   // the learner is looking at un-revocable.
   async function confirmShareRevoke() {
-    if (!shareLink || shareRevokePending) {
+    if (!shareLink || shareRevokePending || shareRevokeRequestRef.current) {
       return;
     }
 
+    const request = {
+      roomToken: currentRoomToken(),
+      shareId: shareLink.shareId,
+    };
+    shareRevokeRequestRef.current = request;
     setShareRevokePending(true);
-    const result = await revokeLearningChatroomShareLink(shareLink.shareId);
+    const result = await revokeLearningChatroomShareLink(request.shareId);
+    if (
+      shareRevokeRequestRef.current !== request ||
+      currentRoomToken() !== request.roomToken ||
+      displayedShareIdRef.current !== request.shareId
+    ) {
+      return;
+    }
+    shareRevokeRequestRef.current = null;
     setShareRevokePending(false);
     if (result.status === "failed") {
       // The link is still live, so the URL and its expiry stay exactly where
@@ -1243,6 +1290,7 @@ export function useLearningChatroom(): LearningChatroomController {
     }
 
     setShareRevokeConfirming(false);
+    displayedShareIdRef.current = null;
     setShareLink(null);
     setNotice(t.learning.shareRevoked);
     setError("");

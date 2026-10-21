@@ -34,6 +34,29 @@ function receipt(state: string, revision: number) {
 }
 
 describe("P1 student learning-loop API", () => {
+  it.each([undefined, "", 1])("rejects a draft save without an explicit version identity (%s)", async (expectedSubmissionVersionId) => {
+    const saveSubmissionDraft = vi.fn();
+    const handler = createSubmissionDraftPutHandler({ env: {}, readActivityScope: async () => scope, authorize: async () => studentAccess, saveSubmissionDraft });
+    const response = await handler(new Request("http://localhost/api/learning/activities/activity-1/submission", {
+      method: "PUT", body: JSON.stringify({ contentText: "text", expectedDraftRevision: 0, expectedSubmissionVersionId }),
+    }), { params: { activityId: "activity-1" } });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ reasonCode: "submission-version-required" });
+    expect(saveSubmissionDraft).not.toHaveBeenCalled();
+  });
+
+  it.each([undefined, null, "", 1])("rejects a submit without a concrete version identity (%s)", async (expectedSubmissionVersionId) => {
+    const submitSubmission = vi.fn();
+    const handler = createSubmissionSubmitPostHandler({ env: {}, readActivityScope: async () => scope, authorize: async () => studentAccess, submitSubmission });
+    const response = await handler(new Request("http://localhost/api/learning/activities/activity-1/submission/submit", {
+      method: "POST", headers: { "idempotency-key": "missing-version-submit" },
+      body: JSON.stringify({ expectedDraftRevision: 1, expectedSubmissionVersionId }),
+    }), { params: { activityId: "activity-1" } });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ reasonCode: "submission-version-required" });
+    expect(submitSubmission).not.toHaveBeenCalled();
+  });
+
   it("returns an honest real-data dashboard for the signed student's approved scopes", async () => {
     const readStudentDashboard = vi.fn(async () => ({
       courses: [],
@@ -168,7 +191,7 @@ describe("P1 student learning-loop API", () => {
     const response = await handler(
       new Request("http://localhost/api/learning/activities/activity-1/submission", {
         method: "PUT",
-        body: JSON.stringify({ contentText: "local text", expectedDraftRevision: 4 }),
+        body: JSON.stringify({ contentText: "local text", expectedDraftRevision: 4, expectedSubmissionVersionId: "version-1" }),
       }),
       { params: { activityId: "activity-1" } },
     );
@@ -186,7 +209,7 @@ describe("P1 student learning-loop API", () => {
       activityId: "activity-1",
       classExternalId: "class-1",
       contentText: "local text",
-      expectedDraftRevision: 4,
+      expectedDraftRevision: 4, expectedSubmissionVersionId: "version-1",
       traceId: expect.any(String),
     });
   });
@@ -205,7 +228,7 @@ describe("P1 student learning-loop API", () => {
         {
           method: "POST",
           headers: { "idempotency-key": "submit-v1-1" },
-          body: JSON.stringify({ expectedDraftRevision: 2 }),
+          body: JSON.stringify({ expectedDraftRevision: 2, expectedSubmissionVersionId: "version-1" }),
         },
       ),
       { params: { activityId: "activity-1" } },
@@ -222,7 +245,7 @@ describe("P1 student learning-loop API", () => {
       studentAccount: "student-1",
       activityId: "activity-1",
       classExternalId: "class-1",
-      expectedDraftRevision: 2,
+      expectedDraftRevision: 2, expectedSubmissionVersionId: "version-1",
       idempotencyKey: "submit-v1-1",
       traceId: expect.any(String),
     });
@@ -239,7 +262,7 @@ describe("P1 student learning-loop API", () => {
     const response = await handler(
       new Request("http://localhost/api/learning/activities/activity-1/submission", {
         method: "PUT",
-        body: JSON.stringify({ contentText: "text", expectedDraftRevision: 0 }),
+        body: JSON.stringify({ contentText: "text", expectedDraftRevision: 0, expectedSubmissionVersionId: null }),
       }),
       { params: { activityId: "activity-1" } },
     );

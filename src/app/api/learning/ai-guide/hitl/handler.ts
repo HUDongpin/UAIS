@@ -2,11 +2,11 @@ import { createHash } from "node:crypto";
 import { Annotation, END, START, StateGraph, interrupt } from "@langchain/langgraph";
 import {
   createUaisLangGraphRuntime,
-  type UaisLangGraphActor,
   type UaisLangGraphRuntimeEvent,
   type UaisLangGraphRunResult,
 } from "@/lib/ai/langgraph-runtime/runtime";
 import { getUaisAppSessionUserFromCookieString } from "@/lib/server/uais-app-session";
+import { createLearningGuideActor } from "@/lib/server/learning-guide-actor";
 
 type LearningGuideHitlRequestBody =
   | {
@@ -77,11 +77,13 @@ export function createLearningAiGuideHitlPostHandler(
 
       session ??= createLearningGuideHitlSession(env);
       const body = parseLearningGuideHitlRequest(await request.json());
-      const actor = createLearningGuideHitlActor(appSession);
+      const actor = createLearningGuideActor(appSession);
       // Bind the runtime thread to the authenticated actor so one learner cannot
       // resume or collide with another learner's review thread by reusing a
       // client-chosen threadId. The client keeps using its own threadId; the
       // server scopes it deterministically per actor.
+      // Never fall back to pre-v2 actor keys: their lossy account mapping can
+      // belong to multiple users. Old pending reviews must be started again.
       const scopedThreadId = createScopedHitlThreadId(actor.actorId, body.threadId);
 
       if (body.action === "start-review") {
@@ -121,6 +123,23 @@ export function createLearningAiGuideHitlPostHandler(
           runtimeEvents: result.events,
           redaction: createLearningGuideHitlRedaction(),
         });
+      }
+
+      const pendingReview = await session.runtime.getSnapshot<LearningGuideHitlState>({
+        graph: session.graph,
+        graphId: learningGuideHitlGraphId,
+        threadId: scopedThreadId,
+      });
+      if (
+        pendingReview.status !== "interrupted" ||
+        !pendingReview.interrupts.some(({ value }) =>
+          isRecord(value) && value.kind === "learning-guide-human-review",
+        )
+      ) {
+        throw new PublicLearningGuideHitlError(
+          "No pending learning AI guide review is available. Start a new human review.",
+          409,
+        );
       }
 
       const resumed = await session.runtime.resume<LearningGuideHitlState>({
@@ -263,24 +282,6 @@ export function createScopedHitlThreadId(actorId: string, clientThreadId: string
   return `hitl-${digest}`;
 }
 
-function createLearningGuideHitlActor(appSession: {
-  account: string;
-  role: "teacher" | "student" | "admin";
-}): UaisLangGraphActor {
-  let role: UaisLangGraphActor["role"];
-  if (appSession.role === "teacher") {
-    role = "educator";
-  } else if (appSession.role === "student") {
-    role = "learner";
-  } else {
-    role = "admin";
-  }
-  return {
-    actorId: `app-session-${role}-${toSafeActorIdSegment(appSession.account)}`,
-    role,
-  };
-}
-
 function createHitlRuntimeMetadata(input: {
   status: "interrupted" | "completed";
   threadId: string;
@@ -341,11 +342,6 @@ function requireSafeId(value: unknown, label: string) {
     throw new PublicLearningGuideHitlError(`Learning AI guide ${label} is invalid.`, 400);
   }
   return id;
-}
-
-function toSafeActorIdSegment(value: string) {
-  const safeSegment = value.trim().replace(/[^A-Za-z0-9._:-]+/g, "-").slice(0, 72);
-  return safeSegment || "unknown";
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

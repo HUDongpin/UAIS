@@ -48,7 +48,7 @@ type UnitResponse = {
 type DraftConflict = {
   latestRevision: number;
   latestContent: string;
-  localContent: string;
+  versionChanged?: boolean;
 };
 
 type SubmissionState = NonNullable<UnitResponse["submission"]>["state"];
@@ -61,27 +61,50 @@ type DraftRecoveryScope = {
 };
 
 type DraftRecoveryEnvelope = {
-  version: 2;
+  version: 2 | 3;
   scope: DraftRecoveryScope;
   contentText: string;
   updatedAt: number;
+  base?: DraftRecoveryBase;
 };
+
+type DraftRecoveryBase = {
+  submissionVersionId?: string | null;
+  draftRevision?: number;
+};
+
+type DraftRecoverySnapshot = { storageKey: string; serialized: string };
 
 const draftRecoveryMaxAgeMs = 7 * 24 * 60 * 60 * 1_000;
 
-export function LearningPracticePanel({
-  locale,
-  courseId,
-  classId,
-  lessonKey,
-  signInHref,
-}: {
+type LearningPracticePanelProps = {
   locale: Locale;
   courseId?: string;
   classId?: string;
   lessonKey?: string;
+  requestedActivityId?: string;
   signInHref: string;
-}) {
+};
+
+export function LearningPracticePanel(props: LearningPracticePanelProps) {
+  const sessionUser = useSessionUser();
+  // A new scope owns a new editor; late requests and unsaved text stay with the
+  // activity that started them. Recovery storage remains scoped by actual ID.
+  const scopeKey = JSON.stringify([
+    sessionUser?.account, sessionUser?.role, props.courseId, props.classId,
+    props.lessonKey, props.requestedActivityId,
+  ]);
+  return <LearningPracticeEditor key={scopeKey} {...props} />;
+}
+
+function LearningPracticeEditor({
+  locale,
+  courseId,
+  classId,
+  lessonKey,
+  requestedActivityId,
+  signInHref,
+}: LearningPracticePanelProps) {
   const zh = locale === "zh-CN";
   const sessionUser = useSessionUser();
   const learnerAccount =
@@ -95,6 +118,7 @@ export function LearningPracticePanel({
   const [draftText, setDraftText] = useState("");
   const [persistedText, setPersistedText] = useState("");
   const [draftRevision, setDraftRevision] = useState(0);
+  const [submissionVersionId, setSubmissionVersionId] = useState<string | null>(null);
   const [saveStatus, setSaveStatus] = useState<
     "idle" | "unsaved" | "saving" | "saved" | "error" | "conflict" | "recovered"
   >("idle");
@@ -103,20 +127,22 @@ export function LearningPracticePanel({
   const [submitBusy, setSubmitBusy] = useState(false);
   const [draftRecoveryScope, setDraftRecoveryScope] =
     useState<DraftRecoveryScope>();
+  const [draftRecoveryBase, setDraftRecoveryBase] = useState<DraftRecoveryBase>({});
   const savingRef = useRef(false);
+  const draftRecoverySnapshotRef = useRef<DraftRecoverySnapshot | undefined>(undefined);
   const activityId = unit?.activity?.id;
   const storageKey = draftRecoveryScope
     ? createDraftRecoveryStorageKey(draftRecoveryScope)
     : undefined;
 
-  const loadUnit = useCallback(async () => {
+  const loadUnit = useCallback(async (useServerText = false) => {
     if (!courseId || !classId || !lessonKey) return;
     setDraftRecoveryScope(undefined);
     setLoading(true);
     setLoadError("");
     try {
       const response = await fetch(
-        `/api/learning/courses/${encodeURIComponent(courseId)}/units/${encodeURIComponent(lessonKey)}`,
+        `/api/learning/courses/${encodeURIComponent(courseId)}/units/${encodeURIComponent(lessonKey)}${requestedActivityId ? `?activityId=${encodeURIComponent(requestedActivityId)}` : ""}`,
         { headers: { accept: "application/json" }, cache: "no-store" },
       );
       const body = (await response.json()) as UnitResponse;
@@ -134,7 +160,7 @@ export function LearningPracticePanel({
         setUnit({ reasonCode: body.reasonCode });
         return;
       }
-      if (!response.ok || !body.activity?.id) {
+      if (!response.ok || !body.activity?.id || (requestedActivityId && body.activity.id.toLowerCase() !== requestedActivityId.trim().toLowerCase())) {
         throw new Error(body.reasonCode ?? "learning-unit-unavailable");
       }
       setSignedOut(false);
@@ -152,15 +178,31 @@ export function LearningPracticePanel({
         classId,
         activityId: body.activity.id,
       });
-      const recovered = recoveryScope
+      const canRecoverDraft = body.activity.status === "published" &&
+        (!body.submission?.state || body.submission.state === "draft" || body.submission.state === "revision_requested");
+      // A local draft is not the evidence that was sealed or accepted elsewhere.
+      const recovered = recoveryScope && canRecoverDraft && !useServerText
         ? readDraftRecovery(window.localStorage, recoveryScope)
         : undefined;
-      setDraftRecoveryScope(recoveryScope);
-      setDraftText(recovered && recovered !== serverText ? recovered : serverText);
+      if (recovered && recoveryScope) {
+        draftRecoverySnapshotRef.current = {
+          storageKey: createDraftRecoveryStorageKey(recoveryScope),
+          serialized: recovered.serialized,
+        };
+      }
+      const serverVersionId = body.submission?.currentVersion?.id ?? null;
+      const hasRecoveredText = Boolean(recovered && recovered.contentText !== serverText);
+      const sameRecoveryVersion = recovered?.base.submissionVersionId === serverVersionId;
+      const recoveryConflict = hasRecoveredText &&
+        (!sameRecoveryVersion || recovered?.base.draftRevision !== serverRevision);
+      setDraftRecoveryScope(canRecoverDraft ? recoveryScope : undefined);
+      setDraftRecoveryBase(hasRecoveredText && recovered ? recovered.base : { submissionVersionId: serverVersionId, draftRevision: serverRevision });
+      setDraftText(hasRecoveredText && recovered ? recovered.contentText : serverText);
       setPersistedText(serverText);
       setDraftRevision(serverRevision);
-      setSaveStatus(recovered && recovered !== serverText ? "recovered" : "idle");
-      setConflict(undefined);
+      setSubmissionVersionId(serverVersionId);
+      setSaveStatus(recoveryConflict ? "conflict" : hasRecoveredText ? "recovered" : "idle");
+      setConflict(recoveryConflict ? { latestRevision: serverRevision, latestContent: serverText, versionChanged: !sameRecoveryVersion } : undefined);
     } catch {
       setLoadError(
         zh
@@ -170,7 +212,7 @@ export function LearningPracticePanel({
     } finally {
       setLoading(false);
     }
-  }, [classId, courseId, learnerAccount, lessonKey, zh]);
+  }, [classId, courseId, learnerAccount, lessonKey, requestedActivityId, zh]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => void loadUnit(), 0);
@@ -180,17 +222,20 @@ export function LearningPracticePanel({
   useEffect(() => {
     if (!storageKey || !draftRecoveryScope) return;
     if (draftText === persistedText) {
-      window.localStorage.removeItem(storageKey);
+      removeUnchangedDraftRecovery(window.localStorage, storageKey, draftRecoverySnapshotRef.current);
     } else {
       const envelope: DraftRecoveryEnvelope = {
-        version: 2,
+        version: 3,
         scope: draftRecoveryScope,
         contentText: draftText,
         updatedAt: Date.now(),
+        base: draftRecoveryBase,
       };
-      window.localStorage.setItem(storageKey, JSON.stringify(envelope));
+      const serialized = JSON.stringify(envelope);
+      window.localStorage.setItem(storageKey, serialized);
+      draftRecoverySnapshotRef.current = { storageKey, serialized };
     }
-  }, [draftRecoveryScope, draftText, persistedText, storageKey]);
+  }, [draftRecoveryBase, draftRecoveryScope, draftText, persistedText, storageKey]);
 
   const submissionState = unit?.submission?.state;
   const editable =
@@ -211,6 +256,7 @@ export function LearningPracticePanel({
           body: JSON.stringify({
             contentText: text,
             expectedDraftRevision: expectedRevision,
+            expectedSubmissionVersionId: submissionVersionId,
           }),
         },
       );
@@ -219,24 +265,27 @@ export function LearningPracticePanel({
         reasonCode?: string;
         latestRevision?: number;
         latestContent?: string;
+        submissionVersionId?: string;
       };
       if (response.status === 401) {
         setSignedOut(true);
         throw new Error("session-required");
       }
-      if (response.status === 409 && body.reasonCode === "stale-draft-revision") {
+      if (response.status === 409 && (body.reasonCode === "stale-draft-revision" || body.reasonCode === "stale-submission-version")) {
         setConflict({
           latestRevision: body.latestRevision ?? expectedRevision,
           latestContent: body.latestContent ?? "",
-          localContent: text,
+          versionChanged: body.reasonCode === "stale-submission-version",
         });
         setSaveStatus("conflict");
         return;
       }
-      if (!response.ok || typeof body.revision !== "number") {
+      if (!response.ok || typeof body.revision !== "number" || !body.submissionVersionId) {
         throw new Error(body.reasonCode ?? "draft-save-failed");
       }
       setDraftRevision(body.revision);
+      setSubmissionVersionId(body.submissionVersionId);
+      setDraftRecoveryBase({ submissionVersionId: body.submissionVersionId, draftRevision: body.revision });
       setPersistedText(text);
       setSaveStatus("saved");
     } catch {
@@ -249,7 +298,7 @@ export function LearningPracticePanel({
     } finally {
       savingRef.current = false;
     }
-  }, [zh]);
+  }, [submissionVersionId, zh]);
 
   useEffect(() => {
     if (
@@ -307,7 +356,8 @@ export function LearningPracticePanel({
   }
 
   async function submitDraft() {
-    if (!activityId || draftText !== persistedText || draftRevision < 1) return;
+    if (!activityId || !submissionVersionId || draftText !== persistedText || draftRevision < 1) return;
+    const submittedRecovery = draftRecoverySnapshotRef.current;
     setSubmitBusy(true);
     setSaveError("");
     try {
@@ -319,11 +369,19 @@ export function LearningPracticePanel({
             "content-type": "application/json",
             "idempotency-key": `submit-${crypto.randomUUID()}`,
           },
-          body: JSON.stringify({ expectedDraftRevision: draftRevision }),
+          body: JSON.stringify({ expectedDraftRevision: draftRevision, expectedSubmissionVersionId: submissionVersionId }),
         },
       );
-      if (!response.ok) throw new Error("submit-failed");
-      if (storageKey) window.localStorage.removeItem(storageKey);
+      if (!response.ok) {
+        const body = await response.json() as { reasonCode?: string; latestRevision?: number; latestContent?: string };
+        if (response.status === 409 && body.reasonCode === "stale-submission-version") {
+          setConflict({ latestRevision: body.latestRevision ?? 0, latestContent: body.latestContent ?? "", versionChanged: true });
+          setSaveStatus("conflict");
+          return;
+        }
+        throw new Error("submit-failed");
+      }
+      removeUnchangedDraftRecovery(window.localStorage, storageKey, submittedRecovery);
       await loadUnit();
     } catch {
       setSaveError(
@@ -334,6 +392,20 @@ export function LearningPracticePanel({
     } finally {
       setSubmitBusy(false);
     }
+  }
+
+  function resolveDraftConflict(merge: boolean) {
+    if (!conflict) return;
+    if (conflict.versionChanged) {
+      void loadUnit(true);
+      return;
+    }
+    setDraftText(merge ? `${conflict.latestContent}\n\n---\n\n${draftText}` : conflict.latestContent);
+    setPersistedText(conflict.latestContent);
+    setDraftRevision(conflict.latestRevision);
+    setDraftRecoveryBase({ submissionVersionId, draftRevision: conflict.latestRevision });
+    setConflict(undefined);
+    setSaveStatus(merge ? "unsaved" : "saved");
   }
 
   if (!courseId || !classId || !lessonKey) {
@@ -379,6 +451,8 @@ export function LearningPracticePanel({
           {unit.activity.instructions?.[locale]}
         </p>
       </header>
+
+      {loadError ? <p role="alert" className="text-sm text-[var(--danger)]">{loadError}</p> : null}
 
       {unit.activity.status === "archived" ? (
         <p className="rounded-xl border border-[var(--warning)] bg-[var(--surface-elevated)] p-3 text-sm leading-6 text-[var(--muted)]">
@@ -433,7 +507,14 @@ export function LearningPracticePanel({
         <textarea aria-label={zh ? "学习产物正文" : "Learning evidence text"} value={draftText} readOnly={!editable} disabled={!unit.formative?.attempted} maxLength={20_000} rows={10} onChange={(event) => { setDraftText(event.target.value); setSaveStatus("unsaved"); setSaveError(""); }} className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3 text-sm leading-6 outline-none focus:ring-2 focus:ring-[var(--accent)] disabled:opacity-60" />
         <p className="text-xs text-[var(--muted)]">{zh ? `${Array.from(draftText).length}/20,000 字符；支持纯文本与受限 Markdown。` : `${Array.from(draftText).length}/20,000 characters; plain text and restricted Markdown only.`}</p>
         {saveError ? <p role="alert" className="text-sm text-[var(--danger)]">{saveError}</p> : null}
-        {conflict ? <DraftConflictPanel conflict={conflict} locale={locale} onUseServer={() => { setDraftText(conflict.latestContent); setPersistedText(conflict.latestContent); setDraftRevision(conflict.latestRevision); setConflict(undefined); setSaveStatus("saved"); }} onMerge={() => { setDraftText(`${conflict.latestContent}\n\n---\n\n${conflict.localContent}`); setPersistedText(conflict.latestContent); setDraftRevision(conflict.latestRevision); setConflict(undefined); setSaveStatus("unsaved"); }} /> : null}
+        {editable && saveStatus === "error" && !conflict ? (
+          <button type="button" disabled={!draftText.trim()} onClick={() => {
+            if (activityId && !savingRef.current) void saveDraft(activityId, draftText, draftRevision);
+          }} className="rounded-full border border-[var(--accent)] px-4 py-2 text-sm font-semibold text-[var(--accent)] disabled:opacity-50">
+            {zh ? "重试保存" : "Retry save"}
+          </button>
+        ) : null}
+        {conflict ? <DraftConflictPanel conflict={conflict} localContent={draftText} locale={locale} onUseServer={() => resolveDraftConflict(false)} onMerge={conflict.versionChanged ? undefined : () => resolveDraftConflict(true)} /> : null}
         {editable ? (
           <button type="button" disabled={submitBusy || !draftText.trim() || draftText !== persistedText || draftRevision < 1 || Boolean(conflict)} onClick={() => void submitDraft()} className="rounded-full bg-[var(--accent)] px-5 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">
             {submitBusy ? (zh ? "提交中…" : "Submitting…") : submissionState === "revision_requested" ? (zh ? "提交新版本" : "Submit new version") : (zh ? "封存并提交" : "Seal and submit")}
@@ -488,14 +569,14 @@ function createDraftRecoveryStorageKey(scope: DraftRecoveryScope) {
 function readDraftRecovery(
   storage: Storage,
   expectedScope: DraftRecoveryScope,
-): string | undefined {
+): { contentText: string; base: DraftRecoveryBase; serialized: string } | undefined {
   const storageKey = createDraftRecoveryStorageKey(expectedScope);
   const serialized = storage.getItem(storageKey);
   if (!serialized) return undefined;
   try {
     const envelope = JSON.parse(serialized) as Partial<DraftRecoveryEnvelope>;
     if (
-      envelope.version !== 2 ||
+      (envelope.version !== 2 && envelope.version !== 3) ||
       typeof envelope.contentText !== "string" ||
       typeof envelope.updatedAt !== "number" ||
       Date.now() - envelope.updatedAt > draftRecoveryMaxAgeMs ||
@@ -504,10 +585,25 @@ function readDraftRecovery(
       storage.removeItem(storageKey);
       return undefined;
     }
-    return envelope.contentText;
+    const candidate = envelope.version === 3 ? envelope.base : undefined;
+    // Keep unknown legacy bases recoverable, but never authorize autosave from them.
+    const base: DraftRecoveryBase = candidate &&
+      (candidate.submissionVersionId === null || typeof candidate.submissionVersionId === "string") &&
+      Number.isInteger(candidate.draftRevision) && (candidate.draftRevision ?? -1) >= 0
+      ? candidate
+      : {};
+    return { contentText: envelope.contentText, base, serialized };
   } catch {
     storage.removeItem(storageKey);
     return undefined;
+  }
+}
+
+function removeUnchangedDraftRecovery(storage: Storage, storageKey: string | undefined, snapshot?: DraftRecoverySnapshot) {
+  // A delayed save or submit only owns the recovery copy this editor saw or
+  // wrote. Another open tab may already have stored newer unsaved work.
+  if (snapshot && snapshot.storageKey === storageKey && storage.getItem(storageKey) === snapshot.serialized) {
+    storage.removeItem(snapshot.storageKey);
   }
 }
 
@@ -531,9 +627,9 @@ function StatusChip({ label, value }: { label: string; value: string }) {
   return <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] p-2"><p className="text-[var(--muted)]">{label}</p><p className="mt-1 font-semibold text-[var(--foreground)]">{value}</p></div>;
 }
 
-function DraftConflictPanel({ conflict, locale, onUseServer, onMerge }: { conflict: DraftConflict; locale: Locale; onUseServer: () => void; onMerge: () => void }) {
+function DraftConflictPanel({ conflict, localContent, locale, onUseServer, onMerge }: { conflict: DraftConflict; localContent: string; locale: Locale; onUseServer: () => void; onMerge?: () => void }) {
   const zh = locale === "zh-CN";
-  return <div role="alert" className="rounded-xl border border-[var(--danger)] p-3 text-sm"><p className="font-semibold text-[var(--danger)]">{zh ? "检测到另一设备上的较新草稿；本机文字未被覆盖。" : "A newer server draft exists; your local text was not overwritten."}</p><div className="mt-3 grid gap-2"><pre className="max-h-32 overflow-auto whitespace-pre-wrap rounded-lg bg-[var(--surface-elevated)] p-2 text-xs">{conflict.latestContent}</pre><div className="flex flex-wrap gap-2"><button type="button" onClick={onUseServer} className="rounded-full border border-[var(--border)] px-3 py-1.5 font-semibold">{zh ? "使用服务端版本" : "Use server version"}</button><button type="button" onClick={onMerge} className="rounded-full bg-[var(--accent)] px-3 py-1.5 font-semibold text-white">{zh ? "显式合并两份文字" : "Explicitly merge both"}</button><button type="button" onClick={() => void navigator.clipboard?.writeText(conflict.localContent)} className="rounded-full border border-[var(--border)] px-3 py-1.5 font-semibold">{zh ? "复制本机文字" : "Copy local text"}</button></div></div></div>;
+  return <div role="alert" className="rounded-xl border border-[var(--danger)] p-3 text-sm"><p className="font-semibold text-[var(--danger)]">{conflict.versionChanged ? (zh ? "提交版本已在另一设备上改变；本机文字已保留。请复制后重新读取服务端版本。" : "The submission version changed elsewhere. Your local text is retained; copy it before loading the server version.") : (zh ? "检测到另一设备上的较新草稿；本机文字未被覆盖。" : "A newer server draft exists; your local text was not overwritten.")}</p><div className="mt-3 grid gap-2"><pre className="max-h-32 overflow-auto whitespace-pre-wrap rounded-lg bg-[var(--surface-elevated)] p-2 text-xs">{conflict.latestContent}</pre><div className="flex flex-wrap gap-2"><button type="button" onClick={onUseServer} className="rounded-full border border-[var(--border)] px-3 py-1.5 font-semibold">{zh ? "使用服务端版本" : "Use server version"}</button>{onMerge ? <button type="button" onClick={onMerge} className="rounded-full bg-[var(--accent)] px-3 py-1.5 font-semibold text-white">{zh ? "显式合并两份文字" : "Explicitly merge both"}</button> : null}<button type="button" onClick={() => void navigator.clipboard?.writeText(localContent)} className="rounded-full border border-[var(--border)] px-3 py-1.5 font-semibold">{zh ? "复制本机文字" : "Copy local text"}</button></div></div></div>;
 }
 
 function formatSubmissionState(state: SubmissionState, locale: Locale) {

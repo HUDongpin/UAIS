@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { TeachingSubmissionReviewPage } from "@/components/pages/teaching-submission-review-page";
@@ -67,6 +67,33 @@ afterEach(() => {
 });
 
 describe("TeachingSubmissionReviewPage", () => {
+  it("prevents edits while a saved feedback draft is awaiting server readback", async () => {
+    let finishSave!: (value: Response) => void;
+    let finishReadback!: (value: Response) => void;
+    let reads = 0;
+    const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+      if (init?.method === "PUT") return new Promise<Response>((resolve) => { finishSave = resolve; });
+      reads += 1;
+      if (reads > 1) return new Promise<Response>((resolve) => { finishReadback = resolve; });
+      return Promise.resolve(json({ submission: detail() }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<TeachingSubmissionReviewPage submissionId="submission-1" />);
+    await screen.findByText("学生封存的 V1 正文");
+    const feedback = screen.getByRole("textbox", { name: "教师确认反馈" });
+    fireEvent.change(feedback, { target: { value: "教师保存的反馈" } });
+    fireEvent.click(screen.getByRole("button", { name: "保存教师草稿" }));
+    expect(feedback).toHaveProperty("readOnly", true);
+    expect(screen.getByRole("combobox", { name: "主张" })).toHaveProperty("disabled", true);
+    await act(async () => finishSave(json({ status: "persisted" })));
+    expect(feedback).toHaveProperty("readOnly", true);
+    const saved = detail("ai");
+    saved.feedback[0].feedbackText = "教师保存的反馈";
+    await act(async () => finishReadback(json({ submission: saved })));
+    expect(feedback).toHaveProperty("value", "教师保存的反馈");
+    expect(feedback).toHaveProperty("readOnly", false);
+  });
+
   it("binds an AI draft to the sealed version, then releases an edited revision decision", async () => {
     let phase: "initial" | "ai" | "decided" = "initial";
     const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {

@@ -77,6 +77,9 @@ export function createUaisLearningChatroomSharePostgresRepository(input: {
         }
         const row = rows[0] as { database?: unknown; revision?: unknown };
         const revision = typeof row.revision === "string" ? row.revision.trim() : "";
+        if (!isValidSnapshotRevision(revision)) {
+          throw snapshotRevisionRequiredError();
+        }
         return {
           database: normalizeLearningChatroomShareDatabase(row.database),
           ...(revision ? { revision } : {}),
@@ -103,7 +106,16 @@ export function createUaisLearningChatroomSharePostgresRepository(input: {
           `;
           const currentRevision =
             typeof rows[0]?.revision === "string" ? rows[0].revision.trim() : undefined;
-          if (expectedRevision && currentRevision && currentRevision !== expectedRevision) {
+          if (rows.length > 0 && !isValidSnapshotRevision(currentRevision)) {
+            throw snapshotRevisionRequiredError();
+          }
+          // Absence is a CAS state too: a first writer must not replace a row
+          // created since its read, and a stale writer must not recreate one
+          // that has disappeared.
+          if (
+            (rows.length === 0 && expectedRevision !== undefined) ||
+            (rows.length > 0 && currentRevision !== expectedRevision)
+          ) {
             throw new LearningChatroomShareStoreError(
               409,
               "Postgres learning chatroom share snapshot changed; retry required.",
@@ -113,7 +125,7 @@ export function createUaisLearningChatroomSharePostgresRepository(input: {
           // text -> jsonb rather than a jsonb parameter: postgres v3.4.9 sends an
           // object parameter unserialized inside sql.begin(). Same reason and
           // same fix as the course-management store.
-          await sql`
+          const applied = await sql`
             INSERT INTO uais_learning_chatroom_share_snapshots (
               snapshot_key, database, revision, updated_at
             )
@@ -128,7 +140,18 @@ export function createUaisLearningChatroomSharePostgresRepository(input: {
               database = EXCLUDED.database,
               revision = EXCLUDED.revision,
               updated_at = EXCLUDED.updated_at
+            WHERE uais_learning_chatroom_share_snapshots.revision
+              IS NOT DISTINCT FROM ${expectedRevision ?? null}::text
+            RETURNING snapshot_key
           `;
+          // FOR UPDATE cannot lock a missing row. The INSERT guard handles
+          // simultaneous first mints so the loser retries the new snapshot.
+          if (applied.length === 0) {
+            throw new LearningChatroomShareStoreError(
+              409,
+              "Postgres learning chatroom share snapshot changed; retry required.",
+            );
+          }
         });
       } finally {
         // Releases an injected test double or a disposable client exactly as
@@ -143,4 +166,21 @@ export function createUaisLearningChatroomSharePostgresRepository(input: {
 
 function createSnapshotRevision(database: LearningChatroomShareDatabase) {
   return `rev-${createHash("sha256").update(JSON.stringify(database)).digest("hex").slice(0, 24)}`;
+}
+
+function isValidSnapshotRevision(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    value.length > 0 &&
+    value.length <= 120 &&
+    value !== "rev-empty" &&
+    /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(value)
+  );
+}
+
+function snapshotRevisionRequiredError() {
+  return new LearningChatroomShareStoreError(
+    503,
+    "Postgres learning chatroom share snapshot revision is missing or invalid.",
+  );
 }

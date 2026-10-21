@@ -8,6 +8,7 @@ import type { TeachingOperationId } from "@/components/teaching/teaching-operati
 import type {
   InlineTeachingOperationAuditAuthSession,
   InlineTeachingOperationBackendReceipt,
+  InlineTeachingOperationRecord,
 } from "./teaching-page-types";
 
 export function isPersistedInlineTeachingOperationReceipt(
@@ -89,6 +90,27 @@ export function isMismatchedOrIncompleteInlineTeachingOperationReceipt(
     !receipt.actionSlot ||
     isMismatchedInlineTeachingOperationReceipt(receipt, expected)
   );
+}
+
+
+export function isInlineAuditRecordForAction(
+  record: InlineTeachingOperationRecord,
+  input: {
+    courseId?: string;
+    operationId: TeachingOperationId;
+    actionSlot: "primary" | "secondary";
+  },
+) {
+  if (input.courseId && record.courseId !== input.courseId) {
+    return false;
+  }
+  if (record.operationId && record.operationId !== input.operationId) {
+    return false;
+  }
+  if (record.actionSlot && record.actionSlot !== input.actionSlot) {
+    return false;
+  }
+  return true;
 }
 
 export function isCourseSettingsPrimarySave(

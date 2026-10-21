@@ -20,7 +20,7 @@ import { localizedText } from "@/components/ui/localized-text";
 import { aiAgents } from "@/data/uais";
 import { copy } from "@/i18n/copy";
 import type { Locale } from "@/i18n/copy";
-import { createLoginHandoffHref } from "@/lib/auth/login-return-path";
+import { createLearningReturnPath, createLoginHandoffHref } from "@/lib/auth/login-return-path";
 import {
   createStudentClassMembershipItems,
   createStudentMembershipLearningHref,
@@ -170,12 +170,12 @@ type StudentLearningLoopDashboard = {
       completedUnits: number;
       overdue: number;
     };
-    nextAction: { type: string; lessonKey?: string; reasonCode: string };
+    nextAction: { type: string; lessonKey?: string; activityId?: string; reasonCode: string };
     playbackProgress: { status: "not-authoritative"; percent: null };
     projectionVersion: number;
     dataFreshAt: string;
   }>;
-  nextAction: { type: string; lessonKey?: string; reasonCode: string };
+  nextAction: { type: string; lessonKey?: string; activityId?: string; reasonCode: string };
   dataFreshAt: string;
 };
 
@@ -645,12 +645,13 @@ function RealLearningSnapshot({
         <section key={`${course.courseId}:${course.classId}`} className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-4">
           <header className="flex flex-wrap items-start justify-between gap-3">
             <div><h3 className="font-semibold text-[var(--foreground)]">{course.courseTitle}</h3><p className="mt-1 text-xs text-[var(--muted)]">{course.classId} · projection V{course.projectionVersion} · {formatHongKong(course.dataFreshAt, locale)}</p></div>
-            <Link href={`/learning?courseId=${encodeURIComponent(course.courseId)}&classId=${encodeURIComponent(course.classId)}`} className="inline-flex items-center gap-2 rounded-full bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-white">{nextActionLabel(course.nextAction.type, zh)}<ArrowRight size={15} /></Link>
+            <Link href={createLearningReturnPath({ courseId: course.courseId, classId: course.classId, lessonKey: course.nextAction.lessonKey, activityId: course.nextAction.activityId })} className="inline-flex items-center gap-2 rounded-full bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-white">{nextActionLabel(course.nextAction.type, zh)}<ArrowRight size={15} /></Link>
           </header>
           {course.units.length === 0 ? <p className="text-sm text-[var(--muted)]">{zh ? "本班尚无已发布任务。" : "No activity is published for this class."}</p> : null}
           {course.units.map((unit) => (
             <article key={unit.activityId} className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
               <div className="flex flex-wrap items-center justify-between gap-2"><p className="text-sm font-semibold">{zh ? `单元 ${unit.position}` : `Unit ${unit.position}`} · {unit.lessonKey}</p>{unit.dueAt ? <span className="text-xs text-[var(--muted)]">{zh ? "截止" : "Due"}: {formatHongKong(unit.dueAt, locale)}</span> : null}</div>
+              <Link href={createLearningReturnPath({ courseId: course.courseId, classId: course.classId, lessonKey: unit.lessonKey, activityId: unit.activityId })} className="mt-2 inline-flex items-center gap-2 text-sm font-semibold text-[var(--accent)]">{zh ? "打开学习任务" : "Open learning activity"}<ArrowRight size={15} /></Link>
               <div className="mt-3 grid grid-cols-2 gap-2 text-xs sm:grid-cols-5">
                 <EvidenceState label={zh ? "播放" : "Playback"} value={zh ? "独立记录，非完成依据" : "Separate; not completion"} />
                 <EvidenceState label={zh ? "检查" : "Checkpoint"} value={unit.formative.attempted ? (zh ? "已尝试" : "Attempted") : (zh ? "未尝试" : "Not attempted")} />

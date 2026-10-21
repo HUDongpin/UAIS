@@ -25,6 +25,7 @@ import {
 } from "@/lib/server/learning-ai-guide-access";
 import { TeachingCourseManagementStoreError } from "@/lib/server/teaching-course-management-store";
 import { getUaisAppSessionUserFromCookieString } from "@/lib/server/uais-app-session";
+import { createLearningGuideActor } from "@/lib/server/learning-guide-actor";
 import type { Locale } from "@/i18n/copy";
 import type {
   DeepSeekCompleteInput,
@@ -239,7 +240,7 @@ export function createLearningAiGuidePostHandler(
           slideNumber: body.slide?.slideNumber,
           narrationText: body.slide?.narrationText,
           slideImageUrl: body.slide?.imageUrl,
-          actor: createLearningGuideGraphActor(appSession),
+          actor: createLearningGuideActor(appSession),
           env,
           completeAgent,
         });
@@ -506,24 +507,6 @@ function createLearningGuideMultiAgentCompleter(input: {
   };
 }
 
-function createLearningGuideGraphActor(appSession: {
-  account: string;
-  role: "teacher" | "student" | "admin";
-}) {
-  let role: "admin" | "educator" | "learner";
-  if (appSession.role === "teacher") {
-    role = "educator";
-  } else if (appSession.role === "student") {
-    role = "learner";
-  } else {
-    role = "admin";
-  }
-  return {
-    actorId: `app-session-${role}-${toSafeActorIdSegment(appSession.account)}`,
-    role,
-  } as const;
-}
-
 function parseLearningAiGuideRequest(value: unknown): LearningAiGuideRequestBody {
   if (!isRecord(value)) {
     throw new PublicLearningAiGuideError("Request body must be an object.", 400);
@@ -656,11 +639,6 @@ function getSafeExternalImageUrl(imageUrl: string | undefined) {
   }
 
   return undefined;
-}
-
-function toSafeActorIdSegment(value: string) {
-  const safeSegment = value.trim().replace(/[^A-Za-z0-9._:-]+/g, "-").slice(0, 72);
-  return safeSegment || "unknown";
 }
 
 function isLearningAiGuideAgentId(value: string): value is LearningAiGuideAgentId {

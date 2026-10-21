@@ -42,6 +42,7 @@ export type LearningLoopPersistedReceipt = {
   resourceId: string;
   state: string;
   revision: number;
+  submissionVersionId?: string;
   eventId?: string;
   traceId: string;
   persistedAt: string;
@@ -397,7 +398,7 @@ export function createUaisLearningLoopPostgresStore(options: StoreOptions) {
             assertActivityIdentityUnchanged(normalizedDraft, row);
             resourceId = createId();
             const nextVersion = readInteger(row.version) + 1;
-            await sql`
+            const created = await sql`
               INSERT INTO uais_assessments (
                 id, lesson_id, type, title, activity_key, title_i18n,
                 instructions_i18n, status, version, edit_revision, rubric,
@@ -416,7 +417,15 @@ export function createUaisLearningLoopPostgresStore(options: StoreOptions) {
                 ${normalizedDraft.revisionPolicy}, ${normalizedDraft.targetClassId},
                 ${persistedAt}, ${persistedAt}
               )
+              ON CONFLICT (lesson_id, activity_key, version) WHERE activity_key IS NOT NULL
+              DO NOTHING
+              RETURNING id
             `;
+            if (!firstRow(created)) {
+              throw new LearningLoopStoreError(409, "activity-version-already-exists", {
+                recoveryAction: "reload-activities",
+              });
+            }
             nextState = "draft";
             nextEditRevision = 1;
           }
@@ -931,8 +940,10 @@ export function createUaisLearningLoopPostgresStore(options: StoreOptions) {
       classExternalId: string;
       contentText: string;
       expectedDraftRevision: number;
+      expectedSubmissionVersionId: string | null;
       traceId: string;
     }): Promise<LearningLoopPersistedReceipt> {
+      const expectedSubmissionVersionId = normalizeSubmissionVersionId(input.expectedSubmissionVersionId, true);
       const contentText = normalizeSubmissionContent(input.contentText);
       const contentHash = hashText(contentText);
       const persistedAt = readNow().toISOString();
@@ -945,6 +956,15 @@ export function createUaisLearningLoopPostgresStore(options: StoreOptions) {
             account: input.studentAccount,
             role: "student",
           });
+          // Row locks cannot serialize the first save while the submission is absent.
+          await sql`
+            SELECT pg_advisory_xact_lock(
+              hashtextextended(
+                'submission-draft:' || ${input.activityId}::uuid::text || ':' || ${studentId}::text,
+                0
+              )
+            )
+          `;
           const [activityRows, attemptRows, submissionRows] = await Promise.all([
             sql`
               SELECT a.id
@@ -974,6 +994,9 @@ export function createUaisLearningLoopPostgresStore(options: StoreOptions) {
             throw new LearningLoopStoreError(409, "formative-attempt-required");
           }
           const existing = firstRow(submissionRows);
+          if ((existing ? readString(existing.version_id).toLowerCase() : null) !== expectedSubmissionVersionId) {
+            throw staleSubmissionVersionError(existing);
+          }
           let persistenceQueries: Array<Promise<unknown[]>>;
           let persistedReceipt: LearningLoopPersistedReceipt;
           if (!existing) {
@@ -1009,6 +1032,7 @@ export function createUaisLearningLoopPostgresStore(options: StoreOptions) {
               resourceId: submissionId,
               state: "draft",
               revision: 1,
+              submissionVersionId: versionId,
               traceId: input.traceId,
               persistedAt,
             };
@@ -1051,6 +1075,7 @@ export function createUaisLearningLoopPostgresStore(options: StoreOptions) {
                 resourceId: readString(existing.id),
                 state: "draft",
                 revision: 1,
+                submissionVersionId: versionId,
                 traceId: input.traceId,
                 persistedAt,
               };
@@ -1075,6 +1100,7 @@ export function createUaisLearningLoopPostgresStore(options: StoreOptions) {
                 resourceId: readString(existing.id),
                 state: "draft",
                 revision: nextRevision,
+                submissionVersionId: readString(existing.version_id),
                 traceId: input.traceId,
                 persistedAt,
               };
@@ -1110,9 +1136,11 @@ export function createUaisLearningLoopPostgresStore(options: StoreOptions) {
       activityId: string;
       classExternalId: string;
       expectedDraftRevision: number;
+      expectedSubmissionVersionId: string;
       idempotencyKey: string;
       traceId: string;
     }): Promise<LearningLoopPersistedReceipt> {
+      const expectedSubmissionVersionId = normalizeSubmissionVersionId(input.expectedSubmissionVersionId);
       const persistedAt = readNow().toISOString();
       const requestHash = hashJson({
         action: "submit-submission",
@@ -1120,6 +1148,7 @@ export function createUaisLearningLoopPostgresStore(options: StoreOptions) {
         activityId: input.activityId,
         classExternalId: input.classExternalId,
         expectedDraftRevision: input.expectedDraftRevision,
+        expectedSubmissionVersionId,
       });
       const client = createDatabase({ env: options.env, max: 1 });
       let receipt: LearningLoopPersistedReceipt | undefined;
@@ -1144,7 +1173,7 @@ export function createUaisLearningLoopPostgresStore(options: StoreOptions) {
           const rows = await sql`
             SELECT
               s.id AS submission_id, s.state, s.current_version_no,
-              v.id AS version_id, v.status AS version_status, v.draft_revision,
+              v.id AS version_id, v.status AS version_status, v.draft_revision, v.content_text,
               a.id AS activity_id, l.id AS lesson_id, l.external_key AS lesson_key,
               c.id AS course_id, cl.id AS class_id,
               (SELECT count(*)::integer FROM uais_formative_attempts fa
@@ -1166,6 +1195,9 @@ export function createUaisLearningLoopPostgresStore(options: StoreOptions) {
           const row = firstRow(rows);
           if (!row) {
             throw new LearningLoopStoreError(404, "submission-draft-required");
+          }
+          if (readString(row.version_id).toLowerCase() !== expectedSubmissionVersionId) {
+            throw staleSubmissionVersionError(row);
           }
           if (readInteger(row.checkpoint_attempts) < 1) {
             throw new LearningLoopStoreError(409, "formative-attempt-required");
@@ -2522,6 +2554,23 @@ async function writeAudit(input: {
       ${input.traceId}, ${JSON.stringify(input.metadata)}::text::jsonb, ${input.persistedAt}
     )
   `;
+}
+
+function normalizeSubmissionVersionId(value: unknown, allowNull = false) {
+  if (allowNull && value === null) return null;
+  if (typeof value !== "string" || !value.trim()) {
+    throw new LearningLoopStoreError(400, "submission-version-required");
+  }
+  return value.trim().toLowerCase();
+}
+
+function staleSubmissionVersionError(row?: Record<string, unknown>) {
+  return new LearningLoopStoreError(409, "stale-submission-version", {
+    latestSubmissionVersionId: row ? readString(row.version_id) : null,
+    latestRevision: row?.state === "revision_requested" ? 0 : readInteger(row?.draft_revision),
+    latestContent: readString(row?.content_text),
+    recoveryAction: "reload-submission",
+  });
 }
 
 function staleDraftError(latestRevision: number, latestContent: string) {

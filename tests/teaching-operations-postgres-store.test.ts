@@ -387,3 +387,23 @@ describe("teaching operations durable cutover", () => {
     }
   });
 });
+
+it.each([
+  { database: { ...buildDatabase([]), providerOperations: [] }, revision: "" },
+  { database: buildDatabase([]), revision: "rev-existing" },
+  { database: { ...buildDatabase([]), providerOperations: null }, revision: "rev-existing" },
+  { database: { ...buildDatabase([]), providerOperations: [{ phase: "succeeded" }] }, revision: "rev-existing" },
+])("refuses malformed existing dedicated provider-operation snapshot %#", async (row) => {
+  const client = createRecordingClient({ rows: [[row]] });
+  const repository = createUaisTeachingOperationPostgresRepository({ env, createDatabase: client.factory, snapshotKey: "gradebook-provider-operations" });
+  await expect(repository.read()).rejects.toMatchObject({ status: 503 });
+  expect(client.queries[0].values).toEqual(["gradebook-provider-operations"]);
+});
+
+it("keeps the dedicated provider-operation namespace separate from normal snapshots", async () => {
+  const client = createRecordingClient({ rows: [[], [], [{ snapshot_key: "gradebook-provider-operations" }]] });
+  const repository = createUaisTeachingOperationPostgresRepository({ env, createDatabase: client.factory, snapshotKey: "gradebook-provider-operations" });
+  expect((await repository.read()).revision).toBeUndefined();
+  await repository.write({ database: { ...buildDatabase([]), providerOperations: [] } });
+  expect(client.queries.every((query) => query.values.includes("gradebook-provider-operations"))).toBe(true);
+});

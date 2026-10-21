@@ -144,15 +144,50 @@ export async function mergeUaisTeacherAiOwnershipRecord(input: {
   updatedAt?: string;
 }): Promise<UaisTeacherAiOwnershipRecord> {
   const incoming = normalizeOwnership(input.ownership);
-  const existing = await readUaisTeacherAiOwnershipRecord({
-    baseDir: input.baseDir,
-    teacherId: incoming.teacherId,
+  const baseDir = resolveTeacherAiOwnershipBaseDir(input.baseDir);
+  return runWithLocalTeacherAiOwnershipLock(baseDir, incoming.teacherId, async () => {
+    const existing = await readUaisTeacherAiOwnershipRecord({
+      baseDir,
+      teacherId: incoming.teacherId,
+    });
+    return storeUaisTeacherAiOwnershipRecord({
+      baseDir,
+      updatedAt: input.updatedAt,
+      ownership: mergeOwnership(existing, incoming),
+    });
   });
-  return storeUaisTeacherAiOwnershipRecord({
-    baseDir: input.baseDir,
-    updatedAt: input.updatedAt,
-    ownership: mergeOwnership(existing, incoming),
-  });
+}
+
+async function runWithLocalTeacherAiOwnershipLock<T>(
+  baseDir: string,
+  teacherId: string,
+  action: () => Promise<T>,
+): Promise<T> {
+  await mkdir(baseDir, { recursive: true });
+  const lockPath = resolve(baseDir, `.${teacherId}.ownership-write-lock`);
+  ensureWithinBase(baseDir, lockPath);
+  const deadline = Date.now() + 5_000;
+
+  // Atomic replacement prevents partial JSON, but the whole merge must be
+  // serialized so simultaneous resource creation retains both contributions.
+  for (;;) {
+    try {
+      await mkdir(lockPath);
+      break;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+      if (Date.now() >= deadline) {
+        throw new Error("Teacher AI ownership mutation lock is unavailable.");
+      }
+      await new Promise<void>((resolveDelay) => setTimeout(resolveDelay, 10));
+    }
+  }
+
+  try {
+    return await action();
+  } finally {
+    await rm(lockPath, { recursive: true, force: true }).catch(() => undefined);
+  }
 }
 
 export async function readUaisTeacherAiOwnershipRecord(input: {

@@ -59,12 +59,12 @@ const teachingRouteModuleContracts: TeachingRouteModuleContract[] = [
   {
     name: "gradebook release",
     load: () => import("@/app/api/teaching/gradebook-updates/[objectId]/release/route"),
-    expectedExports: ["POST", "dynamic"],
+    expectedExports: ["GET", "POST", "dynamic"],
   },
   {
     name: "gradebook release rollback",
     load: () => import("@/app/api/teaching/gradebook-updates/[objectId]/rollback/route"),
-    expectedExports: ["POST", "dynamic"],
+    expectedExports: ["GET", "POST", "dynamic"],
   },
   {
     name: "invite-code join",

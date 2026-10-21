@@ -1,4 +1,5 @@
 import { createUaisLearningLoopPostgresReadStore } from "@/lib/learning-loop/postgres-read-store";
+import { LearningLoopStoreError } from "@/lib/learning-loop/postgres-store";
 import { authorizeLearningLoopStudentCourse } from "@/lib/server/learning-loop-access";
 import {
   createLearningLoopAccessDeniedResponse,
@@ -30,6 +31,7 @@ type GetDeps = {
     courseExternalId: string;
     classExternalId: string;
     lessonKey: string;
+    activityId?: string;
   }) => Promise<Record<string, unknown>>;
 };
 
@@ -53,6 +55,14 @@ function createLearningUnitGetHandler(deps: GetDeps = {}) {
       if (access.status === "denied") {
         return createLearningLoopAccessDeniedResponse(access.reasonCode, traceId);
       }
+      const requestedActivityId = new URL(request.url).searchParams.get("activityId");
+      const activityId = requestedActivityId?.trim();
+      if (
+        requestedActivityId !== null &&
+        (!activityId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(activityId))
+      ) {
+        throw new LearningLoopStoreError(400, "learning-activity-id-invalid");
+      }
       const store = deps.readStudentUnit
         ? undefined
         : createUaisLearningLoopPostgresReadStore({ env });
@@ -61,6 +71,7 @@ function createLearningUnitGetHandler(deps: GetDeps = {}) {
         courseExternalId: courseId,
         classExternalId: access.classId,
         lessonKey,
+        ...(activityId ? { activityId } : {}),
       });
       return createLearningLoopJsonResponse(200, traceId, { ...result, traceId });
     } catch (error) {

@@ -9,7 +9,7 @@ import {
   getUaisAppSessionUserFromCookieString,
 } from "@/lib/server/uais-app-session";
 import { isPublishedDemoTeacherCourseAccess } from "@/lib/server/published-demo-course-access";
-import { teachingActorOwnsCourse } from "@/lib/server/teaching-actor-id";
+import { isSameTeachingActorId, teachingActorOwnsCourse } from "@/lib/server/teaching-actor-id";
 
 type LearningPptPlaybackAccessReason =
   | "student-session-required"
@@ -137,13 +137,15 @@ export async function authorizeLearningPptPlaybackAccess(input: {
     };
   }
 
-  const membership = database.memberships.find(
+  const memberships = database.memberships.filter(
     (item) => item.studentId === user.account && item.courseId === input.courseId,
   );
-  if (!membership) {
+  if (memberships.length === 0) {
     return createDeniedAccess("student-course-membership-required", resource, actor);
   }
-  if (membership.membershipStatus !== "approved") {
+  // A rejected or removed class stays in history and must not mask a new seat.
+  const membership = memberships.find((item) => item.membershipStatus === "approved");
+  if (!membership) {
     return createDeniedAccess("student-course-membership-not-approved", resource, actor);
   }
 
@@ -152,7 +154,8 @@ export async function authorizeLearningPptPlaybackAccess(input: {
     (item) =>
       item.classId === membership.classId &&
       item.courseId === input.courseId &&
-      item.ownerTeacherId === course?.ownerTeacherId,
+      course !== undefined &&
+      isSameTeachingActorId(item.ownerTeacherId, course.ownerTeacherId),
   );
   if (!course || !classItem) {
     return createDeniedAccess("student-course-membership-required", resource, actor);

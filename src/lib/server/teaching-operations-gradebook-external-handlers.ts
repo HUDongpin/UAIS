@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { TeachingOperationStoreError } from "./teaching-operations-error";
 import { createGradebookReleaseAuditEvent } from "./teaching-operations-audit-builders";
 import { createRedaction, requireSafeId } from "./teaching-operations-guards";
@@ -39,6 +40,7 @@ export async function releaseExternalTeachingGradebookUpdate(input: {
   audit: TeachingGradebookReleaseAuditInput;
   appendExternalTeachingOperation: TeachingOperationExternalAppendAdapter;
   providerRelease?: TeachingGradebookReleaseProviderReceipt;
+  releaseGenerationId?: string;
   now?: Date;
 }): Promise<{
   gradebookUpdate: TeachingOperationGradebookUpdateProjection;
@@ -54,6 +56,7 @@ export async function releaseExternalTeachingGradebookUpdate(input: {
   const gradebookUpdate: TeachingOperationGradebookUpdateProjection = {
     ...input.gradebookUpdate,
     updateStatus: "released",
+    releaseGenerationId: input.releaseGenerationId ?? randomUUID(),
     releasedBy: input.gradebookUpdate.releasedBy ?? actorId,
     releasedAt: input.gradebookUpdate.releasedAt ?? releasedAt,
     ...(providerRelease ?? {}),

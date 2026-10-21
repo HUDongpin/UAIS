@@ -10,6 +10,7 @@ import { maxDuration } from "@/app/api/learning/chatroom/route";
 import { createLearningChatroomModerationPostHandler } from "@/app/api/learning/chatroom/moderation/handler";
 import type { UaisAppSessionUser } from "@/lib/auth/uais-app-session";
 import { createUaisAppSessionCookie } from "@/lib/server/uais-app-session";
+import { createLearningGuideActor } from "@/lib/server/learning-guide-actor";
 import {
   createEmptyLearningChatroomTranscriptDatabase,
   createLearningChatroomTranscriptId,
@@ -1651,7 +1652,7 @@ describe("UAIS learning chatroom rate limit", () => {
       traceId: "trace-chatroom-throttled",
       phase: "rate-limit",
       courseId: "elementary-math-research",
-      actorId: "app-session-learner-Peter",
+      actorId: createLearningGuideActor(studentAppSessionUser).actorId,
       rateLimit: { windowId: "per-minute", limit: 1, retryAfterSeconds: 40 },
       message:
         "Learning chatroom rate limit exceeded. Please wait before sending another message.",
@@ -1856,7 +1857,7 @@ describe("UAIS learning chatroom history rate limit", () => {
       traceId: "trace-chatroom-history-throttled",
       phase: "rate-limit",
       courseId: "elementary-math-research",
-      actorId: "app-session-learner-Peter",
+      actorId: createLearningGuideActor(studentAppSessionUser).actorId,
       rateLimit: { windowId: "per-minute", limit: 1, retryAfterSeconds: 40 },
       message:
         "Learning chatroom history rate limit exceeded. Please wait before reloading the transcript.",

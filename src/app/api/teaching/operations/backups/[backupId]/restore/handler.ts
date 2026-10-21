@@ -8,6 +8,7 @@ import {
   type TeachingOperationAuditRequestSource,
 } from "@/lib/server/teaching-operations-store";
 import { createUaisTeacherAiOwnershipAdapter } from "@/lib/server/teacher-ai-ownership-store";
+import { isSameTeachingActorId } from "@/lib/server/teaching-actor-id";
 import { resolveUaisTeacherAuthProviderContract } from "@/lib/server/teacher-auth-provider-contract";
 import { readUaisAuthenticatedTeacherSessionFromSignedCookies } from "@/lib/server/teacher-auth-session";
 import { getUaisAppSessionClaimsFromCookieString } from "@/lib/server/uais-app-session";
@@ -138,7 +139,7 @@ export function createTeachingOperationBackupRestorePostHandler(
       const ownedCourseIds = new Set(ownership?.courseIds ?? []);
       if (
         !ownership ||
-        ownership.teacherId !== authenticatedTeacher.actorId ||
+        !isSameTeachingActorId(ownership.teacherId, authenticatedTeacher.actorId) ||
         impactedCourseIds.some((courseId) => !ownedCourseIds.has(courseId))
       ) {
         return jsonResponse(403, {
@@ -152,6 +153,7 @@ export function createTeachingOperationBackupRestorePostHandler(
         dataDir,
         backupId: params.backupId,
         actorId: authenticatedTeacher.actorId,
+        authorizedCourseIds: [...ownedCourseIds],
         audit: {
           traceId,
           actorRole: "teacher",

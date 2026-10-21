@@ -43,7 +43,6 @@ import {
   resolveTeachingCourseManagementSnapshotPath,
   resolveTeachingOperationAlertNotificationLogPath,
   resolveTeachingOperationAlertWebhookDeliveryLogPath,
-  resolveTeachingOperationAuditLogPath,
   resolveTeachingOperationBackupPath,
   resolveTeachingOperationLogPath,
   resolveTeachingOperationRestoreDrillLogPath,
@@ -73,7 +72,6 @@ import {
   normalizeTeachingOperationAlertWebhookDelivery,
   isPersistedTeachingOperationAuditEventWithoutCourseId,
   normalizeTeachingOperationAuditEvent,
-  normalizeTeachingOperationAuditLedgerEntry,
   normalizeTeachingOperationBackup,
   normalizeTeachingOperationRecord,
   normalizeTeachingOperationRestoreDrill,
@@ -82,20 +80,15 @@ import {
   type QwenVoiceLifecycleAuditEvent,
 } from "./external-storage-serialization";
 import type { ExternalStorageRouteConfig } from "./external-storage-route-service";
-
-const teachingOperationAppendWriteQueues = new Map<string, Promise<void>>();
-
-// The transcript endpoint stores the whole corpus in one JSON snapshot.  A
-// rename is atomic, but it does not make the read/check/rename sequence a CAS:
-// two independent route processes can both read the same revision and then
-// both publish.  `mkdir` is an atomic create on the shared local filesystem,
-// so a directory lock closes that gap across processes as well as across
-// requests in one process.  We deliberately do not remove an abandoned lock:
-// after a crash the bounded wait fails closed instead of risking a writer
-// overwriting a snapshot whose owner may still be active.  This lock is scoped
-// to this one transcript snapshot and does not serialize other external stores.
-const learningChatroomTranscriptsWriteLockMaxWaitMs = 5_000;
-const learningChatroomTranscriptsWriteLockRetryDelayMs = 10;
+import {
+  appendTeachingOperationAuditEvent,
+  listTeachingOperationAuditEvents,
+} from "./external-storage-route-audit-store";
+export { appendTeachingOperationAuditEvent, listTeachingOperationAuditEvents } from "./external-storage-route-audit-store";
+import {
+  runWithExternalStorageFileWriteLock,
+  runWithLearningChatroomTranscriptsWriteLock,
+} from "./external-storage-route-write-lock";
 
 export async function readTeacherOwnership(input: {
   dataDir: string;
@@ -145,6 +138,17 @@ export async function writeTeacherOwnership(input: {
   }
 }
 
+export function runWithTeacherOwnershipWriteLock<T>(
+  input: { dataDir: string; teacherId: string },
+  action: () => Promise<T>,
+) {
+  return runWithExternalStorageFileWriteLock(
+    resolveTeacherOwnershipPath(input.dataDir, input.teacherId),
+    "Teacher AI ownership merge lock is unavailable.",
+    action,
+  );
+}
+
 export async function readTeachingCourseManagementSnapshot(dataDir: string) {
   const filePath = resolveTeachingCourseManagementSnapshotPath(dataDir);
   const raw = await readFile(filePath, "utf8").catch((error: NodeJS.ErrnoException) => {
@@ -173,40 +177,46 @@ export async function replaceTeachingCourseManagementSnapshot(input: {
   expectedRevision: string;
   database: TeachingCourseManagementDatabase;
 }) {
-  const current = await readTeachingCourseManagementSnapshot(input.dataDir);
-  if (current.revision !== input.expectedRevision) {
-    throw new HttpError(409, "Teaching course management snapshot revision mismatch.");
-  }
+  return runWithExternalStorageFileWriteLock(
+    resolveTeachingCourseManagementSnapshotPath(input.dataDir),
+    "Teaching course management snapshot lock is unavailable.",
+    async () => {
+      const current = await readTeachingCourseManagementSnapshot(input.dataDir);
+      if (current.revision !== input.expectedRevision) {
+        throw new HttpError(409, "Teaching course management snapshot revision mismatch.");
+      }
 
-  const snapshot = createTeachingCourseManagementSnapshot(input.database);
-  const snapshotDir = resolve(input.dataDir, "teaching-course-management");
-  ensureWithinBase(input.dataDir, snapshotDir);
-  await mkdir(snapshotDir, { recursive: true });
-  const filePath = resolveTeachingCourseManagementSnapshotPath(input.dataDir);
-  const tempPath = resolve(
-    snapshotDir,
-    `.database.${Date.now()}.${randomUUID()}.tmp`,
+      const snapshot = createTeachingCourseManagementSnapshot(input.database);
+      const snapshotDir = resolve(input.dataDir, "teaching-course-management");
+      ensureWithinBase(input.dataDir, snapshotDir);
+      await mkdir(snapshotDir, { recursive: true });
+      const filePath = resolveTeachingCourseManagementSnapshotPath(input.dataDir);
+      const tempPath = resolve(
+        snapshotDir,
+        `.database.${Date.now()}.${randomUUID()}.tmp`,
+      );
+      ensureWithinBase(input.dataDir, tempPath);
+      try {
+        await writeFile(tempPath, JSON.stringify(snapshot, null, 2), {
+          encoding: "utf8",
+          flag: "wx",
+        });
+        await rename(tempPath, filePath);
+      } catch (error) {
+        await rm(tempPath, { force: true }).catch(() => undefined);
+        throw error;
+      }
+
+      return {
+        status: "persisted",
+        revision: snapshot.revision,
+        storagePolicy: "external-redacted-teaching-course-management-snapshot",
+        storageWritePolicy: "external-optimistic-snapshot-replace",
+        responsibleSession: "S12",
+        redaction: createRedaction(),
+      };
+    },
   );
-  ensureWithinBase(input.dataDir, tempPath);
-  try {
-    await writeFile(tempPath, JSON.stringify(snapshot, null, 2), {
-      encoding: "utf8",
-      flag: "wx",
-    });
-    await rename(tempPath, filePath);
-  } catch (error) {
-    await rm(tempPath, { force: true }).catch(() => undefined);
-    throw error;
-  }
-
-  return {
-    status: "persisted",
-    revision: snapshot.revision,
-    storagePolicy: "external-redacted-teaching-course-management-snapshot",
-    storageWritePolicy: "external-optimistic-snapshot-replace",
-    responsibleSession: "S12",
-    redaction: createRedaction(),
-  };
 }
 
 export async function readTeachingCourseAssetsSnapshot(dataDir: string) {
@@ -235,42 +245,47 @@ export async function replaceTeachingCourseAssetsSnapshot(input: {
   expectedRevision: string;
   database: TeachingCourseAssetsDatabase;
 }) {
-  const current = await readTeachingCourseAssetsSnapshot(input.dataDir);
-  if (current.revision !== input.expectedRevision) {
-    throw new HttpError(409, "Teaching course assets snapshot revision mismatch.");
-  }
+  return runWithExternalStorageFileWriteLock(
+    resolveTeachingCourseAssetsSnapshotPath(input.dataDir),
+    "Teaching course assets snapshot lock is unavailable.",
+    async () => {
+      const current = await readTeachingCourseAssetsSnapshot(input.dataDir);
+      if (current.revision !== input.expectedRevision) {
+        throw new HttpError(409, "Teaching course assets snapshot revision mismatch.");
+      }
 
-  const snapshot = createTeachingCourseAssetsSnapshot(input.database);
-  const snapshotDir = resolve(input.dataDir, "teaching-course-assets");
-  ensureWithinBase(input.dataDir, snapshotDir);
-  await mkdir(snapshotDir, { recursive: true });
-  const filePath = resolveTeachingCourseAssetsSnapshotPath(input.dataDir);
-  const tempPath = resolve(
-    snapshotDir,
-    `.database.${Date.now()}.${randomUUID()}.tmp`,
+      const snapshot = createTeachingCourseAssetsSnapshot(input.database);
+      const snapshotDir = resolve(input.dataDir, "teaching-course-assets");
+      ensureWithinBase(input.dataDir, snapshotDir);
+      await mkdir(snapshotDir, { recursive: true });
+      const filePath = resolveTeachingCourseAssetsSnapshotPath(input.dataDir);
+      const tempPath = resolve(
+        snapshotDir,
+        `.database.${Date.now()}.${randomUUID()}.tmp`,
+      );
+      ensureWithinBase(input.dataDir, tempPath);
+      try {
+        await writeFile(tempPath, JSON.stringify(snapshot, null, 2), {
+          encoding: "utf8",
+          flag: "wx",
+        });
+        await rename(tempPath, filePath);
+      } catch (error) {
+        await rm(tempPath, { force: true }).catch(() => undefined);
+        throw error;
+      }
+
+      return {
+        status: "persisted",
+        revision: snapshot.revision,
+        storagePolicy: "external-redacted-teaching-course-cover-assets",
+        storageWritePolicy: "external-optimistic-snapshot-replace",
+        responsibleSession: "S12" as const,
+        redaction: createRedaction(),
+      };
+    },
   );
-  ensureWithinBase(input.dataDir, tempPath);
-  try {
-    await writeFile(tempPath, JSON.stringify(snapshot, null, 2), {
-      encoding: "utf8",
-      flag: "wx",
-    });
-    await rename(tempPath, filePath);
-  } catch (error) {
-    await rm(tempPath, { force: true }).catch(() => undefined);
-    throw error;
-  }
-
-  return {
-    status: "persisted",
-    revision: snapshot.revision,
-    storagePolicy: "external-redacted-teaching-course-cover-assets",
-    storageWritePolicy: "external-optimistic-snapshot-replace",
-    responsibleSession: "S12" as const,
-    redaction: createRedaction(),
-  };
 }
-
 
 export async function readLearningChatroomTranscriptsSnapshot(dataDir: string) {
   const filePath = resolveLearningChatroomTranscriptsSnapshotPath(dataDir);
@@ -334,50 +349,6 @@ export async function replaceLearningChatroomTranscriptsSnapshot(input: {
     };
   });
 }
-
-async function runWithLearningChatroomTranscriptsWriteLock<T>(
-  dataDir: string,
-  action: () => Promise<T>,
-) {
-  const snapshotDir = resolve(dataDir, "learning-chatroom-transcripts");
-  ensureWithinBase(dataDir, snapshotDir);
-  await mkdir(snapshotDir, { recursive: true });
-  const lockPath = resolve(snapshotDir, ".write-lock");
-  ensureWithinBase(dataDir, lockPath);
-  const deadline = Date.now() + learningChatroomTranscriptsWriteLockMaxWaitMs;
-
-  for (;;) {
-    try {
-      // Directory creation is the cross-process atomic claim.  Do not use
-      // `{ recursive: true }` here: an existing directory must be a conflict.
-      await mkdir(lockPath);
-      break;
-    } catch (error) {
-      const code = (error as NodeJS.ErrnoException).code;
-      if (code !== "EEXIST") {
-        throw error;
-      }
-      if (Date.now() >= deadline) {
-        throw new HttpError(
-          503,
-          "Learning chatroom transcripts snapshot lock is unavailable.",
-        );
-      }
-      await new Promise<void>((resolveDelay) => {
-        setTimeout(resolveDelay, learningChatroomTranscriptsWriteLockRetryDelayMs);
-      });
-    }
-  }
-
-  try {
-    return await action();
-  } finally {
-    // The lock directory is intentionally empty, and force makes cleanup
-    // idempotent if a test harness or process supervisor already removed it.
-    await rm(lockPath, { force: true, recursive: true }).catch(() => undefined);
-  }
-}
-
 
 export async function createTeachingCourseManagementBackup(input: {
   dataDir: string;
@@ -685,6 +656,11 @@ export async function appendTeachingOperation(input: {
       existingRecordIndex >= 0 ? existingRecords[existingRecordIndex] : undefined;
     if (existingRecord) {
       if (areTeachingOperationRecordsEquivalent(existingRecord, input.record)) {
+        await repairTeachingOperationAuditEvent({
+          dataDir: input.dataDir,
+          teacherId: input.teacherId,
+          recordId: existingRecord.recordId,
+        });
         return {
           idempotencyStatus: "already-persisted" as const,
           appendSequence: existingRecordIndex + 1,
@@ -725,23 +701,43 @@ export async function runWithTeachingOperationAppendWriteLock<T>(
   operationLogPath: string,
   action: () => Promise<T>,
 ): Promise<T> {
-  const previous =
-    teachingOperationAppendWriteQueues.get(operationLogPath) ?? Promise.resolve();
-  let releaseCurrent: () => void = () => undefined;
-  const current = new Promise<void>((resolveCurrent) => {
-    releaseCurrent = resolveCurrent;
-  });
-  const queued = previous.catch(() => undefined).then(() => current);
-  teachingOperationAppendWriteQueues.set(operationLogPath, queued);
+  return runWithExternalStorageFileWriteLock(
+    operationLogPath,
+    "Teaching operation append lock is unavailable.",
+    action,
+  );
+}
 
-  await previous.catch(() => undefined);
-  try {
-    return await action();
-  } finally {
-    releaseCurrent();
-    if (teachingOperationAppendWriteQueues.get(operationLogPath) === queued) {
-      teachingOperationAppendWriteQueues.delete(operationLogPath);
+async function repairTeachingOperationAuditEvent(input: {
+  dataDir: string;
+  teacherId: string;
+  recordId: string;
+  ledgerKind?: "rollback";
+}) {
+  // New operation/rollback rows contain the original event even if the second
+  // append failed. A retry must repair that event, never substitute its new trace.
+  const path = input.ledgerKind === "rollback"
+    ? resolveTeachingOperationRollbackLogPath(input.dataDir, input.teacherId)
+    : resolveTeachingOperationLogPath(input.dataDir, input.teacherId);
+  const raw = await readFile(path, "utf8");
+  for (const line of raw.split(/\r?\n/).filter((entry) => entry.trim())) {
+    const value = JSON.parse(line);
+    const recordId = input.ledgerKind === "rollback"
+      ? normalizeTeachingOperationRollbackLedgerEntry(value, input.teacherId).targetRecordId
+      : normalizeTeachingOperationLogEntry(value, input.teacherId).record.recordId;
+    if (recordId !== input.recordId) continue;
+    if (!value.auditEvent) return;
+    const auditEvent = normalizeTeachingOperationAuditEvent(value.auditEvent);
+    if (auditEvent.actorId !== input.teacherId) {
+      throw new Error("Stored teaching operation audit actor id mismatch.");
     }
+    const ledger = await listTeachingOperationAuditEvents(input.dataDir, input.teacherId);
+    if (!ledger.events.some((event) => JSON.stringify(event) === JSON.stringify(auditEvent))) {
+      await appendTeachingOperationAuditEvent({
+        dataDir: input.dataDir, teacherId: input.teacherId, auditEvent,
+      });
+    }
+    return;
   }
 }
 
@@ -823,68 +819,70 @@ export async function rollbackTeachingOperation(input: {
     ipAddress: "redacted";
   };
 }) {
-  const record = await findTeachingOperationRecord({
-    dataDir: input.dataDir,
-    teacherId: input.teacherId,
-    recordId: input.recordId,
-  });
-  if (!record) {
-    throw new HttpError(404, "Teaching operation record was not found.");
-  }
-  if (!record.courseId) {
-    throw new HttpError(409, "Teaching operation record has no course scope.");
-  }
-  if (record.courseId !== input.courseId) {
-    throw new HttpError(409, "Teaching operation rollback course id mismatch.");
-  }
-  const existingRollbacks = await listTeachingOperationRollbackRecords(
-    input.dataDir,
-    input.teacherId,
+  return runWithExternalStorageFileWriteLock(
+    resolveTeachingOperationLogPath(input.dataDir, input.teacherId),
+    "Teaching operation rollback lock is unavailable.",
+    async () => {
+      const record = await findTeachingOperationRecord({
+        dataDir: input.dataDir,
+        teacherId: input.teacherId,
+        recordId: input.recordId,
+      });
+      if (!record) {
+        throw new HttpError(404, "Teaching operation record was not found.");
+      }
+      if (!record.courseId) {
+        throw new HttpError(409, "Teaching operation record has no course scope.");
+      }
+      if (record.courseId !== input.courseId) {
+        throw new HttpError(409, "Teaching operation rollback course id mismatch.");
+      }
+      const existingRollbacks = await listTeachingOperationRollbackRecords(
+        input.dataDir,
+        input.teacherId,
+      );
+      if (existingRollbacks.some((rollback) => rollback.targetRecordId === input.recordId)) {
+        await repairTeachingOperationAuditEvent({
+          dataDir: input.dataDir, teacherId: input.teacherId, recordId: input.recordId, ledgerKind: "rollback",
+        });
+        throw new HttpError(409, "Teaching operation record has already been rolled back.");
+      }
+
+      const rollback = {
+        rollbackId: requireSafeId(
+          `teaching-operation-rollback-${input.recordId}`,
+          "teaching operation rollback id",
+        ),
+        action: "rollback-teaching-operation-record" as const,
+        teacherId: input.teacherId,
+        targetRecordId: input.recordId,
+        courseId: record.courseId,
+        targetOperationId: record.operationId,
+        targetActionSlot: record.actionSlot,
+        targetActionId: record.actionId,
+        rollbackReason: input.rollbackReason,
+        status: "persisted" as const,
+        rolledBackAt: input.requestedAt,
+        storagePolicy: "external-redacted-teaching-operation-rollback" as const,
+        storageWritePolicy: "external-append-only-rollback-log" as const,
+        responsibleSession: "S12" as const,
+        redaction: createRedaction(),
+      };
+      const auditEvent = createTeachingOperationRollbackAuditEvent({
+        teacherId: input.teacherId, record, courseId: record.courseId,
+        rollbackReason: input.rollbackReason, traceId: input.traceId,
+        requestedAt: input.requestedAt, requestSource: input.requestSource,
+      });
+      await appendTeachingOperationRollback({
+        dataDir: input.dataDir, teacherId: input.teacherId, rollback, auditEvent,
+      });
+      await appendTeachingOperationAuditEvent({
+        dataDir: input.dataDir, teacherId: input.teacherId, auditEvent,
+      });
+
+      return rollback;
+    },
   );
-  if (existingRollbacks.some((rollback) => rollback.targetRecordId === input.recordId)) {
-    throw new HttpError(409, "Teaching operation record has already been rolled back.");
-  }
-
-  const rollback = {
-    rollbackId: requireSafeId(
-      `teaching-operation-rollback-${input.recordId}`,
-      "teaching operation rollback id",
-    ),
-    action: "rollback-teaching-operation-record" as const,
-    teacherId: input.teacherId,
-    targetRecordId: input.recordId,
-    courseId: record.courseId,
-    targetOperationId: record.operationId,
-    targetActionSlot: record.actionSlot,
-    targetActionId: record.actionId,
-    rollbackReason: input.rollbackReason,
-    status: "persisted" as const,
-    rolledBackAt: input.requestedAt,
-    storagePolicy: "external-redacted-teaching-operation-rollback" as const,
-    storageWritePolicy: "external-append-only-rollback-log" as const,
-    responsibleSession: "S12" as const,
-    redaction: createRedaction(),
-  };
-  await appendTeachingOperationRollback({
-    dataDir: input.dataDir,
-    teacherId: input.teacherId,
-    rollback,
-  });
-  await appendTeachingOperationAuditEvent({
-    dataDir: input.dataDir,
-    teacherId: input.teacherId,
-    auditEvent: createTeachingOperationRollbackAuditEvent({
-      teacherId: input.teacherId,
-      record,
-      courseId: record.courseId,
-      rollbackReason: input.rollbackReason,
-      traceId: input.traceId,
-      requestedAt: input.requestedAt,
-      requestSource: input.requestSource,
-    }),
-  });
-
-  return rollback;
 }
 
 export async function verifyTeachingOperationBackupRestoreDrill(input: {
@@ -1078,6 +1076,7 @@ export async function appendTeachingOperationRollback(input: {
   dataDir: string;
   teacherId: string;
   rollback: ReturnType<typeof normalizeTeachingOperationRollbackRecord>;
+  auditEvent?: ReturnType<typeof normalizeTeachingOperationAuditEvent>;
 }) {
   const rollbackDir = resolve(input.dataDir, "teaching-operation-rollbacks");
   ensureWithinBase(input.dataDir, rollbackDir);
@@ -1086,6 +1085,7 @@ export async function appendTeachingOperationRollback(input: {
     resolveTeachingOperationRollbackLogPath(input.dataDir, input.teacherId),
     `${JSON.stringify({
       rollback: input.rollback,
+      ...(input.auditEvent ? { auditEvent: input.auditEvent } : {}),
       storagePolicy: "external-redacted-teaching-operation-rollback",
       storageWritePolicy: "external-append-only-rollback-log",
       responsibleSession: "S12",
@@ -1095,26 +1095,6 @@ export async function appendTeachingOperationRollback(input: {
   );
 }
 
-export async function appendTeachingOperationAuditEvent(input: {
-  dataDir: string;
-  teacherId: string;
-  auditEvent: ReturnType<typeof normalizeTeachingOperationAuditEvent>;
-}) {
-  const auditDir = resolve(input.dataDir, "teaching-operations-audit");
-  ensureWithinBase(input.dataDir, auditDir);
-  await mkdir(auditDir, { recursive: true });
-  await appendFile(
-    resolveTeachingOperationAuditLogPath(input.dataDir, input.teacherId),
-    `${JSON.stringify({
-      auditEvent: input.auditEvent,
-      storagePolicy: "external-redacted-teaching-operation-audit-log",
-      storageWritePolicy: "external-append-only-audit-log",
-      responsibleSession: "S12",
-      redaction: createRedaction(),
-    })}\n`,
-    "utf8",
-  );
-}
 
 export async function listLifecycleAuditEvents(dataDir: string) {
   const auditPath = resolveLifecycleAuditPath(dataDir);
@@ -1146,37 +1126,6 @@ export async function listLifecycleAuditEvents(dataDir: string) {
   };
 }
 
-export async function listTeachingOperationAuditEvents(dataDir: string, teacherId: string) {
-  const auditPath = resolveTeachingOperationAuditLogPath(dataDir, teacherId);
-  const raw = await readFile(auditPath, "utf8").catch((error: NodeJS.ErrnoException) => {
-    if (error.code === "ENOENT") {
-      return "";
-    }
-    throw error;
-  });
-  const events = raw
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) =>
-      normalizeTeachingOperationAuditLedgerEntry(JSON.parse(line), teacherId),
-    )
-    .sort((left, right) => {
-      const byTime = left.createdAt.localeCompare(right.createdAt);
-      return byTime === 0 ? left.auditId.localeCompare(right.auditId) : byTime;
-    });
-
-  return {
-    teacherId,
-    eventType: "teaching-operation-audit",
-    storagePolicy: "external-redacted-teaching-operation-audit-log",
-    storageWritePolicy: "external-append-only-audit-log",
-    recordCount: events.length,
-    events,
-    responsibleSession: "S12",
-    redaction: createRedaction(),
-  };
-}
 
 export async function listTeachingOperationAuditReadback(dataDir: string, teacherId: string) {
   const audit = await listTeachingOperationAuditEvents(dataDir, teacherId);

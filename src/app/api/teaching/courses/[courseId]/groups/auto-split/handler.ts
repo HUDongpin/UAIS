@@ -1,3 +1,4 @@
+import { isSameTeachingActorId } from "@/lib/server/teaching-actor-id";
 import {
   autoSplitTeachingLearningGroups,
   readTeachingCourseManagementSnapshot,
@@ -126,7 +127,7 @@ async function denyUnownedCourse(input: {
   if (!course) {
     throw new TeachingCourseManagementStoreError(404, "Teaching course was not found.");
   }
-  if (course.ownerTeacherId === input.authenticatedTeacher.actorId) {
+  if (isSameTeachingActorId(course.ownerTeacherId, input.authenticatedTeacher.actorId)) {
     return undefined;
   }
   return teachingMembershipJsonResponse(403, {

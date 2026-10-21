@@ -1,3 +1,6 @@
+import { readGradebookProviderOperations } from "@/lib/server/teaching-gradebook-provider-operations";
+import { gradebookProviderRecoveryMessage, type TeachingGradebookProviderOperation } from "@/lib/server/teaching-gradebook-provider-operation-types";
+import { isUaisTeachingOperationPostgresSelector, type TeachingOperationRepository } from "@/lib/server/teaching-operations-postgres-store";
 import { randomUUID } from "node:crypto";
 import { getUaisCoreDatabaseReadiness } from "@/lib/db/core-database";
 import { collectTeachingOperationAuditDomainProjectionValues } from "@/lib/server/teaching-operations-receipt-normalizers";
@@ -38,6 +41,7 @@ import { resolveTeachingOperationCollaboratorCapability } from "@/lib/server/tea
 
 type TeachingOperationAuditGetHandlerDeps = {
   env?: Record<string, string | undefined>;
+  providerOperationsRepository?: TeachingOperationRepository;
   now?: Date;
   fetch?: typeof fetch;
   getTeachingOperationCourseOwnership?: GetTeachingOperationCourseOwnership;
@@ -245,7 +249,7 @@ export function createTeachingOperationAuditGetHandler(
           fetch: deps.fetch,
         });
 
-      if (isTeachingOperationProductionRuntime(env) && !externalAudit) {
+      if (isTeachingOperationProductionRuntime(env) && !externalAudit && !isUaisTeachingOperationPostgresSelector(env.UAIS_TEACHING_OPERATIONS_SNAPSHOT_BACKEND)) {
         throw new TeachingOperationStoreError(
           503,
           "Production teaching operation audit readback requires external storage.",
@@ -276,6 +280,15 @@ export function createTeachingOperationAuditGetHandler(
         };
       }
 
+      let providerOperations: TeachingGradebookProviderOperation[] = [];
+      let providerOperationStorage: "available" | "unavailable" = "available";
+      try {
+        providerOperations = await readGradebookProviderOperations({ env, externalStorage: Boolean(externalAudit), repository: deps.providerOperationsRepository });
+      } catch (error) {
+        if (error instanceof TeachingOperationStoreError && error.reasonCode === "gradebook-provider-claim-storage-unavailable") providerOperationStorage = "unavailable";
+        else throw error;
+      }
+
       if (readManagedCourseOwnership) {
         try {
           ownedCourseIds = await expandOwnedCourseIdsWithManagedOwnership({
@@ -283,6 +296,7 @@ export function createTeachingOperationAuditGetHandler(
             ownedCourseIds,
             candidateCourseIds: [
               ...collectAuditSourceCourseIds(auditSource),
+              ...providerOperations.map((operation) => operation.courseId),
               ...(requestedCourseId ? [requestedCourseId] : []),
             ],
             readManagedCourseOwnership,
@@ -352,6 +366,9 @@ export function createTeachingOperationAuditGetHandler(
         auditEvents: visibility.auditEvents,
         domainProjections: visibility.domainProjections,
         rollbackRecords: visibility.rollbackRecords,
+        providerOperations: providerOperations.filter((operation) => ownedCourseIdSet.has(operation.courseId)),
+        providerOperationStorage,
+        providerOperationRecoveryMessage: gradebookProviderRecoveryMessage,
         recordCount: visibility.records.length,
         auditEventCount: visibility.auditEvents.length,
         domainProjectionCount: visibility.domainProjections.length,

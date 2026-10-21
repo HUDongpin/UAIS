@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import {
   createUaisTeachingOperationExternalAuditReadAdapter,
   createUaisTeachingOperationExternalRollbackAdapter,
-  readTeachingOperationDatabase,
+  loadTeachingOperationDatabase,
   resolveTeachingOperationDataDir,
   rollbackTeachingOperationRecord,
   TeachingOperationStoreError,
@@ -213,7 +213,7 @@ export function createTeachingOperationRecordRollbackPostHandler(
         }, traceId);
       }
 
-      const database = await readTeachingOperationDatabase({ dataDir });
+      const database = await loadTeachingOperationDatabase({ dataDir, env });
       const record = database.records.find((item) => item.recordId === recordId);
       if (!record) {
         throw new TeachingOperationStoreError(404, "Teaching operation record was not found.");
@@ -251,6 +251,7 @@ export function createTeachingOperationRecordRollbackPostHandler(
 
       const { receipt } = await rollbackTeachingOperationRecord({
         dataDir,
+        env,
         recordId,
         actorId: authenticatedTeacher.actorId,
         rollbackReason,

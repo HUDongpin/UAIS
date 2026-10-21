@@ -12,7 +12,19 @@ import {
   TeachingCourseManagementStoreError,
   type TeachingCourseExportManifestRecord,
 } from "@/lib/server/teaching-course-management-store";
-import { createUaisTeacherAiOwnershipAdapter } from "@/lib/server/teacher-ai-ownership-store";
+import {
+  createTeachingManagedCourseOwnershipAdapter,
+  type ReadManagedTeachingCourseOwnership,
+} from "@/lib/server/teacher-managed-course-ownership";
+import {
+  authorizeTeachingOperationCourseAccess,
+  createTeachingCourseCapabilityAdapter,
+  createTeachingOperationCourseOwnershipAdapter,
+  getTeachingOperationAccessDeniedStatus,
+  type GetTeachingOperationCourseOwnership,
+  type ReadTeachingCourseCapability,
+  type TeachingOperationAccessDeniedReason,
+} from "../../course-access";
 import { resolveUaisTeacherAuthProviderContract } from "@/lib/server/teacher-auth-provider-contract";
 import { readUaisAuthenticatedTeacherSessionFromSignedCookies } from "@/lib/server/teacher-auth-session";
 import { getUaisAppSessionClaimsFromCookieString } from "@/lib/server/uais-app-session";
@@ -26,6 +38,8 @@ type TeachingOperationExportGetHandlerDeps = {
   now?: Date;
   fetch?: typeof fetch;
   getTeachingOperationCourseOwnership?: GetTeachingOperationCourseOwnership;
+  readManagedCourseOwnership?: ReadManagedTeachingCourseOwnership;
+  readTeachingCourseCapability?: ReadTeachingCourseCapability;
 };
 
 type AuthenticatedTeacher = {
@@ -41,46 +55,31 @@ type AuthenticatedStudent = {
   role: "student";
 };
 
-type TeachingOperationCourseOwnership = {
-  teacherId: string;
-  courseIds?: string[];
-};
-
-type GetTeachingOperationCourseOwnership = (input: {
-  request: Request;
-  authenticatedTeacher: AuthenticatedTeacher;
-}) => Promise<TeachingOperationCourseOwnership | undefined>;
-
 type TeachingOperationExportAccessDeniedReason =
+  | TeachingOperationAccessDeniedReason
   | "authenticated-session-required"
   | "teacher-auth-provider-not-production-ready"
-  | "teacher-role-required"
-  | "course-id-required"
-  | "teacher-course-ownership-required"
-  | "teacher-course-ownership-check-failed"
-  | "course-scope-denied";
-
-type TeachingOperationExportAccess =
-  | {
-      status: "authorized";
-      reasonCode: "authorized";
-      responsibleSession: "S12";
-      actor: { actorId: string; role: "teacher" };
-      resource: { courseId: string };
-      redaction: ReturnType<typeof createRedaction>;
-    }
-  | ReturnType<typeof createDeniedAccess>;
+  | "teacher-role-required";
 
 export function createTeachingOperationExportGetHandler(
   deps: TeachingOperationExportGetHandlerDeps = {},
 ) {
   const env = deps.env ?? process.env;
+  const usesDefaultCourseOwnership = deps.getTeachingOperationCourseOwnership === undefined;
   const getTeachingOperationCourseOwnership =
     deps.getTeachingOperationCourseOwnership ??
     createTeachingOperationCourseOwnershipAdapter({
       env,
       fetch: deps.fetch,
     });
+  const readManagedCourseOwnership =
+    deps.readManagedCourseOwnership ??
+    (usesDefaultCourseOwnership
+      ? createTeachingManagedCourseOwnershipAdapter({ env, fetch: deps.fetch })
+      : undefined);
+  const readTeachingCourseCapability =
+    deps.readTeachingCourseCapability ??
+    createTeachingCourseCapabilityAdapter({ env, now: deps.now });
 
   return async function GET(request: Request, context: TeachingOperationExportRouteContext) {
     const traceId = readSafeTraceId(request);
@@ -139,17 +138,25 @@ export function createTeachingOperationExportGetHandler(
         throw new TeachingOperationStoreError(404, "Teaching export manifest not found.");
       }
 
-      const access = await authorizeTeachingOperationExportAccess({
+      const access = await authorizeTeachingOperationCourseAccess({
         request,
         authenticatedTeacher,
         courseId: manifest.courseId,
+        operationId: "data-export",
+        actionSlot: "primary",
         getTeachingOperationCourseOwnership,
+        readManagedCourseOwnership,
+        readTeachingCourseCapability,
       });
       if (access.status === "denied") {
-        return jsonResponse(getTeachingOperationExportAccessDeniedStatus(access.reasonCode), {
+        return jsonResponse(getTeachingOperationAccessDeniedStatus(access.reasonCode), {
           error: getTeachingOperationExportAccessDeniedError(access.reasonCode),
           traceId,
-          access,
+          access:
+            access.reasonCode === "teacher-course-ownership-check-failed" ||
+            access.reasonCode === "teacher-course-capability-check-failed"
+              ? createDeniedAccess(access.reasonCode, access.actor)
+              : access,
           redaction: createRedaction(),
         }, traceId);
       }
@@ -275,87 +282,17 @@ function createTeachingOperationManifestFromCourseManagementRecord(
   };
 }
 
-function createTeachingOperationCourseOwnershipAdapter(input: {
-  env: Record<string, string | undefined>;
-  fetch?: typeof fetch;
-}): GetTeachingOperationCourseOwnership | undefined {
-  const readOwnership = createUaisTeacherAiOwnershipAdapter({
-    env: input.env,
-    fetch: input.fetch,
-  });
-  if (!readOwnership) {
-    return undefined;
-  }
-
-  return async ({ request, authenticatedTeacher }) =>
-    readOwnership({
-      request,
-      authenticatedSession: authenticatedTeacher,
-    });
-}
-
-async function authorizeTeachingOperationExportAccess(input: {
-  request: Request;
-  authenticatedTeacher: AuthenticatedTeacher;
-  courseId?: string;
-  getTeachingOperationCourseOwnership?: GetTeachingOperationCourseOwnership;
-}): Promise<TeachingOperationExportAccess> {
-  const actor = {
-    actorId: input.authenticatedTeacher.actorId,
-    role: input.authenticatedTeacher.role,
-  };
-  const resource = input.courseId ? { courseId: input.courseId } : undefined;
-  const courseId = input.courseId;
-  if (!courseId) {
-    return createDeniedAccess("course-id-required", actor, resource);
-  }
-  if (!input.getTeachingOperationCourseOwnership) {
-    return createDeniedAccess("teacher-course-ownership-required", actor, resource);
-  }
-
-  let ownership: TeachingOperationCourseOwnership | undefined;
-  try {
-    ownership = await input.getTeachingOperationCourseOwnership({
-      request: input.request,
-      authenticatedTeacher: input.authenticatedTeacher,
-    });
-  } catch {
-    return createDeniedAccess("teacher-course-ownership-check-failed", actor);
-  }
-  if (!ownership || ownership.teacherId !== input.authenticatedTeacher.actorId) {
-    return createDeniedAccess("teacher-course-ownership-required", actor, resource);
-  }
-  if (!new Set(ownership.courseIds ?? []).has(courseId)) {
-    return createDeniedAccess("course-scope-denied", actor, resource);
-  }
-
-  return {
-    status: "authorized",
-    reasonCode: "authorized",
-    responsibleSession: "S12",
-    actor,
-    resource: { courseId },
-    redaction: createRedaction(),
-  };
-}
-
-function getTeachingOperationExportAccessDeniedStatus(
-  reasonCode: TeachingOperationExportAccessDeniedReason,
-) {
-  if (reasonCode === "course-id-required") {
-    return 400;
-  }
-  if (reasonCode === "teacher-course-ownership-check-failed") {
-    return 503;
-  }
-  return 403;
-}
-
 function getTeachingOperationExportAccessDeniedError(
   reasonCode: TeachingOperationExportAccessDeniedReason,
 ) {
   if (reasonCode === "teacher-course-ownership-check-failed") {
     return "UAIS teaching operation export course ownership check failed.";
+  }
+  if (reasonCode === "teacher-course-capability-check-failed") {
+    return "UAIS teaching operation export course capability check failed.";
+  }
+  if (reasonCode.startsWith("collaborator-") || reasonCode === "active-teacher-principal-required") {
+    return "UAIS teaching operation export course capability is required.";
   }
   return "UAIS teaching operation export course ownership is required.";
 }

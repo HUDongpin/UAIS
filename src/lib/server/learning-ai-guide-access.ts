@@ -202,13 +202,15 @@ export async function authorizeLearningAiGuideCourseAccess(input: {
     };
   }
 
-  const membership = database.memberships.find(
+  const memberships = database.memberships.filter(
     (item) => item.studentId === actor.actorId && item.courseId === input.courseId,
   );
-  if (!membership) {
+  if (memberships.length === 0) {
     return createDeniedAccess("student-course-membership-required", actor, resource);
   }
-  if (membership.membershipStatus !== "approved") {
+  // Closed memberships remain as history when a learner changes classes.
+  const membership = memberships.find((item) => item.membershipStatus === "approved");
+  if (!membership) {
     return createDeniedAccess("student-course-membership-not-approved", actor, resource);
   }
 

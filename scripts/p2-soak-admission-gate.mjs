@@ -22,7 +22,7 @@ import { resolveSoakEvidencePacket } from "./p2-soak-evidence-resolver.mjs";
 const defaultManifestPath =
   "coordination/reports/2026-08-27-376-soak-admission.json";
 const fixedOwnerPinPath =
-  "/Volumes/Starship/UAIS-evidence/private-credentials/uais-staging/soak-admission-owner-pins.json";
+  "/Volumes/Mars/UAIS-evidence/private-credentials/uais-staging/soak-admission-owner-pins.json";
 const requiredReceiptSchemas = [
   "uais.staging-health.v1",
   "uais.p1-load.v1",

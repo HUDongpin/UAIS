@@ -2,21 +2,23 @@ import type { LearningSubmissionState } from "@/lib/learning-loop/domain";
 
 export type LearningUnitEvidence = {
   lessonKey: string;
+  activityId?: string;
   position: number;
   checkpointAttempted: boolean;
   submissionState?: LearningSubmissionState;
 };
 
 export type NextLearningAction =
-  | { type: "revise-submission"; lessonKey: string; reasonCode: "revision-requested" }
-  | { type: "await-teacher-review"; lessonKey: string; reasonCode: "teacher-review-pending" }
-  | { type: "complete-checkpoint"; lessonKey: string; reasonCode: "checkpoint-not-attempted" }
-  | {
+  | ({ lessonKey: string; activityId?: string } & (
+    | { type: "revise-submission"; reasonCode: "revision-requested" }
+    | { type: "await-teacher-review"; reasonCode: "teacher-review-pending" }
+    | { type: "complete-checkpoint"; reasonCode: "checkpoint-not-attempted" }
+    | {
       type: "continue-draft" | "start-submission";
-      lessonKey: string;
       reasonCode: "submission-draft-exists" | "submission-not-started";
     }
-  | { type: "open-next-lesson"; lessonKey: string; reasonCode: "previous-unit-accepted" }
+    | { type: "open-next-lesson"; reasonCode: "previous-unit-accepted" }
+  ))
   | { type: "course-complete"; reasonCode: "all-required-units-accepted" }
   | { type: "collect-more-evidence"; reasonCode: "no-published-learning-units" | "evidence-inconsistent" };
 
@@ -26,14 +28,30 @@ export function recommendNextLearningAction(input: {
   if (input.units.length === 0) {
     return { type: "collect-more-evidence", reasonCode: "no-published-learning-units" };
   }
-  const units = [...input.units].sort((a, b) => a.position - b.position);
+  const units = [...input.units].sort((a, b) =>
+    a.position - b.position || (a.activityId ?? "").localeCompare(b.activityId ?? ""),
+  );
+  const activityIds = new Set<string>();
   if (
     units.some(
-      (unit, index) =>
-        !unit.lessonKey ||
-        !Number.isInteger(unit.position) ||
-        unit.position <= 0 ||
-        (index > 0 && units[index - 1]?.position === unit.position),
+      (unit, index) => {
+        const previous = units[index - 1];
+        if (
+          !unit.lessonKey ||
+          !Number.isInteger(unit.position) ||
+          unit.position <= 0 ||
+          (unit.activityId !== undefined && !unit.activityId.trim()) ||
+          (unit.activityId && activityIds.has(unit.activityId)) ||
+          (previous?.position === unit.position && (
+            previous.lessonKey !== unit.lessonKey ||
+            !previous.activityId || !unit.activityId
+          ))
+        ) {
+          return true;
+        }
+        if (unit.activityId) activityIds.add(unit.activityId);
+        return false;
+      },
     )
   ) {
     return { type: "collect-more-evidence", reasonCode: "evidence-inconsistent" };
@@ -43,7 +61,7 @@ export function recommendNextLearningAction(input: {
   if (revision) {
     return {
       type: "revise-submission",
-      lessonKey: revision.lessonKey,
+      ...learningActionTarget(revision),
       reasonCode: "revision-requested",
     };
   }
@@ -53,7 +71,7 @@ export function recommendNextLearningAction(input: {
   if (awaiting) {
     return {
       type: "await-teacher-review",
-      lessonKey: awaiting.lessonKey,
+      ...learningActionTarget(awaiting),
       reasonCode: "teacher-review-pending",
     };
   }
@@ -61,7 +79,7 @@ export function recommendNextLearningAction(input: {
   if (checkpoint) {
     return {
       type: "complete-checkpoint",
-      lessonKey: checkpoint.lessonKey,
+      ...learningActionTarget(checkpoint),
       reasonCode: "checkpoint-not-attempted",
     };
   }
@@ -70,14 +88,14 @@ export function recommendNextLearningAction(input: {
     if (unfinished.submissionState === "draft") {
       return {
         type: "continue-draft",
-        lessonKey: unfinished.lessonKey,
+        ...learningActionTarget(unfinished),
         reasonCode: "submission-draft-exists",
       };
     }
     if (!unfinished.submissionState) {
       return {
         type: "start-submission",
-        lessonKey: unfinished.lessonKey,
+        ...learningActionTarget(unfinished),
         reasonCode: "submission-not-started",
       };
     }
@@ -91,9 +109,16 @@ export function recommendNextLearningAction(input: {
   if (nextAfterAccepted) {
     return {
       type: "open-next-lesson",
-      lessonKey: nextAfterAccepted.lessonKey,
+      ...learningActionTarget(nextAfterAccepted),
       reasonCode: "previous-unit-accepted",
     };
   }
   return { type: "course-complete", reasonCode: "all-required-units-accepted" };
+}
+
+function learningActionTarget(unit: LearningUnitEvidence) {
+  return {
+    lessonKey: unit.lessonKey,
+    ...(unit.activityId ? { activityId: unit.activityId } : {}),
+  };
 }

@@ -162,6 +162,26 @@ function createRedactedOutboxStatement(item: ClaimedLearningOutboxItem) {
       )
     : [];
   const versionNo = readPositiveInteger(item.context.versionNo);
+  // Browser events have no assessment foreign key. Their normalized lesson and
+  // result evidence live in the event context, alongside server-event metadata.
+  const lessonKey = item.lessonKey ?? readBoundedText(item.context.lessonKey, 160);
+  const locale = readBoundedText(item.context.locale, 20);
+  const competencyIds = Array.isArray(item.context.competencyIds)
+    ? item.context.competencyIds.slice(0, 20)
+        .map((value) => readBoundedText(value, 120))
+        .filter((value): value is string => value !== undefined)
+    : [];
+  const storedResult =
+    typeof item.context.result === "object" && item.context.result !== null &&
+    !Array.isArray(item.context.result)
+      ? item.context.result as Record<string, unknown>
+      : {};
+  const duration = readBoundedText(storedResult.duration, 80);
+  const result = {
+    ...(typeof storedResult.success === "boolean" ? { success: storedResult.success } : {}),
+    ...(typeof storedResult.completion === "boolean" ? { completion: storedResult.completion } : {}),
+    ...(duration ? { duration } : {}),
+  };
   return createLearningEventStatement({
     actor: {
       id: item.actorId,
@@ -177,14 +197,11 @@ function createRedactedOutboxStatement(item: ClaimedLearningOutboxItem) {
       object: {
         id: item.objectId,
         name: item.objectName,
-        type:
-          item.eventType === "formative-check.attempted"
-            ? "assessment-question"
-            : "learning-activity",
       },
-      ...(rubricDimensionIds.length > 0 || versionNo
+      ...(Object.keys(result).length > 0 || rubricDimensionIds.length > 0 || versionNo
         ? {
             result: {
+              ...result,
               extensions: {
                 ...(rubricDimensionIds.length > 0
                   ? {
@@ -203,12 +220,22 @@ function createRedactedOutboxStatement(item: ClaimedLearningOutboxItem) {
         tenantId: "uais",
         courseId: item.courseExternalId,
         ...(item.classExternalId ? { classId: item.classExternalId } : {}),
-        ...(item.lessonKey ? { lessonId: item.lessonKey } : {}),
+        ...(lessonKey ? { lessonId: lessonKey } : {}),
+        ...(locale ? { locale } : {}),
+        ...(competencyIds.length > 0 ? { competencyIds } : {}),
       },
     },
     statementId: item.statementId,
     timestamp: item.occurredAt,
   });
+}
+
+function readBoundedText(value: unknown, maxLength: number) {
+  if (typeof value !== "string") return undefined;
+  const text = value.trim();
+  return text && Array.from(text).length <= maxLength && !/[\u0000-\u001f\u007f]/u.test(text)
+    ? text
+    : undefined;
 }
 
 function classifyLrsError(error: unknown) {

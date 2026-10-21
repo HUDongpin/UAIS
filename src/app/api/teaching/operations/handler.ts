@@ -29,7 +29,6 @@ import {
 import {
   type UaisTeacherAiOwnershipPostgresClientFactory,
 } from "@/lib/server/teacher-ai-ownership-store";
-import { createTeachingManagedCourseOwnershipAdapter } from "@/lib/server/teacher-managed-course-ownership";
 import { resolveUaisTeacherAuthProviderContract } from "@/lib/server/teacher-auth-provider-contract";
 import { readUaisAuthenticatedTeacherSessionFromSignedCookies } from "@/lib/server/teacher-auth-session";
 import { getUaisAppSessionClaimsFromCookieString } from "@/lib/server/uais-app-session";
@@ -99,6 +98,10 @@ import {
   readStudentRosterSyncProviderConfig,
 } from "./provider-config";
 import {
+  createTeachingManagedCourseOwnershipAdapter,
+  type ReadManagedTeachingCourseOwnership,
+} from "@/lib/server/teacher-managed-course-ownership";
+import {
   assertProductionTeachingOperationCourseOwnershipAccessConfigured,
   authorizeTeachingOperationCourseAccess,
   createDeniedAccess,
@@ -107,7 +110,6 @@ import {
   getTeachingOperationAccessDeniedError,
   getTeachingOperationAccessDeniedStatus,
   type GetTeachingOperationCourseOwnership,
-  type ReadManagedTeachingCourseOwnership,
   type ReadTeachingCourseCapability,
 } from "./course-access";
 import {
@@ -154,10 +156,7 @@ export function createTeachingOperationActionPostHandler(
   const readManagedCourseOwnership =
     deps.readManagedCourseOwnership ??
     (usesDefaultTeachingOperationCourseOwnership
-      ? createTeachingManagedCourseOwnershipAdapter({
-          env,
-          fetch: deps.fetch,
-        })
+      ? createTeachingManagedCourseOwnershipAdapter({ env, fetch: deps.fetch })
       : undefined);
   const readTeachingCourseCapability =
     deps.readTeachingCourseCapability ??

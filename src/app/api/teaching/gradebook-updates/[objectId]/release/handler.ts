@@ -1,3 +1,8 @@
+import { readGradebookProviderReceipt } from "@/lib/server/teaching-gradebook-provider-request";
+import { gradebookProviderGeneration } from "@/lib/server/teaching-gradebook-provider-generation";
+import { claimGradebookProviderOperation, updateGradebookProviderOperation, readGradebookProviderOperations } from "@/lib/server/teaching-gradebook-provider-operations";
+import { GradebookProviderOperationBlockedError, gradebookProviderRecoveryMessage, type TeachingGradebookProviderOperation } from "@/lib/server/teaching-gradebook-provider-operation-types";
+import { isUaisTeachingOperationPostgresSelector, type TeachingOperationRepository } from "@/lib/server/teaching-operations-postgres-store";
 import { randomUUID } from "node:crypto";
 import {
   createUaisTeachingOperationExternalAppendAdapter,
@@ -25,6 +30,7 @@ type TeachingGradebookReleasePostHandlerDeps = {
   env?: Record<string, string | undefined>;
   now?: Date;
   fetch?: typeof fetch;
+  providerOperationsRepository?: TeachingOperationRepository;
 };
 
 type AuthenticatedTeacher = {
@@ -46,6 +52,9 @@ export function createTeachingGradebookReleasePostHandler(
 
   return async function POST(request: Request, context: TeachingGradebookReleaseRouteContext) {
     const traceId = readSafeTraceId(request);
+    if (!["GET", "HEAD", "POST"].includes(request.method)) return jsonResponse(405, { error: "Method not allowed.", traceId }, traceId);
+    let providerOperation: TeachingGradebookProviderOperation | undefined;
+    let externalStorage = false;
     try {
       const authenticatedStudent = readAuthenticatedStudent({
         request,
@@ -104,7 +113,8 @@ export function createTeachingGradebookReleasePostHandler(
         });
       if (
         isTeachingOperationProductionRuntime(env) &&
-        (!readExternalTeachingOperationAudit || !appendExternalTeachingOperation)
+        (!readExternalTeachingOperationAudit || !appendExternalTeachingOperation) &&
+        !isUaisTeachingOperationPostgresSelector(env.UAIS_TEACHING_OPERATIONS_SNAPSHOT_BACKEND)
       ) {
         throw new TeachingOperationStoreError(
           503,
@@ -112,6 +122,8 @@ export function createTeachingGradebookReleasePostHandler(
         );
       }
 
+      externalStorage = Boolean(readExternalTeachingOperationAudit);
+      const operationAccess = { env, externalStorage, repository: deps.providerOperationsRepository };
       const dataDir = resolveTeachingOperationDataDir(env.UAIS_TEACHING_OPERATIONS_DATA_DIR);
       const externalAudit = readExternalTeachingOperationAudit
         ? await readExternalTeachingOperationAudit({ teacherId: authenticatedTeacher.actorId })
@@ -120,6 +132,7 @@ export function createTeachingGradebookReleasePostHandler(
         ? findLatestGradebookUpdateProjection(externalAudit.domainProjections, params.objectId)
         : await readTeachingGradebookUpdate({
             dataDir,
+            env,
             objectId: params.objectId,
           });
       if (!pendingUpdate) {
@@ -152,6 +165,16 @@ export function createTeachingGradebookReleasePostHandler(
         }, traceId);
       }
 
+      if (request.method === "GET" || request.method === "HEAD") {
+        const providerOperations = (await readGradebookProviderOperations(operationAccess)).filter((operation) =>
+          operation.objectId === pendingUpdate.objectId && operation.courseId === pendingUpdate.courseId);
+        return jsonResponse(200, { providerOperations, recoveryMessage: gradebookProviderRecoveryMessage, traceId, redaction: createRedaction() }, traceId);
+      }
+
+      if (pendingUpdate.updateStatus === "released") {
+        throw new TeachingOperationStoreError(409, "Gradebook update is already released.");
+      }
+
       const releaseInput = {
         objectId: pendingUpdate.objectId,
         actorId: authenticatedTeacher.actorId,
@@ -170,6 +193,25 @@ export function createTeachingGradebookReleasePostHandler(
         actorId: releaseInput.actorId,
         traceId,
         releasedAt: releaseInput.now.toISOString(),
+        beforeDispatch: async () => {
+          providerOperation = await claimGradebookProviderOperation({ ...operationAccess,
+            audit: releaseInput.audit,
+            dispatchMode: env.UAIS_GRADEBOOK_RELEASE_PROVIDER?.trim() ? "provider" : "local",
+            action: "release", gradebookUpdate: pendingUpdate, actorId: authenticatedTeacher.actorId, traceId,
+            now: deps.now ?? new Date(),
+          });
+          const latestAudit = readExternalTeachingOperationAudit
+            ? await readExternalTeachingOperationAudit({ teacherId: authenticatedTeacher.actorId }) : undefined;
+          const current = latestAudit ? findLatestGradebookUpdateProjection(latestAudit.domainProjections, params.objectId)
+            : await readTeachingGradebookUpdate({ dataDir, env, objectId: params.objectId });
+          if (!current || gradebookProviderGeneration(current) !== providerOperation.generation) {
+            throw new TeachingOperationStoreError(409, "Gradebook generation changed before provider dispatch; the reserved operation requires review.");
+          }
+        },
+      });
+      if (!providerOperation) throw new TeachingOperationStoreError(503, "Gradebook provider dispatch was not reserved.");
+      providerOperation = await updateGradebookProviderOperation({ ...operationAccess, operation: providerOperation,
+        phase: providerRelease ? "provider-confirmed" : "completion-pending", providerReceiptId: providerRelease?.providerReleaseId,
       });
       const { gradebookUpdate, notification, receipt } =
         appendExternalTeachingOperation && externalAudit
@@ -179,18 +221,24 @@ export function createTeachingGradebookReleasePostHandler(
               audit: releaseInput.audit,
               appendExternalTeachingOperation,
               providerRelease,
+              releaseGenerationId: providerOperation.releaseGenerationId,
               now: releaseInput.now,
             })
           : await releaseTeachingGradebookUpdate({
               dataDir,
+              env,
+              expectedGeneration: providerOperation.generation,
               objectId: releaseInput.objectId,
               actorId: releaseInput.actorId,
               audit: releaseInput.audit,
               providerRelease,
+              releaseGenerationId: providerOperation.releaseGenerationId,
               now: releaseInput.now,
             });
 
+      providerOperation = await updateGradebookProviderOperation({ ...operationAccess, operation: providerOperation, phase: "succeeded" });
       return jsonResponse(200, {
+        providerOperation,
         gradebookUpdate,
         notification,
         receipt,
@@ -198,6 +246,17 @@ export function createTeachingGradebookReleasePostHandler(
         redaction: createRedaction(),
       }, traceId);
     } catch (error) {
+      if (error instanceof GradebookProviderOperationBlockedError) providerOperation = error.providerOperation;
+      else if (providerOperation) {
+        providerOperation = await updateGradebookProviderOperation({ env, externalStorage,
+          repository: deps.providerOperationsRepository, operation: providerOperation, phase: "reconciliation-required",
+        }).catch(() => providerOperation!);
+      }
+      if (providerOperation) return jsonResponse(error instanceof TeachingOperationStoreError ? error.status : 502, {
+        error: "Gradebook provider operation is recorded. Automatic retry is blocked; retain the operation ID for outcome review.",
+        reasonCode: "gradebook-provider-operation-blocked", providerOperation,
+        recoveryMessage: gradebookProviderRecoveryMessage, traceId, redaction: createRedaction(),
+      }, traceId);
       return createErrorResponse(error, traceId);
     }
   };
@@ -227,6 +286,7 @@ async function syncGradebookReleaseProvider(input: {
   actorId: string;
   traceId: string;
   releasedAt: string;
+  beforeDispatch: () => Promise<void>;
 }): Promise<TeachingGradebookReleaseProviderReceipt | undefined> {
   const provider = input.env.UAIS_GRADEBOOK_RELEASE_PROVIDER?.trim();
   if (!provider) {
@@ -236,6 +296,7 @@ async function syncGradebookReleaseProvider(input: {
         "Gradebook release provider is not configured.",
       );
     }
+    await input.beforeDispatch();
     return undefined;
   }
   if (provider !== "external") {
@@ -259,7 +320,10 @@ async function syncGradebookReleaseProvider(input: {
     input.env,
   );
 
-  const response = await input.fetch(normalizedProviderUrl, {
+  await input.beforeDispatch();
+  const providerGradebookUpdate = { ...input.gradebookUpdate };
+  delete providerGradebookUpdate.releaseGenerationId;
+  const providerReceipt = await readGradebookProviderReceipt(input.fetch, normalizedProviderUrl, {
     method: "POST",
     headers: {
       authorization: `Bearer ${providerToken}`,
@@ -274,15 +338,10 @@ async function syncGradebookReleaseProvider(input: {
       traceId: input.traceId,
       releasePolicy: input.gradebookUpdate.releasePolicy,
       releasedAt: input.releasedAt,
-      gradebookUpdate: input.gradebookUpdate,
+      gradebookUpdate: providerGradebookUpdate,
       redaction: createRedaction(),
     }),
   });
-  if (!response.ok) {
-    throw new TeachingOperationStoreError(502, "Gradebook release provider sync failed.");
-  }
-
-  const providerReceipt = await response.json().catch(() => undefined);
   if (!isRecord(providerReceipt) || providerReceipt.status !== "released") {
     throw new TeachingOperationStoreError(502, "Gradebook release provider sync failed.");
   }

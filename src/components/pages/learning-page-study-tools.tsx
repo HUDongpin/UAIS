@@ -26,7 +26,9 @@ export function StudyToolsPanel({
   onClose,
 }: {
   locale: Locale;
-  studyContent: SlideStudyContent;
+  /** Undefined when no lesson is on screen — the panel then says so instead of
+   *  describing a slide from another course. */
+  studyContent?: SlideStudyContent;
   activeView: StudyToolView;
   expandedCheckpointId?: string;
   onToggleCheckpoint: (checkpointId: string) => void;
@@ -105,11 +107,22 @@ export function StudyToolsPanel({
         </div>
 
         <div className="max-h-[calc(82dvh-8rem)] overflow-y-auto p-4 xl:max-h-none xl:p-0 xl:pt-4">
-          {activeView === "notes" ? (
+          {!studyContent ? (
+            <p
+              data-uais-learning-study-tools="unavailable"
+              className="px-2 py-6 text-center text-sm leading-6 text-[var(--muted)]"
+            >
+              {zh
+                ? "本课程暂无已发布课件，学习工具会在教师发布后按当前页生成。"
+                : "This course has no published lesson yet. Slide notes, checkpoints, and concept cards appear once a teacher publishes one."}
+            </p>
+          ) : null}
+
+          {studyContent && activeView === "notes" ? (
             <SlideNotesView locale={locale} studyContent={studyContent} />
           ) : null}
 
-          {activeView === "checkpoint" ? (
+          {studyContent && activeView === "checkpoint" ? (
             <StudyCheckpointView
               locale={locale}
               studyContent={studyContent}
@@ -118,7 +131,7 @@ export function StudyToolsPanel({
             />
           ) : null}
 
-          {activeView === "concepts" ? (
+          {studyContent && activeView === "concepts" ? (
             <SlideConceptsView locale={locale} studyContent={studyContent} />
           ) : null}
         </div>

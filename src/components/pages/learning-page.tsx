@@ -1,14 +1,12 @@
 "use client";
 
 import Link from "next/link";
+import { CourseDirectoryView, PublishedPlaybackAccessNotice } from "./learning-page-outline";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
-import { BookOpen } from "@phosphor-icons/react/dist/ssr/BookOpen";
 import { ChatsCircle } from "@phosphor-icons/react/dist/ssr/ChatsCircle";
-import { GearSix } from "@phosphor-icons/react/dist/ssr/GearSix";
 import { PaperPlaneTilt } from "@phosphor-icons/react/dist/ssr/PaperPlaneTilt";
 import { Robot } from "@phosphor-icons/react/dist/ssr/Robot";
 import { SlidersHorizontal } from "@phosphor-icons/react/dist/ssr/SlidersHorizontal";
-import { Sparkle } from "@phosphor-icons/react/dist/ssr/Sparkle";
 import { useAppPreferences } from "@/components/providers/app-preferences";
 import { useSessionUser } from "@/components/providers/session-user";
 import { copy, type Locale } from "@/i18n/copy";
@@ -25,27 +23,26 @@ import type {
   LearningPptPlaybackSlide,
 } from "@/lib/learning/ppt-playback-types";
 import {
-  fallbackCourseId,
   playbackByCourseId,
   publishedLearningPptCourseId,
   type PlaybackContent,
 } from "./learning-page-content";
-import { CourseDirectoryView, PublishedPlaybackAccessNotice } from "./learning-page-outline";
 import {
-  canUseSlideStudyTools,
   createAskThisSlidePrompt,
   createCompletedNarrationStorageKey,
   createSlideStudyContent,
   exportSlideStudyNotes,
+  getFallbackCourseTitle,
   getPlaybackContent,
   isPublishedPlaybackAccessBlocked,
+  type PublishedPlaybackError,
   readCompletedNarrationSlideIds,
   resolveLearningEventCourseId,
-  type PublishedPlaybackError,
   type SlideStudyContent,
   type StudyAction,
   type StudyToolView,
 } from "./learning-page-helpers";
+import { getAiGuideCopy } from "./learning-page-guide-copy";
 import { usePublishedLearningPlayback } from "./learning-page-published-playback";
 import { PptStage, SlideChapterRail } from "./learning-page-slides";
 import { NarrationDock } from "./learning-page-narration";
@@ -150,6 +147,17 @@ export type LearningAiGuideOrchestration = {
   }>;
 };
 
+// Carries the HTTP status so a refusal can be reported as a refusal.
+class LearningAiGuideRequestError extends Error {
+  readonly status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "LearningAiGuideRequestError";
+    this.status = status;
+  }
+}
+
 function getSelectedStudyToolView(view: CompanionView): StudyToolView {
   if (view === "checkpoint" || view === "concepts" || view === "notes") {
     return view;
@@ -161,6 +169,8 @@ function getSelectedStudyToolView(view: CompanionView): StudyToolView {
 type LearningPageProps = {
   initialCourseId?: string;
   initialClassId?: string;
+  initialLessonKey?: string;
+  initialActivityId?: string;
 };
 
 type ApprovedInviteLearningContext = {
@@ -196,10 +206,13 @@ type TeachingCoursesResponseBody = {
   memberships?: TeachingCoursesResponseMembership[];
 };
 
-function getValidatedCourseId(courseId: string | undefined) {
-  return courseId && Object.hasOwn(playbackByCourseId, courseId)
-    ? courseId
-    : fallbackCourseId;
+// The id of the template's own sample course when that is what the URL asked for,
+// and `undefined` for every other course. It used to answer `fallbackCourseId` for
+// anything unknown, which handed a real course the demo course's identity, copy and
+// - through the AI-guide payload - the demo course's id, on a page the learner had
+// opened for their own course.
+function getSampleCourseId(courseId: string | undefined) {
+  return courseId && Object.hasOwn(playbackByCourseId, courseId) ? courseId : undefined;
 }
 
 function getStringValue(value: unknown) {
@@ -245,14 +258,14 @@ function findApprovedInviteLearningContext(
   };
 }
 
-export function LearningPage({ initialCourseId, initialClassId }: LearningPageProps = {}) {
+export function LearningPage({ initialCourseId, initialClassId, initialLessonKey, initialActivityId }: LearningPageProps = {}) {
   const { locale } = useAppPreferences();
   const sessionUser = useSessionUser();
   const learnerAccount =
     sessionUser?.role === "student" ? sessionUser.account : undefined;
   const t = copy[locale];
-  const selectedCourseId = getValidatedCourseId(initialCourseId);
-  const playback = getPlaybackContent(selectedCourseId, locale);
+  const sampleCourseId = getSampleCourseId(initialCourseId);
+
   const playbackCourseId = initialCourseId ?? publishedLearningPptCourseId;
   const {
     publishedPlayback,
@@ -263,25 +276,25 @@ export function LearningPage({ initialCourseId, initialClassId }: LearningPagePr
     setActivePublishedSlideIndex,
     retryPublishedPlayback,
   } = usePublishedLearningPlayback({ courseId: playbackCourseId, locale });
+  const playback = isPublishedPlaybackAccessBlocked(publishedPlaybackError)
+    ? undefined
+    : getPlaybackContent(sampleCourseId, locale);
   const [approvedInviteLearningContext, setApprovedInviteLearningContext] =
     useState<ApprovedInviteLearningContext>();
-  const [activeCompanionView, setActiveCompanionView] = useState<CompanionView>("ai");
+  const [activeCompanionView, setActiveCompanionView] = useState<CompanionView>(initialActivityId ? "practice" : "ai");
   const [studyToolsOpen, setStudyToolsOpen] = useState(false);
+  const [studyActionNotice, setStudyActionNotice] = useState("");
   const [guideDraft, setGuideDraft] = useState("");
   const [guideFocusSequence, setGuideFocusSequence] = useState(0);
-  const [studyActionNotice, setStudyActionNotice] = useState("");
   const completedNarrationSlideIdsRef = useRef(new Set<string>());
-  const studyToolsEnabled = canUseSlideStudyTools(publishedPlayback);
-  const studyToolsVisible = studyToolsOpen && studyToolsEnabled;
   const studyContent = useMemo(
     () =>
-      createSlideStudyContent({
+      publishedPlayback && activePublishedSlide ? createSlideStudyContent({
         locale,
-        playback,
         publishedPlayback,
         activePublishedSlide,
-      }),
-    [activePublishedSlide, locale, playback, publishedPlayback],
+      }) : undefined,
+    [activePublishedSlide, locale, publishedPlayback],
   );
 
   function showPreviousPublishedSlide() {
@@ -296,8 +309,13 @@ export function LearningPage({ initialCourseId, initialClassId }: LearningPagePr
   }
 
   function handleStudyAction(action: StudyAction) {
-    if (!studyToolsEnabled) {
-      setStudyActionNotice(t.learning.studyToolsRequireCourseware);
+    // No slide, nothing to study. The action bar disables itself in this state;
+    // this is the guard for anything that reaches the handler another way.
+    if (!studyContent) {
+      if (action === "notes" || action === "checkpoint" || action === "concepts") {
+        setActiveCompanionView(action);
+        setStudyToolsOpen(true);
+      }
       return;
     }
 
@@ -306,7 +324,7 @@ export function LearningPage({ initialCourseId, initialClassId }: LearningPagePr
       setStudyActionNotice(t.learning.notesExported);
       const eventCourseId = resolveLearningEventCourseId({
         publishedPlaybackCourseId: publishedPlayback?.courseId,
-        selectedCourseId,
+        selectedCourseId: sampleCourseId ?? initialCourseId,
         approvedMembershipCourseId: visibleApprovedInviteLearningContext?.courseId,
       });
       // The export itself always runs; only its learning record is conditional.
@@ -345,10 +363,6 @@ export function LearningPage({ initialCourseId, initialClassId }: LearningPagePr
   }
 
   function openStudyToolsFromDock() {
-    if (!studyToolsEnabled) {
-      setStudyActionNotice(t.learning.studyToolsRequireCourseware);
-      return;
-    }
     setActiveCompanionView(getSelectedStudyToolView(activeCompanionView));
     setStudyToolsOpen(true);
   }
@@ -537,15 +551,28 @@ export function LearningPage({ initialCourseId, initialClassId }: LearningPagePr
       });
     }
   }
-  const visibleCourseContextTitle = publishedPlayback
-    ? `${locale === "zh-CN" ? "当前课程：" : "Current course: "}${publishedPlayback.courseTitle}`
-    : playback.liveHint;
-  const visibleCourseContextSlideTitle = activePublishedSlide?.slideTitle;
+  // Only a course name something on this page can actually vouch for: the deck
+  // being played, the sample course the URL asked for, or the class this learner
+  // was approved into. When none of the three answers, the bar says the lesson has
+  // not loaded instead of naming a course at random - it used to read
+  // "当前课程：大学研究方法" over anybody's unpublished course.
+  const visibleCourseName =
+    publishedPlayback?.courseTitle ??
+    getFallbackCourseTitle(getPlaybackContent(sampleCourseId, locale), locale) ??
+    visibleApprovedInviteLearningContext?.courseName;
+  const visibleCourseContextTitle = visibleCourseName
+    ? `${locale === "zh-CN" ? "当前课程：" : "Current course: "}${visibleCourseName}`
+    : locale === "zh-CN"
+      ? "尚未加载课程课件"
+      : "No lesson loaded yet";
+  // `undefined` renders no slide segment at all rather than another course's slide.
+  const visibleCourseContextSlideTitle =
+    activePublishedSlide?.slideTitle;
   // A 401 on the deck used to render as a dead label. The return path is built
   // from the route's own props rather than `window.location`, so the href is the
   // same string on the server render and on the first client render.
   const playbackSignInHref = createLoginHandoffHref(
-    createLearningReturnPath({ courseId: initialCourseId, classId: initialClassId }),
+    createLearningReturnPath({ courseId: initialCourseId, classId: initialClassId, lessonKey: initialLessonKey, activityId: initialActivityId }),
   );
 
   return (
@@ -564,9 +591,13 @@ export function LearningPage({ initialCourseId, initialClassId }: LearningPagePr
         {visibleApprovedInviteLearningContext ? (
           <>
             <span className="text-[var(--placeholder)]">/</span>
-            <span className="text-[var(--accent)]">
-              {visibleApprovedInviteLearningContext.courseName}
-            </span>
+            {/* Skipped when the title above is already this course's name, which
+                it is whenever no deck or sample supplied one. */}
+            {visibleCourseName === visibleApprovedInviteLearningContext.courseName ? null : (
+              <span className="text-[var(--accent)]">
+                {visibleApprovedInviteLearningContext.courseName}
+              </span>
+            )}
             <span className="text-[var(--muted)]">
               {visibleApprovedInviteLearningContext.className}
             </span>
@@ -624,24 +655,22 @@ export function LearningPage({ initialCourseId, initialClassId }: LearningPagePr
             activePublishedSlide={activePublishedSlide}
             publishedPlaybackError={publishedPlaybackError}
             isPublishedPlaybackLoading={isPublishedPlaybackLoading}
-            conceptCount={studyContent.concepts.length}
-            studyActionsEnabled={studyToolsEnabled}
-            studyActionNotice={studyActionNotice}
+            conceptCount={studyContent?.concepts.length ?? 0}
+            hasStudyContent={Boolean(studyContent)}
             onStudyAction={handleStudyAction}
             signInHref={playbackSignInHref}
             onRetryPublishedPlayback={retryPublishedPlayback}
           />
+          {studyActionNotice ? <p role="status" className="text-sm text-[var(--muted)]">{studyActionNotice}</p> : null}
           <NarrationDock
             locale={locale}
             playback={playback}
             publishedPlayback={publishedPlayback}
-            publishedPlaybackError={publishedPlaybackError}
             activePublishedSlide={activePublishedSlide}
             activePublishedSlideIndex={activePublishedSlideIndex}
             onPreviousPublishedSlide={showPreviousPublishedSlide}
             onNextPublishedSlide={showNextPublishedSlide}
-            studyToolsOpen={studyToolsVisible}
-            studyToolsEnabled={studyToolsEnabled}
+            studyToolsOpen={studyToolsOpen}
             onOpenStudyTools={openStudyToolsFromDock}
             onSlideNarrationPlay={handleSlideNarrationPlay}
             onSlideNarrationEnded={handleSlideNarrationEnded}
@@ -649,17 +678,19 @@ export function LearningPage({ initialCourseId, initialClassId }: LearningPagePr
         </div>
         <LearningCompanionPanel
           locale={locale}
-          courseId={selectedCourseId}
+          courseId={sampleCourseId ?? initialCourseId}
+          requestedLessonKey={initialLessonKey}
+          requestedActivityId={initialActivityId}
           approvedInviteContext={visibleApprovedInviteLearningContext}
+          publishedPlaybackError={publishedPlaybackError}
           playback={playback}
           publishedPlayback={publishedPlayback}
-          publishedPlaybackError={publishedPlaybackError}
           activePublishedSlide={activePublishedSlide}
           onSelectPublishedSlide={setActivePublishedSlideIndex}
           studyContent={studyContent}
           activeView={activeCompanionView}
           onActiveViewChange={setActiveCompanionView}
-          studyToolsOpen={studyToolsVisible}
+          studyToolsOpen={studyToolsOpen}
           onStudyToolsOpenChange={setStudyToolsOpen}
           guideDraft={guideDraft}
           onGuideDraftChange={setGuideDraft}
@@ -674,10 +705,12 @@ export function LearningPage({ initialCourseId, initialClassId }: LearningPagePr
 function LearningCompanionPanel({
   locale,
   courseId,
+  requestedLessonKey,
+  requestedActivityId,
   approvedInviteContext,
+  publishedPlaybackError,
   playback,
   publishedPlayback,
-  publishedPlaybackError,
   activePublishedSlide,
   onSelectPublishedSlide,
   studyContent,
@@ -691,14 +724,16 @@ function LearningCompanionPanel({
   signInHref,
 }: {
   locale: Locale;
-  courseId: string;
-  approvedInviteContext?: { courseId: string; classId: string };
-  playback: PlaybackContent;
-  publishedPlayback?: LearningPptPlaybackManifest;
+  courseId?: string;
+  requestedLessonKey?: string;
+  requestedActivityId?: string;
+  approvedInviteContext?: { courseId: string; classId: string; courseName?: string };
   publishedPlaybackError?: PublishedPlaybackError;
+  playback?: PlaybackContent;
+  publishedPlayback?: LearningPptPlaybackManifest;
   activePublishedSlide?: LearningPptPlaybackSlide;
   onSelectPublishedSlide: (index: number) => void;
-  studyContent: SlideStudyContent;
+  studyContent?: SlideStudyContent;
   activeView: CompanionView;
   onActiveViewChange: (view: CompanionView) => void;
   studyToolsOpen: boolean;
@@ -722,6 +757,24 @@ function LearningCompanionPanel({
     selectedCourseId: courseId,
     approvedMembershipCourseId: approvedInviteContext?.courseId,
   });
+  // The course the guide is allowed to speak for: the deck on the stage, the
+  // sample course the URL named, or the class this learner was approved into.
+  // Without one there is nothing to scope a question to, and the composer says so
+  // instead of firing a request the server is bound to refuse.
+  const guideCourseId =
+    publishedPlayback?.courseId ?? courseId ?? approvedInviteContext?.courseId;
+  const guideCourseTitle =
+    publishedPlayback?.courseTitle ??
+    getFallbackCourseTitle(playback, locale) ??
+    approvedInviteContext?.courseName;
+  // Shown when the learner actually sends. The composer stays usable while a deck
+  // is still loading; what must not happen is firing a request scoped to a course
+  // this page cannot name.
+  const guideCourseScopeMissing = guideCourseId
+    ? undefined
+    : locale === "zh-CN"
+      ? "本课程暂无已发布课件，智能导学还无法确定要回答哪门课程。"
+      : "This course has no published lesson yet, so the AI guide cannot tell which course to answer for.";
   const [guideMessages, setGuideMessages] = useState<AiGuideMessage[]>([]);
   const [guideError, setGuideError] = useState("");
   const [activeGuideAgentId, setActiveGuideAgentId] =
@@ -735,9 +788,15 @@ function LearningCompanionPanel({
   const guideRequestCounterRef = useRef(0);
   const guideInputRef = useRef<HTMLInputElement | null>(null);
   const guideTranscriptRef = useRef<HTMLDivElement | null>(null);
-  const guideCopy = getAiGuideCopy(locale, playback, publishedPlayback, activePublishedSlide);
-  const coursewareAccessBlocked = isPublishedPlaybackAccessBlocked(
-    publishedPlaybackError,
+  const guideCopy = getAiGuideCopy(
+    locale,
+    playback,
+    publishedPlayback,
+    activePublishedSlide,
+    // Without a deck or a sample, the approved membership is the only thing that
+    // can name this course — so the guide introduces itself as the learner's own
+    // course rather than as nobody.
+    guideCourseTitle,
   );
   const activeGuideAgent =
     guideCopy.agentCards.find((agent) => agent.id === activeGuideAgentId) ??
@@ -813,9 +872,6 @@ function LearningCompanionPanel({
 
   function handleGuideSend(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (coursewareAccessBlocked) {
-      return;
-    }
     const question = guideDraft.trim();
 
     if (!question) {
@@ -831,9 +887,18 @@ function LearningCompanionPanel({
     question: string,
     mode: "single-agent" | "multi-agent" = "single-agent",
   ) {
-    if (coursewareAccessBlocked) {
+    // Nothing on this page can say which course the question belongs to, and the
+    // server authorizes every guide request against course membership (a request
+    // with no course id is refused as `course-context-required`). Sending anyway
+    // is what surfaced as "智能服务暂时不可用" while the service was answering
+    // fine. Both entry points - the composer and the three agent cards - land
+    // here, so this is the one place the check belongs.
+    if (isPublishedPlaybackAccessBlocked(publishedPlaybackError)) return;
+    if (guideCourseScopeMissing) {
+      setGuideError(guideCourseScopeMissing);
       return;
     }
+
     guideRequestCounterRef.current += 1;
     const requestId = String(guideRequestCounterRef.current);
     const assistantMessageId = `guide-assistant-${requestId}`;
@@ -889,7 +954,10 @@ function LearningCompanionPanel({
       const body = (await response.json()) as LearningAiGuideApiResponse;
       const assistantText = body.message?.text?.trim();
       if (!response.ok || !assistantText) {
-        throw new Error(body.error ?? "Learning AI guide request failed.");
+        throw new LearningAiGuideRequestError(
+          body.error ?? "Learning AI guide request failed.",
+          response.status,
+        );
       }
 
       setGuideMessages((current) => [
@@ -906,11 +974,23 @@ function LearningCompanionPanel({
             : undefined,
         },
       ]);
-    } catch {
+    } catch (error) {
+      // A refusal is not an outage. 401/403 mean the session or this learner's
+      // membership in THIS course is the problem, and calling that "service
+      // unavailable" sent learners to wait for a service that was answering fine.
+      const status = error instanceof LearningAiGuideRequestError ? error.status : undefined;
       setGuideError(
-        locale === "zh-CN"
-          ? "智能服务暂时不可用，已保留你的问题。"
-          : "AI service is temporarily unavailable. Your question is kept above.",
+        status === 401
+          ? locale === "zh-CN"
+            ? "登录状态已过期，请重新登录后再提问。"
+            : "Your session has expired. Sign in again to ask a question."
+          : status === 403
+            ? locale === "zh-CN"
+              ? "当前账号无权就本课程提问，请确认课程加入状态。"
+              : "This account cannot ask questions about this course. Check your course membership."
+            : locale === "zh-CN"
+              ? "智能服务暂时不可用，已保留你的问题。"
+              : "AI service is temporarily unavailable. Your question is kept above.",
       );
     } finally {
       setPendingGuideAgentId((current) => (current === pendingId ? null : current));
@@ -1015,13 +1095,25 @@ function LearningCompanionPanel({
     question: string,
     mode: "single-agent" | "multi-agent",
   ) {
-    const fallbackCourseTitle = playback.liveHint.replace(
-      locale === "zh-CN" ? "当前课程：" : "Current course: ",
-      "",
-    );
     const slideImageUrl = activePublishedSlide?.imageUrl
       ? new URL(activePublishedSlide.imageUrl, window.location.origin).toString()
       : undefined;
+    // A slide the learner is not looking at is not context, it is a wrong answer
+    // waiting to happen: these fields stay undefined rather than describing the
+    // demo deck's slide 3.
+    const slide = activePublishedSlide
+      ? {
+          slideNumber: activePublishedSlide.slideNumber,
+          slideTitle: activePublishedSlide.slideTitle,
+          narrationText: activePublishedSlide.narrationText,
+          imageUrl: slideImageUrl,
+        }
+      : playback
+        ? {
+            slideTitle: playback.slideTitle,
+            narrationText: playback.subtitles.find((subtitle) => subtitle.active)?.text,
+          }
+        : {};
 
     return {
       agentId,
@@ -1029,17 +1121,15 @@ function LearningCompanionPanel({
       locale,
       question,
       course: {
-        courseId: publishedPlayback?.courseId ?? courseId,
-        courseTitle: publishedPlayback?.courseTitle ?? fallbackCourseTitle,
+        // `guideCourseId` is the course this page is actually about. It used to be
+        // the demo course id whenever no deck had loaded, so every question a
+        // learner asked about their own unpublished course was authorized against
+        // a course they are not enrolled in, came back 403, and surfaced as
+        // "智能服务暂时不可用" - the guide was simply dead in that state.
+        courseId: guideCourseId,
+        courseTitle: guideCourseTitle,
       },
-      slide: {
-        slideNumber: activePublishedSlide?.slideNumber,
-        slideTitle: activePublishedSlide?.slideTitle ?? playback.slideTitle,
-        narrationText:
-          activePublishedSlide?.narrationText ??
-          playback.subtitles.find((subtitle) => subtitle.active)?.text,
-        imageUrl: slideImageUrl,
-      },
+      slide,
     };
   }
 
@@ -1086,6 +1176,9 @@ function LearningCompanionPanel({
                 : "overflow-y-auto p-4"
           }
         >
+          {isPublishedPlaybackAccessBlocked(publishedPlaybackError) ? (
+            <PublishedPlaybackAccessNotice locale={locale} error={publishedPlaybackError} />
+          ) : (<>
           {studyToolsOpen ? (
             <StudyToolsPanel
               locale={locale}
@@ -1097,7 +1190,7 @@ function LearningCompanionPanel({
                 setExpandedCheckpointId((current) =>
                   current === checkpointId ? undefined : checkpointId,
                 );
-                if (expanding && learnerAccount && eventCourseId) {
+                if (expanding && learnerAccount && eventCourseId && studyContent) {
                   void reportLearningEvent({
                     actorId: learnerAccount,
                     event: {
@@ -1125,12 +1218,6 @@ function LearningCompanionPanel({
           ) : null}
 
           {!studyToolsOpen && activeView === "ai" ? (
-            coursewareAccessBlocked && publishedPlaybackError ? (
-              <PublishedPlaybackAccessNotice
-                locale={locale}
-                error={publishedPlaybackError}
-              />
-            ) : (
             <div className="flex h-full min-h-0 flex-col">
               <div className="flex gap-3">
                 <span className="grid size-10 shrink-0 place-items-center rounded-full bg-[var(--accent-soft)] text-[var(--accent)]">
@@ -1263,25 +1350,22 @@ function LearningCompanionPanel({
               </p>
               </form>
             </div>
-            )
           ) : null}
 
           {!studyToolsOpen && activeView === "subtitles" ? (
           <div>
             <div className="space-y-4">
               {transcript.length === 0 ? (
-                coursewareAccessBlocked && publishedPlaybackError ? (
-                  <PublishedPlaybackAccessNotice
-                    locale={locale}
-                    error={publishedPlaybackError}
-                  />
-                ) : (
                 <p className="px-2 py-6 text-center text-sm leading-6 text-[var(--muted)]">
                   {locale === "zh-CN"
                     ? "本课程暂无字幕，课件发布后会在这里显示讲解文本。"
                     : "No subtitles yet. Narration text appears here once a lesson is published."}
                 </p>
-                )
+              ) : null}
+              {transcript.length > 0 && visibleTranscript.length === 0 ? (
+                <p role="status" className="px-2 py-6 text-center text-sm leading-6 text-[var(--muted)]">
+                  {subtitleCopy.noMatches}
+                </p>
               ) : null}
               {transcript.length > 0 && visibleTranscript.length === 0 ? (
                 <p role="status" className="px-2 py-6 text-center text-sm leading-6 text-[var(--muted)]">
@@ -1370,142 +1454,26 @@ function LearningCompanionPanel({
               locale={locale}
               learnerAccount={learnerAccount}
               publishedPlayback={publishedPlayback}
-              publishedPlaybackError={publishedPlaybackError}
               activePublishedSlide={activePublishedSlide}
               onSelectPublishedSlide={onSelectPublishedSlide}
             />
           ) : null}
 
           {!studyToolsOpen && activeView === "practice" ? (
-            coursewareAccessBlocked && publishedPlaybackError ? (
-              <PublishedPlaybackAccessNotice
-                locale={locale}
-                error={publishedPlaybackError}
-              />
-            ) : (
             <LearningPracticePanel
               locale={locale}
               courseId={eventCourseId}
               classId={eventCourseId ? classIdForCourse(eventCourseId) : undefined}
-              lessonKey={publishedPlayback?.learningUnit.lessonKey}
+              lessonKey={requestedLessonKey ?? publishedPlayback?.learningUnit.lessonKey}
+              requestedActivityId={requestedActivityId}
               signInHref={signInHref}
             />
-            )
           ) : null}
+          </>)}
         </div>
       </div>
     </aside>
   );
-}
-
-function getAiGuideCopy(
-  locale: Locale,
-  playback: PlaybackContent,
-  publishedPlayback?: LearningPptPlaybackManifest,
-  activePublishedSlide?: LearningPptPlaybackSlide,
-) {
-  const courseTitle =
-    publishedPlayback?.courseTitle ??
-    playback.liveHint.replace(locale === "zh-CN" ? "当前课程：" : "Current course: ", "");
-  const slideTitle =
-    activePublishedSlide?.slideTitle ??
-    (publishedPlayback
-      ? playback.slideTitle
-      : locale === "zh-CN"
-        ? "当前课件"
-        : "the current slides");
-  const slidePosition = activePublishedSlide
-    ? locale === "zh-CN"
-      ? `第 ${activePublishedSlide.slideNumber} 页`
-      : `slide ${activePublishedSlide.slideNumber}`
-    : playback.slideLabel;
-  const guideContext =
-    activePublishedSlide?.narrationText ??
-    playback.subtitles.find((subtitle) => subtitle.active)?.text ??
-    playback.aiMessages[0]?.body;
-
-  if (locale === "zh-CN") {
-    return {
-      greeting: `你好！我是《${courseTitle}》智能导学，会围绕当前${slidePosition}「${slideTitle}」帮你总结、答疑和拓展学习。`,
-      contextHint: `当前讲解线索：${guideContext}`,
-      prompts: [
-        `解释「${slideTitle}」的核心概念`,
-        "把这页整理成 3 个学习要点",
-        `根据「${slideTitle}」生成一个课堂提问`,
-      ],
-      agentCards: [
-        {
-          id: "learning-advisor" as const,
-          label: "学习顾问",
-          sub: "学习路径规划",
-          icon: BookOpen,
-          prompt: `请基于「${slideTitle}」给我一个 10 分钟学习路径`,
-        },
-        {
-          id: "concept-explainer" as const,
-          label: "概念解读",
-          sub: "知识点解析",
-          icon: Sparkle,
-          prompt: `解释「${slideTitle}」的核心概念、常见误区和例子`,
-        },
-        {
-          id: "code-assistant" as const,
-          label: "代码助手",
-          sub: "算法与实现",
-          icon: GearSix,
-          prompt: `把「${slideTitle}」转成步骤、伪代码或短代码示例`,
-        },
-      ],
-      multiAgentLabel: "LangGraph 多智能体导学",
-      buildReceipt: (question: string) =>
-        `智能导学已收到，会结合《${courseTitle}》当前${slidePosition}「${slideTitle}」、字幕和课程目录帮你拆解这个问题：${question}`,
-      buildMultiAgentReceipt: (question: string) =>
-        `智能导学已收到，多智能体链路会让学习顾问、概念解读和代码助手共同处理：${question}`,
-    };
-  }
-
-  return {
-    greeting: `Hi, I am the AI guide for ${courseTitle}. I will use the current ${slidePosition}, "${slideTitle}", to summarize, answer questions, and extend your learning.`,
-    contextHint: `Current narration cue: ${guideContext}`,
-    prompts: [
-      `Explain the core idea of "${slideTitle}"`,
-      "Turn this slide into 3 study takeaways",
-      `Create a classroom question for "${slideTitle}"`,
-    ],
-    agentCards: [
-      {
-        id: "learning-advisor" as const,
-        label: "Study Advisor",
-        sub: "Path planning",
-        icon: BookOpen,
-        prompt: `Give me a 10-minute study path for "${slideTitle}"`,
-      },
-      {
-        id: "concept-explainer" as const,
-        label: "Concepts",
-        sub: "Explain ideas",
-        icon: Sparkle,
-        prompt: `Explain the core idea, misconception, and example for "${slideTitle}"`,
-      },
-      {
-        // Was "Teaching TA", with a prompt asking for a classroom question and a
-        // teaching example. Both the zh-CN card and the server persona
-        // (`learningGuideAgents` in src/lib/ai/orchestration/learning-guide-graph.ts)
-        // call this agent the Code Assistant, so an English-locale student picked
-        // a card promising teaching examples and got steps and pseudocode back.
-        id: "code-assistant" as const,
-        label: "Code Assistant",
-        sub: "Algorithms and code",
-        icon: GearSix,
-        prompt: `Turn "${slideTitle}" into steps, pseudocode, or a short code example`,
-      },
-    ],
-    multiAgentLabel: "LangGraph multi-agent guide",
-    buildReceipt: (question: string) =>
-      `AI Guide received: ${question}. I will connect ${courseTitle}, the current ${slidePosition} "${slideTitle}", subtitles, and outline for you.`,
-    buildMultiAgentReceipt: (question: string) =>
-      `The multi-agent chain received: ${question}. Study Advisor, Concept Explainer, and Code Assistant will work together.`,
-  };
 }
 
 export { HumanAiChatroom, LearningChatroomPage } from "./learning-page-chatroom";

@@ -3,3 +3,5 @@ import { createTeachingGradebookReleaseRollbackPostHandler } from "./handler";
 export const dynamic = "force-dynamic";
 
 export const POST = createTeachingGradebookReleaseRollbackPostHandler();
+
+export const GET = POST;

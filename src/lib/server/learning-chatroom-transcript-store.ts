@@ -585,6 +585,17 @@ async function mutateLearningChatroomTranscriptRecord(input: {
     existing: LearningChatroomTranscriptRecord | undefined,
   ) => LearningChatroomTranscriptRecord | "not-found";
 }): Promise<"applied" | "not-found"> {
+  if (input.repository) {
+    return mutateLearningChatroomTranscriptRecordLocked(input);
+  }
+  return runWithLocalLearningChatroomTranscriptWriteLock(input.dataDir, () =>
+    mutateLearningChatroomTranscriptRecordLocked(input),
+  );
+}
+
+async function mutateLearningChatroomTranscriptRecordLocked(
+  input: Parameters<typeof mutateLearningChatroomTranscriptRecord>[0],
+): Promise<"applied" | "not-found"> {
   const transcriptId = createLearningChatroomTranscriptId(input);
   const maxAttempts = input.repository ? learningChatroomTranscriptMaxAppendAttempts : 1;
   const retryBudgetStartedAtMs = Date.now();
@@ -711,9 +722,9 @@ export async function appendLearningChatroomTranscriptMessages(input: {
   // route's own race remains the single deadline authority - it only stops the
   // loop from starting another attempt the caller is no longer waiting for.
   retryBudgetMs?: number;
-  // A read performed earlier in this same request.  It is consumed only for the
-  // first attempt; after a 409 the loop must obtain a new snapshot from the
-  // repository, never reuse this potentially stale value.
+  // A repository read performed earlier in this same request. It is consumed
+  // only for the first attempt; after a 409 the loop reads again. Local writes
+  // always read under the corpus lock instead of consuming an earlier snapshot.
   snapshot?: LearningChatroomTranscriptWriteSnapshot;
   // Runtime-facing alias for the request-local handoff.  It remains the
   // repository read shape so the runtime can keep room identity in its own
@@ -724,6 +735,17 @@ export async function appendLearningChatroomTranscriptMessages(input: {
   // retained for lower-level callers and the two are intentionally equivalent.
   writerRole?: "student" | "teacher";
 }): Promise<LearningChatroomTranscriptAppendReceipt> {
+  if (input.repository) {
+    return appendLearningChatroomTranscriptMessagesLocked(input);
+  }
+  return runWithLocalLearningChatroomTranscriptWriteLock(input.dataDir, () =>
+    appendLearningChatroomTranscriptMessagesLocked(input),
+  );
+}
+
+async function appendLearningChatroomTranscriptMessagesLocked(
+  input: Parameters<typeof appendLearningChatroomTranscriptMessages>[0],
+): Promise<LearningChatroomTranscriptAppendReceipt> {
   const storage = input.repository?.storage ?? localLearningChatroomTranscriptStorage;
   const now = input.now ?? new Date().toISOString();
   const transcriptId = createLearningChatroomTranscriptId(input);
@@ -768,8 +790,8 @@ export async function appendLearningChatroomTranscriptMessages(input: {
   // A repository-backed write races other writers of the same snapshot, so the
   // read-modify-write is retried against a fresh revision. A per-student room has
   // one writer and retries once; a group room has one writer per member and
-  // retries up to three times. The local file replace is already atomic and needs
-  // no retry.
+  // retries up to three times. The local mutation holds a corpus-wide lock and
+  // reads again inside it, so it needs no snapshot retry.
   const maxAttempts = input.repository
     ? groupId
       ? learningChatroomGroupTranscriptMaxAppendAttempts
@@ -779,7 +801,7 @@ export async function appendLearningChatroomTranscriptMessages(input: {
   let retryDelayMs = 0;
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     const snapshot =
-      attempt === 0 && handedSnapshot
+      attempt === 0 && handedSnapshot && input.repository
         ? handedSnapshot
         : await readLearningChatroomTranscriptSnapshot({
             dataDir: input.dataDir,
@@ -803,6 +825,7 @@ export async function appendLearningChatroomTranscriptMessages(input: {
     // the room after the first read wins the race, the repository CAS returns
     // 409, the next attempt reads the fresh moderation block, and a student's
     // append becomes a fail-closed 423 instead of being written after freeze.
+    // Local writes likewise use the fresh read taken under the corpus lock.
     // Teacher appends remain allowed and retain the moderation block below.
     if (writerRole === "student" && existing?.moderation?.status === "frozen") {
       throw new LearningChatroomTranscriptStoreError(
@@ -994,6 +1017,48 @@ export async function readLearningChatroomTranscriptDatabase(input: {
   }
 
   return normalizeLearningChatroomTranscriptDatabase(JSON.parse(raw));
+}
+
+async function runWithLocalLearningChatroomTranscriptWriteLock<T>(
+  dataDir: string | undefined,
+  action: () => Promise<T>,
+): Promise<T> {
+  if (!dataDir) {
+    throw new LearningChatroomTranscriptStoreError(
+      500,
+      "Learning chatroom transcript data directory is required.",
+    );
+  }
+  await mkdir(dataDir, { recursive: true });
+  const lockPath = resolve(dataDir, ".learning-chatroom-transcripts-write-lock");
+  ensureWithinBase(dataDir, lockPath);
+  const deadline = Date.now() + 5_000;
+
+  // All local rooms share one file. Lock the entire read-modify-write across
+  // processes so another room's append or a teacher's moderation survives.
+  for (;;) {
+    try {
+      await mkdir(lockPath);
+      break;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
+        throw error;
+      }
+      if (Date.now() >= deadline) {
+        throw new LearningChatroomTranscriptStoreError(
+          503,
+          "Learning chatroom transcript snapshot lock is unavailable.",
+        );
+      }
+      await new Promise<void>((resolveDelay) => setTimeout(resolveDelay, 10));
+    }
+  }
+
+  try {
+    return await action();
+  } finally {
+    await rm(lockPath, { force: true, recursive: true }).catch(() => undefined);
+  }
 }
 
 async function writeLearningChatroomTranscriptSnapshot(input: {

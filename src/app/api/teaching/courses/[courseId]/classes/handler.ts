@@ -1,3 +1,4 @@
+import { isSameTeachingActorId } from "@/lib/server/teaching-actor-id";
 import { randomUUID } from "node:crypto";
 import {
   assertTeachingCourseManagementLocalJsonRuntimeAllowed,
@@ -180,7 +181,7 @@ async function authorizeTeachingClassCourseAccessBeforeBody(input: {
   if (!course) {
     throw new TeachingCourseManagementStoreError(404, "Teaching course was not found.");
   }
-  if (course.ownerTeacherId !== input.authenticatedTeacher.actorId) {
+  if (!isSameTeachingActorId(course.ownerTeacherId, input.authenticatedTeacher.actorId)) {
     return createDeniedAccess(
       "teacher-course-ownership-required",
       input.authenticatedTeacher,

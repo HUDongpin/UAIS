@@ -3,9 +3,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Bell } from "@phosphor-icons/react/dist/ssr/Bell";
 import { BookOpen } from "@phosphor-icons/react/dist/ssr/BookOpen";
-import { CalendarBlank } from "@phosphor-icons/react/dist/ssr/CalendarBlank";
 import { CaretDown } from "@phosphor-icons/react/dist/ssr/CaretDown";
 import { ChartBar } from "@phosphor-icons/react/dist/ssr/ChartBar";
 import { CheckCircle } from "@phosphor-icons/react/dist/ssr/CheckCircle";
@@ -17,7 +15,7 @@ import { Sun } from "@phosphor-icons/react/dist/ssr/Sun";
 import { Translate } from "@phosphor-icons/react/dist/ssr/Translate";
 import { UserCircle } from "@phosphor-icons/react/dist/ssr/UserCircle";
 import { UsersThree } from "@phosphor-icons/react/dist/ssr/UsersThree";
-import { HeaderComingSoonControl } from "@/components/layout/header-coming-soon-control";
+import { HeaderCourseActions } from "@/components/layout/header-course-actions";
 import { HeaderMobileMenu } from "@/components/layout/header-mobile-menu";
 import { useAppPreferences } from "@/components/providers/app-preferences";
 import { getTeachingOperationHref } from "@/components/teaching/teaching-operation-data";
@@ -45,9 +43,8 @@ export function Header({
   const t = copy[locale];
   const accountMenuRef = useRef<HTMLDivElement>(null);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
-  const [openComingSoon, setOpenComingSoon] = useState<
-    "calendar" | "notifications" | null
-  >(null);
+  const signOutInFlight = useRef(false);
+  const [signOutFailed, setSignOutFailed] = useState(false);
   // Read straight from the prop instead of being frozen in `useState` at first
   // render: a server-provided change (a fresh RSC payload for the root layout)
   // now reaches the header instead of being outlived by a stale snapshot. The
@@ -183,15 +180,23 @@ export function Header({
   }, [accountMenuOpen]);
 
   async function signOut() {
+    if (signOutInFlight.current) return;
+    signOutInFlight.current = true;
+    setSignOutFailed(false);
     setAccountMenuOpen(false);
     try {
-      await fetch("/api/auth/app-session", {
+      const response = await fetch("/api/auth/app-session", {
         method: "DELETE",
         credentials: "same-origin",
       });
+      if (!response.ok) throw new Error("Session clear failed.");
     } catch {
-      // A failed clear request must not trap the user inside the app: the hard
-      // navigation below still leaves the authenticated surface.
+      // Cookies remain active when the clear fails; /login would send the user
+      // straight back to their authenticated home without explaining why.
+      setSignOutFailed(true);
+      return;
+    } finally {
+      signOutInFlight.current = false;
     }
     // Hard navigation instead of router.replace: the /login request must be
     // issued only after the sign-out Set-Cookie response has been processed,
@@ -203,7 +208,7 @@ export function Header({
 
   return (
     <header className="sticky top-0 z-30 border-b border-[var(--border)] bg-[var(--surface)]/92 backdrop-blur-xl">
-      <div className="relative mx-auto flex min-h-[72px] w-full max-w-[1608px] items-center justify-between gap-6 px-4 sm:px-6 lg:px-8">
+      <div className="relative mx-auto flex min-h-[72px] w-full max-w-[1608px] items-center justify-between gap-1 px-4 sm:gap-6 sm:px-6 lg:px-8">
         <Link
           href={role ? getUaisHomeHrefForRole(role) : "/login"}
           className="flex shrink-0 items-center gap-3 rounded-2xl px-1 py-2 text-[var(--foreground)] outline-none transition focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
@@ -225,7 +230,7 @@ export function Header({
         {role ? (
           <nav
             aria-label="Primary"
-            className="hidden min-w-0 items-center justify-center gap-8 overflow-x-auto md:absolute md:left-1/2 md:top-0 md:flex md:h-full md:-translate-x-1/2"
+            className="hidden min-w-0 items-center justify-center gap-8 overflow-x-auto xl:absolute xl:left-1/2 xl:top-0 xl:flex xl:h-full xl:-translate-x-1/2"
           >
             {primaryNavItems.map((item) => {
               const active =
@@ -253,42 +258,15 @@ export function Header({
           </nav>
         ) : null}
 
-        <div className="flex shrink-0 items-center gap-2 text-[var(--foreground)]">
-          <HeaderComingSoonControl
-            label={t.controls.calendar}
-            title={t.controls.calendarComingSoonTitle}
-            body={t.controls.calendarComingSoonBody}
-            icon={<CalendarBlank size={19} weight="duotone" />}
-            showLabel
-            open={openComingSoon === "calendar"}
-            onOpenChange={(open) => {
-              setAccountMenuOpen(false);
-              setOpenComingSoon((current) => {
-                if (open) {
-                  return "calendar";
-                }
-                return current === "calendar" ? null : current;
-              });
-            }}
-            buttonClassName="hidden h-11 items-center gap-2 rounded-full px-3 text-sm font-medium outline-none transition hover:bg-[var(--surface-soft)] focus-visible:ring-2 focus-visible:ring-[var(--accent)] lg:inline-flex"
-          />
-          <HeaderComingSoonControl
-            label={t.controls.notifications}
-            title={t.controls.notificationsComingSoonTitle}
-            body={t.controls.notificationsComingSoonBody}
-            icon={<Bell size={19} weight="duotone" />}
-            open={openComingSoon === "notifications"}
-            onOpenChange={(open) => {
-              setAccountMenuOpen(false);
-              setOpenComingSoon((current) => {
-                if (open) {
-                  return "notifications";
-                }
-                return current === "notifications" ? null : current;
-              });
-            }}
-            buttonClassName="hidden size-11 items-center justify-center rounded-full outline-none transition hover:bg-[var(--surface-soft)] focus-visible:ring-2 focus-visible:ring-[var(--accent)] md:inline-flex"
-          />
+        <div className="flex shrink-0 items-center gap-1 text-[var(--foreground)] sm:gap-2">
+          {sessionUser ? (
+            <HeaderCourseActions
+              key={`${sessionUser.role}:${sessionUser.account}:${pathname}`}
+              user={sessionUser}
+              locale={locale}
+              onOpen={() => setAccountMenuOpen(false)}
+            />
+          ) : null}
           <button
             type="button"
             onClick={toggleLocale}
@@ -313,7 +291,7 @@ export function Header({
           {sessionUser ? (
             <>
               {/* Phone-width nav and sign-out. The desktop nav above and the account
-                  menu below are both hidden under `md`, so without this the header
+                  menu below are both hidden under `xl`, so without this the header
                   carried no route affordance and no way out of the app. */}
               <HeaderMobileMenu
                 locale={locale}
@@ -324,11 +302,10 @@ export function Header({
                 signOutLabel={accountMenuCopy.signOut}
                 onSignOut={() => void signOut()}
               />
-              <div ref={accountMenuRef} className="relative hidden md:block">
+              <div ref={accountMenuRef} className="relative hidden xl:block">
                 <button
                   type="button"
                   onClick={() => {
-                    setOpenComingSoon(null);
                     setAccountMenuOpen((open) => !open);
                   }}
                   className="inline-flex h-11 items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface)] px-2.5 pr-3 text-sm font-medium text-[var(--foreground)] shadow-[0_8px_24px_var(--shadow)] outline-none transition hover:bg-[var(--surface-soft)] active:translate-y-px focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
@@ -452,6 +429,20 @@ export function Header({
           )}
         </div>
       </div>
+      {signOutFailed ? (
+        <div role="alert" className="mx-auto flex max-w-[1608px] flex-wrap items-center gap-3 px-4 pb-3 text-sm text-[var(--danger)] sm:px-6 lg:px-8">
+          <p>{locale === "zh-CN"
+            ? "退出失败，您仍处于登录状态。请重试。"
+            : "Sign out failed. You are still signed in. Please try again."}</p>
+          <button
+            type="button"
+            onClick={() => void signOut()}
+            className="min-h-11 rounded-xl border border-[var(--border)] px-3 font-semibold outline-none hover:bg-[var(--surface-soft)] focus-visible:ring-2 focus-visible:ring-[var(--danger)]"
+          >
+            {locale === "zh-CN" ? "重试退出" : "Try signing out again"}
+          </button>
+        </div>
+      ) : null}
     </header>
   );
 }

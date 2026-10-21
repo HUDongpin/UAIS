@@ -275,6 +275,39 @@ describe("teaching-course collaborator ACL on real PostgreSQL", () => {
     }
   }, 60_000);
 
+  it("executes capability reads for owners, collaborators and missing courses on PostgreSQL", async () => {
+    const fixture = await createFixture({ label: "capability-read" });
+    const courseId = fixture.courseIds[0];
+    const recipient = fixture.recipients[0];
+
+    await expect(store().readCapability({
+      principalAccount: fixture.owner.account,
+      courseId,
+      capability: "course.read",
+    })).resolves.toMatchObject({ authorized: true });
+    await expect(store().readCapability({
+      principalAccount: recipient.account,
+      courseId,
+      capability: "course.read",
+    })).resolves.toMatchObject({ authorized: false });
+    await expect(store().readCapability({
+      principalAccount: fixture.owner.account,
+      courseId: `${coursePrefix}missing`,
+      capability: "course.export",
+    })).resolves.toMatchObject({ authorized: false });
+
+    await grant({
+      fixture,
+      key: `${requestPrefix}capability-read`,
+      traceId: `${requestPrefix}capability-read`,
+    });
+    await expect(store().readCapability({
+      principalAccount: recipient.account,
+      courseId,
+      capability: "course.read",
+    })).resolves.toMatchObject({ authorized: true });
+  });
+
   it("applies both ACL migrations and nulls retained identifier references", async () => {
     const fixture = await createFixture({ label: "identifier-null" });
     const receipt = await grant({
