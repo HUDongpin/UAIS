@@ -7,7 +7,7 @@ import { ArrowRight } from "@phosphor-icons/react/dist/ssr/ArrowRight";
 import { useAppPreferences } from "@/components/providers/app-preferences";
 import type { Locale } from "@/i18n/copy";
 import type { LearningSubmissionState } from "@/lib/learning-loop/domain";
-import type { TeacherSubmissionQueueRow } from "./teaching-learning-loop-types";
+import type { TeacherSubmissionQueueCounts, TeacherSubmissionQueueRow } from "./teaching-learning-loop-types";
 
 type QueueFilter = "all" | LearningSubmissionState;
 
@@ -15,6 +15,7 @@ export function TeachingSubmissionQueuePage({ activityId }: { activityId: string
   const { locale } = useAppPreferences();
   const zh = locale === "zh-CN";
   const [rows, setRows] = useState<TeacherSubmissionQueueRow[]>([]);
+  const [counts, setCounts] = useState<TeacherSubmissionQueueCounts | null>(null);
   const [filter, setFilter] = useState<QueueFilter>("all");
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [dataFreshAt, setDataFreshAt] = useState("");
@@ -39,8 +40,9 @@ export function TeachingSubmissionQueuePage({ activityId }: { activityId: string
       const page = Array.isArray(body.submissions) ? body.submissions as TeacherSubmissionQueueRow[] : [];
       setSignedOut(false);
       setRows((current) => append ? [...current, ...page] : page);
+      setCounts(body.counts && typeof body.counts === "object" ? body.counts as TeacherSubmissionQueueCounts : null);
       setNextCursor(typeof body.nextCursor === "string" ? body.nextCursor : null);
-      setDataFreshAt(typeof body.dataFreshAt === "string" ? body.dataFreshAt : new Date().toISOString());
+      setDataFreshAt(typeof body.dataFreshAt === "string" ? body.dataFreshAt : "");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "submission-queue-unavailable");
     } finally {
@@ -70,16 +72,29 @@ export function TeachingSubmissionQueuePage({ activityId }: { activityId: string
     <div className="mx-auto w-full max-w-6xl space-y-6 px-4 py-6 text-[var(--foreground)] sm:px-6">
       <header>
         <Link href="/teaching" className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--accent)]"><ArrowLeft size={16} />{zh ? "返回我的教学" : "Back to My Teaching"}</Link>
-        <p className="mt-5 text-xs font-semibold uppercase tracking-wide text-[var(--accent)]">P1 · {activityId}</p>
-        <h1 className="mt-1 text-3xl font-semibold">{zh ? "真实提交队列" : "Real submission queue"}</h1>
-        <p className="mt-2 text-sm leading-6 text-[var(--muted)]">{zh ? "本页只列出数据库中该任务的真实学生提交；不会使用演示姓名或静态数量。" : "This page lists only real database submissions for this activity—no demo names or static totals."}</p>
+        <p className="mt-5 text-xs font-semibold text-[var(--accent)]">{zh ? "作业评阅" : "Assignment review"}</p>
+        <h1 className="mt-1 text-3xl font-semibold">{zh ? "学生提交" : "Student submissions"}</h1>
+        <p className="mt-2 text-sm leading-6 text-[var(--muted)]">{zh ? "查看本任务的学生提交，选择一份作业进行评阅、反馈或要求修订。" : "Review submissions for this activity, provide feedback, or request a revision."}</p>
       </header>
 
+      {counts ? <section aria-label={zh ? "全班作业概况" : "Class submission overview"} className="space-y-3">
+        <p className="text-sm text-[var(--muted)]">{zh ? `${counts.totalStudents} 位已批准加入目标班级的学生 · 全部人数，不受下方筛选或分页影响` : `${counts.totalStudents} approved students in the target class · Totals are independent of filters and pagination`}</p>
+        <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {[
+            { label: zh ? "未交" : "Not submitted", value: counts.notSubmitted },
+            { label: zh ? "已交" : "Submitted", value: counts.submitted },
+            { label: zh ? "待修订" : "Revision needed", value: counts.revisionRequested },
+            { label: zh ? "已反馈" : "Feedback received", value: counts.feedbackReleased },
+          ].map(({ label, value }) => <div key={label} aria-label={zh ? `${label}人数` : `${label} count`} className="rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3"><dt className="text-xs text-[var(--muted)]">{label}</dt><dd className="mt-1 text-2xl font-semibold">{value}</dd></div>)}
+        </dl>
+        <p className="text-xs leading-5 text-[var(--muted)]">{zh ? `未交与已交合计为全班人数。未交包含尚未开始和当前草稿；已交中有 ${counts.awaitingReview} 人待评阅。待修订包含正在修改的草稿；已反馈表示曾收到教师发布的反馈，这两项人数可能重叠。` : `Not submitted and submitted add up to the class total. Not submitted includes students who have not started and current drafts; ${counts.awaitingReview} submitted students await review. Revision needed includes drafts being revised. Feedback received means teacher feedback has been released at least once; these indicators can overlap.`}</p>
+      </section> : null}
+
       <div role="group" aria-label={zh ? "提交状态筛选" : "Submission state filter"} className="flex flex-wrap gap-2">{filters.map((item) => <button key={item.value} type="button" aria-pressed={filter === item.value} onClick={() => setFilter(item.value)} className={filter === item.value ? "rounded-full bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-white" : "rounded-full border border-[var(--border)] px-4 py-2 text-sm font-semibold"}>{item.label}</button>)}</div>
-      {dataFreshAt ? <p className="text-xs text-[var(--muted)]">{zh ? "数据新鲜度" : "Data fresh at"}: {formatHongKong(dataFreshAt, locale)}</p> : null}
+      {dataFreshAt ? <p className="text-xs text-[var(--muted)]">{zh ? "更新于" : "Updated at"}: {formatHongKong(dataFreshAt, locale)}</p> : null}
       {error ? <div role="alert" className="rounded-xl border border-[var(--danger)] p-4 text-sm"><p>{error}</p><button type="button" onClick={() => void loadQueue()} className="mt-2 font-semibold text-[var(--accent)]">{zh ? "重试" : "Retry"}</button></div> : null}
-      {loading && rows.length === 0 ? <p className="text-sm text-[var(--muted)]">{zh ? "正在读取真实提交…" : "Loading real submissions…"}</p> : null}
-      {!loading && !error && rows.length === 0 ? <p className="rounded-xl border border-dashed border-[var(--border)] p-6 text-sm text-[var(--muted)]">{zh ? "当前筛选下没有真实提交。" : "There are no real submissions in this filter."}</p> : null}
+      {loading && rows.length === 0 ? <p className="text-sm text-[var(--muted)]">{zh ? "正在读取提交…" : "Loading submissions…"}</p> : null}
+      {!loading && !error && rows.length === 0 ? <p className="rounded-xl border border-dashed border-[var(--border)] p-6 text-sm text-[var(--muted)]">{zh ? "当前筛选下没有提交记录。" : "There are no submissions in this filter."}</p> : null}
 
       <div className="overflow-x-auto rounded-2xl border border-[var(--border)] bg-[var(--surface)]">
         <table className="w-full min-w-[760px] text-left text-sm">

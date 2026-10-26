@@ -79,6 +79,7 @@ export type ChatroomTranscriptPdfLabels = {
   // rolling window: a saved PDF outlives the room it came from, so it is the
   // last place that can still say the conversation started earlier than page 1.
   windowTrimmedNotice: string;
+  archiveBoundaryNotice?: string;
 };
 
 type RenderState = {
@@ -169,6 +170,7 @@ export function createChatroomTranscriptPdfMetaLines(
   if (document.windowAtCapacity) {
     metaLines.push(labels.windowTrimmedNotice);
   }
+  if (document.archiveAvailable && labels.archiveBoundaryNotice) metaLines.push(labels.archiveBoundaryNotice);
   return metaLines;
 }
 

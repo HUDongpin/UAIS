@@ -3,7 +3,7 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 import vitestConfig from "../vitest.config.mts";
-import { LIVE_DB_TEST_FILES } from "../scripts/live-db-test-contract.mjs";
+import { LIVE_DB_TEST_FILES, LOCAL_CLASSROOM_DB_TEST_FILES } from "../scripts/live-db-test-contract.mjs";
 
 const liveDatabaseTestFiles = [
   "tests/teaching-course-management-postgres-integration.test.ts",
@@ -32,8 +32,8 @@ describe("P2 deterministic local quality gates", () => {
     expect([...LIVE_DB_TEST_FILES].sort()).toEqual(
       [...liveDatabaseTestFiles].sort(),
     );
-    expect(discovered).toEqual([...liveDatabaseTestFiles].sort());
-    for (const testFile of discovered) {
+    expect(discovered).toEqual([...liveDatabaseTestFiles, ...LOCAL_CLASSROOM_DB_TEST_FILES.filter(file => file.endsWith("-postgres-integration.test.ts"))].sort());
+    for (const testFile of liveDatabaseTestFiles) {
       expect(readFileSync(testFile, "utf8"), testFile).toContain(
         "authorizeLiveDatabaseTestFile",
       );
@@ -51,7 +51,7 @@ describe("P2 deterministic local quality gates", () => {
     const report = JSON.parse(result.stdout) as { commands: string[] };
     expect(report.commands).toHaveLength(5);
     for (const command of report.commands) {
-      for (const testFile of liveDatabaseTestFiles) {
+      for (const testFile of [...liveDatabaseTestFiles, ...LOCAL_CLASSROOM_DB_TEST_FILES]) {
         expect(command).toContain(`--exclude ${testFile}`);
       }
     }
@@ -134,7 +134,7 @@ describe("P2 deterministic local quality gates", () => {
     }
 
     const body = JSON.parse(result.stdout);
-    const exclusions = liveDatabaseTestFiles
+    const exclusions = [...liveDatabaseTestFiles, ...LOCAL_CLASSROOM_DB_TEST_FILES]
       .map((testFile) => ` --exclude ${testFile}`)
       .join("");
     expect(body).toEqual({

@@ -16,6 +16,7 @@
 // session's to extend).
 
 import Link from "next/link";
+import { ChatroomArchivePanel } from "./chatroom-archive-panel";
 import {
   useEffect,
   useRef,
@@ -292,6 +293,10 @@ export function HumanAiChatroom({ summary }: HumanAiChatroomProps) {
                 {room.windowNotice}
               </p>
             ) : null}
+            {room.archiveAvailable && room.activeCourse ? <ChatroomArchivePanel
+              key={`${room.activeCourse.courseId}:${room.activeCourse.classId ?? ""}:${room.activeGroup?.groupId ?? ""}`}
+              courseId={room.activeCourse.courseId} classId={room.activeCourse.classId} groupId={room.activeGroup?.groupId} locale={locale}
+            /> : null}
             {room.fallbackNotice ? (
               <div
                 role="status"

@@ -92,6 +92,7 @@ describe("P1 teacher submission API", () => {
     const listActivitySubmissions = vi.fn(async () => ({
       activityId: "activity-1",
       submissions: [],
+      counts: { totalStudents: 30, notSubmitted: 9, submitted: 21, awaitingReview: 14, revisionRequested: 3, feedbackReleased: 7 },
       nextCursor: null,
       dataFreshAt: "2026-08-20T18:40:00.000Z",
     }));
@@ -109,7 +110,7 @@ describe("P1 teacher submission API", () => {
     );
 
     expect(response.status).toBe(200);
-    expect(await response.json()).toMatchObject({ submissions: [], nextCursor: null });
+    expect(await response.json()).toMatchObject({ submissions: [], nextCursor: null, counts: { totalStudents: 30, notSubmitted: 9, submitted: 21, awaitingReview: 14, revisionRequested: 3, feedbackReleased: 7 } });
     expect(listActivitySubmissions).toHaveBeenCalledWith({
       teacherAccount: "teacher-1",
       activityId: "activity-1",

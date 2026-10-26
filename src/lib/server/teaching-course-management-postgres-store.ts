@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type { TransactionSql } from "postgres";
+import { assertClassroomSnapshotWriteAllowed, ClassroomRecordRetentionError } from "./classroom-record-retention-store";
 import {
   closeUaisCoreDatabaseClient,
   getUaisCoreDatabasePool,
@@ -174,6 +175,11 @@ export function createUaisTeachingCourseManagementPostgresRepository(input: {
       const client = (input.createDatabase ?? getUaisCoreDatabasePool)({ env: input.env });
       try {
         await client.sql.begin(async (sql: TransactionSql) => {
+          try { await assertClassroomSnapshotWriteAllowed(sql, courseKey, courseDatabase); }
+          catch (error) {
+            if (error instanceof ClassroomRecordRetentionError) throw new TeachingCourseManagementStoreError(error.status, error.message, undefined, error.reasonCode);
+            throw error;
+          }
           const rows = await sql`
             SELECT revision
             FROM uais_teaching_course_management_snapshots

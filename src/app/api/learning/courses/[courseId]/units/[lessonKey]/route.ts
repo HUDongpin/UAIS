@@ -25,6 +25,7 @@ type GetDeps = {
     now?: Date;
     fetch?: typeof fetch;
     courseId: string;
+    classId?: string;
   }) => Promise<LearningLoopStudentAccess>;
   readStudentUnit?: (input: {
     studentAccount: string;
@@ -45,12 +46,14 @@ function createLearningUnitGetHandler(deps: GetDeps = {}) {
     const traceId = readLearningLoopTraceId(request);
     try {
       const { courseId, lessonKey } = await context.params;
+      const requestedClassId = new URL(request.url).searchParams.get("classId")?.trim();
       const access = await (deps.authorize ?? authorizeLearningLoopStudentCourse)({
         request,
         env,
         now: deps.now,
         fetch: deps.fetch,
         courseId,
+        ...(requestedClassId ? { classId: requestedClassId } : {}),
       });
       if (access.status === "denied") {
         return createLearningLoopAccessDeniedResponse(access.reasonCode, traceId);

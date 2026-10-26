@@ -4,9 +4,12 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useSessionUser } from "@/components/providers/session-user";
 import type { Locale } from "@/i18n/copy";
+import { availableLocalStorage, readSealIntent, writeSealIntent, removeSealIntent, type SubmissionSealIntent } from "@/lib/learning-loop/client-submission-recovery";
+import type { SubmissionImage } from "@/lib/learning-loop/submission-image-policy";
+import { SubmissionImageEditor, type SubmissionImageSnapshot } from "./submission-image-editor";
 
 type UnitResponse = {
-  unit?: { courseId?: string; classId?: string; lessonKey?: string };
+  unit?: { courseId?: string; classId?: string; lessonKey?: string; recordsReadOnly?: boolean };
   activity?: {
     id?: string;
     status?: "published" | "archived";
@@ -30,6 +33,7 @@ type UnitResponse = {
       status?: "draft" | "sealed";
       contentText?: string;
       draftRevision?: number;
+      attachments?: SubmissionImage[];
     };
   };
   feedback?: Array<{
@@ -125,6 +129,18 @@ function LearningPracticeEditor({
   const [saveError, setSaveError] = useState("");
   const [conflict, setConflict] = useState<DraftConflict>();
   const [submitBusy, setSubmitBusy] = useState(false);
+  const [storageUnavailable, setStorageUnavailable] = useState(false);
+  const [sealIntent, setSealIntent] = useState<SubmissionSealIntent>();
+  const sealIntentRef = useRef<SubmissionSealIntent | undefined>(undefined);
+  const [attachments, setAttachments] = useState<SubmissionImage[]>([]);
+  const [imageBusy, setImageBusy] = useState(false);
+  const imageBusyRef = useRef(false);
+  const [pendingImageCount, setPendingImageCount] = useState(0);
+  const pendingImageCountRef = useRef(0);
+  const [imageRecoveryReady, setImageRecoveryReady] = useState(() => typeof indexedDB === "undefined");
+  const versionRef = useRef<{id:string|null;revision:number}>({id:null,revision:0});
+  const draftTextRef = useRef("");
+  const persistedTextRef = useRef("");
   const [draftRecoveryScope, setDraftRecoveryScope] =
     useState<DraftRecoveryScope>();
   const [draftRecoveryBase, setDraftRecoveryBase] = useState<DraftRecoveryBase>({});
@@ -142,7 +158,7 @@ function LearningPracticeEditor({
     setLoadError("");
     try {
       const response = await fetch(
-        `/api/learning/courses/${encodeURIComponent(courseId)}/units/${encodeURIComponent(lessonKey)}${requestedActivityId ? `?activityId=${encodeURIComponent(requestedActivityId)}` : ""}`,
+        `/api/learning/courses/${encodeURIComponent(courseId)}/units/${encodeURIComponent(lessonKey)}?${new URLSearchParams({classId,...(requestedActivityId?{activityId:requestedActivityId}:{})})}`,
         { headers: { accept: "application/json" }, cache: "no-store" },
       );
       const body = (await response.json()) as UnitResponse;
@@ -170,8 +186,9 @@ function LearningPracticeEditor({
         body.submission?.state === "revision_requested"
           ? 0
           : body.submission?.currentVersion?.draftRevision ?? 0;
-      const legacyRecoveryKey = `uais:p1:draft-recovery:${body.activity.id}`;
-      window.localStorage.removeItem(legacyRecoveryKey);
+      const storage = availableLocalStorage();
+      if (!storage) setStorageUnavailable(true);
+      try { storage?.removeItem(`uais:p1:draft-recovery:${body.activity.id}`); } catch { setStorageUnavailable(true); }
       const recoveryScope = createDraftRecoveryScope({
         learnerAccount,
         courseId,
@@ -181,9 +198,9 @@ function LearningPracticeEditor({
       const canRecoverDraft = body.activity.status === "published" &&
         (!body.submission?.state || body.submission.state === "draft" || body.submission.state === "revision_requested");
       // A local draft is not the evidence that was sealed or accepted elsewhere.
-      const recovered = recoveryScope && canRecoverDraft && !useServerText
-        ? readDraftRecovery(window.localStorage, recoveryScope)
-        : undefined;
+      let recovered: ReturnType<typeof readDraftRecovery>;
+      try { recovered = storage && recoveryScope && canRecoverDraft && !useServerText ? readDraftRecovery(storage, recoveryScope) : undefined; }
+      catch { setStorageUnavailable(true); }
       if (recovered && recoveryScope) {
         draftRecoverySnapshotRef.current = {
           storageKey: createDraftRecoveryStorageKey(recoveryScope),
@@ -191,6 +208,13 @@ function LearningPracticeEditor({
         };
       }
       const serverVersionId = body.submission?.currentVersion?.id ?? null;
+      versionRef.current={id:serverVersionId,revision:serverRevision};
+      setAttachments(body.submission?.currentVersion?.attachments??[]);
+      const pendingSeal = recoveryScope ? readSealIntent(storage, recoveryScope) : undefined;
+      if (pendingSeal && serverVersionId === pendingSeal.submissionVersionId && body.submission?.currentVersion?.status === "sealed") {
+        if (!removeSealIntent(storage, pendingSeal)) setStorageUnavailable(true);
+        sealIntentRef.current = undefined; setSealIntent(undefined);
+      } else if (pendingSeal) { sealIntentRef.current = pendingSeal; setSealIntent(pendingSeal); }
       const hasRecoveredText = Boolean(recovered && recovered.contentText !== serverText);
       const sameRecoveryVersion = recovered?.base.submissionVersionId === serverVersionId;
       const recoveryConflict = hasRecoveredText &&
@@ -198,16 +222,19 @@ function LearningPracticeEditor({
       setDraftRecoveryScope(canRecoverDraft ? recoveryScope : undefined);
       setDraftRecoveryBase(hasRecoveredText && recovered ? recovered.base : { submissionVersionId: serverVersionId, draftRevision: serverRevision });
       setDraftText(hasRecoveredText && recovered ? recovered.contentText : serverText);
+      draftTextRef.current=hasRecoveredText&&recovered?recovered.contentText:serverText;
       setPersistedText(serverText);
+      persistedTextRef.current=serverText;
       setDraftRevision(serverRevision);
       setSubmissionVersionId(serverVersionId);
       setSaveStatus(recoveryConflict ? "conflict" : hasRecoveredText ? "recovered" : "idle");
       setConflict(recoveryConflict ? { latestRevision: serverRevision, latestContent: serverText, versionChanged: !sameRecoveryVersion } : undefined);
+      return body;
     } catch {
       setLoadError(
         zh
-          ? "暂时无法读取真实学习任务，请稍后重试。"
-          : "The real learning activity is temporarily unavailable. Please retry.",
+          ? "暂时无法读取学习任务，请稍后重试。"
+          : "The learning activity is temporarily unavailable. Please retry.",
       );
     } finally {
       setLoading(false);
@@ -221,8 +248,11 @@ function LearningPracticeEditor({
 
   useEffect(() => {
     if (!storageKey || !draftRecoveryScope) return;
+    const storage=availableLocalStorage();
+    if(!storage){queueMicrotask(()=>setStorageUnavailable(true));return;}
+    try {
     if (draftText === persistedText) {
-      removeUnchangedDraftRecovery(window.localStorage, storageKey, draftRecoverySnapshotRef.current);
+      removeUnchangedDraftRecovery(storage, storageKey, draftRecoverySnapshotRef.current);
     } else {
       const envelope: DraftRecoveryEnvelope = {
         version: 3,
@@ -232,14 +262,16 @@ function LearningPracticeEditor({
         base: draftRecoveryBase,
       };
       const serialized = JSON.stringify(envelope);
-      window.localStorage.setItem(storageKey, serialized);
+      storage.setItem(storageKey, serialized);
       draftRecoverySnapshotRef.current = { storageKey, serialized };
     }
+    } catch { queueMicrotask(()=>setStorageUnavailable(true)); }
   }, [draftRecoveryBase, draftRecoveryScope, draftText, persistedText, storageKey]);
 
   const submissionState = unit?.submission?.state;
   const editable =
     unit?.activity?.status === "published" &&
+    !unit?.unit?.recordsReadOnly &&
     Boolean(unit?.formative?.attempted) &&
     (!submissionState || submissionState === "draft" || submissionState === "revision_requested");
 
@@ -256,7 +288,7 @@ function LearningPracticeEditor({
           body: JSON.stringify({
             contentText: text,
             expectedDraftRevision: expectedRevision,
-            expectedSubmissionVersionId: submissionVersionId,
+            expectedSubmissionVersionId: versionRef.current.id,
           }),
         },
       );
@@ -285,41 +317,73 @@ function LearningPracticeEditor({
       }
       setDraftRevision(body.revision);
       setSubmissionVersionId(body.submissionVersionId);
+      versionRef.current={id:body.submissionVersionId,revision:body.revision};
       setDraftRecoveryBase({ submissionVersionId: body.submissionVersionId, draftRevision: body.revision });
       setPersistedText(text);
+      persistedTextRef.current=text;
       setSaveStatus("saved");
-    } catch {
+      return {submissionVersionId:body.submissionVersionId,revision:body.revision};
+    } catch (caught) {
       setSaveStatus((current) => (current === "conflict" ? current : "error"));
+      const closed = caught instanceof Error && (caught.message === "course-records-closed" || caught.message === "course-records-purged");
+      if(closed)setUnit((current)=>current?{...current,unit:{...current.unit,recordsReadOnly:true}}:current);
       setSaveError(
-        zh
-          ? "自动保存失败；本机内容已保留，请恢复网络后重试。"
-          : "Autosave failed. Your local text is retained; retry when online.",
+        closed ? (zh ? "课程已结束，学习记录仍可回看。" : "This course has ended. Learning records remain available to read.") : zh
+          ? "自动保存失败；当前页面的文字仍在，请恢复网络后重试。"
+          : "Autosave failed. Your text is still on this page; retry when online.",
       );
     } finally {
       savingRef.current = false;
     }
-  }, [submissionVersionId, zh]);
+  }, [zh]);
 
   useEffect(() => {
     if (
       !activityId ||
       !editable ||
-      !draftText.trim() ||
       draftText === persistedText ||
-      conflict
+      conflict || sealIntent || imageBusy
     ) {
       return;
     }
     const timer = window.setTimeout(() => {
-      if (!savingRef.current) {
+      if (!savingRef.current && !imageBusyRef.current && !sealIntentRef.current) {
         void saveDraft(activityId, draftText, draftRevision);
       }
     }, 2_000);
     return () => window.clearTimeout(timer);
-  }, [activityId, conflict, draftRevision, draftText, editable, persistedText, saveDraft]);
+  }, [activityId, conflict, draftRevision, draftText, editable, persistedText, saveDraft, sealIntent, imageBusy]);
+
+  async function readImageSnapshot():Promise<SubmissionImageSnapshot> {
+    if(!courseId||!classId||!lessonKey||!activityId)throw Error("student-scope-required");
+    const response=await fetch(`/api/learning/courses/${encodeURIComponent(courseId)}/units/${encodeURIComponent(lessonKey)}?${new URLSearchParams({classId,activityId})}`,{cache:"no-store",headers:{accept:"application/json"}});
+    const body=await response.json() as UnitResponse;
+    if(response.status===401){setSignedOut(true);throw Error("session-required");}
+    if(!response.ok||body.activity?.id!==activityId)throw Error("submission-readback-required");
+    if(body.unit?.recordsReadOnly){setUnit(body);throw Error("course-records-closed");}
+    const current=body.submission?.currentVersion;
+    return {submissionVersionId:current?.id??null,draftRevision:current?.draftRevision??0,attachments:current?.attachments??[],contentText:current?.contentText??"",sealed:current?.status==="sealed"};
+  }
+  function imageConflict(current:SubmissionImageSnapshot){setConflict({latestRevision:current.draftRevision,latestContent:current.contentText,versionChanged:current.submissionVersionId!==versionRef.current.id||current.sealed});setSaveStatus("conflict");}
+  function updateImageSnapshot(current:SubmissionImageSnapshot){
+    setAttachments(current.attachments);
+    if(current.contentText!==persistedTextRef.current){imageConflict(current);return;}
+    versionRef.current={id:current.submissionVersionId,revision:current.draftRevision};setSubmissionVersionId(current.submissionVersionId);setDraftRevision(current.draftRevision);setDraftRecoveryBase({submissionVersionId:current.submissionVersionId,draftRevision:current.draftRevision});
+    if(current.sealed)void loadUnit();
+  }
+  async function prepareImageDraft():Promise<SubmissionImageSnapshot|undefined>{
+    if(!activityId||!editable||savingRef.current||sealIntentRef.current||conflict)return;
+    const previous=versionRef.current;
+    if(!previous.id||previous.revision<1||draftTextRef.current!==persistedTextRef.current ){
+      const saved=await saveDraft(activityId,draftTextRef.current,previous.revision);if(!saved)return;
+    }
+    const current=await readImageSnapshot();
+    if(current.submissionVersionId!==versionRef.current.id||current.draftRevision!==versionRef.current.revision||current.contentText!==persistedTextRef.current||current.sealed){imageConflict(current);return;}
+    updateImageSnapshot(current);return current;
+  }
 
   async function submitCheckpoint() {
-    if (!activityId || !unit?.activity?.checkpoint?.kind || !checkpointResponse.trim()) {
+    if (!activityId || unit?.unit?.recordsReadOnly || !unit?.activity?.checkpoint?.kind || !checkpointResponse.trim()) {
       return;
     }
     setCheckpointBusy(true);
@@ -356,38 +420,63 @@ function LearningPracticeEditor({
   }
 
   async function submitDraft() {
-    if (!activityId || !submissionVersionId || draftText !== persistedText || draftRevision < 1) return;
+    if (!activityId || !imageRecoveryReady || unit?.unit?.recordsReadOnly || !submissionVersionId || draftText !== persistedText || draftRevision < 1 || imageBusyRef.current || pendingImageCountRef.current || savingRef.current || (!draftText.trim() && attachments.length === 0)) return;
     const submittedRecovery = draftRecoverySnapshotRef.current;
     setSubmitBusy(true);
     setSaveError("");
     try {
+      let intent=sealIntentRef.current;
+      if (intent) {
+        const current=await loadUnit();
+        if (!current?.submission?.currentVersion) throw new Error("submit-readback-required");
+        const version=current.submission.currentVersion;
+        if (version.id===intent.submissionVersionId&&version.status==="sealed") { removeSealIntent(availableLocalStorage(),intent);sealIntentRef.current=undefined;setSealIntent(undefined);return; }
+        if (version.id!==intent.submissionVersionId||version.draftRevision!==intent.draftRevision) {
+          setConflict({latestRevision:version.draftRevision??0,latestContent:version.contentText??"",versionChanged:version.id!==intent.submissionVersionId});
+          setSaveStatus("conflict"); removeSealIntent(availableLocalStorage(),intent);sealIntentRef.current=undefined;setSealIntent(undefined);return;
+        }
+      } else {
+        const scope=createDraftRecoveryScope({learnerAccount,courseId,classId,activityId});
+        if(!scope)throw Error("student-scope-required");
+        intent={scope,submissionVersionId,draftRevision,idempotencyKey:`submit-${crypto.randomUUID()}`,updatedAt:Date.now()};
+        sealIntentRef.current=intent;setSealIntent(intent);
+        if(!writeSealIntent(availableLocalStorage(),intent))setStorageUnavailable(true);
+      }
       const response = await fetch(
         `/api/learning/activities/${encodeURIComponent(activityId)}/submission/submit`,
         {
           method: "POST",
           headers: {
             "content-type": "application/json",
-            "idempotency-key": `submit-${crypto.randomUUID()}`,
+            "idempotency-key": intent.idempotencyKey,
           },
-          body: JSON.stringify({ expectedDraftRevision: draftRevision, expectedSubmissionVersionId: submissionVersionId }),
+          body: JSON.stringify({ expectedDraftRevision: intent.draftRevision, expectedSubmissionVersionId: intent.submissionVersionId }),
         },
       );
       if (!response.ok) {
+        if(response.status===401){setSignedOut(true);throw Error("session-required");}
         const body = await response.json() as { reasonCode?: string; latestRevision?: number; latestContent?: string };
-        if (response.status === 409 && body.reasonCode === "stale-submission-version") {
-          setConflict({ latestRevision: body.latestRevision ?? 0, latestContent: body.latestContent ?? "", versionChanged: true });
+        if(body.reasonCode==="course-records-closed"||body.reasonCode==="course-records-purged"){
+          setUnit((current)=>current?{...current,unit:{...current.unit,recordsReadOnly:true}}:current);
+          removeSealIntent(availableLocalStorage(),intent);sealIntentRef.current=undefined;setSealIntent(undefined);return;
+        }
+        if (response.status === 409 && (body.reasonCode === "stale-submission-version" || body.reasonCode === "stale-draft-revision")) {
+          setConflict({ latestRevision: body.latestRevision ?? 0, latestContent: body.latestContent ?? "", versionChanged: body.reasonCode === "stale-submission-version" });
           setSaveStatus("conflict");
+          removeSealIntent(availableLocalStorage(),intent);sealIntentRef.current=undefined;setSealIntent(undefined);
           return;
         }
         throw new Error("submit-failed");
       }
-      removeUnchangedDraftRecovery(window.localStorage, storageKey, submittedRecovery);
+      if(!removeSealIntent(availableLocalStorage(),intent))setStorageUnavailable(true);
+      sealIntentRef.current=undefined;setSealIntent(undefined);
+      try { const storage=availableLocalStorage(); if(storage)removeUnchangedDraftRecovery(storage,storageKey,submittedRecovery); } catch { setStorageUnavailable(true); }
       await loadUnit();
     } catch {
       setSaveError(
         zh
-          ? "提交未完成，草稿仍然保留。"
-          : "Submission did not complete; your draft is still retained.",
+          ? "提交结果尚未确认。请核对服务端状态后重试，避免重复提交。"
+          : "The submission result is not confirmed. Check the server state before retrying.",
       );
     } finally {
       setSubmitBusy(false);
@@ -401,8 +490,11 @@ function LearningPracticeEditor({
       return;
     }
     setDraftText(merge ? `${conflict.latestContent}\n\n---\n\n${draftText}` : conflict.latestContent);
+    draftTextRef.current=merge?`${conflict.latestContent}\n\n---\n\n${draftText}`:conflict.latestContent;
     setPersistedText(conflict.latestContent);
+    persistedTextRef.current=conflict.latestContent;
     setDraftRevision(conflict.latestRevision);
+    versionRef.current={id:submissionVersionId,revision:conflict.latestRevision};
     setDraftRecoveryBase({ submissionVersionId, draftRevision: conflict.latestRevision });
     setConflict(undefined);
     setSaveStatus(merge ? "unsaved" : "saved");
@@ -422,7 +514,7 @@ function LearningPracticeEditor({
     );
   }
   if (loading && !unit) {
-    return <p className="text-sm text-[var(--muted)]">{zh ? "正在读取真实任务…" : "Loading the real activity…"}</p>;
+    return <p className="text-sm text-[var(--muted)]">{zh ? "正在读取学习任务…" : "Loading the activity…"}</p>;
   }
   if (loadError && !unit) {
     return (
@@ -442,7 +534,7 @@ function LearningPracticeEditor({
     <div className="space-y-5" data-uais-learning-practice="real">
       <header>
         <p className="text-xs font-semibold uppercase tracking-wide text-[var(--accent)]">
-          {zh ? "真实形成性学习任务" : "Real formative learning activity"}
+          {zh ? "课堂学习任务" : "Classroom learning activity"}
         </p>
         <h2 className="mt-1 text-lg font-semibold text-[var(--foreground)]">
           {unit.activity.title?.[locale]}
@@ -453,6 +545,8 @@ function LearningPracticeEditor({
       </header>
 
       {loadError ? <p role="alert" className="text-sm text-[var(--danger)]">{loadError}</p> : null}
+      {unit.unit?.recordsReadOnly ? <p role="status" className="rounded-xl border border-[var(--border)] p-3 text-sm">{zh?"课程已结束，学习记录仍可回看。":"This course has ended. Learning records remain available to read."}</p>:null}
+      {storageUnavailable ? <p role="status" className="rounded-xl border border-[var(--warning)] p-3 text-sm">{zh?"本机恢复副本不可用。尚未保存到服务器的文字只在当前页面，请勿刷新或关闭，并先复制备份。":"Local recovery storage is unavailable. Unsaved text exists only on this page; copy it before refreshing or closing."}</p>:null}
 
       {unit.activity.status === "archived" ? (
         <p className="rounded-xl border border-[var(--warning)] bg-[var(--surface-elevated)] p-3 text-sm leading-6 text-[var(--muted)]">
@@ -469,7 +563,7 @@ function LearningPracticeEditor({
         <StatusChip label={zh ? "单元完成" : "Unit completion"} value={unit.completion?.completed ? (zh ? "教师已接受" : "Teacher accepted") : (zh ? "尚未完成" : "Not complete")} />
       </div>
 
-      {unit.activity.status === "published" && !unit.formative?.attempted && checkpoint ? (
+      {unit.activity.status === "published" && !unit.unit?.recordsReadOnly && !unit.formative?.attempted && checkpoint ? (
         <section className="rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] p-4">
           <h3 className="font-semibold text-[var(--foreground)]">{checkpoint.prompt?.[locale]}</h3>
           {checkpoint.kind === "single-choice" ? (
@@ -504,11 +598,11 @@ function LearningPracticeEditor({
         <ul className="list-disc space-y-1 pl-5 text-xs leading-5 text-[var(--muted)]">
           {unit.activity.rubric?.map((item) => <li key={item.id}>{item.label?.[locale]}</li>)}
         </ul>
-        <textarea aria-label={zh ? "学习产物正文" : "Learning evidence text"} value={draftText} readOnly={!editable} disabled={!unit.formative?.attempted} maxLength={20_000} rows={10} onChange={(event) => { setDraftText(event.target.value); setSaveStatus("unsaved"); setSaveError(""); }} className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3 text-sm leading-6 outline-none focus:ring-2 focus:ring-[var(--accent)] disabled:opacity-60" />
+        <textarea aria-label={zh ? "学习产物正文" : "Learning evidence text"} value={draftText} readOnly={!editable || submitBusy || imageBusy || Boolean(sealIntent)} disabled={!unit.formative?.attempted} maxLength={20_000} rows={10} onChange={(event) => { draftTextRef.current=event.target.value; setDraftText(event.target.value); setSaveStatus("unsaved"); setSaveError(""); }} className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3 text-sm leading-6 outline-none focus:ring-2 focus:ring-[var(--accent)] disabled:opacity-60" />
         <p className="text-xs text-[var(--muted)]">{zh ? `${Array.from(draftText).length}/20,000 字符；支持纯文本与受限 Markdown。` : `${Array.from(draftText).length}/20,000 characters; plain text and restricted Markdown only.`}</p>
         {saveError ? <p role="alert" className="text-sm text-[var(--danger)]">{saveError}</p> : null}
         {editable && saveStatus === "error" && !conflict ? (
-          <button type="button" disabled={!draftText.trim()} onClick={() => {
+          <button type="button" disabled={imageBusy || submitBusy} onClick={() => {
             if (activityId && !savingRef.current) void saveDraft(activityId, draftText, draftRevision);
           }} className="rounded-full border border-[var(--accent)] px-4 py-2 text-sm font-semibold text-[var(--accent)] disabled:opacity-50">
             {zh ? "重试保存" : "Retry save"}
@@ -516,11 +610,13 @@ function LearningPracticeEditor({
         ) : null}
         {conflict ? <DraftConflictPanel conflict={conflict} localContent={draftText} locale={locale} onUseServer={() => resolveDraftConflict(false)} onMerge={conflict.versionChanged ? undefined : () => resolveDraftConflict(true)} /> : null}
         {editable ? (
-          <button type="button" disabled={submitBusy || !draftText.trim() || draftText !== persistedText || draftRevision < 1 || Boolean(conflict)} onClick={() => void submitDraft()} className="rounded-full bg-[var(--accent)] px-5 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">
-            {submitBusy ? (zh ? "提交中…" : "Submitting…") : submissionState === "revision_requested" ? (zh ? "提交新版本" : "Submit new version") : (zh ? "封存并提交" : "Seal and submit")}
+          <button type="button" disabled={submitBusy || !imageRecoveryReady || imageBusy || pendingImageCount > 0 || (!draftText.trim() && attachments.length === 0) || draftText !== persistedText || draftRevision < 1 || Boolean(conflict)} onClick={() => void submitDraft()} className="rounded-full bg-[var(--accent)] px-5 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">
+            {submitBusy ? (zh ? "提交中…" : "Submitting…") : sealIntent ? (zh ? "核对并重试提交" : "Check and retry submission") : submissionState === "revision_requested" ? (zh ? "提交新版本" : "Submit new version") : (zh ? "封存并提交" : "Seal and submit")}
           </button>
         ) : null}
       </section>
+
+      {activityId && learnerAccount && courseId && classId ? <SubmissionImageEditor scope={{learnerAccount,courseId,classId,activityId}} locale={locale} versionId={submissionVersionId} revision={draftRevision} attachments={attachments} editable={editable} disabled={submitBusy || !imageRecoveryReady || imageBusy || saveStatus === "saving" || Boolean(conflict) || Boolean(sealIntent)} prepareDraft={prepareImageDraft} readSnapshot={readImageSnapshot} onUpdated={updateImageSnapshot} onConflict={imageConflict} onAuthenticationRequired={()=>setSignedOut(true)} onBusyChange={(value)=>{imageBusyRef.current=value;setImageBusy(value);}} onPendingChange={(count)=>{pendingImageCountRef.current=count;setPendingImageCount(count);}} onRecoveryReady={()=>setImageRecoveryReady(true)} /> : null}
 
       {feedback.length ? (
         <section className="space-y-3 border-t border-[var(--border)] pt-4">
@@ -620,7 +716,7 @@ function sameDraftRecoveryScope(
 }
 
 function PracticeEmptyState({ locale }: { locale: Locale }) {
-  return <p className="px-2 py-6 text-center text-sm leading-6 text-[var(--muted)]">{locale === "zh-CN" ? "当前真实课件单元尚未发布学习任务；这里不会显示虚构待交作业。" : "No activity is published for this real lesson yet. This view does not invent pending work."}</p>;
+  return <p className="px-2 py-6 text-center text-sm leading-6 text-[var(--muted)]">{locale === "zh-CN" ? "教师尚未为此课时发布学习任务。" : "Your teacher has not published an activity for this lesson yet."}</p>;
 }
 
 function StatusChip({ label, value }: { label: string; value: string }) {
@@ -639,6 +735,6 @@ function formatSubmissionState(state: SubmissionState, locale: Locale) {
 }
 
 function formatSaveStatus(status: string, locale: Locale) {
-  const labels: Record<string, [string, string]> = { idle: ["", ""], unsaved: ["等待自动保存", "Waiting to autosave"], saving: ["正在保存…", "Saving…"], saved: ["已由服务端保存", "Saved by server"], error: ["保存失败，本机已保留", "Save failed; retained locally"], conflict: ["需要处理版本冲突", "Version conflict needs attention"], recovered: ["已恢复本机未提交文字", "Recovered local unsaved text"] };
+  const labels: Record<string, [string, string]> = { idle: ["", ""], unsaved: ["等待自动保存", "Waiting to autosave"], saving: ["正在保存…", "Saving…"], saved: ["已由服务端保存", "Saved by server"], error: ["保存失败", "Save failed"], conflict: ["需要处理版本冲突", "Version conflict needs attention"], recovered: ["已恢复本机未提交文字", "Recovered local unsaved text"] };
   return labels[status]?.[locale === "zh-CN" ? 0 : 1] ?? "";
 }

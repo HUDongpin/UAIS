@@ -1,0 +1,108 @@
+{
+  "schemaVersion": 1,
+  "primaryLocale": "zh-CN",
+  "studentContent": {
+    "title": "第 1 课：自然数、后继与计数 / Natural numbers, successor and counting",
+    "objectives": [
+      "说明本课自然数包含 0 的约定，区分数量、序号与数字符号。 / State the zero-inclusive convention and distinguish quantity, position and numeral.",
+      "用后继 S 和一一对应解释“多一个”，识别重复计数、遗漏与标签偏移。 / Explain one more with successor and one-to-one correspondence; diagnose double counting, omission and offset labels.",
+      "比较实物、点图和符号表达，写出面向初学者的数学解释。 / Compare objects, dot diagrams and symbols and write an explanation for a beginner."
+    ],
+    "body": "课程定位：大学《初等数学研究》；本课 45 分钟，适合数学及数学教育学习者。先备知识：集合元素、基本等号与简单函数。准备纸笔或文字编辑器，不要求图片、音频或 AI 服务。\n\n一、先约定我们在谈什么（0–7 分钟）\n本课用 N={0,1,2,3,…} 表示自然数，N+={1,2,3,…} 表示正整数。有些教材用 N 表示从 1 开始的集合；使用前说清约定，不能仅凭符号判定对错。空集合的元素个数是 0。\n“3”是书写数字的一个符号；“三”“III”和三个点可以表达相同数量。第三张卡片的“第三”描述位置，三张卡片的“三”描述数量。表示方式改变，不会自动改变所表示的数。\n先独立写一句话：你平时说“第 0 项”时，究竟在说数量还是位置标签？稍后与同伴交换。\n\n二、把“下一个”说清楚（7–16 分钟）\n后继 S 是从 N 到 N 的函数；S(n) 表示 n 的后继。在通常算术表示下 S(n)=n+1。于是 1=S(0)，2=S(S(0))。这里的 n 是任意自然数。\n我们采用的自然数结构具有以下特征：0 是起点；每个自然数都有后继；没有自然数的后继是 0；相同的后继来自相同的数，即 S(a)=S(b) 蕴含 a=b。此外，需要归纳原则：一个包含 0 且对后继封闭的自然数子集包含所有自然数。单靠列出若干数，不能替代最后这条条件。下一课研究它怎样支撑证明。\n“每个数有后继”意味着不会出现最大的自然数：若 m 是最大的，S(m)=m+1 仍是自然数且大于 m。0 没有自然数范围内的前驱；n>0 则可以退回前一自然数。\n\n三、已解示例：计数是一种配对，不是看最后一个标签（16–23 分钟）\n给三个物体 A、B、C 计数，可以配对 A↔1、B↔2、C↔3。每个物体恰好配到一个标签，每个标签也恰好用一次，这是一一对应，数量为 3。\n也可给它们编号 A↔0、B↔1、C↔2。末标签为 2，物体仍有 3 个：标签集合 {0,1,2} 与 {1,2,3} 通过 i↦i+1 一一对应。编号起点与数量不是同一回事。\n如果移动 C，再按 B、C、A 的顺序逐一配对，数量仍为 3。这里要求物体没有被增减，而且每件恰数一次；“顺序无关”并不允许重复或遗漏。若增加一个新物体 D，原配对保留，再给 D 一个新标签，数量由 3 变为 S(3)=4。\n画一个三点图，分别写下从 1 和从 0 开始的标签，再圈出新增的第四个点。用一句话解释图与符号 S(3) 的联系。\n\n四、同伴讨论（23–30 分钟）\n三人一组：一人提出表示，一人检查一一对应，一人写解释。讨论思考问题 counting-six；可以交换顺序、改变标签起点，但要说清哪些对象保持不变。随后审查 cycle-model：一个“永远能往下走”的规则是否必然就是自然数后继？每人至少给出一条可检验的理由。\n讨论结束后各自提交，不把同伴姓名写入作业，不把其他人的照片上传。\n\n五、个人产物与退出卡（30–45 分钟）\n完成下方“计数解释与模型审查”任务。可以用文字、清晰的手写图片或两者组合。结尾补充一句：哪一种表示最容易让初学者把“最后标签”误当作“数量”，你会怎样纠正？先确认保存，再提交，并在页面上检查提交状态。\n\nEnglish companion\nUse N={0,1,2,…} and N+={1,2,3,…}. A numeral represents a number; cardinality counts objects, while an ordinal label identifies a position. Our successor function satisfies S(n)=n+1. Zero is not a successor, S is injective, and the induction principle rules out additional unreachable parts of the natural-number structure. There is no greatest natural number.\nCounting a finite collection pairs each object with exactly one label and uses every label exactly once. For three objects, labels 1,2,3 and labels 0,1,2 describe the same cardinality. Their final labels differ. Rearrangement preserves cardinality when no object is added, removed, omitted or counted twice. Adding one new object extends the pairing and changes the cardinality from n to S(n).\nIn the group discussion, compare a dot diagram, a labeling table and successor notation. Then submit your own response to counting-six and cycle-model. Explain the reasoning, rather than supplying only a number.",
+    "questions": [
+      {
+        "id": "counting-six",
+        "prompt": "桌上有六个不同的物体 A、B、C、D、E、F。甲用 1 到 6 编号；乙用 0 到 5 编号并说“只有五个”。用两张配对表或点图纠正乙。再添加新的物体 G，分别说明两种编号的最后标签与总数量，并用 S 表示数量变化。最后写两三句面向初学者的解释。 / Six distinct objects A–F are labeled 1–6 by one learner and 0–5 by another, who claims there are only five. Correct this using two pairing tables or dot diagrams. Add a new object G; identify each final label, the cardinality and the successor relation. Write a brief beginner-friendly explanation."
+      },
+      {
+        "id": "cycle-model",
+        "prompt": "三个符号 {0,1,2} 按 T(0)=1、T(1)=2、T(2)=0 循环。每个符号都有“下一个”，是否足以把 T 当作本课的自然数后继？明确指出一个被违反的条件。再解释“自然数没有最大值”怎样区别于“有限循环没有终点”。 / On {0,1,2}, let T(0)=1, T(1)=2 and T(2)=0. Does having a next symbol suffice to make T a natural-number successor? Identify a violated condition and distinguish no greatest natural number from an endless finite cycle."
+      }
+    ]
+  },
+  "teacherGuide": {
+    "notes": "教师备课信息，不放入学生正文。建议 30 人，10 组三人；本课总计 45 分钟。0–7 分钟确认 N/N+ 约定并收集数量/序号例子；7–16 分钟讲后继结构，以“下一步有没有”和“是否回到 0”作区别；16–23 分钟走完三个物体的已解示例，要求学生口头说出一一对应的两侧；23–30 分钟分组讨论，巡视记录两类误区；30–40 分钟个人完成任务；40–45 分钟退出卡、确认提交并抽看两份产物。\n课前不要把“自然数一定包含 0”说成唯一通用记法；本材料选择含 0 的约定。不要以“0 不能减 1”作整数运算的一般断言，应限定自然数范围。循环 T 是单射，但违反 0 不属于后继像集这一条件，不能把错误归因于“循环函数不是函数”。\n形成性检查后追问：若少数学生选错，先让他们指出哪一件物体被数了两次，而非直接再讲一遍定义。\n评价采用任务的三项量规：met=对应关系与理由完整、无关键错误；partly-met=核心正确但一个标签/解释不清；needs-revision=数量标签混淆、违反的条件未指明或论证无效。各维度分别判断，不把图片美观计入数学成绩。反馈模板：指出一个已成立的对应关系；引用一处具体标签或条件；要求一个可执行的修订。\n第二课衔接：后继结构说明每一步是什么，归纳原则说明一个由起点和步骤覆盖全部自然数的证明为何有效。学生本课尚未掌握完整形式公理系统；不宣称这次教学已验证学习效果。\n数学核对来源（2026-10-26，公开大学教材；活动及措辞为本课原创）：University of Nottingham, Library Arith, natural numbers 部分，https://people.cs.nott.ac.uk/psztxa/g52ifr/html/Arith.html （仅核对 0、后继、单射和归纳原则；不采用网页后文的排版错式）；Lehman, Leighton, & Meyer (2015), Mathematics for Computer Science, §§4.5,5.1，https://ocw.mit.edu/courses/6-042j-mathematics-for-computer-science-spring-2015/mit6_042js15_textbook.pdf （核对有限基数与归纳原理）。未复制原文题目、图片或人物故事。",
+    "answers": [
+      {
+        "questionId": "counting-six",
+        "answer": "甲：A↔1、B↔2、C↔3、D↔4、E↔5、F↔6。乙：A↔0、B↔1、C↔2、D↔3、E↔4、F↔5。两个标签集合各有 6 个元素，通过 i↦i+1 配对，所以都有 6 个物体。新增 G 后，甲最后标签为 7，乙最后标签为 6，数量均为 7=S(6)。面向初学者可说：“0 是第一个物体的名字，不是没有物体；把六个标签逐一与物体配对，会得到六对。加一件物体，就多一对。”可接受其他严谨、无重复遗漏的对应图。 / Both label sets have six members. After G is added, the final labels are 7 and 6 respectively, but both cardinalities are seven, S(6). Credit a correct bijection and an explanation of label versus count, not just the answer 7."
+      },
+      {
+        "questionId": "cycle-model",
+        "answer": "不足。T(2)=0，直接违反“0 不是任何自然数的后继”。T 在三元素集合上仍是单射，所以不能指称它违反单射。沿着 T 可以无限重复，但永远只有三个状态；自然数的后继产生更大的自然数，不会回到 0。若存在最大的自然数 m，S(m)=m+1>m 仍是自然数，矛盾。 / The cycle violates zero not being a successor: T(2)=0. It is nevertheless injective. An infinite walk through three repeated states is not an unbounded sequence of distinct increasing natural numbers."
+      }
+    ]
+  },
+  "tasks": [
+    {
+      "id": "counting-model-review",
+      "title": {
+        "zh-CN": "计数解释与模型审查",
+        "en-US": "Counting explanation and model review"
+      },
+      "instructions": {
+        "zh-CN": "个人提交一份产物，同时回应 counting-six 和 cycle-model。包含：两种编号的一一对应图或表；新增 G 后的最后标签、总数量与 S 等式；对有限循环的条件检查；面向初学者的两三句反馈。可提交文字、手写图片或组合；最多 3 张 PNG/JPEG，每张不超过 1 MiB，拍清符号即可。先保存草稿，再提交；教师要求修订后保留原思路并说明修改。",
+        "en-US": "Submit one individual artifact addressing counting-six and cycle-model. Include two one-to-one labeling diagrams or tables, the final labels and cardinality after adding G, a successor equation, a condition violated by the finite cycle, and a short beginner-friendly explanation. Use text, handwritten images, or both: up to three PNG/JPEG files of 1 MiB each. Save before submitting; after a revision request explain what you changed."
+      },
+      "checkpoint": {
+        "kind": "single-choice",
+        "prompt": {
+          "zh-CN": "给三个物体计数时，下列哪种做法一定不能建立所需的一一对应？",
+          "en-US": "Which procedure necessarily fails to establish a one-to-one counting correspondence for three objects?"
+        },
+        "options": [
+          {
+            "id": "a",
+            "label": {
+              "zh-CN": "改变物体的摆放顺序，每个物体仍恰数一次",
+              "en-US": "Rearrange the objects but count each exactly once"
+            }
+          },
+          {
+            "id": "b",
+            "label": {
+              "zh-CN": "把同一个物体分别配到两个不同标签",
+              "en-US": "Assign two different counting labels to the same object"
+            }
+          },
+          {
+            "id": "c",
+            "label": {
+              "zh-CN": "选用标签 0、1、2 并说明标签起点",
+              "en-US": "Use labels 0, 1 and 2 and state the starting convention"
+            }
+          }
+        ],
+        "correctOptionId": "b",
+        "explanation": {
+          "zh-CN": "计数要求每件物体恰好对应一个标签，并且没有标签重复占用或遗漏。B 重复计数同一物体；换摆放顺序或换一组有同样数量的标签，本身不破坏一一对应。",
+          "en-US": "Counting requires every object to receive exactly one label and every label to be used once. B counts an object twice. Rearrangement or changing to an equally sized label set does not itself break the correspondence."
+        }
+      },
+      "rubric": [
+        {
+          "id": "representation",
+          "label": {
+            "zh-CN": "表示与数量：两种编号均无重复遗漏，区分最后标签和元素个数。",
+            "en-US": "Representation and cardinality: both labelings are bijective and final labels are distinguished from counts."
+          }
+        },
+        {
+          "id": "successor",
+          "label": {
+            "zh-CN": "后继与条件：正确写出数量变化，准确指出循环违反的条件。",
+            "en-US": "Successor and conditions: state the count change correctly and identify the precise condition violated by the cycle."
+          }
+        },
+        {
+          "id": "explanation",
+          "label": {
+            "zh-CN": "数学解释：以对象、对应与条件给出可检查理由，向初学者清楚解释并回应反馈。",
+            "en-US": "Mathematical explanation: provide checkable object–label reasoning, communicate to a beginner, and respond to feedback."
+          }
+        }
+      ],
+      "aiPolicy": "disabled"
+    }
+  ]
+}

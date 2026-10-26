@@ -26,6 +26,7 @@ export async function authorizeLearningLoopStudentActivity(input: {
     now?: Date;
     fetch?: typeof fetch;
     courseId: string;
+    classId?: string;
   }) => Promise<LearningLoopStudentAccess>;
 }) {
   const readStore = input.readActivityScope
@@ -40,6 +41,7 @@ export async function authorizeLearningLoopStudentActivity(input: {
     now: input.now,
     fetch: input.fetch,
     courseId: scope.courseId,
+    classId: scope.classId,
   });
   if (access.status === "denied") return { access, scope };
   if (access.courseId !== scope.courseId || access.classId !== scope.classId) {

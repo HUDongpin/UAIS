@@ -129,7 +129,7 @@ describe("LearningPage", () => {
     vi.stubGlobal("fetch", fetchMock);
     render(<LearningPage initialCourseId="course-1" initialClassId="class-1" initialLessonKey="lesson-1" initialActivityId="activity-b" />);
     const login = await screen.findByRole("link", { name: "重新登录并返回本单元" });
-    expect(fetchMock).toHaveBeenCalledWith("/api/learning/courses/course-1/units/lesson-1?activityId=activity-b", expect.anything());
+    expect(fetchMock).toHaveBeenCalledWith("/api/learning/courses/course-1/units/lesson-1?classId=class-1&activityId=activity-b", expect.anything());
     expect(login.getAttribute("href")).toBe(`/login?from=${encodeURIComponent("/learning?courseId=course-1&classId=class-1&lessonKey=lesson-1&activityId=activity-b")}`);
     expect(screen.queryByText("当前课程：大学研究方法")).toBeNull();
   });

@@ -12,6 +12,7 @@ import {
   type NextLearningAction,
 } from "@/lib/learning-loop/recommendation";
 import type { LearningSubmissionState } from "@/lib/learning-loop/domain";
+import { readSubmissionImageVersions } from "./submission-image-store";
 
 type ReadSql = {
   (strings: TemplateStringsArray, ...values: unknown[]): Promise<unknown[]>;
@@ -53,7 +54,7 @@ export function createUaisLearningLoopPostgresReadStore(options: ReadStoreOption
         );
         const rows = await (client.sql as ReadSql)`
           SELECT
-            a.id, a.activity_key, a.version, a.edit_revision, a.status, a.title_i18n,
+            a.id, a.activity_key, a.version, a.edit_revision, a.status, a.title_i18n, a.lesson_version_id,
             a.instructions_i18n, a.rubric, a.formative_check, a.due_at,
             a.ai_policy, a.revision_policy, a.target_class_external_id,
             a.published_at, a.archived_at, a.updated_at,
@@ -87,7 +88,7 @@ export function createUaisLearningLoopPostgresReadStore(options: ReadStoreOption
         );
         const rows = await (client.sql as ReadSql)`
           SELECT
-            a.id, a.activity_key, a.version, a.edit_revision, a.status, a.title_i18n,
+            a.id, a.activity_key, a.version, a.edit_revision, a.status, a.title_i18n, a.lesson_version_id,
             a.instructions_i18n, a.rubric, a.formative_check, a.due_at,
             a.ai_policy, a.revision_policy, a.target_class_external_id,
             a.published_at, a.archived_at, a.updated_at,
@@ -117,7 +118,7 @@ export function createUaisLearningLoopPostgresReadStore(options: ReadStoreOption
           SELECT
             c.slug AS course_external_id,
             a.target_class_external_id AS class_external_id,
-            l.external_key AS lesson_key
+            l.external_key AS lesson_key, a.lesson_version_id
           FROM uais_assessments a
           JOIN uais_lessons l ON l.id = a.lesson_id
           JOIN uais_courses c ON c.id = l.course_id
@@ -130,6 +131,7 @@ export function createUaisLearningLoopPostgresReadStore(options: ReadStoreOption
           courseId: readString(row.course_external_id),
           classId: readString(row.class_external_id),
           lessonKey: readString(row.lesson_key),
+          ...(readString(row.lesson_version_id) ? { lessonVersionId: readString(row.lesson_version_id) } : {}),
         };
       } finally {
         await closeUaisCoreDatabaseClient(client);
@@ -151,18 +153,20 @@ export function createUaisLearningLoopPostgresReadStore(options: ReadStoreOption
           const activityRows = await sql`
             SELECT
               a.id AS activity_id, a.version AS activity_version,
-              a.status AS activity_status,
+              a.status AS activity_status, a.lesson_version_id,
               a.title_i18n, a.instructions_i18n, a.rubric, a.formative_check,
               a.due_at, a.ai_policy, l.id AS lesson_id,
               l.external_key AS lesson_key, l.position AS lesson_position,
-              l.title AS lesson_title, c.id AS course_id,
+              COALESCE(lv.student_content->>'title',l.title) AS lesson_title, c.id AS course_id,
               c.slug AS course_external_id, cl.id AS class_id,
-              cl.external_key AS class_external_id
+              cl.external_key AS class_external_id, retention.closed_at AS records_closed_at
             FROM uais_assessments a
             JOIN uais_lessons l ON l.id = a.lesson_id
+            LEFT JOIN uais_lesson_versions lv ON lv.id=a.lesson_version_id AND lv.lesson_id=l.id
             JOIN uais_courses c ON c.id = l.course_id
             JOIN uais_classes cl
               ON cl.course_id = c.id AND cl.external_key = a.target_class_external_id
+            LEFT JOIN uais_course_record_retention retention ON retention.course_external_id=c.slug
             WHERE c.slug = ${input.courseExternalId}
               AND cl.external_key = ${input.classExternalId}
               AND l.external_key = ${input.lessonKey}
@@ -244,6 +248,7 @@ export function createUaisLearningLoopPostgresReadStore(options: ReadStoreOption
               ])
             : [[], []];
           const profile = firstRow(profileRows);
+          const imagesByVersion = submission ? await readSubmissionImageVersions(sql, readString(submission.submission_id)) : new Map();
           const submissionState = submission
             ? readSubmissionState(submission.submission_state)
             : undefined;
@@ -255,6 +260,7 @@ export function createUaisLearningLoopPostgresReadStore(options: ReadStoreOption
                 contentText: readString(submission.content_text),
                 draftRevision: readInteger(submission.draft_revision),
                 submittedAt: readOptionalTimestamp(submission.submitted_at),
+                attachments: imagesByVersion.get(readString(submission.version_id)) ?? [],
               }
             : undefined;
           const dataFreshAt = newestTimestamp([
@@ -270,6 +276,8 @@ export function createUaisLearningLoopPostgresReadStore(options: ReadStoreOption
               lessonKey: readString(activity.lesson_key),
               position: readInteger(activity.lesson_position),
               title: readString(activity.lesson_title),
+              recordsReadOnly: Boolean(activity.records_closed_at),
+              ...(readString(activity.lesson_version_id) ? { lessonVersionId: readString(activity.lesson_version_id) } : {}),
             },
             activity: {
               id: readString(activity.activity_id),
@@ -297,7 +305,7 @@ export function createUaisLearningLoopPostgresReadStore(options: ReadStoreOption
                     state: submissionState,
                     currentVersionNo: readInteger(submission.current_version_no),
                     currentVersion,
-                    versions: versions.map(mapStudentVersion),
+                    versions: versions.map(value => ({ ...mapStudentVersion(value), attachments: imagesByVersion.get(readString(readRecord(value).id)) ?? [] })),
                   },
                 }
               : {}),
@@ -563,18 +571,77 @@ export function createUaisLearningLoopPostgresReadStore(options: ReadStoreOption
         `;
         const pageRows = rows.slice(0, limit);
         const last = rows.length > limit ? readRecord(pageRows.at(-1)) : undefined;
+        // Approval is authoritative in the course snapshot; uais_enrollments is
+        // not written by the classroom join/approval flow. Aggregate separately
+        // from the queue page so filtering and cursor pagination cannot alter it.
+        const countRows = await (client.sql as ReadSql)`
+          WITH activity_audience AS (
+            SELECT DISTINCT u.id AS student_id, a.id AS activity_id,
+              a.target_class_external_id AS class_external_id
+            FROM uais_assessments a
+            JOIN uais_lessons l ON l.id = a.lesson_id
+            JOIN uais_courses c ON c.id = l.course_id
+            JOIN uais_teaching_course_management_snapshots snapshot
+              ON snapshot.snapshot_key = c.slug
+            CROSS JOIN LATERAL jsonb_array_elements(snapshot.database->'memberships') membership
+            JOIN uais_users u ON lower(u.account) = lower(membership->>'studentId')
+              AND u.role = 'student' AND u.status = 'active'
+            WHERE a.id = ${input.activityId} AND c.teacher_id = ${teacherId}
+              AND membership->>'courseId' = c.slug
+              AND membership->>'classId' = a.target_class_external_id
+              AND membership->>'membershipStatus' = 'approved'
+              AND (${input.classExternalId ?? null}::text IS NULL
+                OR a.target_class_external_id = ${input.classExternalId ?? null})
+              AND NOT EXISTS (
+                SELECT 1 FROM uais_classroom_account_onboarding onboarding
+                WHERE onboarding.user_id = u.id AND onboarding.activated_at IS NULL
+              )
+          ), student_status AS (
+            SELECT s.state,
+              EXISTS (
+                SELECT 1 FROM uais_feedback f
+                WHERE f.submission_id = s.id
+                  AND f.status IN ('released', 'superseded') AND f.released_at IS NOT NULL
+              ) AS has_released_feedback,
+              (s.state = 'revision_requested' OR (s.state = 'draft' AND EXISTS (
+                SELECT 1 FROM uais_feedback f
+                JOIN uais_submission_versions previous ON previous.id = f.submission_version_id
+                WHERE f.submission_id = s.id AND f.status = 'released'
+                  AND f.released_at IS NOT NULL AND f.requires_revision
+                  AND previous.version_no = s.current_version_no - 1
+              ))) AS needs_revision
+            FROM activity_audience audience
+            LEFT JOIN uais_submissions s ON s.assessment_id = audience.activity_id
+              AND s.user_id = audience.student_id AND s.class_external_id = audience.class_external_id
+          )
+          SELECT count(*)::integer AS total_students,
+            count(*) FILTER (WHERE state IS NULL OR state = 'draft')::integer AS not_submitted,
+            count(*) FILTER (WHERE state IN ('submitted', 'resubmitted', 'revision_requested', 'accepted'))::integer AS submitted,
+            count(*) FILTER (WHERE state IN ('submitted', 'resubmitted'))::integer AS awaiting_review,
+            count(*) FILTER (WHERE needs_revision)::integer AS revision_requested,
+            count(*) FILTER (WHERE has_released_feedback)::integer AS feedback_released
+          FROM student_status
+        `;
+        const counts = firstRow(countRows);
+        if (!counts) throw new LearningLoopStoreError(500, "submission-counts-unavailable");
         return {
           activityId: input.activityId,
           submissions: pageRows.map(mapTeacherSubmissionQueueRow),
+          counts: {
+            totalStudents: readInteger(counts.total_students),
+            notSubmitted: readInteger(counts.not_submitted),
+            submitted: readInteger(counts.submitted),
+            awaitingReview: readInteger(counts.awaiting_review),
+            revisionRequested: readInteger(counts.revision_requested),
+            feedbackReleased: readInteger(counts.feedback_released),
+          },
           nextCursor: last
             ? encodeSubmissionCursor({
                 updatedAt: requireTimestamp(last.updated_at, "submission-cursor-invalid"),
                 submissionId: readString(last.submission_id),
               })
             : null,
-          dataFreshAt:
-            newestTimestamp(pageRows.map((row) => readRecord(row).updated_at)) ??
-            readNow().toISOString(),
+          dataFreshAt: readNow().toISOString(),
         };
       } finally {
         await closeUaisCoreDatabaseClient(client);
@@ -636,6 +703,7 @@ export function createUaisLearningLoopPostgresReadStore(options: ReadStoreOption
             ORDER BY created_at, id
           `,
         ]);
+        const imagesByVersion = await readSubmissionImageVersions(client.sql as ReadSql, input.submissionId);
         return {
           id: readString(row.submission_id),
           state: readSubmissionState(row.submission_state),
@@ -660,7 +728,7 @@ export function createUaisLearningLoopPostgresReadStore(options: ReadStoreOption
             attempted: readInteger(row.checkpoint_attempt_count) > 0,
             attemptCount: readInteger(row.checkpoint_attempt_count),
           },
-          versions: versions.map(mapTeacherSubmissionVersion),
+          versions: versions.map(value => ({ ...mapTeacherSubmissionVersion(value), attachments: imagesByVersion.get(readString(readRecord(value).id)) ?? [] })),
           feedback: feedback.map(mapTeacherFeedback),
           dataFreshAt:
             newestTimestamp([
@@ -994,6 +1062,7 @@ function mapTeacherActivity(value: unknown) {
     status: readString(row.status),
     lessonKey: readString(row.lesson_key),
     lessonPosition: readInteger(row.lesson_position),
+    ...(readString(row.lesson_version_id) ? { lessonVersionId: readString(row.lesson_version_id) } : {}),
     targetClassId: readString(row.target_class_external_id),
     title: readRecord(row.title_i18n),
     instructions: readRecord(row.instructions_i18n),

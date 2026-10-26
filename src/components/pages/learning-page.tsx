@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { ClassroomCourseRouter } from "./classroom-learning-page";
 import { CourseDirectoryView, PublishedPlaybackAccessNotice } from "./learning-page-outline";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { ChatsCircle } from "@phosphor-icons/react/dist/ssr/ChatsCircle";
@@ -258,7 +259,16 @@ function findApprovedInviteLearningContext(
   };
 }
 
-export function LearningPage({ initialCourseId, initialClassId, initialLessonKey, initialActivityId }: LearningPageProps = {}) {
+export function LearningPage(props: LearningPageProps = {}) {
+  const user = useSessionUser();
+  const canonicalLesson = /^lesson-[0-9a-f-]{36}$/i.test(props.initialLessonKey ?? "");
+  const inspectCatalog = props.initialCourseId && user?.role === "student" &&
+    (canonicalLesson || (!props.initialLessonKey && props.initialCourseId !== publishedLearningPptCourseId));
+  if (inspectCatalog) return <ClassroomCourseRouter courseId={props.initialCourseId!} classId={props.initialClassId} lessonKey={props.initialLessonKey} activityId={props.initialActivityId} legacy={<LegacyLearningPage {...props} />} />;
+  return <LegacyLearningPage {...props} />;
+}
+
+function LegacyLearningPage({ initialCourseId, initialClassId, initialLessonKey, initialActivityId }: LearningPageProps = {}) {
   const { locale } = useAppPreferences();
   const sessionUser = useSessionUser();
   const learnerAccount =

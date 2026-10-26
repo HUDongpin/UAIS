@@ -350,6 +350,9 @@ describe("P1 learning-loop Postgres read store", () => {
       if (text.includes("FROM uais_users") && text.includes("role = 'teacher'")) {
         return [{ id: "11111111-1111-4111-8111-111111111111" }];
       }
+      if (text.includes("WITH activity_audience")) {
+        return [{ total_students: 30, not_submitted: 11, submitted: 19, awaiting_review: 10, revision_requested: 4, feedback_released: 9 }];
+      }
       if (text.includes("FROM uais_submissions s") && text.includes("ORDER BY s.updated_at DESC")) {
         return [
           {
@@ -383,6 +386,7 @@ describe("P1 learning-loop Postgres read store", () => {
       }),
     ).resolves.toMatchObject({
       activityId: ids.activity,
+      counts: { totalStudents: 30, notSubmitted: 11, submitted: 19, awaitingReview: 10, revisionRequested: 4, feedbackReleased: 9 },
       submissions: [
         {
           id: ids.submission,

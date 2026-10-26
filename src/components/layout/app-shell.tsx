@@ -6,7 +6,7 @@ import { Header } from "@/components/layout/header";
 import { useAppPreferences } from "@/components/providers/app-preferences";
 import type { UaisAppSessionUser } from "@/lib/auth/uais-app-session";
 
-const standaloneRoutes = new Set(["/login", "/terms", "/privacy"]);
+const standaloneRoutes = new Set(["/login", "/first-login", "/terms", "/privacy"]);
 
 export function AppShell({
   children,

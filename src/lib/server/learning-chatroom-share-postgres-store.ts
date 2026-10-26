@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type { TransactionSql } from "postgres";
+import { assertClassroomRecordWriteAllowed, ClassroomRecordRetentionError } from "@/lib/server/classroom-record-retention-store";
 import {
   closeUaisCoreDatabaseClient,
   getUaisCoreDatabasePool,
@@ -98,6 +99,19 @@ export function createUaisLearningChatroomSharePostgresRepository(input: {
       const client = (input.createDatabase ?? getUaisCoreDatabasePool)({ env: input.env, max: 1 });
       try {
         await client.sql.begin(async (sql: TransactionSql) => {
+          // Purge holds the exclusive course lock before touching this global
+          // snapshot. Match that ordering so a stale CAS retry cannot recreate
+          // a purged share, and sort course locks to avoid cross-course deadlocks.
+          const courseIds = [...new Set(normalizedDatabase.shares.map((share) => share.courseId))].sort();
+          for (const courseId of courseIds) {
+            try { await assertClassroomRecordWriteAllowed(sql, courseId, { allowClosed: true }); }
+            catch (error) {
+              if (error instanceof ClassroomRecordRetentionError) {
+                throw new LearningChatroomShareStoreError(error.status, error.reasonCode);
+              }
+              throw error;
+            }
+          }
           const rows = await sql`
             SELECT revision
             FROM uais_learning_chatroom_share_snapshots

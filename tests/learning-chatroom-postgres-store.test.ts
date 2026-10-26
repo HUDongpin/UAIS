@@ -577,7 +577,7 @@ describe("learning chatroom transcript postgres store", () => {
     // retry, which is the whole point of the re-key. Under the single 'default'
     // row these two writers shared a lock and a revision.
     expect(client.rowKeys()).toEqual([groupOneKey, groupTwoKey].sort());
-    expect(client.statements("INSERT INTO")).toHaveLength(2);
+    expect(client.statements("INSERT INTO uais_learning_chatroom_transcript_snapshots")).toHaveLength(2);
     // A room's row carries that room only.
     expect(
       client.databaseFor(groupOneKey)?.transcripts.map((item) => item.transcriptId),

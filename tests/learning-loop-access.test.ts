@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   authorizeLearningLoopStudentDashboard,
+  authorizeLearningLoopStudentCourse,
   authorizeLearningLoopTeacherCourse,
 } from "@/lib/server/learning-loop-access";
 import { createUaisAppSessionCookie } from "@/lib/server/uais-app-session";
@@ -123,6 +124,12 @@ describe("P1 learning-loop teacher access", () => {
 });
 
 describe("P1 learning-loop student dashboard access", () => {
+  it("selects the exact approved class rather than the first seat in the course", async () => {
+    const cookie=createUaisAppSessionCookie({account:"student-1",role:"student",displayName:"Student",department:"Education"},{env,now,ttlSeconds:3600});
+    const input={request:new Request("http://localhost",{headers:{cookie}}),env,now,courseId:"course-1",readDashboardScopes:async()=>[{courseId:"course-1",courseTitle:"Course",classId:"class-a"},{courseId:"course-1",courseTitle:"Course",classId:"class-b"}]};
+    expect(await authorizeLearningLoopStudentCourse({...input,classId:"class-b"})).toMatchObject({status:"authorized",classId:"class-b"});
+    expect(await authorizeLearningLoopStudentCourse({...input,classId:"not-approved"})).toMatchObject({status:"denied"});
+  });
   it("derives course/class scopes only from approved snapshot memberships", async () => {
     const studentCookie = createUaisAppSessionCookie(
       {

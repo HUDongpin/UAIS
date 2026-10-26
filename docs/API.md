@@ -255,6 +255,124 @@ Production note:
   configuration. Do not expose provider secrets through client variables or
   logs.
 
+## Classroom lessons, accounts, and student evidence
+
+The classroom flow uses the managed Postgres course/chat backend and core
+database migrations through `0016_classroom_submission_images`. Course and class
+ownership remain authoritative in the managed course snapshot; a newly created
+course can exist there before its first lesson creates normalized course rows.
+Authenticated JSON and media responses are not public cacheable assets.
+
+| Route | Methods | Classroom contract |
+| --- | --- | --- |
+| `/api/teaching/courses/{courseId}/lessons` | GET, POST | List authored lessons; import a `LessonPackageV1`, a saved teaching draft, or a blank draft. POST uses an `idempotency-key`. |
+| `/api/teaching/courses/{courseId}/lessons/{lessonKey}` | GET, PATCH | Read/edit an owned draft with `expectedRevision`; `GET ?preview=true` returns only student materials. |
+| `/api/teaching/courses/{courseId}/lessons/{lessonKey}/publish` | POST | Publish the expected draft revision to owned `targetClassIds` with selected `taskIds`. The immutable lesson version and its tasks commit atomically; retries reuse the idempotency key. |
+| `/api/learning/courses/{courseId}/lessons` | GET | List lessons published to an approved class selected by `classId`. |
+| `/api/learning/courses/{courseId}/lessons/{lessonKey}` | GET | Read student materials for that class. An `activityId` pins the corresponding published lesson version. |
+| `/api/teaching/courses/{courseId}/classes/{classId}/roster` | GET, POST | List accounts provisioned through this classroom; POST actions are `preview`, `import`, and `reissue`. Requires database account authentication and the owning teacher's signed sessions. |
+| `/api/auth/first-password` | POST | Consume the short-lived first-password setup cookie and set a 12–128 character password different from the initial credential. A successful transaction activates the account and issues the normal student session. |
+
+Teacher lesson drafts and `teacherGuide` are never included in student lesson
+responses. Student projections allowlist student materials; media embedded in
+that authenticated JSON follows the same class membership check, without a
+separate public media URL. Student-facing media notes are public to the class,
+so private answers belong in `teacherGuide`. Formative checkpoint explanations
+are released only after the learner attempts the checkpoint. The source lesson
+package, including its teacher answers, is a teacher artifact.
+
+Roster CSV accepts only `account`, `displayName`, and optional `email`, with at
+most 100 students and 100 KB. Import always creates student accounts, never
+trusts an imported role, and preserves existing passwords and memberships.
+New initial credentials appear only in the successful authenticated response;
+the database stores their hashes. A lost response is recovered by refreshing
+the account list and explicitly reissuing credentials for an unactivated
+account. Reissue and activation invalidate earlier setup tokens. Importing an
+account does not approve course membership: the student still uses the class
+invitation and teacher approval flow.
+
+Teacher lesson summaries include `draftTaskCount`, `hasUnpublishedDraft`, and
+`latestRelease` (version, saved draft revision, target class IDs and the current
+published task count for that version). Published tasks are counted per target
+class; older versions and draft/archived tasks are excluded. A newer saved draft
+revision indicates unpublished edits, not a semantic comparison of its text.
+
+`GET /api/teaching/activities/{activityId}/submissions` also returns `counts`
+independent of its page, cursor and state filter. Its audience is the exact
+target class's approved, active, activated students in the course snapshot.
+`notSubmitted` (no submission or current draft) plus `submitted` equals
+`totalStudents`. `awaitingReview` counts submitted/resubmitted work;
+`revisionRequested` includes a revision draft following a released request;
+`feedbackReleased` counts students who have received released teacher feedback,
+including historical feedback. Revision and feedback indicators can overlap
+with the current-state partition and must not be added to it.
+
+### Submission images and confirmed submission
+
+- `PUT /api/learning/activities/{activityId}/submission` saves a draft against
+  `expectedSubmissionVersionId` and `expectedDraftRevision`. Empty draft text is
+  permitted to prepare image-only work.
+- `POST /api/learning/activities/{activityId}/submission/images` accepts one
+  multipart `image`, `expectedSubmissionVersionId`, `expectedDraftRevision`, and
+  stable UUID `clientAttachmentId`. Only PNG/JPEG, at most 1 MiB per image and
+  three images per version, are accepted. Full decode/re-encoding strips image
+  metadata; bytes stay in private Postgres storage.
+- `DELETE /api/learning/activities/{activityId}/submission/images/{attachmentId}`
+  removes an image only from the caller's editable draft with the expected
+  version/revision. Sealed versions remain immutable.
+- `GET /api/learning/submission-images/{attachmentId}` requires the submission
+  owner's current class access or the authorized course teacher's review
+  access. It returns `private, no-store` media with `nosniff`; identifiers are
+  not bearer capabilities.
+- `POST /api/learning/activities/{activityId}/submission/submit` requires a
+  stable `idempotency-key`, the expected version/revision, and at least text or
+  one saved image. The text and ordered image hashes are sealed together.
+  Response-loss recovery reads the server state and reuses the original key;
+  an uncertain response is not presented as a confirmed failure or success.
+
+Images and feedback follow their immutable submission version. A requested
+revision creates a new draft with copies of the prior version's images; changes
+cannot alter the previous sealed evidence. Current AI feedback drafts use text
+only; attached images remain available for teacher review and are not silently
+represented as model-reviewed evidence.
+
+### Discussion archive and retention
+
+`GET /api/learning/chatroom/history` retains the course/group ACL for every
+request. Normal reads return the latest 200 personal or 500 group messages;
+`archive=1` with an optional `before` message ID returns an earlier 100-message
+page and `transcript.archivePage.nextCursor`. Hidden messages are omitted from
+all student/export/share projections. The complete archive is a separate
+Postgres per-message record written in the same transaction as the live window.
+Authenticated print/PDF export reads the archive, while public shares retain
+their existing recent-window scope and expiry. Archiving includes only messages
+still retained when the feature is enabled; previously discarded messages are
+not recovered. The default read budget is 30/minute and 10,000/day per actor per
+server process, independent of provider-spend limits.
+
+`GET /api/teaching/courses/{courseId}/retention` returns the owning teacher's
+current record counts, closure/expiry timestamps, purge eligibility, and a
+confirmation digest. It is read-only, including for courses with no normalized
+lesson rows yet. `POST` accepts either:
+
+- `{ "action": "close", "confirm": true }`: close the record period now and
+  retain existing records for 180 days. New student work, enrolment/group
+  mutations, and chat messages stop; existing feedback can still be reviewed.
+- `{ "action": "purge", "confirm": true, "confirmationDigest": "..." }`:
+  after expiry, remove the records in a fresh preview. A changed preview or an
+  unexpired period is rejected. There is no automatic deletion job.
+
+The retention route requires Postgres course/chat storage; external/local JSON
+backends receive `503 course-retention-postgres-required`. Retention POST uses
+the shared same-origin browser check in addition to signed role and ownership
+checks. Purge removes the course's student submissions, images,
+feedback, learning projections/events, discussion records and relevant private
+records in retired database snapshots. Accounts, course/lesson materials,
+unrelated courses, and teacher content-publication provenance remain. The
+aggregate purge receipt remains; external backups and downloaded copies are
+outside this operation. Course transaction locks and a retained tombstone
+prevent delayed requests from recreating deleted classroom records.
+
 ## Not Yet Product Contracts
 
 The following route families are implementation or experimental surfaces until

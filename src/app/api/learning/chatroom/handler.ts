@@ -1,3 +1,4 @@
+import { readLearningChatroomHistoryRateLimitConfig } from "@/lib/server/learning-chatroom-history-rate-limit";
 import * as Sentry from "@sentry/nextjs";
 import { runAgentLoop } from "@/lib/ai/orchestration/agent-loop";
 import { hasMentionedAgent } from "@/lib/ai/orchestration/director";
@@ -221,8 +222,6 @@ const learningChatroomPostRateLimitMessage =
 // plus a manual refresh or two stays well inside 30 - while still bounding a
 // client stuck in a retry loop. The per-day window is the same ceiling stated
 // over a whole day of continuous polling.
-const learningChatroomHistoryDefaultRateLimitPerMinute = 30;
-const learningChatroomHistoryDefaultRateLimitPerDay = 2000;
 const learningChatroomHistoryRateLimitMessage =
   "Learning chatroom history rate limit exceeded. Please wait before reloading the transcript.";
 const learningChatroomPostTimingNames = ["entry", "session", "rate", "backend", "pool", "authorization", "transcript", "projection", "total"] as const;
@@ -1211,20 +1210,6 @@ function readLearningChatroomRateLimitConfig(env: Record<string, string | undefi
     perDay: env.UAIS_LEARNING_CHATROOM_RATE_LIMIT_PER_DAY,
     defaultPerMinute: learningChatroomDefaultRateLimitPerMinute,
     defaultPerDay: learningChatroomDefaultRateLimitPerDay,
-  });
-}
-
-// The GET guard, on its own env names so an operator can widen polling without
-// also widening provider spend.
-function readLearningChatroomHistoryRateLimitConfig(
-  env: Record<string, string | undefined>,
-) {
-  return createLearningChatroomRateLimitConfig({
-    mode: env.UAIS_LEARNING_CHATROOM_HISTORY_RATE_LIMIT_MODE,
-    perMinute: env.UAIS_LEARNING_CHATROOM_HISTORY_RATE_LIMIT_PER_MINUTE,
-    perDay: env.UAIS_LEARNING_CHATROOM_HISTORY_RATE_LIMIT_PER_DAY,
-    defaultPerMinute: learningChatroomHistoryDefaultRateLimitPerMinute,
-    defaultPerDay: learningChatroomHistoryDefaultRateLimitPerDay,
   });
 }
 

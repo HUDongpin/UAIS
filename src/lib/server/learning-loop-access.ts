@@ -9,6 +9,8 @@ import {
 } from "@/lib/server/teaching-course-management-store";
 import { readUaisAuthenticatedTeacherSessionFromSignedCookies } from "@/lib/server/teacher-auth-session";
 import { getUaisAppSessionClaimsFromCookieString } from "@/lib/server/uais-app-session";
+import { getUaisCoreDatabaseReadiness } from "@/lib/db/core-database";
+import { createClassroomLessonStore } from "@/lib/classroom-lessons/store";
 
 export type LearningLoopCourseScope = {
   course: { externalId: string; title: string };
@@ -18,6 +20,8 @@ export type LearningLoopCourseScope = {
     position: number;
     title: { "zh-CN": string; "en-US": string };
     manifestRef: string;
+    contentKind?: "authored" | "legacy";
+    versionId?: string;
   };
 };
 
@@ -44,10 +48,12 @@ export async function authorizeLearningLoopTeacherCourse(input: {
   fetch?: typeof fetch;
   courseId: string;
   lessonKey?: string;
+  targetClassId?: string;
   readCourseScope?: (input: {
     teacherAccount: string;
     courseId: string;
     lessonKey?: string;
+    targetClassId?: string;
   }) => Promise<LearningLoopCourseScope | undefined>;
 }): Promise<LearningLoopTeacherCourseAccess> {
   const appClaims = getUaisAppSessionClaimsFromCookieString(
@@ -77,6 +83,7 @@ export async function authorizeLearningLoopTeacherCourse(input: {
         teacherAccount: appClaims.account,
         courseId: input.courseId,
         ...(input.lessonKey ? { lessonKey: input.lessonKey } : {}),
+        ...(input.targetClassId ? { targetClassId: input.targetClassId } : {}),
       })
     : await readDefaultTeacherCourseScope({
         env: input.env,
@@ -84,6 +91,7 @@ export async function authorizeLearningLoopTeacherCourse(input: {
         teacherAccount: appClaims.account,
         courseId: input.courseId,
         lessonKey: input.lessonKey,
+        targetClassId: input.targetClassId,
       });
   if (!scope) {
     return { status: "denied", reasonCode: "teacher-course-ownership-required" };
@@ -105,7 +113,16 @@ export async function authorizeLearningLoopStudentCourse(input: {
   now?: Date;
   fetch?: typeof fetch;
   courseId: string;
+  classId?: string;
+  readDashboardScopes?: (input: { studentAccount: string }) => Promise<LearningLoopStudentDashboardScope[]>;
 }) {
+  if (input.classId) {
+    const dashboard = await authorizeLearningLoopStudentDashboard(input);
+    if (dashboard.status === "denied") return dashboard;
+    const scope = dashboard.scopes.find((item) => item.courseId === input.courseId && item.classId === input.classId);
+    if (!scope) return { status: "denied" as const, reasonCode: "student-course-membership-required" as const };
+    return { status: "authorized" as const, reasonCode: "student-course-membership-approved" as const, studentAccount: dashboard.studentAccount, courseId: scope.courseId, classId: scope.classId };
+  }
   const access = await authorizeLearningPptPlaybackAccess({
     request: input.request,
     env: input.env,
@@ -178,6 +195,7 @@ async function readDefaultTeacherCourseScope(input: {
   teacherAccount: string;
   courseId: string;
   lessonKey?: string;
+  targetClassId?: string;
 }): Promise<LearningLoopCourseScope | undefined> {
   const repository = createUaisTeachingCourseManagementRepository({
     env: input.env,
@@ -202,15 +220,18 @@ async function readDefaultTeacherCourseScope(input: {
     }),
   );
   if (!course) return undefined;
+  const authored = input.lessonKey && getUaisCoreDatabaseReadiness(input.env).status === "ready"
+    ? await createClassroomLessonStore({ env: input.env }).readPublishedScope({ teacherAccount: input.teacherAccount, courseId: input.courseId, lessonKey: input.lessonKey, targetClassId: input.targetClassId })
+    : undefined;
   const playback = createPublishedLearningPptPlaybackManifestForCourse(input.courseId);
-  const lesson = playback
+  const lesson = authored ?? (playback
     ? {
         key: playback.learningUnit.lessonKey,
         position: playback.learningUnit.position,
         title: playback.learningUnit.title,
         manifestRef: playback.audioManifestId,
       }
-    : undefined;
+    : undefined);
   if (input.lessonKey && lesson?.key !== input.lessonKey) return undefined;
   return {
     course: { externalId: course.courseId, title: course.courseName },
@@ -272,7 +293,8 @@ async function readDefaultStudentDashboardScopes(input: {
       const classItem = database.classes.find(
         (item) =>
           item.classId === membership.classId &&
-          item.courseId === membership.courseId,
+          item.courseId === membership.courseId && course !== undefined &&
+          isSameTeachingActorId(item.ownerTeacherId, course.ownerTeacherId),
       );
       return course && classItem
         ? [

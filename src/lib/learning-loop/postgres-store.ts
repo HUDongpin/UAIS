@@ -1,5 +1,7 @@
 /* eslint-disable max-lines -- P1 commands stay co-located until their shared transaction primitives and idempotency contract are frozen. */
 import { createHash, randomUUID } from "node:crypto";
+import { assertClassroomRecordWriteAllowed } from "@/lib/server/classroom-record-retention-store";
+import { createSubmissionEvidenceHash } from "./submission-evidence";
 import {
   closeUaisCoreDatabaseClient,
   getUaisCoreDatabasePool,
@@ -98,6 +100,8 @@ export function createUaisLearningLoopPostgresStore(options: StoreOptions) {
         position: number;
         title: { "zh-CN": string; "en-US": string };
         manifestRef: string;
+        contentKind?: "authored" | "legacy";
+        versionId?: string;
       };
       draft: unknown;
       idempotencyKey: string;
@@ -117,6 +121,7 @@ export function createUaisLearningLoopPostgresStore(options: StoreOptions) {
       let receipt: LearningLoopPersistedReceipt | undefined;
       try {
         await client.sql.begin(async (sql) => {
+          await assertClassroomRecordWriteAllowed(sql, input.course.externalId);
           const replay = await readIdempotentReceipt({
             sql,
             actorAccount: input.teacherAccount,
@@ -157,7 +162,16 @@ export function createUaisLearningLoopPostgresStore(options: StoreOptions) {
             RETURNING id
           `;
           readRequiredId(classRows, "class-ownership-required");
-          const lessonRows = await sql`
+          const lessonRows = input.lesson.contentKind === "authored"
+            ? await sql`
+              SELECT l.id FROM uais_lessons l
+              JOIN uais_lesson_versions v ON v.lesson_id=l.id
+              WHERE l.course_id=${courseId} AND l.external_key=${input.lesson.key}
+                AND l.content_kind='authored' AND l.status='published'
+                AND v.id=${input.lesson.versionId ?? null}::uuid
+                AND v.target_class_ids ? ${input.class.externalId}
+            `
+            : await sql`
             INSERT INTO uais_lessons (
               course_id, title, position, external_key, published_manifest_ref,
               status, created_at, updated_at
@@ -174,19 +188,20 @@ export function createUaisLearningLoopPostgresStore(options: StoreOptions) {
               published_manifest_ref = EXCLUDED.published_manifest_ref,
               status = 'published',
               updated_at = EXCLUDED.updated_at
+            WHERE uais_lessons.content_kind = 'legacy'
             RETURNING id
           `;
           const lessonId = readRequiredId(lessonRows, "lesson-registration-failed");
           const activityId = createId();
           const activityRows = await sql`
             INSERT INTO uais_assessments (
-              id, lesson_id, type, title, activity_key, title_i18n,
+              id, lesson_id, lesson_version_id, type, title, activity_key, title_i18n,
               instructions_i18n, status, version, edit_revision, rubric, formative_check,
               due_at, ai_policy, revision_policy, target_class_external_id,
               created_at, updated_at
             )
             VALUES (
-              ${activityId}, ${lessonId}, 'assignment', ${draft.title["zh-CN"]},
+              ${activityId}, ${lessonId}, ${input.lesson.contentKind === "authored" ? input.lesson.versionId ?? null : null}, 'assignment', ${draft.title["zh-CN"]},
               ${activityId}, ${JSON.stringify(draft.title)}::text::jsonb,
               ${JSON.stringify(draft.instructions)}::text::jsonb, 'draft', 1, 1,
               ${JSON.stringify(draft.rubric)}::text::jsonb,
@@ -268,6 +283,7 @@ export function createUaisLearningLoopPostgresStore(options: StoreOptions) {
       let receipt: LearningLoopPersistedReceipt | undefined;
       try {
         await client.sql.begin(async (sql) => {
+          await assertActivityRecordWriteAllowed(sql, input.activityId);
           const replay = await readIdempotentReceipt({
             sql,
             actorAccount: input.teacherAccount,
@@ -288,7 +304,7 @@ export function createUaisLearningLoopPostgresStore(options: StoreOptions) {
             SELECT
               a.id, a.activity_key, a.status, a.version, a.edit_revision,
               a.title_i18n, a.instructions_i18n, a.rubric, a.formative_check,
-              a.due_at, a.ai_policy, a.revision_policy,
+              a.due_at, a.ai_policy, a.revision_policy, a.lesson_version_id,
               a.target_class_external_id, l.id AS lesson_id,
               l.external_key AS lesson_key
             FROM uais_assessments a
@@ -310,6 +326,7 @@ export function createUaisLearningLoopPostgresStore(options: StoreOptions) {
           let resourceId = input.activityId;
           let nextState = currentState;
           let nextEditRevision = currentEditRevision + 1;
+          let savedActivityVersion = readInteger(row.version);
 
           if (input.operation === "publish") {
             assertLearningActivityTransition(currentState, "published");
@@ -397,16 +414,30 @@ export function createUaisLearningLoopPostgresStore(options: StoreOptions) {
             }
             assertActivityIdentityUnchanged(normalizedDraft, row);
             resourceId = createId();
-            const nextVersion = readInteger(row.version) + 1;
+            // The lesson publisher and this standalone editor share a task family.
+            // Lock that family before reading its next version in a fresh statement.
+            await sql`SELECT pg_advisory_xact_lock(hashtextextended(${`learning-activity-family:${readString(row.lesson_id)}:${readString(row.activity_key)}`}, 0))`;
+            const family = firstRow(await sql`
+              SELECT COALESCE(max(version),0)+1 AS next_version,
+                COALESCE(bool_or(status='draft' AND version>${readInteger(row.version)}),false) AS draft_pending
+              FROM uais_assessments
+              WHERE lesson_id=${readString(row.lesson_id)} AND activity_key=${readString(row.activity_key)}
+            `);
+            if (family?.draft_pending === true) {
+              throw new LearningLoopStoreError(409, "activity-version-already-exists", { recoveryAction: "reload-activities" });
+            }
+            const nextVersion = readInteger(family?.next_version);
+            if (nextVersion < 1) throw new LearningLoopStoreError(409, "activity-version-allocation-failed");
+            savedActivityVersion = nextVersion;
             const created = await sql`
               INSERT INTO uais_assessments (
-                id, lesson_id, type, title, activity_key, title_i18n,
+                id, lesson_id, lesson_version_id, type, title, activity_key, title_i18n,
                 instructions_i18n, status, version, edit_revision, rubric,
                 formative_check, due_at, ai_policy, revision_policy,
                 target_class_external_id, created_at, updated_at
               )
               VALUES (
-                ${resourceId}, ${readString(row.lesson_id)}, 'assignment',
+                ${resourceId}, ${readString(row.lesson_id)}, ${row.lesson_version_id ?? null}, 'assignment',
                 ${normalizedDraft.title["zh-CN"]}, ${readString(row.activity_key)},
                 ${JSON.stringify(normalizedDraft.title)}::text::jsonb,
                 ${JSON.stringify(normalizedDraft.instructions)}::text::jsonb,
@@ -448,10 +479,7 @@ export function createUaisLearningLoopPostgresStore(options: StoreOptions) {
             metadata: {
               sourceActivityId: input.activityId,
               operation: input.operation,
-              activityVersion:
-                input.operation === "create-version"
-                  ? readInteger(row.version) + 1
-                  : readInteger(row.version),
+              activityVersion: savedActivityVersion,
               editRevision: nextEditRevision,
               ...(input.operation === "adjust-due-date" ? { dueAt } : {}),
             },
@@ -492,6 +520,7 @@ export function createUaisLearningLoopPostgresStore(options: StoreOptions) {
       let receipt: LearningLoopPersistedReceipt | undefined;
       try {
         await client.sql.begin(async (sql) => {
+          await assertClassroomRecordWriteAllowed(sql, String(event.context.courseId));
           const replay = await readIdempotentReceipt({
             sql,
             actorAccount: input.studentAccount,
@@ -625,6 +654,7 @@ export function createUaisLearningLoopPostgresStore(options: StoreOptions) {
       let receipt: LearningLoopPersistedReceipt | undefined;
       try {
         await client.sql.begin(async (sql) => {
+          await assertActivityRecordWriteAllowed(sql, input.activityId);
           const replay = await readIdempotentReceipt({
             sql,
             actorAccount: input.studentAccount,
@@ -944,7 +974,7 @@ export function createUaisLearningLoopPostgresStore(options: StoreOptions) {
       traceId: string;
     }): Promise<LearningLoopPersistedReceipt> {
       const expectedSubmissionVersionId = normalizeSubmissionVersionId(input.expectedSubmissionVersionId, true);
-      const contentText = normalizeSubmissionContent(input.contentText);
+      const contentText = normalizeSubmissionContent(input.contentText, { allowEmpty: true });
       const contentHash = hashText(contentText);
       const persistedAt = readNow().toISOString();
       const client = createDatabase({ env: options.env, max: 1 });
@@ -957,6 +987,7 @@ export function createUaisLearningLoopPostgresStore(options: StoreOptions) {
             role: "student",
           });
           // Row locks cannot serialize the first save while the submission is absent.
+          await assertActivityRecordWriteAllowed(sql, input.activityId);
           await sql`
             SELECT pg_advisory_xact_lock(
               hashtextextended(
@@ -1124,6 +1155,15 @@ export function createUaisLearningLoopPostgresStore(options: StoreOptions) {
               persistedAt,
             }),
           ]);
+          if (existing?.state === "revision_requested") {
+            await sql`
+              INSERT INTO uais_submission_attachments (
+                submission_version_id,client_attachment_id,position,mime,byte_length,width,height,sha256,content
+              )
+              SELECT ${persistedReceipt.submissionVersionId},client_attachment_id,position,mime,byte_length,width,height,sha256,content
+              FROM uais_submission_attachments WHERE submission_version_id=${readString(existing.version_id)}
+            `;
+          }
         });
       } finally {
         await closeUaisCoreDatabaseClient(client);
@@ -1165,6 +1205,7 @@ export function createUaisLearningLoopPostgresStore(options: StoreOptions) {
             receipt = replay;
             return;
           }
+          await assertActivityRecordWriteAllowed(sql, input.activityId);
           const studentId = await requireUserId({
             sql,
             account: input.studentAccount,
@@ -1213,12 +1254,23 @@ export function createUaisLearningLoopPostgresStore(options: StoreOptions) {
             });
           }
           const versionNo = readInteger(row.current_version_no);
+          const attachmentRows = await sql`
+            SELECT id,position,sha256 FROM uais_submission_attachments
+            WHERE submission_version_id=${readString(row.version_id)} ORDER BY position,id
+          `;
+          if (!readString(row.content_text).trim() && attachmentRows.length === 0) {
+            throw new LearningLoopStoreError(400, "submission-evidence-required");
+          }
+          const evidenceHash = createSubmissionEvidenceHash(readString(row.content_text), attachmentRows.map(value => {
+            const image = readRecord(value);
+            return { id: readString(image.id), position: readInteger(image.position), sha256: readString(image.sha256) };
+          }));
           const nextState = versionNo === 1 ? "submitted" : "resubmitted";
           assertSubmissionTransition({ from: "draft", to: nextState, versionNo });
           await Promise.all([
             sql`
               UPDATE uais_submission_versions
-              SET status = 'sealed', submitted_at = ${persistedAt}, updated_at = ${persistedAt}
+              SET status = 'sealed', evidence_hash = ${evidenceHash}, submitted_at = ${persistedAt}, updated_at = ${persistedAt}
               WHERE id = ${readString(row.version_id)} AND status = 'draft'
             `,
             sql`
@@ -1359,6 +1411,7 @@ export function createUaisLearningLoopPostgresStore(options: StoreOptions) {
         | undefined;
       try {
         await client.sql.begin(async (sql) => {
+          await assertSubmissionRecordWriteAllowed(sql, input.submissionId);
           const teacherId = await requireUserId({
             sql,
             account: input.teacherAccount,
@@ -1546,6 +1599,7 @@ export function createUaisLearningLoopPostgresStore(options: StoreOptions) {
       let receipt: LearningLoopPersistedReceipt | undefined;
       try {
         await client.sql.begin(async (sql) => {
+          await assertSubmissionRecordWriteAllowed(sql, input.submissionId);
           if (input.idempotencyKey && requestHash) {
             const replay = await readIdempotentReceipt({
               sql,
@@ -1759,6 +1813,7 @@ export function createUaisLearningLoopPostgresStore(options: StoreOptions) {
       let receipt: LearningLoopPersistedReceipt | undefined;
       try {
         await client.sql.begin(async (sql) => {
+          await assertSubmissionRecordWriteAllowed(sql, input.submissionId);
           const replay = await readIdempotentReceipt({
             sql,
             actorAccount: input.teacherAccount,
@@ -2413,6 +2468,27 @@ function readIsoTimestamp(value: unknown) {
   return new Date(timestamp).toISOString();
 }
 
+async function assertActivityRecordWriteAllowed(sql: LearningLoopSql, activityId: string, allowClosed = false) {
+  const scope = firstRow(await sql`
+    SELECT c.slug AS course_slug FROM uais_assessments a
+    JOIN uais_lessons l ON l.id=a.lesson_id JOIN uais_courses c ON c.id=l.course_id
+    WHERE a.id=${activityId}
+  `);
+  if (!scope || !readString(scope.course_slug)) throw new LearningLoopStoreError(404, "learning-activity-required");
+  await assertClassroomRecordWriteAllowed(sql, readString(scope.course_slug), { allowClosed });
+}
+
+async function assertSubmissionRecordWriteAllowed(sql: LearningLoopSql, submissionId: string) {
+  const scope = firstRow(await sql`
+    SELECT c.slug AS course_slug FROM uais_submissions s
+    JOIN uais_assessments a ON a.id=s.assessment_id
+    JOIN uais_lessons l ON l.id=a.lesson_id JOIN uais_courses c ON c.id=l.course_id
+    WHERE s.id=${submissionId}
+  `);
+  if (!scope || !readString(scope.course_slug)) throw new LearningLoopStoreError(404, "teacher-submission-required");
+  await assertClassroomRecordWriteAllowed(sql, readString(scope.course_slug), { allowClosed: true });
+}
+
 async function requireUserId(input: {
   sql: LearningLoopSql;
   account: string;
@@ -2447,25 +2523,17 @@ async function readIdempotentReceipt(input: {
   requestHash: string;
 }) {
   requireIdempotencyKey(input.key);
+  // This must be a separate statement: a SELECT that waits for the lock keeps
+  // its pre-wait MVCC snapshot and can miss the receipt committed by the holder.
+  await input.sql`SELECT pg_advisory_xact_lock(hashtextextended(${input.key}, 0))`;
   const rows = await input.sql`
-    WITH idempotency_lock AS MATERIALIZED (
-      SELECT pg_advisory_xact_lock(hashtextextended(${input.key}, 0))
-    ), locked_record AS MATERIALIZED (
-      SELECT
-        ir.idempotency_key, u.account AS actor_account, ir.scope,
-        ir.request_hash, ir.response_receipt
-      FROM uais_idempotency_records ir
-      JOIN uais_users u ON u.id = ir.actor_user_id
-      CROSS JOIN idempotency_lock
-      WHERE ir.idempotency_key = ${input.key}
-      FOR UPDATE OF ir
-    )
     SELECT
-      locked_record.idempotency_key, locked_record.actor_account,
-      locked_record.scope, locked_record.request_hash,
-      locked_record.response_receipt
-    FROM idempotency_lock
-    LEFT JOIN locked_record ON true
+      ir.idempotency_key, u.account AS actor_account, ir.scope,
+      ir.request_hash, ir.response_receipt
+    FROM uais_idempotency_records ir
+    JOIN uais_users u ON u.id = ir.actor_user_id
+    WHERE ir.idempotency_key = ${input.key}
+    FOR UPDATE OF ir
   `;
   const row = firstRow(rows);
   if (!row || !readString(row.idempotency_key)) return undefined;

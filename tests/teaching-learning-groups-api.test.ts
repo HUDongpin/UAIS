@@ -292,7 +292,7 @@ describe("teaching learning group API", () => {
 
       expect(response.status, JSON.stringify(body)).toBe(201);
       expect(body.group).toEqual({
-        groupId: "group-group-3-20260808-020000",
+        groupId: "group-group-3-39126b548742-20260808-020000",
         courseId: course.courseId,
         classId: classItem.classId,
         ownerTeacherId: ownerTeacherId,
@@ -380,7 +380,7 @@ describe("teaching learning group API", () => {
 
       expect(response.status, JSON.stringify(body)).toBe(201);
       // A non-latin name still yields a safe, bounded id via the slug fallback.
-      expect(body.group.groupId).toBe("group-learning-20260808-020000");
+      expect(body.group.groupId).toMatch(/^group-learning-[a-f0-9]{12}-20260808-020000$/);
       expect(body.group.classId).toBeUndefined();
       expectNoCredentialValues(body, dataDir);
     });

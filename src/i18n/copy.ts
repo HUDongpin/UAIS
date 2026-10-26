@@ -156,6 +156,15 @@ export const copy = {
       chatMessageUndelivered: "未送达，点按重试",
       // 读得到接口、读不到存档：线程里已有的消息继续显示，只是提示可能不完整。
       chatHistoryUnavailable: "历史记录暂不可用，当前仅显示本次会话的消息。",
+      chatSyncPaused: "消息同步暂时暂停，当前记录可能不是最新；稍后会自动重试。",
+      chatCourseClosed: "课程已结束，讨论记录仍可查看和导出，不能再发送新消息。",
+      chatArchiveOpen: "查看完整讨论记录",
+      chatArchiveClose: "收起讨论记录",
+      chatArchiveEarlier: "更早的记录",
+      chatArchiveLatest: "最新的记录",
+      chatArchiveLoading: "正在读取讨论记录…",
+      chatArchiveWindow: "课堂窗口显示最近的消息；更早的消息可在完整讨论记录中查看和导出。",
+      chatArchiveBoundary: "归档从功能启用时开始，包含当时仍保留的消息；此前已移除的旧消息无法恢复。公开分享仍只包含最近的课堂窗口。",
       // 聊天室是滚动窗口而不是档案馆：写满之后每条新消息都会挤掉最早的一条。
       // 房间、导出文档、PDF 和分享页共用这一句，因为它们replay的是同一份记录。
       chatroomWindowTrimmed: "较早的消息已滚动归档，导出与分享同样不含",
@@ -613,6 +622,15 @@ export const copy = {
       chatMessageUndelivered: "Not delivered — tap to retry",
       chatHistoryUnavailable:
         "History temporarily unavailable — only this session's messages are shown.",
+      chatSyncPaused: "Message sync is temporarily paused. These messages may be out of date; updates will retry automatically.",
+      chatCourseClosed: "This course has ended. Discussion records remain available to view and export, but new messages are closed.",
+      chatArchiveOpen: "View complete discussion records",
+      chatArchiveClose: "Close discussion records",
+      chatArchiveEarlier: "Earlier records",
+      chatArchiveLatest: "Latest records",
+      chatArchiveLoading: "Loading discussion records…",
+      chatArchiveWindow: "The classroom window shows recent messages. Earlier messages remain available in the complete discussion records and authenticated export.",
+      chatArchiveBoundary: "Archiving starts when the feature is enabled and includes messages retained then. Previously removed messages cannot be recovered. Public shares still show only the recent classroom window.",
       chatroomWindowTrimmed:
         "Older messages have rolled out of the window; exports and shares omit them too",
       chatroomFrozenNotice:
@@ -943,5 +961,43 @@ export const copy = {
       nextUnit: "Next Unit",
       templateReady: "Template placeholder",
     },
+  },
+} as const;
+
+export const classroomRecordRetentionCopy = {
+  "zh-CN": {
+    title: "课程记录保留", backendRequired: "课堂记录保留与清理需要使用 Postgres 课程及聊天存储，请联系管理员配置后重试。", help: "课程进行期间保留课堂记录。结束课程后继续保留 180 天，到期后由课程教师预览并确认清理。结束课程会停止新增入班、讨论和学生提交，现有反馈仍可复核。",
+    boundary: "保留学生账号、课程及课节内容。清理包含当前数据库和旧迁移副本中的本课程学生记录，不包含外部备份或已下载的文件。",
+    close: "结束课程并开始保留期", closeConfirm: "确认结束课程", closeWarning: "确认以当前时间结束本课程的课堂记录期？这将停止新的学生学习记录，180 天内不会提供清理操作。",
+    preview: "预览到期清理", purgeConfirm: "确认清理本课程到期记录", acknowledge: "我已核对本课程、到期日期和下列记录数量，并确认清理这些记录。",
+    cancel: "取消", refresh: "刷新状态", loading: "正在读取课程记录…", busy: "正在处理…", failed: "操作未确认完成，请刷新状态后重试；如记录已变化，需要重新预览。",
+    active: "课程仍在进行", closed: "课程结束时间", due: "保留到期日", purged: "课堂记录已清理", previewTitle: "此次清理的记录数量", empty: "暂无课堂记录。",
+    labels: { submissions: "作业", versions: "作业版本", images: "作业图片", feedback: "教师反馈", formativeAttempts: "形成性检查", learningEvents: "学习事件", chatMessages: "归档讨论消息", liveChatRooms: "当前聊天室", enrollments: "入班关系", learnerProfiles: "学习概况", recommendations: "学习建议", courseSnapshotRecords: "课程工作区学生记录", retiredCourseRecords: "旧迁移副本学生记录", retiredChatMessages: "旧迁移副本讨论消息", shareLinks: "讨论分享链接", operationRecords: "课程操作副本", classroomAuditRecords: "旧课堂审计记录" },
+  },
+  "en-US": {
+    title: "Course record retention", backendRequired: "Classroom retention and purging require Postgres course and chat storage. Ask the administrator to configure it, then retry.", help: "Classroom records remain available during the course and for 180 days after it closes. The course teacher previews and confirms any expired-record purge. Closing stops new enrolment, discussion and student submissions; existing feedback can still be reviewed.",
+    boundary: "Accounts and course/lesson content remain. The purge covers this course's student records in the current database and retired migration copies. External backups and downloaded files are not included.",
+    close: "End course and begin retention", closeConfirm: "Confirm course closure", closeWarning: "End this course's classroom record period now? New student records will stop, and purging will remain unavailable for 180 days.",
+    preview: "Preview expired-record purge", purgeConfirm: "Confirm purge of this course's expired records", acknowledge: "I checked the course, expiry date and record counts below and confirm their deletion.",
+    cancel: "Cancel", refresh: "Refresh status", loading: "Loading course records…", busy: "Working…", failed: "The operation was not confirmed. Refresh the status and retry; changed records require a new preview.",
+    active: "Course is active", closed: "Course closed", due: "Retention expires", purged: "Classroom records purged", previewTitle: "Records included in this purge", empty: "No classroom records yet.",
+    labels: { submissions: "Submissions", versions: "Submission versions", images: "Submission images", feedback: "Teacher feedback", formativeAttempts: "Formative attempts", learningEvents: "Learning events", chatMessages: "Archived discussion messages", liveChatRooms: "Live chatrooms", enrollments: "Enrolments", learnerProfiles: "Learner profiles", recommendations: "Recommendations", courseSnapshotRecords: "Student workspace records", retiredCourseRecords: "Student records in retired copies", retiredChatMessages: "Discussion messages in retired copies", shareLinks: "Discussion share links", operationRecords: "Course operation copies", classroomAuditRecords: "Prior classroom audit records" },
+  },
+} as const;
+
+export const classroomAccountCopy = {
+  "zh-CN": {
+    closed: "课程已结束，不能再创建或补发学生初始凭据。已激活账号不受影响。",
+    title: "学生账号与首次登录", help: "CSV 列为 account,displayName,email（邮箱列可省略），最多 100 人。先预览再导入；已有账号保持原密码与课程关系。学生设密后仍需邀请码入班。",
+    upload: "选择名单 CSV", preview: "预览名单", confirm: "确认创建学生账号", pending: "正在处理…", clear: "清除本次凭据", download: "下载初始凭据", print: "打印初始凭据", credentials: "请把各人的凭据分别交给本人。这些凭据仅在本次响应中提供，离开页面后无法读回；未激活账号可补发新凭据，原凭据随即失效。",
+    refresh: "刷新账号状态", account: "账号", name: "姓名", status: "状态", reissue: "补发初始凭据", confirmReissue: "确认补发（原凭据失效）", cancel: "取消", activated: "已设密", waiting: "待首次设密", imported: "名单已处理。请下载新账号的初始凭据；已有账号继续使用原密码。", noCredentials: "本次没有创建新账号。已有学生请用原密码登录。", empty: "当前班级尚无通过此处创建的账号。", previewFirst: "请先预览完整名单并修正无效或重复行。", new: "新增", existing: "已有学生账号", duplicate: "文件内重复", invalid: "无效或身份冲突", valid: "格式有效", failed: "操作未确认完成，请刷新状态。若账号已创建但凭据未收到，可补发未激活账号的凭据。", fileFailed: "请检查 CSV 列名、格式及 100 KB 大小限制。", blocked: "当前环境尚未启用数据库账号，请联系课程管理员。",
+    firstTitle: "设置你的学习账号密码", firstHelp: "初始凭据仅用于此次设密。设置 12–128 个字符的新密码后，进入课程并使用教师的邀请码申请入班。", password: "新密码", repeat: "再次输入新密码", save: "设置密码并进入课程", mismatch: "两次密码不一致。", length: "密码需要 12–128 个字符。", expired: "首次设密会话已失效，请用最新初始凭据重新登录。", different: "新密码不能与初始凭据相同。", login: "返回登录", firstFailed: "设密结果未确认。请先尝试用新密码登录；若不成功，再用初始凭据登录。", issue: "请修正名单中的无效或重复记录后重新预览。",
+  },
+  "en-US": {
+    closed: "This course has ended. New accounts and initial credential reissues are closed; activated accounts remain unchanged.",
+    title: "Student accounts and first sign-in", help: "CSV columns: account,displayName,email (email optional), up to 100 students. Preview before import. Existing passwords and course relationships remain unchanged. Students still join with an invitation code after setting their password.",
+    upload: "Choose roster CSV", preview: "Preview roster", confirm: "Confirm student account creation", pending: "Working…", clear: "Clear these credentials", download: "Download initial credentials", print: "Print initial credentials", credentials: "Give each credential only to its owner. Credentials are available only in this response and cannot be retrieved after leaving. You may reissue credentials for unactivated accounts, immediately invalidating the previous credentials.",
+    refresh: "Refresh account status", account: "Account", name: "Name", status: "Status", reissue: "Reissue initial credential", confirmReissue: "Confirm reissue (invalidates previous credential)", cancel: "Cancel", activated: "Password set", waiting: "Awaiting first password", imported: "Roster processed. Download credentials for new accounts; existing students retain their current passwords.", noCredentials: "No new accounts were created. Existing students should use their current passwords.", empty: "No accounts have been created here for this class.", previewFirst: "Preview the complete roster and correct invalid or duplicate rows first.", new: "New", existing: "Existing student", duplicate: "Duplicate in file", invalid: "Invalid or identity conflict", valid: "Valid format", failed: "The operation was not confirmed. Refresh the status. If an account was created but its credential was not received, reissue its unactivated credential.", fileFailed: "Check CSV columns, format and the 100 KB limit.", blocked: "Database accounts are not enabled in this environment. Contact the course administrator.",
+    firstTitle: "Set your learning account password", firstHelp: "Your initial credential allows only password setup. Choose 12–128 characters, then enter the course invitation code supplied by your teacher.", password: "New password", repeat: "Repeat new password", save: "Set password and enter courses", mismatch: "The passwords do not match.", length: "Use 12–128 characters.", expired: "Password setup expired. Sign in again with your latest initial credential.", different: "Choose a password different from the initial credential.", login: "Return to sign-in", firstFailed: "Password setup was not confirmed. Try signing in with your new password first; if that fails, use your initial credential.", issue: "Correct invalid or duplicate rows and preview the roster again.",
   },
 } as const;

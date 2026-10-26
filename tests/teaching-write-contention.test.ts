@@ -182,9 +182,9 @@ describe("enrolment-day write contention", () => {
         status: 409,
         message: "Teaching course management snapshot changed; retry required.",
         reasonCode: "snapshot-contention",
-        diagnostics: { attempts: 5 },
+        diagnostics: { attempts: 12 },
       });
-      expect(repository.writes).toBe(5);
+      expect(repository.writes).toBe(12);
     } finally {
       await rm(dataDir, { recursive: true, force: true });
     }
@@ -275,7 +275,7 @@ describe("enrolment-day write contention", () => {
       expect(body.error).toBe("Teaching course management snapshot changed; retry required.");
       expect(body.reasonCode).toBe("snapshot-contention");
       expect(body.traceId).toBe("trace-join-contention");
-      expect(putCount).toBe(5);
+      expect(putCount).toBe(12);
       expect(JSON.stringify(body)).not.toContain(externalStorageAccessToken);
       expect(JSON.stringify(body)).not.toContain(dataDir);
     } finally {

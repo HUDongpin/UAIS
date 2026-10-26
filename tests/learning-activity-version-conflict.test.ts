@@ -13,12 +13,14 @@ it("returns a recoverable conflict when a second tab creates the same next versi
   const versions = new Set<string>();
   const sql = async (strings: TemplateStringsArray, ...values: unknown[]) => {
     const text = strings.join("?");
+    if (text.includes("AS course_slug")) return [{ course_slug: "course-1" }];
+    if (text.includes("max(version)")) return [{ next_version: versions.size + 2, draft_pending: versions.size > 0 }];
     if (text.includes("FROM uais_idempotency_records")) return [];
     if (text.includes("FROM uais_users")) return [{ id: "teacher-id" }];
     if (text.includes("FROM uais_assessments a")) return [{ id: "activity-1", activity_key: "family-1", status: "published", version: 1, edit_revision: 3, lesson_id: "lesson-id", lesson_key: "lesson-1", target_class_external_id: "class-1" }];
     if (text.includes("INSERT INTO uais_assessments")) {
       // Enforce the real migration's (lesson_id, activity_key, version) unique index.
-      const key = `${values[1]}:${values[3]}:${values[6]}`;
+      const key = `${values[1]}:${values[4]}:${values[7]}`;
       if (versions.has(key)) {
         if (text.includes("ON CONFLICT (lesson_id, activity_key, version) WHERE activity_key IS NOT NULL") && text.includes("DO NOTHING")) return [];
         throw Object.assign(new Error("duplicate activity version"), { code: "23505" });

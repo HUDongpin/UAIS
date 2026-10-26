@@ -100,6 +100,60 @@ afterEach(() => {
 });
 
 describe("LearningPracticePanel", () => {
+  it("waits for local image recovery before permitting a seal",async()=>{
+    const opening:{onerror?:()=>void;error?:Error}={};vi.stubGlobal("indexedDB",{open:()=>opening});
+    await renderLoadedPanel(vi.fn(async()=>jsonResponse(unitResponse())));
+    expect(screen.getByRole("button",{name:"封存并提交"})).toHaveProperty("disabled",true);
+    await waitFor(()=>expect(opening.onerror).toBeTypeOf("function"));
+    await act(async()=>{opening.onerror?.();});
+    await waitFor(()=>expect(screen.getByRole("button",{name:"封存并提交"})).toHaveProperty("disabled",false));
+  });
+  it("recovers an uncertain seal across a page reload using the original key",async()=>{
+    const keys:string[]=[];let sealed=false;vi.stubGlobal("fetch",vi.fn(async(_url:string,init?:RequestInit)=>{if(init?.method==="POST"){keys.push(new Headers(init.headers).get("idempotency-key")!);if(keys.length===1)throw new TypeError("offline");sealed=true;return jsonResponse({status:"persisted"});}const result=unitResponse();if(sealed){result.submission.state="submitted";result.submission.currentVersion.status="sealed";}return jsonResponse(result);}));
+    const first=render(scopedPanel("activity-1"));await screen.findByRole("heading",{name:"证据论证"});fireEvent.click(screen.getByRole("button",{name:"封存并提交"}));await screen.findByRole("button",{name:"核对并重试提交"});first.unmount();
+    render(scopedPanel("activity-1"));fireEvent.click(await screen.findByRole("button",{name:"核对并重试提交"}));await screen.findByText("等待教师反馈");expect(keys).toHaveLength(2);expect(keys[0]).toBe(keys[1]);
+  });
+  it("keeps ended-course records readable while disabling new work",async()=>{
+    const fetchMock=vi.fn(async()=>jsonResponse(unitResponse({unit:{courseId:"course-1",classId:"class-1",lessonKey:"lesson-1",recordsReadOnly:true}})));
+    await renderLoadedPanel(fetchMock);expect(screen.getByText("课程已结束，学习记录仍可回看。")).toBeTruthy();expect(screen.getByRole("textbox",{name:"学习产物正文"})).toHaveProperty("readOnly",true);expect(screen.queryByLabelText("上传作业图片")).toBeNull();expect(screen.queryByRole("button",{name:"封存并提交"})).toBeNull();
+  });
+  it("creates an empty draft before uploading image-only evidence, then enables sealing",async()=>{
+    let saved=false;let attached=false;const writes:Array<{url:string;init:RequestInit}>=[];
+    const image={id:"image-1",clientAttachmentId:"client-1",submissionVersionId:"version-1",position:1,mime:"image/png",byteLength:4,width:1,height:1,sha256:"hash",url:"/api/learning/submission-images/image-1"};
+    const fetchMock=vi.fn(async(url:string,init?:RequestInit)=>{
+      if(init?.method){writes.push({url,init});if(init.method==="PUT"){saved=true;return jsonResponse({status:"persisted",revision:1,submissionVersionId:"version-1"});}if(url.endsWith("/images")){attached=true;image.clientAttachmentId=String((init.body as FormData).get("clientAttachmentId"));return jsonResponse({status:"persisted",attachment:image,revision:2});}}
+      return jsonResponse(unitResponse({submission:saved?{id:"submission-1",state:"draft",currentVersion:{id:"version-1",status:"draft",contentText:"",draftRevision:attached?2:1,attachments:attached?[image]:[]}}:undefined}));
+    });
+    await renderLoadedPanel(fetchMock);fireEvent.change(screen.getByLabelText("上传作业图片"),{target:{files:[new File(["photo"],"photo.png",{type:"image/png"})]}});
+    await waitFor(()=>expect(screen.getByRole("button",{name:"封存并提交"})).toHaveProperty("disabled",false));
+    expect(JSON.parse(String(writes[0].init.body))).toMatchObject({contentText:"",expectedDraftRevision:0,expectedSubmissionVersionId:null});
+    expect(writes[1].url).toMatch(/\/images$/);expect(screen.getByRole("img",{name:"作业图片 1"})).toHaveProperty("src",expect.stringContaining("/api/learning/submission-images/image-1"));
+  });
+  it("retries a failed image with its stable client ID and never seals while it is pending",async()=>{
+    const clients:string[]=[];const image={id:"image-1",clientAttachmentId:"",submissionVersionId:"version-1",position:1,mime:"image/png",byteLength:4,width:1,height:1,sha256:"hash",url:"/api/learning/submission-images/image-1"};
+    const fetchMock=vi.fn(async(url:string,init?:RequestInit)=>{if(init?.method==="POST"&&url.endsWith("/images")){clients.push(String((init.body as FormData).get("clientAttachmentId")));if(clients.length===1)throw new TypeError("offline");return jsonResponse({status:"persisted",attachment:{...image,clientAttachmentId:clients[1]},revision:2});}return jsonResponse(unitResponse());});
+    await renderLoadedPanel(fetchMock);fireEvent.change(screen.getByLabelText("上传作业图片"),{target:{files:[new File(["photo"],"photo.png",{type:"image/png"})]}});
+    const retry=await screen.findByRole("button",{name:"重试图片上传"});expect(screen.getByRole("button",{name:"封存并提交"})).toHaveProperty("disabled",true);fireEvent.click(retry);
+    await waitFor(()=>expect(clients).toHaveLength(2));expect(clients[0]).toBe(clients[1]);await waitFor(()=>expect(screen.getByRole("button",{name:"封存并提交"})).toHaveProperty("disabled",false));
+  });
+  it("keeps the loaded task usable when browser draft storage is denied", async () => {
+    vi.spyOn(Storage.prototype,"getItem").mockImplementation(()=>{throw new DOMException("denied","SecurityError");});
+    vi.spyOn(Storage.prototype,"removeItem").mockImplementation(()=>{throw new DOMException("denied","SecurityError");});
+    await renderLoadedPanel(vi.fn(async()=>jsonResponse(unitResponse())));
+    expect(screen.getByRole("textbox",{name:"学习产物正文"})).toHaveProperty("value","服务端草稿");
+    expect(screen.getByText(/本机恢复副本不可用/)).toBeTruthy();
+  });
+  it("confirms a lost seal response by readback before sending another seal",async()=>{
+    let sealed=false;let writes=0;const fetchMock=vi.fn(async(_url:string,init?:RequestInit)=>{if(init?.method==="POST"){writes++;sealed=true;throw new TypeError("response lost");}const result=unitResponse();if(sealed){result.submission.state="submitted";result.submission.currentVersion.status="sealed";}return jsonResponse(result);});
+    await renderLoadedPanel(fetchMock);fireEvent.click(screen.getByRole("button",{name:"封存并提交"}));
+    const retry=await screen.findByRole("button",{name:"核对并重试提交"});fireEvent.click(retry);
+    await screen.findByText("等待教师反馈");expect(writes).toBe(1);
+  });
+  it("reuses the seal idempotency key when readback proves the first request did not commit",async()=>{
+    const keys:string[]=[];let sealed=false;const fetchMock=vi.fn(async(_url:string,init?:RequestInit)=>{if(init?.method==="POST"){keys.push(new Headers(init.headers).get("idempotency-key")!);if(keys.length===1)throw new TypeError("offline");sealed=true;return jsonResponse({status:"persisted"});}const result=unitResponse();if(sealed){result.submission.state="submitted";result.submission.currentVersion.status="sealed";}return jsonResponse(result);});
+    await renderLoadedPanel(fetchMock);fireEvent.click(screen.getByRole("button",{name:"封存并提交"}));fireEvent.click(await screen.findByRole("button",{name:"核对并重试提交"}));
+    await screen.findByText("等待教师反馈");expect(keys).toHaveLength(2);expect(keys[0]).toBe(keys[1]);
+  });
   it.each(["version", "revision", "legacy"])("does not adopt fresh server tokens for an older %s recovery draft", async (change) => {
     let remote = unitResponse();
     const fetchMock = vi.fn(async (_input: string, init?: RequestInit) => {
@@ -217,7 +271,7 @@ describe("LearningPracticePanel", () => {
     vi.stubGlobal("fetch", fetchMock);
     render(scopedPanel("activity-b"));
     await screen.findByRole("heading", { name: "任务 activity-b" });
-    expect(fetchMock).toHaveBeenCalledWith("/api/learning/courses/course-1/units/lesson-1?activityId=activity-b", expect.anything());
+    expect(fetchMock).toHaveBeenCalledWith("/api/learning/courses/course-1/units/lesson-1?classId=class-1&activityId=activity-b", expect.anything());
     vi.useFakeTimers();
     fireEvent.change(screen.getByRole("textbox", { name: "学习产物正文" }), { target: { value: "B draft" } });
     await act(async () => vi.advanceTimersByTimeAsync(2_000));
@@ -231,13 +285,13 @@ describe("LearningPracticePanel", () => {
     vi.stubGlobal("fetch", fetchMock);
     render(scopedPanel(requested));
     expect(await screen.findByRole("heading", { name: `任务 ${activityId}` })).toBeTruthy();
-    expect(fetchMock).toHaveBeenCalledWith(`/api/learning/courses/course-1/units/lesson-1?activityId=${encodeURIComponent(requested)}`, expect.anything());
+    expect(fetchMock).toHaveBeenCalledWith(`/api/learning/courses/course-1/units/lesson-1?${new URLSearchParams({classId:"class-1",activityId:requested})}`, expect.anything());
   });
 
   it("does not fall back to another activity when an explicit selection is mismatched", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(jsonResponse(scopedUnit("activity-a"))));
     render(scopedPanel("activity-b"));
-    expect(await screen.findByRole("alert")).toHaveProperty("textContent", expect.stringContaining("暂时无法读取真实学习任务"));
+    expect(await screen.findByRole("alert")).toHaveProperty("textContent", expect.stringContaining("暂时无法读取学习任务"));
     expect(screen.queryByRole("textbox", { name: "学习产物正文" })).toBeNull();
   });
 
@@ -401,7 +455,7 @@ describe("LearningPracticePanel", () => {
     vi.stubGlobal("fetch", fetchMock);
     render(<LearningPracticePanel locale="zh-CN" signInHref="/login" />);
 
-    expect(screen.getByText(/不会显示虚构待交作业/)).toBeTruthy();
+    expect(screen.getByText(/教师尚未为此课时发布学习任务/)).toBeTruthy();
     expect(fetchMock).not.toHaveBeenCalled();
   });
 

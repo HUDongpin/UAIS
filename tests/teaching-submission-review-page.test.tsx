@@ -67,6 +67,11 @@ afterEach(() => {
 });
 
 describe("TeachingSubmissionReviewPage", () => {
+  it("shows each sealed version's protected images and requires manual review for image-only work",async()=>{
+    const submission=detail();submission.versions[0].contentText="";Object.assign(submission.versions[0],{attachments:[{id:"image-v1",url:"/api/learning/submission-images/image-v1",position:1,submissionVersionId:"version-1"}]});
+    vi.stubGlobal("fetch",vi.fn(async()=>json({submission})));render(<TeachingSubmissionReviewPage submissionId="submission-1"/>);
+    expect(await screen.findByRole("img",{name:"V1 作业图片 1"})).toBeTruthy();expect(screen.getByRole("button",{name:/按需生成 AI 草稿/})).toHaveProperty("disabled",true);expect(screen.getByText(/AI 仅分析文字/)).toBeTruthy();expect(screen.getByRole("button",{name:"保存教师草稿"})).toHaveProperty("disabled",false);
+  });
   it("prevents edits while a saved feedback draft is awaiting server readback", async () => {
     let finishSave!: (value: Response) => void;
     let finishReadback!: (value: Response) => void;

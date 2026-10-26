@@ -73,6 +73,7 @@ export type ChatroomTranscriptDocument = {
   // quietly starts mid-conversation is worse than one that admits where it
   // begins.
   windowAtCapacity: boolean;
+  archiveAvailable?: boolean;
 };
 
 export type LearningChatroomShareViewResult =
@@ -311,6 +312,7 @@ export async function loadLearningChatroomExportDocument(
     ...(classId ? { classId } : {}),
     ...(group ? { groupId: group.groupId } : {}),
     studentId: input.appSession.account,
+    fullArchive: true,
   });
 
   const snapshot = await readChatroomCourseDatabase({
@@ -331,6 +333,7 @@ export async function loadLearningChatroomExportDocument(
       messages: history.messages,
       transcriptStatus: history.status,
       windowAtCapacity: history.window.atCapacity,
+      archiveAvailable: history.window.archiveAvailable,
     }),
   };
 }
@@ -344,6 +347,7 @@ function createChatroomTranscriptDocument(input: {
   messages: LearningChatroomTranscriptMessage[];
   transcriptStatus: "loaded" | "unavailable";
   windowAtCapacity: boolean;
+  archiveAvailable?: boolean;
 }): ChatroomTranscriptDocument {
   const t = copy[input.locale];
   const messages = input.messages.map((message) => ({
@@ -376,6 +380,7 @@ function createChatroomTranscriptDocument(input: {
       : {}),
     transcriptStatus: input.transcriptStatus,
     windowAtCapacity: input.windowAtCapacity,
+    ...(input.archiveAvailable ? { archiveAvailable: true } : {}),
   };
 }
 

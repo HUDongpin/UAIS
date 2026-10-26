@@ -170,6 +170,7 @@ type ChatroomHistoryResponse = {
   // Always a definite status from the route (`open` when a room was never
   // moderated), so the client never has to infer "open" from a missing key.
   moderation?: unknown;
+  courseClosed?: unknown;
 };
 
 export type ChatroomHistoryResult =
@@ -187,6 +188,9 @@ export type ChatroomHistoryResult =
       // The room is holding a full rolling window, so older turns are leaving
       // it - and leaving the export and the share link with it.
       transcriptWindowAtCapacity: boolean;
+      archiveAvailable: boolean;
+      courseClosed: boolean;
+      archiveNextCursor?: string;
       groupId?: string;
       groupName?: string;
       members?: ChatroomRoomMember[];
@@ -207,8 +211,12 @@ export async function fetchChatroomHistory(input: {
   groupId?: string;
   locale: Locale;
   otherMemberFallbackName: string;
+  archive?: boolean;
+  before?: string;
 }): Promise<ChatroomHistoryResult> {
   const query = new URLSearchParams({ courseId: input.courseId });
+  if (input.archive) query.set("archive", "1");
+  if (input.before) query.set("before", input.before);
   if (input.classId) {
     query.set("classId", input.classId);
   }
@@ -244,11 +252,15 @@ export async function fetchChatroomHistory(input: {
 
     const groupId = readString(body.groupId);
     const isGroupRoom = Boolean(groupId);
+    const transcript = body.transcript as { window?: { archiveAvailable?: unknown }; archivePage?: { nextCursor?: unknown } } | undefined;
     return {
       status: "loaded",
       transcriptUnavailable: isUnconfirmedTranscriptReceipt(body.transcript),
       roomFrozen: isFrozenRoomModeration(body.moderation),
       transcriptWindowAtCapacity: isTranscriptWindowAtCapacity(body.transcript),
+      archiveAvailable: transcript?.window?.archiveAvailable === true,
+      courseClosed: body.courseClosed === true,
+      ...(readString(transcript?.archivePage?.nextCursor) ? { archiveNextCursor: readString(transcript?.archivePage?.nextCursor) } : {}),
       messages: body.messages.flatMap((message) => {
         const restored = toStoredChatMessage(
           message as ChatroomHistoryMessage,

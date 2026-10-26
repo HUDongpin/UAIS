@@ -45,14 +45,16 @@ export function AppPreferencesProvider({
 
   useEffect(() => {
     document.documentElement.lang = locale;
-    window.localStorage.setItem(localeCookieName, locale);
+    try { window.localStorage.setItem(localeCookieName, locale); }
+    catch { /* Classroom work must remain usable when browser storage is denied. */ }
     document.cookie = `${localeCookieName}=${locale}; path=/; max-age=${preferenceCookieMaxAgeSeconds}; SameSite=Lax`;
   }, [locale]);
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", theme === "dark");
     document.documentElement.dataset.theme = theme;
-    window.localStorage.setItem(themeStorageKey, theme);
+    try { window.localStorage.setItem(themeStorageKey, theme); }
+    catch { /* The active preference and cookie do not depend on local recovery storage. */ }
     // Persist the choice to a route-readable cookie so the next server render
     // resolves the same theme (mirrors the locale cookie).
     document.cookie = `${themeCookieName}=${theme}; path=/; max-age=${preferenceCookieMaxAgeSeconds}; SameSite=Lax`;
