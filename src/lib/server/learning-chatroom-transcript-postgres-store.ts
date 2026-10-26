@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type { TransactionSql } from "postgres";
+import { assertClassroomRecordWriteAllowed, ClassroomRecordRetentionError } from "./classroom-record-retention-store";
 import {
   closeUaisCoreDatabaseClient,
   getUaisCoreDatabasePool,
@@ -10,6 +11,8 @@ import {
   createEmptyLearningChatroomTranscriptDatabase,
   learningChatroomTranscriptRoomKeyMismatchReasonCode,
   normalizeLearningChatroomTranscriptDatabase,
+  normalizeLearningChatroomTranscriptMessage,
+  resolveLearningChatroomTranscriptMaxMessages,
   type LearningChatroomTranscriptDatabase,
   type LearningChatroomTranscriptRepository,
   type LearningChatroomTranscriptStorageDescriptor,
@@ -71,6 +74,14 @@ export function createUaisLearningChatroomTranscriptPostgresRepository(input: {
 
   return {
     storage: postgresLearningChatroomTranscriptStorage,
+    readCourseRecordState: async (courseId) => {
+      const client = (input.createDatabase ?? getUaisCoreDatabasePool)({ env: input.env });
+      try {
+        const rows = await client.sql`SELECT closed_at,purged_at FROM uais_course_record_retention WHERE course_external_id=${courseId}`;
+        const row = rows[0] as { closed_at?: unknown; purged_at?: unknown } | undefined;
+        return row?.purged_at ? "purged" : row?.closed_at ? "closed" : "active";
+      } finally { await closeUaisCoreDatabaseClient(client); }
+    },
     read: async (scope) => {
       const roomKey = readRoomKey(scope?.transcriptId);
       const client = (input.createDatabase ?? getUaisCoreDatabasePool)({ env: input.env, max: 1 });
@@ -113,7 +124,50 @@ export function createUaisLearningChatroomTranscriptPostgresRepository(input: {
         await closeUaisCoreDatabaseClient(client);
       }
     },
-    write: async ({ database, expectedRevision, transcriptId }) => {
+    readArchive: async ({ transcriptId, before, limit = 100 }) => {
+      if (!Number.isSafeInteger(limit) || limit < 1 || limit > 500) {
+        throw new LearningChatroomTranscriptStoreError(400, "Archive page size must be between 1 and 500.");
+      }
+      const client = (input.createDatabase ?? getUaisCoreDatabasePool)({ env: input.env });
+      try {
+        const rows = await client.sql`
+          SELECT message FROM uais_learning_chatroom_messages
+          WHERE transcript_id = ${transcriptId}
+            AND (${before ?? null}::text IS NULL OR id < (
+              SELECT id FROM uais_learning_chatroom_messages WHERE transcript_id = ${transcriptId} AND message_id = ${before ?? null}
+            ))
+          ORDER BY id DESC LIMIT ${limit + 1}
+        `;
+        const messages = rows.slice(0, limit).map((row) => normalizeLearningChatroomTranscriptMessage((row as { message: unknown }).message)).reverse();
+        return { messages, ...(rows.length > limit && messages[0] ? { nextCursor: messages[0].messageId } : {}) };
+      } finally { await closeUaisCoreDatabaseClient(client); }
+    },
+    moderateArchive: async ({ transcriptId, courseId, messageId, moderation }) => {
+      const client = (input.createDatabase ?? getUaisCoreDatabasePool)({ env: input.env });
+      let applied = false;
+      try {
+        await client.sql.begin(async (sql: TransactionSql) => {
+          await assertClassroomRecordWriteAllowed(sql, courseId, { allowClosed: true });
+          const snapshots = await sql`SELECT database, revision FROM uais_learning_chatroom_transcript_snapshots WHERE snapshot_key = ${transcriptId} FOR UPDATE`;
+          if (!snapshots.length) return;
+          const database = selectRoomDatabase(normalizeLearningChatroomTranscriptDatabase(snapshots[0].database), transcriptId);
+          if (database.transcripts[0]?.courseId !== courseId) return;
+          const changed = await sql`
+            UPDATE uais_learning_chatroom_messages SET message = jsonb_set(message, '{moderation}', ${JSON.stringify(moderation)}::text::jsonb)
+            WHERE transcript_id = ${transcriptId} AND message_id = ${messageId} RETURNING id
+          `;
+          if (!changed.length) return;
+          const room = database.transcripts[0];
+          room.messages = room.messages.map((message) => message.messageId === messageId ? { ...message, moderation } : message);
+          room.updatedAt = moderation.actedAt;
+          database.updatedAt = moderation.actedAt;
+          await sql`UPDATE uais_learning_chatroom_transcript_snapshots SET database = ${JSON.stringify(database)}::text::jsonb, revision = ${createSnapshotRevision(database)}, updated_at = now() WHERE snapshot_key = ${transcriptId}`;
+          applied = true;
+        });
+        return applied;
+      } finally { await closeUaisCoreDatabaseClient(client); }
+    },
+    write: async ({ database, expectedRevision, transcriptId, archiveMessages }) => {
       const roomKey = readRoomKey(transcriptId);
       if (!roomKey) {
         // A corpus-wide replace is no longer expressible: it would have to take
@@ -126,10 +180,18 @@ export function createUaisLearningChatroomTranscriptPostgresRepository(input: {
         );
       }
       const roomDatabase = selectRoomDatabase(database, roomKey);
-      const revision = createSnapshotRevision(roomDatabase);
+      const room = roomDatabase.transcripts[0];
+      let revision = createSnapshotRevision(roomDatabase);
       const client = (input.createDatabase ?? getUaisCoreDatabasePool)({ env: input.env, max: 1 });
       try {
         await client.sql.begin(async (sql: TransactionSql) => {
+          if (room) {
+            try { await assertClassroomRecordWriteAllowed(sql, room.courseId, { allowClosed: archiveMessages === undefined }); }
+            catch (error) {
+              if (error instanceof ClassroomRecordRetentionError) throw new LearningChatroomTranscriptStoreError(error.status, error.message, error.reasonCode);
+              throw error;
+            }
+          }
           const rows = await sql`
             SELECT revision
             FROM uais_learning_chatroom_transcript_snapshots
@@ -194,6 +256,30 @@ export function createUaisLearningChatroomTranscriptPostgresRepository(input: {
               "Postgres learning chatroom transcript snapshot changed; retry required.",
               snapshotContentionReasonCode,
             );
+          }
+          if (room) {
+            const candidates = archiveMessages ?? room.messages;
+            // Stable message ids are immutable evidence. Only trusted moderation
+            // changes can update an existing archived row; a delayed client
+            // resend neither changes its contents nor moves it to the live tail.
+            const messages = [...new Map(candidates.map((message) => [message.messageId, message])).values()];
+            if (messages.length) {
+              await sql`
+                INSERT INTO uais_learning_chatroom_messages (transcript_id, message_id, course_external_id, message)
+                SELECT ${roomKey}, item->>'messageId', ${room.courseId}, item
+                FROM jsonb_array_elements(${JSON.stringify(messages)}::text::jsonb) WITH ORDINALITY AS incoming(item, position)
+                ORDER BY position
+                ON CONFLICT (transcript_id, message_id) DO UPDATE SET message =
+                  CASE WHEN EXCLUDED.message ? 'moderation' THEN jsonb_set(uais_learning_chatroom_messages.message, '{moderation}', EXCLUDED.message->'moderation')
+                  ELSE uais_learning_chatroom_messages.message END
+                WHERE EXCLUDED.message ? 'moderation'
+                  AND uais_learning_chatroom_messages.message->'moderation' IS DISTINCT FROM EXCLUDED.message->'moderation'
+              `;
+            }
+            const latest = await sql`SELECT message FROM uais_learning_chatroom_messages WHERE transcript_id = ${roomKey} ORDER BY id DESC LIMIT ${resolveLearningChatroomTranscriptMaxMessages(room.groupId)}`;
+            room.messages = latest.map((row) => normalizeLearningChatroomTranscriptMessage(row.message)).reverse();
+            revision = createSnapshotRevision(roomDatabase);
+            await sql`UPDATE uais_learning_chatroom_transcript_snapshots SET database = ${JSON.stringify(roomDatabase)}::text::jsonb, revision = ${revision}, updated_at = now() WHERE snapshot_key = ${roomKey}`;
           }
         });
       } finally {

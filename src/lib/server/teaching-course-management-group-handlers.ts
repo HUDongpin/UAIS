@@ -1,4 +1,5 @@
 import { isSameTeachingActorId } from "@/lib/server/teaching-actor-id";
+import { createHash } from "node:crypto";
 import { TeachingCourseManagementStoreError } from "./teaching-course-management-error";
 import {
   createRedaction,
@@ -96,7 +97,8 @@ type LearningGroupMutationAudit = {
 
 export function createTeachingLearningGroupId(groupName: string, now: Date) {
   const slug = createLearningGroupSlug(groupName) || "learning";
-  return `group-${slug}-${formatTimestampId(now)}`;
+  const identity = createHash("sha256").update(groupName.trim().normalize("NFC")).digest("hex").slice(0, 12);
+  return `group-${slug}-${identity}-${formatTimestampId(now)}`;
 }
 
 export async function createTeachingLearningGroupRecord(input: {

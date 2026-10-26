@@ -1,8 +1,5 @@
-import {
-  createAiRequestRateLimiter,
-  resolveAiRequestRateLimitCount,
-  resolveAiRequestRateLimitMode,
-} from "@/lib/server/ai-request-rate-limit";
+import { createAiRequestRateLimiter } from "@/lib/server/ai-request-rate-limit";
+import { readLearningChatroomHistoryRateLimitConfig } from "@/lib/server/learning-chatroom-history-rate-limit";
 import {
   authorizeLearningAiGuideCourseAccess,
   createLearningAiGuideAccessDeniedResponse,
@@ -34,8 +31,6 @@ export type LearningChatroomHistoryGetHandlerDeps = {
   transcriptRepository?: LearningChatroomTranscriptRepository;
 };
 
-const historyDefaultRateLimitPerMinute = 30;
-const historyDefaultRateLimitPerDay = 2000;
 const historyRateLimitMessage =
   "Learning chatroom history rate limit exceeded. Please wait before reloading the transcript.";
 const timingSpanOrder = [
@@ -62,7 +57,7 @@ export function createLearningChatroomHistoryGetHandler(
   const timingNow = deps.timingNow ?? defaultTimingNow;
   const readPendingTranscript = createPendingTranscriptReadSingleFlight();
   const rateLimiter = createAiRequestRateLimiter({
-    config: readHistoryRateLimitConfig(env),
+    config: readLearningChatroomHistoryRateLimitConfig(env),
   });
 
   return async function GET(request: Request) {
@@ -152,16 +147,16 @@ export function createLearningChatroomHistoryGetHandler(
         group,
         studentId: appSession.account,
       });
-      const history = await timing.measureAsync("transcript", () =>
-        readPendingTranscript(transcriptRoom, () =>
-          readLearningChatroomHistory({
+      const readHistory = () => readLearningChatroomHistory({
             env,
             fetch: deps.fetch,
             repository: deps.transcriptRepository,
             ...transcriptRoom,
-          }),
-        ),
-      );
+            ...(room.archivePage ? { archivePage: room.archivePage } : {}),
+          });
+      const history = await timing.measureAsync("transcript", () => room.archivePage
+        ? readHistory()
+        : readPendingTranscript(transcriptRoom, readHistory));
       if (history.status === "unavailable") {
         logHistoryStorageFailure({ traceId, phase: "transcript-read" });
       }
@@ -189,11 +184,13 @@ export function createLearningChatroomHistoryGetHandler(
               status: history.status,
               messageCount: history.messages.length,
               window: history.window,
+              ...(history.archivePage ? { archivePage: history.archivePage } : {}),
               ...(history.storagePolicy
                 ? { storagePolicy: history.storagePolicy }
                 : {}),
             },
             moderation: createModerationProjection(history),
+            ...(history.courseClosed ? { courseClosed: true } : {}),
             redaction: createHistoryRedaction(),
           },
           traceId,
@@ -239,34 +236,12 @@ function createTranscriptReadFlightKey(room: LearningChatroomTranscriptRoomKey) 
   ]);
 }
 
-function readHistoryRateLimitConfig(env: Record<string, string | undefined>) {
-  return {
-    mode: resolveAiRequestRateLimitMode(
-      env.UAIS_LEARNING_CHATROOM_HISTORY_RATE_LIMIT_MODE,
-    ),
-    windows: [
-      {
-        id: "per-minute",
-        limit: resolveAiRequestRateLimitCount(
-          env.UAIS_LEARNING_CHATROOM_HISTORY_RATE_LIMIT_PER_MINUTE,
-          historyDefaultRateLimitPerMinute,
-        ),
-        windowMs: 60_000,
-      },
-      {
-        id: "per-day",
-        limit: resolveAiRequestRateLimitCount(
-          env.UAIS_LEARNING_CHATROOM_HISTORY_RATE_LIMIT_PER_DAY,
-          historyDefaultRateLimitPerDay,
-        ),
-        windowMs: 86_400_000,
-      },
-    ],
-  };
-}
-
 function parseHistoryQuery(request: Request) {
   const params = new URL(request.url).searchParams;
+  const before = params.get("before") ?? undefined;
+  if ((params.has("archive") && params.get("archive") !== "1") || (before && (before.length > 200 || params.get("archive") !== "1"))) {
+    throw new PublicHistoryError("Invalid archive page request.", 400);
+  }
   const courseId = readString(params.get("courseId"));
   if (courseId.length > 200) {
     throw new PublicHistoryError(
@@ -278,6 +253,7 @@ function parseHistoryQuery(request: Request) {
     courseId,
     classId: readBoundedRoomId(params.get("classId"), "classId"),
     groupId: readBoundedRoomId(params.get("groupId"), "groupId"),
+    ...(params.get("archive") === "1" ? { archivePage: { ...(before ? { before } : {}), limit: 100 } } : {}),
   };
 }
 

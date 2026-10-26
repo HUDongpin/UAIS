@@ -51,7 +51,9 @@ function createRecordingClient(options: { rows?: unknown[][] } = {}) {
   let transactions = 0;
 
   const sql = ((strings: TemplateStringsArray, ...values: unknown[]) => {
-    queries.push({ text: strings.join("?").replace(/\s+/g, " ").trim(), values });
+    const text = strings.join("?").replace(/\s+/g, " ").trim();
+    queries.push({ text, values });
+    if (text.includes("pg_advisory_xact_lock_shared") || text.includes("FROM uais_course_record_retention")) return Promise.resolve([]);
     return Promise.resolve(rowQueue.shift() ?? []);
   }) as never as {
     (strings: TemplateStringsArray, ...values: unknown[]): Promise<unknown[]>;
@@ -364,8 +366,8 @@ describe("teaching course management postgres store", () => {
     });
 
     expect(client.transactions).toBe(1);
-    const select = client.queries[0];
-    const insert = client.queries[1];
+    const select = client.queries.find((query) => query.text.startsWith("SELECT revision"))!;
+    const insert = client.queries.find((query) => query.text.startsWith("INSERT INTO uais_teaching_course_management_snapshots"))!;
     // The guard reads FOR UPDATE first so a concurrent writer cannot slip
     // between the check and the replace - and it locks this course's row only.
     expect(select.text).toContain("FOR UPDATE");

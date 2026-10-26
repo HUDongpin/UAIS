@@ -105,6 +105,10 @@ export const UAIS_CORE_DATABASE_MIGRATIONS = [
     path: "migrations/0012_course_collaborator_identifier_retention.sql",
     tables: [],
   },
+  { version: "0013_classroom_lessons", path: "migrations/0013_classroom_lessons.sql", tables: ["uais_lesson_versions"] },
+  { version: "0014_classroom_accounts", path: "migrations/0014_classroom_accounts.sql", tables: ["uais_classroom_account_onboarding"] },
+  { version: "0015_classroom_chat_retention", path: "migrations/0015_classroom_chat_retention.sql", tables: ["uais_learning_chatroom_messages", "uais_course_record_retention"] },
+  { version: "0016_classroom_submission_images", path: "migrations/0016_classroom_submission_images.sql", tables: ["uais_submission_attachments"] },
 ] as const;
 
 export type UaisCoreDatabaseMigrationVersion =

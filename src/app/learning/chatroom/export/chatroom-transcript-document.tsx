@@ -129,6 +129,7 @@ export function ChatroomTranscriptDocument({
             {t.learning.chatroomWindowTrimmed}
           </p>
         ) : null}
+        {document.archiveAvailable ? <p className={`mt-3 text-xs leading-5 ${style.muted}`}>{t.learning.chatArchiveBoundary}</p> : null}
 
         {notice ? <p className={`mt-3 text-xs leading-5 ${style.muted}`}>{notice}</p> : null}
       </header>

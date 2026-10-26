@@ -154,7 +154,7 @@ describe("teaching-course collaborator ACL migration", () => {
   });
 
   it("registers the ACL tables and the immutable follow-up correction", () => {
-    expect(UAIS_CORE_DATABASE_MIGRATIONS.slice(-2)).toEqual([
+    expect(UAIS_CORE_DATABASE_MIGRATIONS.filter((migration) => migration.version === "0011_course_collaborator_acl" || migration.version === "0012_course_collaborator_identifier_retention")).toEqual([
       {
         version: "0011_course_collaborator_acl",
         path: "migrations/0011_course_collaborator_acl.sql",

@@ -69,6 +69,7 @@ export function createLearningChatroomExportPdfGetHandler(
         agentTag: t.learning.exportAgentTag,
         unavailableNotice: t.learning.exportTranscriptUnavailable,
         windowTrimmedNotice: t.learning.chatroomWindowTrimmed,
+        archiveBoundaryNotice: t.learning.chatArchiveBoundary,
       },
       ...(deps.fontPath ? { fontPath: deps.fontPath } : {}),
     });

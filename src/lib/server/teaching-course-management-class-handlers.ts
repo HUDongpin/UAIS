@@ -26,6 +26,7 @@ import {
   createTeachingCourseManagementContentionError,
   createTeachingCourseManagementWriteRetry,
   teachingCourseManagementMaxWriteAttempts,
+  teachingClassroomJoinMaxWriteAttempts,
 } from "./teaching-course-management-write-retry";
 import type {
   TeachingClassInviteCodeDraftRecord,
@@ -758,8 +759,8 @@ export async function joinTeachingClassByInviteCode(input: {
     notFoundMessage: "Teaching class invite code was not found.",
   });
 
-  const writeRetry = createTeachingCourseManagementWriteRetry();
-  for (let attempt = 0; attempt < teachingCourseManagementMaxWriteAttempts; attempt += 1) {
+  const writeRetry = createTeachingCourseManagementWriteRetry({ maxAttempts: teachingClassroomJoinMaxWriteAttempts });
+  for (let attempt = 0; attempt < teachingClassroomJoinMaxWriteAttempts; attempt += 1) {
     const snapshot = await readTeachingCourseManagementSnapshot({
       dataDir,
       repository: input.repository,
@@ -918,12 +919,12 @@ export async function joinTeachingClassByInviteCode(input: {
       // caller mistake: answer with the structured 409 rather than passing the
       // backend's own revision-mismatch prose through. Local snapshots use the same retry policy.
       throw writeRetry.isConflict(error)
-        ? createTeachingCourseManagementContentionError()
+        ? createTeachingCourseManagementContentionError({ attempts: teachingClassroomJoinMaxWriteAttempts })
         : error;
     }
   }
 
-  throw createTeachingCourseManagementContentionError();
+  throw createTeachingCourseManagementContentionError({ attempts: teachingClassroomJoinMaxWriteAttempts });
 }
 
 function createTeachingClassMembershipId(classId: string, studentId: string) {

@@ -61,11 +61,14 @@ export type LearningChatroomHistoryResult = {
   // start of a discussion and find no surface anywhere that said so.
   window: LearningChatroomTranscriptWindow;
   storagePolicy?: LearningChatroomTranscriptStoragePolicy;
+  archivePage?: { nextCursor?: string };
+  courseClosed?: boolean;
 };
 
 export type LearningChatroomTranscriptWindow = {
   maxMessages: number;
   atCapacity: boolean;
+  archiveAvailable?: boolean;
 };
 
 export type LearningChatroomTranscriptWriteResult = {
@@ -107,7 +110,10 @@ type LearningChatroomTranscriptRuntimeDeps = {
 };
 
 export async function readLearningChatroomHistory(
-  input: LearningChatroomTranscriptRuntimeDeps & LearningChatroomTranscriptRoomKey,
+  input: LearningChatroomTranscriptRuntimeDeps & LearningChatroomTranscriptRoomKey & {
+    archivePage?: { before?: string; limit?: number };
+    fullArchive?: boolean;
+  },
 ): Promise<LearningChatroomHistoryResult> {
   try {
     const { dataDir, repository } = resolveLearningChatroomTranscriptBackend(input);
@@ -119,8 +125,40 @@ export async function readLearningChatroomHistory(
       ...(input.groupId ? { groupId: input.groupId } : {}),
       studentId: input.studentId,
     });
+    const courseState = await repository?.readCourseRecordState?.(input.courseId);
+    const courseClosed = courseState === "closed" || courseState === "purged";
+    if (input.archivePage && !repository?.readArchive) {
+      throw new Error("Complete classroom archive is not available on this storage backend.");
+    }
+    if (repository?.readArchive && (input.archivePage || input.fullArchive)) {
+      const transcriptId = createLearningChatroomTranscriptId(input);
+      const pages: LearningChatroomTranscriptMessage[][] = [];
+      let before = input.archivePage?.before;
+      let nextCursor: string | undefined;
+      const cursors = new Set<string>();
+      do {
+        const page = await repository.readArchive({ transcriptId, ...(before ? { before } : {}), limit: input.fullArchive ? 500 : input.archivePage?.limit ?? 100 });
+        pages.unshift(page.messages);
+        nextCursor = page.nextCursor;
+        if (nextCursor && cursors.has(nextCursor)) throw new Error("Invalid repeating archive cursor.");
+        if (nextCursor) cursors.add(nextCursor);
+        before = nextCursor;
+      } while (input.fullArchive && nextCursor);
+      const messages = pages.flat();
+      const hidden = messages.filter((message) => message.moderation?.status === "hidden");
+      return {
+        status: "loaded", messages: messages.filter((message) => message.moderation?.status !== "hidden"),
+        hiddenMessageCount: hidden.length, hiddenMessageIds: hidden.map((message) => message.messageId),
+        ...(transcript.moderation ? { moderation: transcript.moderation } : {}),
+        window: { maxMessages: resolveLearningChatroomTranscriptMaxMessages(input.groupId), atCapacity: false, archiveAvailable: true },
+        storagePolicy: transcript.storagePolicy,
+        ...(courseClosed ? { courseClosed: true } : {}),
+        ...(input.archivePage ? { archivePage: { ...(nextCursor ? { nextCursor } : {}) } } : {}),
+      };
+    }
     return {
       status: "loaded",
+      ...(courseClosed ? { courseClosed: true } : {}),
       messages: transcript.messages,
       hiddenMessageCount: transcript.hiddenMessageCount,
       hiddenMessageIds: transcript.hiddenMessageIds,
@@ -131,6 +169,7 @@ export async function readLearningChatroomHistory(
       window: createLearningChatroomTranscriptWindow({
         groupId: input.groupId,
         storedMessageCount: transcript.messages.length + transcript.hiddenMessageCount,
+        archiveAvailable: Boolean(repository?.readArchive),
       }),
       storagePolicy: transcript.storagePolicy,
     };
@@ -163,6 +202,10 @@ export async function readLearningChatroomTranscriptWriteSnapshot(
 ): Promise<LearningChatroomTranscriptWriteSnapshot> {
   try {
     const { dataDir, repository } = resolveLearningChatroomTranscriptBackend(input);
+    const courseState = await repository?.readCourseRecordState?.(input.courseId);
+    if (courseState === "closed" || courseState === "purged") {
+      throw new LearningChatroomTranscriptStoreError(423, "This course no longer accepts new classroom records.", `course-records-${courseState}`);
+    }
     const transcriptId = createLearningChatroomTranscriptId(input);
     // The shared helper intentionally binds the requested id onto its return
     // value for ordinary callers.  POST must inspect the repository's original
@@ -304,11 +347,13 @@ function throwLearningChatroomTranscriptSnapshotRevisionRequired(): never {
 function createLearningChatroomTranscriptWindow(input: {
   groupId?: string;
   storedMessageCount: number;
+  archiveAvailable?: boolean;
 }): LearningChatroomTranscriptWindow {
   const maxMessages = resolveLearningChatroomTranscriptMaxMessages(input.groupId);
   return {
     maxMessages,
     atCapacity: input.storedMessageCount >= maxMessages,
+    ...(input.archiveAvailable ? { archiveAvailable: true } : {}),
   };
 }
 

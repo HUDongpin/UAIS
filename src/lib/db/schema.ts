@@ -1,7 +1,10 @@
 import { sql } from "drizzle-orm";
 import {
   boolean,
+  bigint,
   check,
+  customType,
+  foreignKey,
   index,
   integer,
   jsonb,
@@ -16,6 +19,7 @@ import {
 
 const createdAt = timestamp("created_at", { withTimezone: true }).notNull().defaultNow();
 const updatedAt = timestamp("updated_at", { withTimezone: true }).notNull().defaultNow();
+const bytea = customType<{ data: Buffer; driverData: Buffer }>({ dataType: () => "bytea" });
 
 export const uaisUsers = pgTable(
   "uais_users",
@@ -73,6 +77,9 @@ export const uaisLessons = pgTable(
     contentRef: text("content_ref"),
     externalKey: text("external_key"),
     publishedManifestRef: text("published_manifest_ref"),
+    contentKind: text("content_kind").notNull().default("legacy"),
+    draftPackage: jsonb("draft_package").$type<Record<string, unknown>>(),
+    draftRevision: integer("draft_revision").notNull().default(0),
     status: text("status").notNull().default("published"),
     createdAt,
     updatedAt,
@@ -83,8 +90,30 @@ export const uaisLessons = pgTable(
     uniqueIndex("uais_lessons_course_external_key_unique").on(table.courseId, table.externalKey),
     check("uais_lessons_position_check", sql`${table.position} > 0`),
     check("uais_lessons_status_check", sql`${table.status} IN ('draft', 'published', 'archived')`),
+    check("uais_lessons_content_kind_check", sql`${table.contentKind} IN ('legacy', 'authored')`),
+    check("uais_lessons_draft_revision_check", sql`${table.draftRevision} >= 0`),
   ],
 );
+
+export const uaisLessonVersions = pgTable("uais_lesson_versions", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  lessonId: uuid("lesson_id").notNull().references(() => uaisLessons.id, { onDelete: "restrict" }),
+  versionNo: integer("version_no").notNull(),
+  primaryLocale: text("primary_locale").notNull(),
+  studentContent: jsonb("student_content").$type<Record<string, unknown>>().notNull(),
+  teacherGuide: jsonb("teacher_guide").$type<Record<string, unknown>>().notNull(),
+  targetClassIds: jsonb("target_class_ids").$type<string[]>().notNull(),
+  draftRevision: integer("draft_revision").notNull(),
+  publishedBy: uuid("published_by").notNull().references(() => uaisUsers.id, { onDelete: "restrict" }),
+  publishedAt: timestamp("published_at", { withTimezone: true }).notNull().defaultNow(),
+}, table => [
+  uniqueIndex("uais_lesson_versions_lesson_id_version_no_key").on(table.lessonId, table.versionNo),
+  uniqueIndex("uais_lesson_versions_id_lesson_id_key").on(table.id, table.lessonId),
+  index("uais_lesson_versions_published_by_idx").on(table.publishedBy),
+  check("uais_lesson_versions_version_no_check", sql`${table.versionNo} > 0`),
+  check("uais_lesson_versions_draft_revision_check", sql`${table.draftRevision} > 0`),
+  check("uais_lesson_versions_primary_locale_check", sql`${table.primaryLocale} IN ('zh-CN','en-US')`),
+]);
 
 export const uaisClasses = pgTable(
   "uais_classes",
@@ -177,6 +206,7 @@ export const uaisAssessments = pgTable(
       .notNull()
       .references(() => uaisLessons.id, { onDelete: "cascade" }),
     type: text("type").notNull(),
+    lessonVersionId: uuid("lesson_version_id"),
     title: text("title").notNull(),
     rubricRef: text("rubric_ref"),
     activityKey: text("activity_key"),
@@ -205,6 +235,8 @@ export const uaisAssessments = pgTable(
       table.activityKey,
       table.version,
     ),
+    foreignKey({ columns: [table.lessonVersionId, table.lessonId], foreignColumns: [uaisLessonVersions.id, uaisLessonVersions.lessonId], name: "uais_assessments_lesson_version_fk" }).onDelete("restrict"),
+    index("uais_assessments_lesson_version_idx").on(table.lessonVersionId).where(sql`${table.lessonVersionId} IS NOT NULL`),
     check("uais_assessments_type_check", sql`${table.type} IN ('quiz', 'assignment', 'discussion', 'manual')`),
     check("uais_assessments_status_check", sql`${table.status} IN ('draft', 'published', 'archived')`),
     check("uais_assessments_version_check", sql`${table.version} > 0`),
@@ -266,6 +298,7 @@ export const uaisSubmissionVersions = pgTable(
     status: text("status").notNull().default("draft"),
     contentText: text("content_text").notNull(),
     contentHash: text("content_hash").notNull(),
+    evidenceHash: text("evidence_hash"),
     draftRevision: integer("draft_revision").notNull().default(1),
     createdAt,
     updatedAt,
@@ -287,6 +320,27 @@ export const uaisSubmissionVersions = pgTable(
     check("uais_submission_versions_draft_revision_check", sql`${table.draftRevision} > 0`),
   ],
 );
+
+export const uaisSubmissionAttachments = pgTable("uais_submission_attachments", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  submissionVersionId: uuid("submission_version_id").notNull().references(() => uaisSubmissionVersions.id, { onDelete: "cascade" }),
+  clientAttachmentId: uuid("client_attachment_id").notNull(),
+  position: integer("position").notNull(),
+  mime: text("mime").notNull(),
+  byteLength: integer("byte_length").notNull(),
+  width: integer("width").notNull(),
+  height: integer("height").notNull(),
+  sha256: text("sha256").notNull(),
+  content: bytea("content").notNull(),
+  createdAt,
+}, table => [
+  uniqueIndex("uais_submission_attachment_client_unique").on(table.submissionVersionId, table.clientAttachmentId),
+  uniqueIndex("uais_submission_attachment_position_unique").on(table.submissionVersionId, table.position),
+  check("uais_submission_attachment_position_check", sql`${table.position} > 0`),
+  check("uais_submission_attachment_mime_check", sql`${table.mime} IN ('image/png','image/jpeg')`),
+  check("uais_submission_attachment_bytes_check", sql`${table.byteLength} > 0 AND ${table.byteLength} <= 1048576 AND octet_length(${table.content}) = ${table.byteLength}`),
+  check("uais_submission_attachment_pixels", sql`${table.width} > 0 AND ${table.height} > 0 AND ${table.width}::bigint * ${table.height}::bigint <= 40000000`),
+]);
 
 export const uaisFeedback = pgTable(
   "uais_feedback",
@@ -644,16 +698,55 @@ export const uaisUserLoginIdentifiers = pgTable(
   ],
 );
 
+export const uaisClassroomAccountOnboarding = pgTable("uais_classroom_account_onboarding", {
+  userId: uuid("user_id").primaryKey().references(() => uaisUsers.id, { onDelete: "cascade" }),
+  provisionedBy: text("provisioned_by").notNull(),
+  courseKey: text("course_key").notNull(),
+  classKey: text("class_key").notNull(),
+  credentialVersion: integer("credential_version").notNull().default(1),
+  activatedAt: timestamp("activated_at", { withTimezone: true }),
+  createdAt, updatedAt,
+}, table => [
+  index("uais_classroom_account_onboarding_owner_idx").on(table.provisionedBy, table.courseKey, table.classKey),
+  check("uais_classroom_account_onboarding_credential_version_check", sql`${table.credentialVersion} > 0`),
+]);
+
+export const uaisLearningChatroomMessages = pgTable("uais_learning_chatroom_messages", {
+  id: bigint("id", { mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),
+  transcriptId: text("transcript_id").notNull(),
+  messageId: text("message_id").notNull(),
+  courseExternalId: text("course_external_id").notNull(),
+  message: jsonb("message").$type<Record<string, unknown>>().notNull(),
+  receivedAt: timestamp("received_at", { withTimezone: true }).notNull().defaultNow(),
+}, table => [
+  uniqueIndex("uais_learning_chatroom_messages_transcript_id_message_id_key").on(table.transcriptId, table.messageId),
+  index("uais_learning_chatroom_messages_room_cursor_idx").on(table.transcriptId, table.id),
+  index("uais_learning_chatroom_messages_course_idx").on(table.courseExternalId),
+]);
+
+export const uaisCourseRecordRetention = pgTable("uais_course_record_retention", {
+  courseExternalId: text("course_external_id").primaryKey(),
+  closedAt: timestamp("closed_at", { withTimezone: true }).notNull(),
+  purgeAfter: timestamp("purge_after", { withTimezone: true }).notNull(),
+  purgedAt: timestamp("purged_at", { withTimezone: true }),
+  updatedAt,
+}, table => [
+  check("uais_course_record_retention_period", sql`${table.purgeAfter} = ${table.closedAt} + interval '180 days'`),
+  check("uais_course_record_retention_purge", sql`${table.purgedAt} IS NULL OR ${table.purgedAt} >= ${table.purgeAfter}`),
+]);
+
 export const uaisCoreSchemaTables = {
   users: uaisUsers,
   courses: uaisCourses,
   lessons: uaisLessons,
+  lessonVersions: uaisLessonVersions,
   classes: uaisClasses,
   inviteCodes: uaisInviteCodes,
   enrollments: uaisEnrollments,
   assessments: uaisAssessments,
   submissions: uaisSubmissions,
   submissionVersions: uaisSubmissionVersions,
+  submissionAttachments: uaisSubmissionAttachments,
   feedback: uaisFeedback,
   formativeAttempts: uaisFormativeAttempts,
   learningEvents: uaisLearningEvents,
@@ -664,4 +757,7 @@ export const uaisCoreSchemaTables = {
   auditLog: uaisAuditLog,
   exportJobs: uaisExportJobs,
   providerJobs: uaisProviderJobs,
+  classroomAccountOnboarding: uaisClassroomAccountOnboarding,
+  classroomMessages: uaisLearningChatroomMessages,
+  courseRecordRetention: uaisCourseRecordRetention,
 };

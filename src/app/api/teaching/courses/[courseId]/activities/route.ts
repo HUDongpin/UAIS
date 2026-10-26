@@ -33,6 +33,7 @@ type CommonDeps = {
     fetch?: typeof fetch;
     courseId: string;
     lessonKey?: string;
+    targetClassId?: string;
   }) => Promise<LearningLoopTeacherCourseAccess>;
 };
 
@@ -82,6 +83,7 @@ function createTeachingActivitiesPostHandler(deps: PostDeps = {}) {
         fetch: deps.fetch,
         courseId,
         lessonKey: draft.lessonKey,
+        targetClassId: draft.targetClassId,
       });
       if (access.status === "denied") return createAccessDeniedResponse(access, traceId);
       const targetClass = access.classes.find(

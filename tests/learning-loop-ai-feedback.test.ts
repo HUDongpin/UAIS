@@ -20,6 +20,13 @@ const input = {
 };
 
 describe("P1 AI-assisted feedback contract", () => {
+  it("refuses image-only submissions before any text-provider request", async () => {
+    const complete = vi.fn(async () => ({ provider: "deepseek" as const, model: "test", content: "{}" }));
+    const generator = createLearningFeedbackDraftGenerator({ env: {}, complete });
+    await expect(generator.generate({ ...input, submission: { versionId: "version-1", contentText: "" } }))
+      .rejects.toMatchObject({ status: 400, reasonCode: "ai-feedback-text-required" });
+    expect(complete).not.toHaveBeenCalled();
+  });
   it("accepts only a complete non-numeric structured draft for the exact rubric", async () => {
     const complete = vi.fn(async () => ({
       provider: "deepseek" as const,
@@ -45,6 +52,7 @@ describe("P1 AI-assisted feedback contract", () => {
     expect(JSON.stringify(messages)).toContain("student evidence");
     expect(JSON.stringify(messages)).not.toContain("student-1");
     expect(JSON.stringify(messages)).toContain("Do not produce numeric scores");
+    expect(JSON.stringify(messages)).toContain("Images are not supplied");
   });
 
   it("rejects malformed or numeric AI output before it can become feedback", async () => {

@@ -729,12 +729,13 @@ describe("UAIS enterprise app sessions", () => {
     })();
     const setCookies = readSetCookieHeaders(signOutResponse);
 
-    expect(setCookies).toHaveLength(4);
+    expect(setCookies).toHaveLength(5);
     setCookies.forEach((setCookie) => {
       expect(setCookie).toContain("Max-Age=0");
     });
     expect(setCookies.join("\n")).toContain("uais_teacher_auth_claims=");
     expect(setCookies.join("\n")).toContain("uais_teacher_auth_signature=");
+    expect(setCookies.join("\n")).toContain("uais_password_setup=");
   });
 });
 

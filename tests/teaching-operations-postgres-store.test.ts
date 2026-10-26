@@ -31,7 +31,9 @@ import {
 // tests/teaching-operations-cutover-integration.test.ts when a database url is
 // present (npm run test:db).
 
-const env = { UAIS_CORE_DATABASE_URL: "postgres://user:pass@db.example.com/uais" };
+const env = {
+  UAIS_CORE_DATABASE_URL: "postgres://user:pass@db.example.com/uais",
+};
 
 type RecordedQuery = { text: string; values: unknown[] };
 
@@ -42,7 +44,10 @@ function createRecordingClient(options: { rows?: unknown[][] } = {}) {
   let transactions = 0;
 
   const sql = ((strings: TemplateStringsArray, ...values: unknown[]) => {
-    queries.push({ text: strings.join("?").replace(/\s+/g, " ").trim(), values });
+    queries.push({
+      text: strings.join("?").replace(/\s+/g, " ").trim(),
+      values,
+    });
     return Promise.resolve(rowQueue.shift() ?? []);
   }) as never as {
     (strings: TemplateStringsArray, ...values: unknown[]): Promise<unknown[]>;
@@ -94,7 +99,10 @@ function createRowAwareClient() {
       if (row && row.revision !== (expectedRevision ?? null)) {
         return [];
       }
-      row = { database: JSON.parse(String(database)), revision: String(revision) };
+      row = {
+        database: JSON.parse(String(database)),
+        revision: String(revision),
+      };
       return [{ snapshot_key: "default" }];
     }
     return [];
@@ -115,8 +123,10 @@ function createRowAwareClient() {
   return {
     factory: () => ({ sql }),
     queries,
-    storedDatabase: () => row?.database as TeachingOperationDatabase | undefined,
-    statements: (prefix: string) => queries.filter((query) => query.text.startsWith(prefix)),
+    storedDatabase: () =>
+      row?.database as TeachingOperationDatabase | undefined,
+    statements: (prefix: string) =>
+      queries.filter((query) => query.text.startsWith(prefix)),
   };
 }
 
@@ -145,6 +155,76 @@ function buildDatabase(inviteIds: string[]): TeachingOperationDatabase {
 }
 
 describe("teaching operations postgres store", () => {
+  it("does not recreate legacy classroom operations for a purged course", async () => {
+    const client = createRecordingClient({
+      rows: [[], [{ closed_at: "2026-01-01", purged_at: "2026-07-01" }]],
+    });
+    const repository = createUaisTeachingOperationPostgresRepository({
+      env,
+      createDatabase: client.factory,
+    });
+    const database = normalizeTeachingOperationDatabase({
+      ...buildDatabase([]),
+      records: [
+        {
+          recordId: "late-grading",
+          operationId: "grading",
+          actionSlot: "primary",
+          actorId: "teacher",
+          courseId: "purged-course",
+          createdAt: "2026-01-01T00:00:00Z",
+          artifacts: [],
+        },
+      ],
+    });
+    await expect(repository.write({ database })).rejects.toMatchObject({
+      status: 423,
+      reasonCode: "course-records-purged",
+    });
+    expect(
+      client.queries.some((query) => query.text.includes("FOR UPDATE")),
+    ).toBe(false);
+  });
+  it("does not block another course merely because the global snapshot retains a purged course's content provenance", async () => {
+    const queries: string[] = [];
+    const sql = (async (strings: TemplateStringsArray) => {
+      const text = strings.join("");
+      queries.push(text);
+      if (text.includes("FROM uais_course_record_retention"))
+        return [{ closed_at: "2026-01-01", purged_at: "2026-07-01" }];
+      if (text.includes("INSERT INTO uais_teaching_operations_snapshots"))
+        return [{ snapshot_key: "default" }];
+      return [];
+    }) as ReturnType<
+      ReturnType<typeof createRecordingClient>["factory"]
+    >["sql"];
+    sql.begin = async (run) => {
+      await run(sql as never);
+    };
+    sql.end = async () => {};
+    const repository = createUaisTeachingOperationPostgresRepository({
+      env,
+      createDatabase: () => ({ sql }),
+    });
+    const database = normalizeTeachingOperationDatabase({
+      ...buildDatabase([]),
+      records: [
+        {
+          recordId: "preserved-content",
+          operationId: "content",
+          actionSlot: "primary",
+          actorId: "teacher",
+          courseId: "purged-course",
+          createdAt: "2026-01-01T00:00:00Z",
+          artifacts: [],
+        },
+      ],
+    });
+    await expect(repository.write({ database })).resolves.toBeUndefined();
+    expect(
+      queries.some((query) => query.includes("uais_course_record_retention")),
+    ).toBe(false);
+  });
   it("returns an empty database when the snapshot row does not exist yet", async () => {
     const client = createRecordingClient({ rows: [[]] });
     const repository = createUaisTeachingOperationPostgresRepository({
@@ -158,13 +238,17 @@ describe("teaching operations postgres store", () => {
     // No revision on an absent row: the first write must not be told it is
     // replacing something.
     expect(snapshot.revision).toBeUndefined();
-    expect(client.queries[0].text).toContain("uais_teaching_operations_snapshots");
+    expect(client.queries[0].text).toContain(
+      "uais_teaching_operations_snapshots",
+    );
     expect(client.ended).toBe(1);
   });
 
   it("normalizes a stored snapshot and carries its trimmed revision forward", async () => {
     const client = createRecordingClient({
-      rows: [[{ database: buildDatabase(["invite-a"]), revision: "  rev-abc  " }]],
+      rows: [
+        [{ database: buildDatabase(["invite-a"]), revision: "  rev-abc  " }],
+      ],
     });
     const repository = createUaisTeachingOperationPostgresRepository({
       env,
@@ -180,7 +264,9 @@ describe("teaching operations postgres store", () => {
   });
 
   it("writes the snapshot as text cast to jsonb under a conditional upsert", async () => {
-    const client = createRecordingClient({ rows: [[], [{ snapshot_key: "default" }]] });
+    const client = createRecordingClient({
+      rows: [[], [{ snapshot_key: "default" }]],
+    });
     const repository = createUaisTeachingOperationPostgresRepository({
       env,
       createDatabase: client.factory,
@@ -194,7 +280,9 @@ describe("teaching operations postgres store", () => {
     // The guard reads FOR UPDATE first so a concurrent writer cannot slip
     // between the check and the replace.
     expect(select.text).toContain("FOR UPDATE");
-    expect(insert.text).toContain("INSERT INTO uais_teaching_operations_snapshots");
+    expect(insert.text).toContain(
+      "INSERT INTO uais_teaching_operations_snapshots",
+    );
     // The conditional conflict path is the half FOR UPDATE cannot provide, and
     // RETURNING is how the store learns the update was skipped.
     expect(insert.text).toContain("IS NOT DISTINCT FROM");
@@ -209,7 +297,9 @@ describe("teaching operations postgres store", () => {
   });
 
   it("refuses to replace a snapshot that moved under it", async () => {
-    const client = createRecordingClient({ rows: [[{ revision: "rev-current" }]] });
+    const client = createRecordingClient({
+      rows: [[{ revision: "rev-current" }]],
+    });
     const repository = createUaisTeachingOperationPostgresRepository({
       env,
       createDatabase: client.factory,
@@ -224,7 +314,9 @@ describe("teaching operations postgres store", () => {
 
     // The conflict is detected before any write is issued, and the connection is
     // still closed.
-    expect(client.queries.some((query) => query.text.includes("INSERT"))).toBe(false);
+    expect(client.queries.some((query) => query.text.includes("INSERT"))).toBe(
+      false,
+    );
     expect(client.ended).toBe(1);
   });
 
@@ -233,7 +325,9 @@ describe("teaching operations postgres store", () => {
     // check and no conditional WHERE, so a caller that had read nothing
     // overwrote a snapshot it never saw and the loser's action was gone with no
     // error anywhere.
-    const client = createRecordingClient({ rows: [[{ revision: "rev-current" }]] });
+    const client = createRecordingClient({
+      rows: [[{ revision: "rev-current" }]],
+    });
     const repository = createUaisTeachingOperationPostgresRepository({
       env,
       createDatabase: client.factory,
@@ -242,7 +336,9 @@ describe("teaching operations postgres store", () => {
     await expect(
       repository.write({ database: buildDatabase(["invite-a"]) }),
     ).rejects.toThrow(/retry required/);
-    expect(client.queries.some((query) => query.text.includes("INSERT"))).toBe(false);
+    expect(client.queries.some((query) => query.text.includes("INSERT"))).toBe(
+      false,
+    );
     expect(client.ended).toBe(1);
   });
 
@@ -314,9 +410,9 @@ describe("teaching operations postgres store", () => {
   });
 
   it("requires a core database url", () => {
-    expect(() => createUaisTeachingOperationPostgresRepository({ env: {} })).toThrow(
-      /UAIS_CORE_DATABASE_URL/,
-    );
+    expect(() =>
+      createUaisTeachingOperationPostgresRepository({ env: {} }),
+    ).toThrow(/UAIS_CORE_DATABASE_URL/);
   });
 });
 
@@ -324,7 +420,10 @@ describe("teaching operations postgres store", () => {
 // documented as "run it repeatedly until parity holds", so its second run is a
 // replace of the row its first run wrote.
 describe("teaching operations durable cutover", () => {
-  async function seedJsonFile(dataDir: string, database: TeachingOperationDatabase) {
+  async function seedJsonFile(
+    dataDir: string,
+    database: TeachingOperationDatabase,
+  ) {
     await writeFile(
       join(dataDir, "teaching-operations.json"),
       JSON.stringify(database),
@@ -391,19 +490,47 @@ describe("teaching operations durable cutover", () => {
 it.each([
   { database: { ...buildDatabase([]), providerOperations: [] }, revision: "" },
   { database: buildDatabase([]), revision: "rev-existing" },
-  { database: { ...buildDatabase([]), providerOperations: null }, revision: "rev-existing" },
-  { database: { ...buildDatabase([]), providerOperations: [{ phase: "succeeded" }] }, revision: "rev-existing" },
-])("refuses malformed existing dedicated provider-operation snapshot %#", async (row) => {
-  const client = createRecordingClient({ rows: [[row]] });
-  const repository = createUaisTeachingOperationPostgresRepository({ env, createDatabase: client.factory, snapshotKey: "gradebook-provider-operations" });
-  await expect(repository.read()).rejects.toMatchObject({ status: 503 });
-  expect(client.queries[0].values).toEqual(["gradebook-provider-operations"]);
-});
+  {
+    database: { ...buildDatabase([]), providerOperations: null },
+    revision: "rev-existing",
+  },
+  {
+    database: {
+      ...buildDatabase([]),
+      providerOperations: [{ phase: "succeeded" }],
+    },
+    revision: "rev-existing",
+  },
+])(
+  "refuses malformed existing dedicated provider-operation snapshot %#",
+  async (row) => {
+    const client = createRecordingClient({ rows: [[row]] });
+    const repository = createUaisTeachingOperationPostgresRepository({
+      env,
+      createDatabase: client.factory,
+      snapshotKey: "gradebook-provider-operations",
+    });
+    await expect(repository.read()).rejects.toMatchObject({ status: 503 });
+    expect(client.queries[0].values).toEqual(["gradebook-provider-operations"]);
+  },
+);
 
 it("keeps the dedicated provider-operation namespace separate from normal snapshots", async () => {
-  const client = createRecordingClient({ rows: [[], [], [{ snapshot_key: "gradebook-provider-operations" }]] });
-  const repository = createUaisTeachingOperationPostgresRepository({ env, createDatabase: client.factory, snapshotKey: "gradebook-provider-operations" });
+  const client = createRecordingClient({
+    rows: [[], [], [{ snapshot_key: "gradebook-provider-operations" }]],
+  });
+  const repository = createUaisTeachingOperationPostgresRepository({
+    env,
+    createDatabase: client.factory,
+    snapshotKey: "gradebook-provider-operations",
+  });
   expect((await repository.read()).revision).toBeUndefined();
-  await repository.write({ database: { ...buildDatabase([]), providerOperations: [] } });
-  expect(client.queries.every((query) => query.values.includes("gradebook-provider-operations"))).toBe(true);
+  await repository.write({
+    database: { ...buildDatabase([]), providerOperations: [] },
+  });
+  expect(
+    client.queries.every((query) =>
+      query.values.includes("gradebook-provider-operations"),
+    ),
+  ).toBe(true);
 });

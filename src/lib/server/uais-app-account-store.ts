@@ -33,10 +33,12 @@ export type UaisAppAccountClientFactory = (input: {
   };
 };
 
+export type UaisAppAccountAuthenticationResult = UaisAppSessionUser & { passwordSetup?: { credentialVersion: number } };
+
 export type UaisAppAccountAuthenticator = (input: {
   account: string;
   password: string;
-}) => Promise<UaisAppSessionUser | null>;
+}) => Promise<UaisAppAccountAuthenticationResult | null>;
 
 // Two different things, deliberately kept apart.
 //
@@ -114,6 +116,7 @@ export function createUaisAppAccountAuthenticator(input: {
       role: row.role,
       displayName: row.displayName,
       department: row.department,
+      ...(row.credentialVersion ? { passwordSetup: { credentialVersion: row.credentialVersion } } : {}),
     };
   };
 }
@@ -168,8 +171,10 @@ async function readActiveAccountRow(input: {
     // `password_hash IS NOT NULL` excludes the 'invited' rows a roster import
     // creates before an initial password is set.
     const rows = await client.sql`
-      SELECT u.account, u.password_hash, u.role, u.display_name, u.department
+      SELECT u.account, u.password_hash, u.role, u.display_name, u.department,
+             CASE WHEN o.activated_at IS NULL THEN o.credential_version ELSE NULL END AS credential_version
       FROM uais_users u
+      LEFT JOIN uais_classroom_account_onboarding o ON o.user_id = u.id
       WHERE u.status = 'active'
         AND u.password_hash IS NOT NULL
         AND (
@@ -190,6 +195,7 @@ async function readActiveAccountRow(input: {
           role?: unknown;
           display_name?: unknown;
           department?: unknown;
+          credential_version?: unknown;
         }
       | undefined;
     if (!row) {
@@ -214,6 +220,7 @@ async function readActiveAccountRow(input: {
       role,
       displayName: readAccountLabel(row.display_name) ?? account,
       department: readAccountLabel(row.department) ?? defaultDepartmentLabel,
+      credentialVersion: typeof row.credential_version === "number" && row.credential_version > 0 ? row.credential_version : undefined,
     };
   } finally {
     await closeUaisCoreDatabaseClient(client);

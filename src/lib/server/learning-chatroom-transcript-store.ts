@@ -150,8 +150,15 @@ export type LearningChatroomTranscriptRepository = {
     input: LearningChatroomTranscriptRepositoryScope & {
       database: LearningChatroomTranscriptDatabase;
       expectedRevision?: string;
+      archiveMessages?: LearningChatroomTranscriptMessage[];
     },
   ) => Promise<void>;
+  readArchive?: (input: { transcriptId: string; before?: string; limit?: number }) => Promise<{
+    messages: LearningChatroomTranscriptMessage[];
+    nextCursor?: string;
+  }>;
+  moderateArchive?: (input: { transcriptId: string; courseId: string; messageId: string; moderation: LearningChatroomTranscriptMessageModeration }) => Promise<boolean>;
+  readCourseRecordState?: (courseId: string) => Promise<"active" | "closed" | "purged">;
 };
 
 export type LearningChatroomTranscriptAppendReceipt = {
@@ -455,6 +462,15 @@ export async function setLearningChatroomTranscriptMessageModeration(input: {
     "message id",
     learningChatroomTranscriptMaxIdLength,
   );
+
+  if (input.repository?.moderateArchive) {
+    const applied = await input.repository.moderateArchive({
+      transcriptId: createLearningChatroomTranscriptId(input), courseId: input.courseId, messageId, moderation,
+    });
+    return applied ? { status: "applied", receipt: createModerationReceipt({
+      transcriptId: createLearningChatroomTranscriptId(input), target: "message", moderation, messageId, storage,
+    }) } : { status: "not-found" };
+  }
 
   const result = await mutateLearningChatroomTranscriptRecord({
     ...input,
@@ -883,6 +899,7 @@ async function appendLearningChatroomTranscriptMessagesLocked(
         transcriptId,
         database: nextDatabase,
         expectedRevision: snapshot.revision,
+        archiveMessages: appended,
       });
       return {
         status: "persisted",
@@ -1067,6 +1084,7 @@ async function writeLearningChatroomTranscriptSnapshot(input: {
   transcriptId?: string;
   database: LearningChatroomTranscriptDatabase;
   expectedRevision?: string;
+  archiveMessages?: LearningChatroomTranscriptMessage[];
 }) {
   if (input.repository) {
     await input.repository.write({
@@ -1075,6 +1093,7 @@ async function writeLearningChatroomTranscriptSnapshot(input: {
       ...(input.expectedRevision !== undefined
         ? { expectedRevision: input.expectedRevision }
         : {}),
+      ...(input.archiveMessages ? { archiveMessages: input.archiveMessages } : {}),
     });
     return;
   }
@@ -1181,7 +1200,7 @@ function normalizeLearningChatroomTranscript(
   };
 }
 
-function normalizeLearningChatroomTranscriptMessage(
+export function normalizeLearningChatroomTranscriptMessage(
   value: unknown,
 ): LearningChatroomTranscriptMessage {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {

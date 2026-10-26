@@ -150,6 +150,7 @@ export type LearningChatroomController = {
   fallbackNotice: string | null;
   /** The room's stored transcript could not be read on the last poll. */
   historyNotice: string | null;
+  archiveAvailable: boolean;
   /** The room is holding a full rolling window, so older turns are leaving it. */
   windowNotice: string | null;
   /** The course teacher has frozen the room; shown to everyone who cannot post. */
@@ -239,6 +240,9 @@ export function useLearningChatroom(): LearningChatroomController {
   // The last read reached the endpoint but not the store, so the thread the
   // learner is looking at may be missing rows nobody can see yet.
   const [historyUnavailable, setHistoryUnavailable] = useState(false);
+  const [historySyncPaused, setHistorySyncPaused] = useState(false);
+  const [archiveAvailable, setArchiveAvailable] = useState(false);
+  const [courseClosed, setCourseClosed] = useState(false);
   // The room's stored transcript is at its rolling-window cap, so its oldest
   // turns are being dropped on every further message - and the export and share
   // link inherit the same cut. Nothing used to say so anywhere.
@@ -472,6 +476,7 @@ export function useLearningChatroom(): LearningChatroomController {
     demoPreviewOnly ||
     needsGroupChoice ||
     roomAccessNotice !== null ||
+    courseClosed ||
     frozenForViewer;
   const roomUnbound = demoPreviewOnly || needsGroupChoice || resolution.status !== "ready" || !activeCourse;
   const exportDisabled = roomUnbound || roomAccessNotice !== null;
@@ -544,6 +549,9 @@ export function useLearningChatroom(): LearningChatroomController {
     // another room's transcript.
     setUndeliveredMessageIds([]);
     setHistoryUnavailable(false);
+    setHistorySyncPaused(false);
+    setArchiveAvailable(false);
+    setCourseClosed(false);
     // Every one of these describes the room that produced it, not the room the
     // learner just walked into.
     setWindowAtCapacity(false);
@@ -590,12 +598,14 @@ export function useLearningChatroom(): LearningChatroomController {
     // endpoint for at least as long as the server asked, however the interval
     // happens to line up with it.
     let backoffUntilMs = 0;
+    let readInFlight = false;
 
     const readRoom = async () => {
-      if (cancelled || Date.now() < backoffUntilMs) {
+      if (cancelled || readInFlight || Date.now() < backoffUntilMs) {
         return;
       }
 
+      readInFlight = true;
       const result = await fetchChatroomHistory({
         courseId: activeCourseId,
         classId: activeClassId,
@@ -603,11 +613,13 @@ export function useLearningChatroom(): LearningChatroomController {
         locale,
         otherMemberFallbackName: t.learning.groupMemberUnknown,
       });
+      readInFlight = false;
       if (cancelled || currentRoomToken() !== roomToken) {
         return;
       }
 
       if (result.status === "throttled") {
+        setHistorySyncPaused(true);
         // Never blank the thread on a 429: the last good transcript stays on
         // screen and the room simply reads less often for a while.
         backoffUntilMs =
@@ -633,12 +645,16 @@ export function useLearningChatroom(): LearningChatroomController {
         return;
       }
       if (result.status !== "loaded") {
+        setHistorySyncPaused(true);
         // A failed or malformed read is not something the learner can act on and
         // must not cost them the transcript they can already see.
         return;
       }
 
       setRoomAccessNotice(null);
+      setHistorySyncPaused(false);
+      setArchiveAvailable(result.archiveAvailable);
+      setCourseClosed(result.courseClosed);
       // An unreadable store answers 200 with an empty `messages` array, which is
       // indistinguishable from a genuinely empty room. Without this the learner
       // sees a healthy, quiet classroom instead of a transcript that is simply
@@ -1353,8 +1369,9 @@ export function useLearningChatroom(): LearningChatroomController {
     error,
     roomAccessNotice,
     fallbackNotice,
-    historyNotice: historyUnavailable ? t.learning.chatHistoryUnavailable : null,
-    windowNotice: windowAtCapacity ? t.learning.chatroomWindowTrimmed : null,
+    historyNotice: courseClosed ? t.learning.chatCourseClosed : historySyncPaused ? t.learning.chatSyncPaused : historyUnavailable ? t.learning.chatHistoryUnavailable : null,
+    archiveAvailable,
+    windowNotice: windowAtCapacity ? archiveAvailable ? t.learning.chatArchiveWindow : t.learning.chatroomWindowTrimmed : null,
     // The teacher already sees the room's state in the moderation panel, so
     // this line is for the members it actually stops.
     frozenNotice: frozenForViewer ? t.learning.chatroomFrozenNotice : null,

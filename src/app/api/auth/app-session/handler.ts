@@ -1,3 +1,4 @@
+import { createPasswordSetupToken, passwordSetupCookieFromRequest, passwordSetupSetCookie } from "@/lib/server/classroom-password-setup-token";
 import { randomUUID } from "node:crypto";
 import {
   getUaisHomeHrefForRole,
@@ -12,6 +13,7 @@ import {
 } from "@/lib/server/local-teacher-auth-bridge";
 import {
   createUaisAppAccountAuthenticator,
+  type UaisAppAccountAuthenticationResult,
   normalizeUaisLoginIdentifier,
 } from "@/lib/server/uais-app-account-store";
 import {
@@ -52,7 +54,7 @@ type UaisAppSessionPostHandlerDeps = {
   authenticateDatabaseAccount?: (input: {
     account: string;
     password: string;
-  }) => Promise<UaisAppSessionUser | null>;
+  }) => Promise<UaisAppAccountAuthenticationResult | null>;
   loginFailureGuard?: UaisAppLoginFailureGuard;
 };
 
@@ -211,6 +213,19 @@ export function createUaisAppSessionPostHandler(
       );
     }
 
+    if (authenticatedUser.passwordSetup) {
+      const secure = isUaisAppProductionRuntime(env);
+      const response = createUaisAppSessionDeleteHandler({ env })();
+      const headers = new Headers(response.headers);
+      headers.set("cache-control", "no-store");
+      headers.append("set-cookie", passwordSetupSetCookie(createPasswordSetupToken({
+        account: authenticatedUser.account,
+        credentialVersion: authenticatedUser.passwordSetup.credentialVersion,
+        secret: signingSecret, now: deps.now, from: body.from,
+      }), secure));
+      return new Response(JSON.stringify({ status: "password-setup-required", redirectTarget: "/first-login" }), { status: 200, headers });
+    }
+
     const ttlSeconds = 8 * 60 * 60;
     const isProductionRuntime = isUaisAppProductionRuntime(env);
     const claims = createUaisAppSessionClaims({
@@ -278,7 +293,10 @@ export function createUaisAppSessionPostHandler(
       body.from && isUaisRouteAllowedForRole(body.from, authenticatedUser.role)
         ? body.from
         : getUaisHomeHrefForRole(authenticatedUser.role);
-    const headers = new Headers({ "content-type": "application/json" });
+    const headers = new Headers({ "content-type": "application/json", "cache-control": "no-store" });
+    if (passwordSetupCookieFromRequest(request)) {
+      headers.append("set-cookie", passwordSetupSetCookie("", isProductionRuntime));
+    }
     for (const setCookieHeader of [
       ...setCookieHeaders,
       ...teacherAuthSetCookieHeaders,
@@ -367,12 +385,13 @@ export function createUaisAppSessionDeleteHandler(
       "Priority=High",
       ...(isProductionRuntime ? ["Secure"] : []),
     ];
-    const headers = new Headers({ "content-type": "application/json" });
+    const headers = new Headers({ "content-type": "application/json", "cache-control": "no-store" });
     headers.append("set-cookie", ["uais_app_session=", ...attributes].join("; "));
     headers.append(
       "set-cookie",
       ["uais_app_session_signature=", ...attributes].join("; "),
     );
+    headers.append("set-cookie", passwordSetupSetCookie("", isProductionRuntime));
     // The teaching write routes read the teacher cookie alone, with no
     // cross-check against the app session, so leaving it behind would keep a
     // signed-out browser authorized to write for the rest of its lifetime - and
@@ -432,8 +451,8 @@ async function authenticateForProviderKind(input: {
   authenticateDatabaseAccount?: (input: {
     account: string;
     password: string;
-  }) => Promise<UaisAppSessionUser | null>;
-}): Promise<UaisAppSessionUser | null> {
+  }) => Promise<UaisAppAccountAuthenticationResult | null>;
+}): Promise<UaisAppAccountAuthenticationResult | null> {
   switch (input.providerKind) {
     case "trusted-account-provider":
       return (await input.authenticateTrustedAccount?.(input.credentials)) ?? null;

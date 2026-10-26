@@ -2,6 +2,7 @@ import { isRecord } from "./teaching-operations-guards";
 import { normalizeGradebookProviderOperations } from "./teaching-gradebook-provider-operation-types";
 import { createHash } from "node:crypto";
 import type { TransactionSql } from "postgres";
+import { assertClassroomRecordWriteAllowed, ClassroomRecordRetentionError, isClassroomSnapshotRecord } from "./classroom-record-retention-store";
 import {
   closeUaisCoreDatabaseClient,
   getUaisCoreDatabasePool,
@@ -122,6 +123,19 @@ export function createUaisTeachingOperationPostgresRepository(input: {
       const client = (input.createDatabase ?? getUaisCoreDatabasePool)({ env: input.env });
       try {
         await client.sql.begin(async (sql: TransactionSql) => {
+          // These snapshots contain several courses. Take course locks in a
+          // stable order BEFORE the shared snapshot row lock, matching purge's
+          // ordering and preventing a delayed retry from recreating old records.
+          const courseIds = [...new Set(Object.entries(normalizedDatabase)
+            .flatMap(([field, value]) => Array.isArray(value) ? value.filter((item) => isClassroomSnapshotRecord(field, item, "operations")) : [])
+            .map((item) => "courseId" in item ? item.courseId : undefined)
+            .filter((id): id is string => typeof id === "string" && id.length > 0))].sort();
+          try {
+            for (const courseId of courseIds) await assertClassroomRecordWriteAllowed(sql, courseId, { allowClosed: true });
+          } catch (error) {
+            if (error instanceof ClassroomRecordRetentionError) throw new TeachingOperationStoreError(error.status, error.message, error.reasonCode);
+            throw error;
+          }
           const rows = await sql`
             SELECT revision
             FROM uais_teaching_operations_snapshots

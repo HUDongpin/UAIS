@@ -37,6 +37,7 @@ export default defineConfig({
       // test.describe/test.use outside the Playwright runner and makes the
       // otherwise offline default lane fail before any browser test runs.
       "tests/p2/browser/**",
+      "tests/classroom-browser/**",
     ],
   },
 });

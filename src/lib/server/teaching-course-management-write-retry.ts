@@ -12,14 +12,15 @@ import { isTeachingCourseManagementOptimisticSnapshotConflict } from "./teaching
 // read-modify-write of the same course row, and every approval another one. A
 // single retry - which is what these loops used to allow - is enough for two
 // writers and drops the third, so a student's join answers 409 and their seat
-// silently does not exist. Five attempts spread by decorrelated jitter cover an
-// ordinary class-sized burst; past that the honest answer is that the row is too
-// hot for this request, and the caller is told so in a form it can act on.
+// silently does not exist. Ordinary edits retain five attempts. Actual concurrent
+// classroom admission exceeded that ladder, so joins use twelve bounded attempts
+// with the same jitter before returning an actionable contention response.
 export const teachingCourseManagementMaxWriteAttempts = 5;
+export const teachingClassroomJoinMaxWriteAttempts = 12;
 
-export function createTeachingCourseManagementWriteRetry() {
+export function createTeachingCourseManagementWriteRetry(options: { maxAttempts?: number } = {}) {
   return createOptimisticWriteRetry({
-    maxAttempts: teachingCourseManagementMaxWriteAttempts,
+    maxAttempts: options.maxAttempts ?? teachingCourseManagementMaxWriteAttempts,
     isConflict: isTeachingCourseManagementOptimisticSnapshotConflict,
   });
 }

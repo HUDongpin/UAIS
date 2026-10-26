@@ -372,6 +372,45 @@ describe("dedicated learning chatroom history route", () => {
     expect(warn).toHaveBeenCalled();
   });
 
+  it("allows two hours of ordinary visible-room polling with the default daily budget", async () => {
+    const createDedicatedHistoryHandler = await loadDedicatedHistoryHandler();
+    const fixture = await createHistoryAuthorizationFixture();
+    let nowMs = 1_000_000;
+    const handler = createDedicatedHistoryHandler({
+      env: fixture.env,
+      now: () => nowMs,
+      transcriptRepository: createHistoryRepository(),
+    });
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    for (let poll = 0; poll <= 2 * 60 * 60 * 1000 / 2500; poll += 1) {
+      const response = await handler(createHistoryRequest(fixture.courseId, fixture.cookies.approved));
+      expect(response.status, `ordinary poll ${poll} at ${poll * 2500 / 60000} minutes`).toBe(200);
+      nowMs += 2500;
+    }
+  }, 30_000);
+
+  it("paginates the authorized durable archive and omits moderated rows", async () => {
+    const createDedicatedHistoryHandler = await loadDedicatedHistoryHandler();
+    const fixture = await createHistoryAuthorizationFixture();
+    const repository = createHistoryRepository();
+    const readArchive = vi.fn(async () => ({ messages: [
+      { messageId: "earlier-1", role: "student" as const, content: "Earlier evidence", createdAt: "2026-01-01T00:00:00Z" },
+      { messageId: "earlier-hidden", role: "student" as const, content: "Moderated evidence", createdAt: "2026-01-01T00:00:01Z", moderation: { status: "hidden" as const, actorId: "teacher", actedAt: "2026-01-01T00:00:02Z" } },
+    ], nextCursor: "earlier-1" }));
+    repository.readArchive = readArchive;
+    const handler = createDedicatedHistoryHandler({ env: fixture.env, transcriptRepository: repository });
+    const request = createHistoryRequest(fixture.courseId, fixture.cookies.approved);
+    const response = await handler(new Request(request.url + "&archive=1&before=recent-first", { headers: request.headers }));
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.messages.map((message: { content: string }) => message.content)).toEqual(["Earlier evidence"]);
+    expect(body.transcript.archivePage.nextCursor).toBe("earlier-1");
+    expect(readArchive).toHaveBeenCalledWith(expect.objectContaining({ before: "recent-first", limit: 100 }));
+    const denied = createHistoryRequest(fixture.courseId, fixture.cookies.nonMember);
+    expect((await handler(new Request(denied.url + "&archive=1", { headers: denied.headers }))).status).toBe(403);
+    expect(readArchive).toHaveBeenCalledTimes(1);
+  });
+
   it("emits a bounded redacted Server-Timing allowlist on an authorized read", async () => {
     const createDedicatedHistoryHandler = await loadDedicatedHistoryHandler();
     const fixture = await createHistoryAuthorizationFixture();

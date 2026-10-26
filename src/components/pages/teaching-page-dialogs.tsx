@@ -24,6 +24,7 @@ import { QrCode } from "@phosphor-icons/react/dist/ssr/QrCode";
 import { UsersThree } from "@phosphor-icons/react/dist/ssr/UsersThree";
 import { X } from "@phosphor-icons/react/dist/ssr/X";
 import { ClassMembershipRoster } from "@/components/teaching/class-membership-roster";
+import { useSessionUser } from "@/components/providers/session-user";
 import { InvitationQrCode } from "@/components/teaching/invitation-qr-code";
 import {
   describeInviteAvailability,
@@ -601,9 +602,19 @@ export function NewCourseDialog({
   onCancel: () => void;
   onCreate: (draft: NewCourseDraft) => Promise<void> | void;
 }) {
-  const [draft, setDraft] = useState<NewCourseDraft>(() =>
-    createDefaultNewCourseDraft(locale),
-  );
+  const sessionUser = useSessionUser();
+  const teacher = sessionUser?.role === "teacher" ? sessionUser : undefined;
+  const [draft, setDraft] = useState<NewCourseDraft>(() => {
+    const defaults = createDefaultNewCourseDraft(locale);
+    if (!teacher) return defaults;
+    const date = new Date();
+    const year = Number(new Intl.DateTimeFormat("en", { year: "numeric", timeZone: "Asia/Taipei" }).format(date));
+    const month = Number(new Intl.DateTimeFormat("en", { month: "numeric", timeZone: "Asia/Taipei" }).format(date));
+    const startYear = month >= 8 ? year : year - 1;
+    return { ...defaults, instructor: teacher.displayName, department: teacher.department,
+      unit: locale === "zh-CN" ? "优爱思" : "University AI System (UAIS)",
+      semester: locale === "zh-CN" ? `${startYear}-${startYear + 1}第${month >= 8 ? "一" : "二"}学期` : `${month >= 8 ? "Fall" : "Spring"} ${year}` };
+  });
   const [draftCourseId, setDraftCourseId] = useState<string>();
   const [generatedCover, setGeneratedCover] = useState<GeneratedCourseCover>();
   const [coverError, setCoverError] = useState<string>();
@@ -811,6 +822,7 @@ export function NewCourseDialog({
                   </span>
                   <NewCourseSelect
                     id="new-course-unit"
+                    allowCustom={Boolean(teacher)}
                     value={draft.unit}
                     options={
                       locale === "zh-CN"
@@ -829,6 +841,7 @@ export function NewCourseDialog({
                   </label>
                   <NewCourseSelect
                     id="new-course-department"
+                    allowCustom={Boolean(teacher)}
                     value={draft.department}
                     options={
                       locale === "zh-CN"
@@ -868,6 +881,7 @@ export function NewCourseDialog({
               </label>
               <NewCourseSelect
                 id="new-course-semester"
+                allowCustom={Boolean(teacher)}
                 value={draft.semester}
                 options={
                   locale === "zh-CN"
@@ -943,7 +957,9 @@ export function NewCourseDialog({
         <footer className="flex flex-col gap-4 border-t border-[#edf0f5] bg-white px-7 py-5 shadow-[0_-18px_40px_rgba(30,45,75,0.06)] sm:flex-row sm:items-center sm:justify-between md:px-10">
           <div className="inline-flex items-center gap-3 text-lg font-semibold text-[#1557c0]">
             <Package size={25} weight="duotone" />
-            {locale === "zh-CN" ? "正在使用演示教学包" : "Using Demonstration Teaching Package"}
+            {teacher
+              ? locale === "zh-CN" ? "创建自己的课堂课程；封面可稍后添加" : "Create your classroom course; a cover can be added later"
+              : locale === "zh-CN" ? "正在使用演示教学包" : "Using Demonstration Teaching Package"}
           </div>
           <div className="flex flex-wrap justify-end gap-4">
             <button
@@ -979,6 +995,7 @@ function NewCourseSelect({
   ariaLabel,
   value,
   options,
+  allowCustom = false,
   className = "",
   onChange,
 }: {
@@ -986,9 +1003,14 @@ function NewCourseSelect({
   ariaLabel?: string;
   value: string;
   options: string[];
+  allowCustom?: boolean;
   className?: string;
   onChange: (value: string) => void;
 }) {
+  if (allowCustom) {
+    return <input id={id} aria-label={ariaLabel} value={value} onChange={event => onChange(event.target.value)}
+      className={`h-[52px] w-full min-w-0 rounded-lg border border-[#d8dde6] bg-white px-4 text-base font-medium text-[#111827] outline-none focus:border-[#2f7cff] focus:ring-4 focus:ring-[#2f7cff]/12 ${className}`} />;
+  }
   return (
     <div className={["relative min-w-0", className].filter(Boolean).join(" ")}>
       <select

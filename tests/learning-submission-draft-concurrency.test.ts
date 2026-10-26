@@ -29,6 +29,9 @@ it.each([activityId, activityId.toUpperCase(), `{${activityId}}`])(
     const releases: Array<() => void> = [];
     const sql = async (strings: TemplateStringsArray, ...values: unknown[]) => {
       const text = strings.join("?");
+      if (text.includes("AS course_slug")) return [{ course_slug: "course-1" }];
+      // Shared retention locks do not serialize peers; only the draft lock does.
+      if (text.includes("pg_advisory_xact_lock_shared")) return [];
       if (text.includes("FROM uais_users")) return [{ id: "student-id" }];
       if (text.includes("pg_advisory_xact_lock")) {
         const key = text.includes("::uuid::text")

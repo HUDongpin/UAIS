@@ -15,6 +15,7 @@ function fixture(state: "draft" | "revision_requested" | "absent" = "draft") {
   const writes: Array<{ text: string; values: unknown[] }> = [];
   const sql = async (strings: TemplateStringsArray, ...values: unknown[]) => {
     const text = strings.join("?");
+    if (text.includes("AS course_slug")) return [{ course_slug: "course-1" }];
     if (text.includes("FROM uais_users")) return [{ id: "student-id" }];
     if (text.includes("FROM uais_idempotency_records")) return [];
     if (text.includes("FROM uais_assessments")) return [{ id: "activity-id" }];

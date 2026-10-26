@@ -45,6 +45,23 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+// Existing cases exercise the original course/class operations. The independent
+// classroom panels receive valid empty readbacks instead of consuming a write
+// mock or turning an unrelated panel into the dialog's failure signal.
+function withClassroomReadbacks(fetchMock: ReturnType<typeof vi.fn>) {
+  return (input: RequestInfo | URL, init?: RequestInit) => {
+    const path = String(input);
+    if ((!init?.method || init.method === "GET") && /\/api\/teaching\/courses\/[^/]+\/lessons$/.test(path)) {
+      return Promise.resolve(Response.json({ lessons: [], classes: [] }));
+    }
+    const retention = path.match(/\/api\/teaching\/courses\/([^/]+)\/retention$/);
+    if ((!init?.method || init.method === "GET") && retention) {
+      return Promise.resolve(Response.json({ retention: { courseId: decodeURIComponent(retention[1]), retentionDays: 180, closedAt: null, purgeAfter: null, purgedAt: null, eligibleForPurge: false, counts: {}, confirmationDigest: "fixture" } }));
+    }
+    return fetchMock(input, init);
+  };
+}
+
 function createDashboardInsightsReadback(overrides: Partial<{
   notStarted: number; draft: number; submitted: number; revisionRequested: number;
   resubmitted: number; accepted: number; overdue: number;
@@ -970,7 +987,7 @@ describe("TeachingPage", () => {
         traceId,
       });
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     render(<TeachingPage />);
     await chooseWorkspaceCourse("teacher-research-methods");
@@ -1004,7 +1021,7 @@ describe("TeachingPage", () => {
         traceId: "trace-inline-missing-receipt",
       }),
     );
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     render(<TeachingPage />);
     await chooseWorkspaceCourse("teacher-research-methods");
@@ -1039,7 +1056,7 @@ describe("TeachingPage", () => {
         traceId: "trace-inline-receipt-session-missing",
       }),
     );
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     render(<TeachingPage />);
     await chooseWorkspaceCourse("teacher-research-methods");
@@ -1072,7 +1089,7 @@ describe("TeachingPage", () => {
         { status: 403 },
       ),
     );
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     render(<TeachingPage />);
     await chooseWorkspaceCourse("teacher-research-methods");
@@ -1126,7 +1143,7 @@ describe("TeachingPage", () => {
         },
       });
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     const { container } = render(<TeachingPage />);
     await chooseWorkspaceCourse("teacher-course-enterprise-operations-20260623");
@@ -1179,7 +1196,7 @@ describe("TeachingPage", () => {
         ],
       });
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     render(<TeachingPage />);
 
@@ -1217,7 +1234,7 @@ describe("TeachingPage", () => {
         { status: 401 },
       );
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     render(<TeachingPage />);
     await chooseWorkspaceCourse("teacher-research-methods");
@@ -1250,7 +1267,7 @@ describe("TeachingPage", () => {
         resolveApproval = resolve;
       });
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     render(<TeachingPage />);
 
@@ -1362,7 +1379,7 @@ describe("TeachingPage", () => {
         },
       });
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     render(<TeachingPage />);
 
@@ -1400,7 +1417,7 @@ describe("TeachingPage", () => {
       expect(init?.method).toBe("POST");
       return createApprovedPeterMembershipApprovalResponse();
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     render(<TeachingPage />);
 
@@ -1489,7 +1506,7 @@ describe("TeachingPage", () => {
         ),
       });
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     render(<TeachingPage />);
 
@@ -1570,7 +1587,7 @@ describe("TeachingPage", () => {
         { status: 401 },
       );
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     render(<TeachingPage />);
 
@@ -1654,7 +1671,7 @@ describe("TeachingPage", () => {
         { status: 403 },
       );
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     render(<TeachingPage />);
 
@@ -1692,7 +1709,7 @@ describe("TeachingPage", () => {
         { status: 401 },
       ),
     );
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     render(<TeachingPage />);
     await chooseWorkspaceCourse("teacher-research-methods");
@@ -1748,7 +1765,7 @@ describe("TeachingPage", () => {
         },
       }),
     );
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     render(<TeachingPage />);
     await chooseWorkspaceCourse("teacher-research-methods");
@@ -1805,7 +1822,7 @@ describe("TeachingPage", () => {
         },
       }),
     );
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     render(<TeachingPage />);
     await chooseWorkspaceCourse("teacher-research-methods");
@@ -1842,7 +1859,7 @@ describe("TeachingPage", () => {
         },
       }),
     );
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     const { rerender } = render(<TeachingPage />);
     await chooseWorkspaceCourse("teacher-research-methods");
@@ -1899,7 +1916,7 @@ describe("TeachingPage", () => {
         },
       }),
     );
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     const { rerender } = render(<TeachingPage />);
     await chooseWorkspaceCourse("teacher-research-methods");
@@ -1963,7 +1980,7 @@ describe("TeachingPage", () => {
         },
       }),
     );
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     mockPreferences.locale = "en-US";
     render(<TeachingPage />);
@@ -2011,7 +2028,7 @@ describe("TeachingPage", () => {
         },
       }),
     );
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     mockPreferences.locale = "en-US";
     render(<TeachingPage />);
@@ -2052,7 +2069,7 @@ describe("TeachingPage", () => {
         },
       }),
     );
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     mockPreferences.locale = "en-US";
     render(<TeachingPage />);
@@ -2103,7 +2120,7 @@ describe("TeachingPage", () => {
         },
       }),
     );
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     render(<TeachingPage />);
     await chooseWorkspaceCourse("teacher-research-methods");
@@ -2146,7 +2163,7 @@ describe("TeachingPage", () => {
         },
       }),
     );
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     const { rerender } = render(<TeachingPage />);
     await chooseWorkspaceCourse("teacher-research-methods");
@@ -2198,7 +2215,7 @@ describe("TeachingPage", () => {
         },
       }),
     );
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     render(<TeachingPage />);
     await chooseWorkspaceCourse("teacher-research-methods");
@@ -2231,7 +2248,7 @@ describe("TeachingPage", () => {
         },
       }),
     );
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     render(<TeachingPage />);
     await chooseWorkspaceCourse("teacher-research-methods");
@@ -2270,7 +2287,7 @@ describe("TeachingPage", () => {
         },
       }),
     );
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     render(<TeachingPage />);
     await chooseWorkspaceCourse("teacher-research-methods");
@@ -2309,7 +2326,7 @@ describe("TeachingPage", () => {
         },
       }),
     );
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     render(<TeachingPage />);
     await chooseWorkspaceCourse("teacher-research-methods");
@@ -2346,7 +2363,7 @@ describe("TeachingPage", () => {
         },
       }),
     );
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     render(<TeachingPage />);
     await chooseWorkspaceCourse("teacher-research-methods");
@@ -2412,7 +2429,7 @@ describe("TeachingPage", () => {
         { status: 502 },
       );
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     render(<TeachingPage />);
     await chooseWorkspaceCourse("teacher-research-methods");
@@ -2456,7 +2473,7 @@ describe("TeachingPage", () => {
           resolveSave = resolve;
         });
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     render(<TeachingPage />);
     await chooseWorkspaceCourse("teacher-research-methods");
@@ -2573,7 +2590,7 @@ describe("TeachingPage", () => {
         traceId,
       });
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     render(<TeachingPage />);
     await chooseWorkspaceCourse("teacher-research-methods");
@@ -2671,7 +2688,7 @@ describe("TeachingPage", () => {
         "trace-inline-agent-plan-semantic-missing",
       );
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     render(<TeachingPage />);
     await chooseWorkspaceCourse("teacher-research-methods");
@@ -2773,7 +2790,7 @@ describe("TeachingPage", () => {
         "trace-inline-student-preview-session-semantic-missing",
       );
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     try {
       render(<TeachingPage />);
@@ -2900,7 +2917,7 @@ describe("TeachingPage", () => {
         "trace-inline-student-preview-session-generated",
       );
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     try {
       render(<TeachingPage />);
@@ -2937,7 +2954,7 @@ describe("TeachingPage", () => {
         { status: 403 },
       ),
     );
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     try {
       render(<TeachingPage />);
@@ -3039,7 +3056,7 @@ describe("TeachingPage", () => {
         "trace-inline-permission-preflight-semantic-missing",
       );
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     render(<TeachingPage />);
     await chooseWorkspaceCourse("teacher-research-methods");
@@ -3140,7 +3157,7 @@ describe("TeachingPage", () => {
         "trace-inline-admin-settings-semantic-missing",
       );
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     render(<TeachingPage />);
     await chooseWorkspaceCourse("teacher-research-methods");
@@ -3240,7 +3257,7 @@ describe("TeachingPage", () => {
         "trace-inline-collaboration-invite-semantic-missing",
       );
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     render(<TeachingPage />);
     await chooseWorkspaceCourse("teacher-research-methods");
@@ -3265,7 +3282,7 @@ describe("TeachingPage", () => {
       if (String(input) === "/api/teaching/courses/teacher-research-methods/learning-insights") return createDashboardInsightsReadback();
       throw new Error(`Unexpected request: ${String(input)}`);
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
     render(<TeachingPage />);
     await chooseWorkspaceCourse("teacher-research-methods");
     fireEvent.click(screen.getByRole("link", { name: "测验看板" }));
@@ -3292,7 +3309,7 @@ describe("TeachingPage", () => {
       }
       throw new Error(`Unexpected request: ${String(input)}`);
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
     render(<TeachingPage />);
     await chooseWorkspaceCourse("teacher-research-methods");
     fireEvent.click(screen.getByRole("link", { name: "测验看板" }));
@@ -3390,7 +3407,7 @@ describe("TeachingPage", () => {
         "trace-inline-export-manifest-semantic-missing",
       );
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     render(<TeachingPage />);
     await chooseWorkspaceCourse("teacher-research-methods");
@@ -3490,7 +3507,7 @@ describe("TeachingPage", () => {
         "trace-inline-redaction-validation-semantic-missing",
       );
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     render(<TeachingPage />);
     await chooseWorkspaceCourse("teacher-research-methods");
@@ -3591,7 +3608,7 @@ describe("TeachingPage", () => {
         "trace-inline-students-roster-semantic-missing",
       );
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     render(<TeachingPage />);
     await chooseWorkspaceCourse("teacher-research-methods");
@@ -3690,7 +3707,7 @@ describe("TeachingPage", () => {
         "trace-inline-group-suggestions-semantic-missing",
       );
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     render(<TeachingPage />);
     await chooseWorkspaceCourse("teacher-research-methods");
@@ -3788,7 +3805,7 @@ describe("TeachingPage", () => {
       expect(String(input)).toBe("/api/teaching/operations/audit/alerts");
       return createClearInlineOperationAuditAlertsResponse(traceId);
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     render(<TeachingPage />);
     await chooseWorkspaceCourse("teacher-research-methods");
@@ -3930,7 +3947,7 @@ describe("TeachingPage", () => {
         "trace-inline-knowledge-index-semantic-missing",
       );
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     render(<TeachingPage />);
     await chooseWorkspaceCourse("teacher-research-methods");
@@ -3966,7 +3983,7 @@ describe("TeachingPage", () => {
       if (String(input).includes("learning-insights")) return createDashboardInsightsReadback(refreshed ? { notStarted: 2, accepted: 3 } : {});
       throw new Error(`Unexpected request: ${String(input)}`);
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
     render(<TeachingPage />);
     await chooseWorkspaceCourse("teacher-research-methods");
     fireEvent.click(screen.getByRole("link", { name: "数据看板" }));
@@ -3993,7 +4010,7 @@ describe("TeachingPage", () => {
       if (String(input).includes("learning-insights")) return createDashboardInsightsReadback();
       throw new Error(`Unexpected request: ${String(input)}`);
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
     render(<TeachingPage />);
     fireEvent.click(screen.getByRole("link", { name: "数据看板" }));
     expect((screen.getByRole("button", { name: "刷新数据看板" }) as HTMLButtonElement).disabled).toBe(true);
@@ -4091,7 +4108,7 @@ describe("TeachingPage", () => {
         "trace-inline-course-content-semantic-missing",
       );
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     render(<TeachingPage />);
     await chooseWorkspaceCourse("teacher-research-methods");
@@ -4204,7 +4221,7 @@ describe("TeachingPage", () => {
         "trace-inline-unit-draft-semantic-missing",
       );
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     render(<TeachingPage />);
     await chooseWorkspaceCourse("teacher-research-methods");
@@ -4344,7 +4361,7 @@ describe("TeachingPage", () => {
         "trace-inline-unit-draft-body-ready",
       );
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     render(<TeachingPage />);
     await chooseWorkspaceCourse("teacher-research-methods");
@@ -4446,7 +4463,7 @@ describe("TeachingPage", () => {
         "trace-inline-grading-primary-semantic-missing",
       );
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     render(<TeachingPage />);
     await chooseWorkspaceCourse("teacher-research-methods");
@@ -4547,7 +4564,7 @@ describe("TeachingPage", () => {
         "trace-inline-ai-feedback-draft-semantic-missing",
       );
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     render(<TeachingPage />);
     await chooseWorkspaceCourse("teacher-research-methods");
@@ -4590,7 +4607,7 @@ describe("TeachingPage", () => {
           resolveSave = resolve;
         });
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     render(<TeachingPage />);
     await chooseWorkspaceCourse("teacher-research-methods");
@@ -4707,7 +4724,7 @@ describe("TeachingPage", () => {
         ],
       });
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     render(<TeachingPage />);
     await chooseWorkspaceCourse("teacher-research-methods");
@@ -4810,7 +4827,7 @@ describe("TeachingPage", () => {
         "trace-alert-missing-auth-session",
       );
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     render(<TeachingPage />);
     await chooseWorkspaceCourse("teacher-research-methods");
@@ -4879,7 +4896,7 @@ describe("TeachingPage", () => {
       expect(String(input)).toBe("/api/teaching/operations/audit/alerts");
       return createClearInlineOperationAuditAlertsResponse("trace-alert-delayed-trace");
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     render(<TeachingPage />);
     await chooseWorkspaceCourse("teacher-research-methods");
@@ -4950,7 +4967,7 @@ describe("TeachingPage", () => {
 
       throw new Error(`Unexpected request ${String(input)}`);
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     render(<TeachingPage />);
     await chooseWorkspaceCourse("teacher-research-methods");
@@ -5015,7 +5032,7 @@ describe("TeachingPage", () => {
 
       throw new Error(`Unexpected request ${String(input)}`);
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     render(<TeachingPage />);
     await chooseWorkspaceCourse("teacher-research-methods");
@@ -5070,7 +5087,7 @@ describe("TeachingPage", () => {
         alerts: [],
       });
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     const { container } = render(<TeachingPage />);
     await chooseWorkspaceCourse("teacher-research-methods");
@@ -5196,7 +5213,7 @@ describe("TeachingPage", () => {
         alerts: [],
       });
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     const { container } = render(<TeachingPage />);
     await chooseWorkspaceCourse("teacher-research-methods");
@@ -5347,7 +5364,7 @@ describe("TeachingPage", () => {
         "trace-inline-course-settings-field-readback-missing",
       );
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     render(<TeachingPage />);
     await chooseWorkspaceCourse("teacher-research-methods");
@@ -5459,7 +5476,7 @@ describe("TeachingPage", () => {
         "trace-inline-course-settings-semantic-missing",
       );
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     render(<TeachingPage />);
     await chooseWorkspaceCourse("teacher-research-methods");
@@ -5547,7 +5564,7 @@ describe("TeachingPage", () => {
         resolveAlertReadback = resolve;
       });
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     const { container } = render(<TeachingPage />);
     await chooseWorkspaceCourse("teacher-research-methods");
@@ -5679,7 +5696,7 @@ describe("TeachingPage", () => {
         alerts: [],
       });
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     render(<TeachingPage />);
     await chooseWorkspaceCourse("teacher-research-methods");
@@ -5763,7 +5780,7 @@ describe("TeachingPage", () => {
         alerts: [],
       });
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     render(<TeachingPage />);
     await chooseWorkspaceCourse("teacher-research-methods");
@@ -5895,7 +5912,7 @@ describe("TeachingPage", () => {
         domainProjections: [],
       });
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     const { container } = render(<TeachingPage />);
     await chooseWorkspaceCourse("teacher-research-methods");
@@ -5987,7 +6004,7 @@ describe("TeachingPage", () => {
         alerts: [],
       });
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     const { container } = render(<TeachingPage />);
     await chooseWorkspaceCourse("teacher-research-methods");
@@ -6079,7 +6096,7 @@ describe("TeachingPage", () => {
         alerts: [],
       });
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     const { container } = render(<TeachingPage />);
     await chooseWorkspaceCourse("teacher-research-methods");
@@ -6131,7 +6148,7 @@ describe("TeachingPage", () => {
         ],
       });
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     render(<TeachingPage />);
     await chooseWorkspaceCourse("teacher-research-methods");
@@ -6278,7 +6295,7 @@ describe("TeachingPage", () => {
         ],
       });
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     render(<TeachingPage />);
     await chooseWorkspaceCourse("teacher-research-methods");
@@ -6441,7 +6458,7 @@ describe("TeachingPage", () => {
         ],
       });
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     render(<TeachingPage />);
     await chooseWorkspaceCourse("teacher-research-methods");
@@ -6564,7 +6581,7 @@ describe("TeachingPage", () => {
         { status: 503 },
       );
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     render(<TeachingPage />);
     await chooseWorkspaceCourse("teacher-research-methods");
@@ -6653,7 +6670,7 @@ describe("TeachingPage", () => {
         { status: 503 },
       );
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     const { container } = render(<TeachingPage />);
     await chooseWorkspaceCourse("teacher-research-methods");
@@ -6763,7 +6780,7 @@ describe("TeachingPage", () => {
         },
       });
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     render(<TeachingPage />);
     await chooseWorkspaceCourse("teacher-research-methods");
@@ -6873,7 +6890,7 @@ describe("TeachingPage", () => {
         { status: 503 },
       );
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     render(<TeachingPage />);
     await chooseWorkspaceCourse("teacher-research-methods");
@@ -6898,7 +6915,7 @@ describe("TeachingPage", () => {
 
   it("responds to teacher workspace menu and exposes course-card navigation without backend persistence", () => {
     const fetchMock = vi.fn();
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     render(<TeachingPage />);
 
@@ -7090,7 +7107,7 @@ describe("TeachingPage", () => {
         traceId,
       });
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     window.history.replaceState(null, "", "/teaching");
     const { container } = render(<TeachingPage />);
@@ -7241,7 +7258,7 @@ describe("TeachingPage", () => {
         },
       });
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     window.history.replaceState(null, "", "/teaching");
     const { container } = render(<TeachingPage />);
@@ -7395,7 +7412,7 @@ describe("TeachingPage", () => {
         },
       });
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     render(<TeachingPage />);
     await chooseWorkspaceCourse("teacher-course-enterprise-operations-20260623");
@@ -7487,7 +7504,7 @@ describe("TeachingPage", () => {
         traceId: "trace-invite-publication-receipt-missing",
       });
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     const { container } = render(<TeachingPage />);
     await chooseWorkspaceCourse("teacher-course-enterprise-operations-20260623");
@@ -7589,7 +7606,7 @@ describe("TeachingPage", () => {
         },
       });
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     const { container } = render(<TeachingPage />);
     await chooseWorkspaceCourse("teacher-course-enterprise-operations-20260623");
@@ -7697,7 +7714,7 @@ describe("TeachingPage", () => {
         ],
       });
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     window.history.replaceState(null, "", "/teaching");
     const { container } = render(<TeachingPage />);
@@ -7754,7 +7771,7 @@ describe("TeachingPage", () => {
         { status: 403 },
       );
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     window.history.replaceState(null, "", "/teaching");
     render(<TeachingPage />);
@@ -7784,7 +7801,7 @@ describe("TeachingPage", () => {
               resolveInviteSave = resolve;
             }),
     );
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     window.history.replaceState(null, "", "/teaching");
     const { container } = render(<TeachingPage />);
@@ -7875,7 +7892,7 @@ describe("TeachingPage", () => {
         resolveAuditReadback = resolve;
       });
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     window.history.replaceState(null, "", "/teaching");
     const { container } = render(<TeachingPage />);
@@ -8005,7 +8022,7 @@ describe("TeachingPage", () => {
         ],
       });
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     window.history.replaceState(null, "", "/teaching");
     const { container } = render(<TeachingPage />);
@@ -8076,7 +8093,7 @@ describe("TeachingPage", () => {
         { status: 502 },
       );
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     window.history.replaceState(null, "", "/teaching");
     const { container } = render(<TeachingPage />);
@@ -8180,7 +8197,7 @@ describe("TeachingPage", () => {
         { status: 201 },
       );
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     render(<TeachingPage />);
 
@@ -8259,7 +8276,7 @@ describe("TeachingPage", () => {
       expect(init?.method).toBe("POST");
       return createCourseResponse;
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     render(<TeachingPage />);
 
@@ -8337,7 +8354,7 @@ describe("TeachingPage", () => {
         { status: 201 },
       );
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     render(<TeachingPage />);
 
@@ -8394,7 +8411,7 @@ describe("TeachingPage", () => {
         { status: 201 },
       );
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     render(<TeachingPage />);
 
@@ -8453,7 +8470,7 @@ describe("TeachingPage", () => {
         { status: 201 },
       );
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     render(<TeachingPage />);
 
@@ -8515,7 +8532,7 @@ describe("TeachingPage", () => {
         { status: 201 },
       );
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     render(<TeachingPage />);
 
@@ -8580,7 +8597,7 @@ describe("TeachingPage", () => {
         { status: 201 },
       );
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     render(<TeachingPage />);
 
@@ -8605,7 +8622,7 @@ describe("TeachingPage", () => {
         { status: 401 },
       );
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     render(<TeachingPage />);
 
@@ -8654,7 +8671,7 @@ describe("TeachingPage", () => {
         { status: 403 },
       );
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     render(<TeachingPage />);
 
@@ -8702,7 +8719,7 @@ describe("TeachingPage", () => {
         { status: 403 },
       );
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     render(<TeachingPage />);
 
@@ -8764,7 +8781,7 @@ describe("TeachingPage", () => {
         }),
       );
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     const { container } = render(<TeachingPage />);
 
@@ -8846,7 +8863,7 @@ describe("TeachingPage", () => {
         },
       });
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     render(<TeachingPage />);
 
@@ -8890,7 +8907,7 @@ describe("TeachingPage", () => {
       expect(url).not.toBe("/api/teaching/course-cover");
       return Response.json({}, { status: 500 });
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     render(<TeachingPage />);
 
@@ -8947,7 +8964,7 @@ describe("TeachingPage", () => {
         }),
       );
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     render(<TeachingPage />);
 
@@ -9008,7 +9025,7 @@ describe("TeachingPage", () => {
       expect(url).not.toBe("/api/teaching/course-cover");
       return Response.json({}, { status: 500 });
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     render(<TeachingPage />);
 
@@ -9077,7 +9094,7 @@ describe("TeachingPage", () => {
         { status: 403 },
       );
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     render(<TeachingPage />);
 
@@ -9176,7 +9193,7 @@ describe("TeachingPage", () => {
         { status: 201 },
       );
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     render(<TeachingPage />);
     await chooseWorkspaceCourse("teacher-research-methods");
@@ -9295,7 +9312,7 @@ describe("TeachingPage", () => {
         { status: 201 },
       );
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     render(<TeachingPage />);
 
@@ -9394,7 +9411,7 @@ describe("TeachingPage", () => {
         { status: 201 },
       );
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     render(<TeachingPage />);
     await chooseWorkspaceCourse("teacher-course-updated-course-name-20260623");
@@ -9516,7 +9533,7 @@ describe("TeachingPage", () => {
         { status: 201 },
       );
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     render(<TeachingPage />);
 
@@ -9633,7 +9650,7 @@ describe("TeachingPage", () => {
         { status: 201 },
       );
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     const { container } = render(<TeachingPage />);
 
@@ -9748,7 +9765,7 @@ describe("TeachingPage", () => {
       });
       return createClassResponse;
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     render(<TeachingPage />);
     await chooseWorkspaceCourse("teacher-course-pending-class-lock-20260625");
@@ -9846,7 +9863,7 @@ describe("TeachingPage", () => {
         { status: 201 },
       );
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     render(<TeachingPage />);
     await chooseWorkspaceCourse("teacher-course-enterprise-operations-20260623");
@@ -9922,7 +9939,7 @@ describe("TeachingPage", () => {
         { status: 201 },
       );
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     render(<TeachingPage />);
     await chooseWorkspaceCourse("teacher-course-class-receipt-required-20260628");
@@ -10001,7 +10018,7 @@ describe("TeachingPage", () => {
         { status: 201 },
       );
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     render(<TeachingPage />);
     await chooseWorkspaceCourse("teacher-course-class-session-required-20260630");
@@ -10084,7 +10101,7 @@ describe("TeachingPage", () => {
         { status: 201 },
       );
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     render(<TeachingPage />);
     await chooseWorkspaceCourse("teacher-course-enterprise-operations-20260625");
@@ -10175,7 +10192,7 @@ describe("TeachingPage", () => {
         { status: 201 },
       );
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     render(<TeachingPage />);
     await chooseWorkspaceCourse("teacher-course-enterprise-operations-20260626");
@@ -10262,7 +10279,7 @@ describe("TeachingPage", () => {
         { status: 201 },
       );
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     render(<TeachingPage />);
     await chooseWorkspaceCourse("teacher-course-enterprise-semester-20260627");
@@ -10330,7 +10347,7 @@ describe("TeachingPage", () => {
         { status: 403 },
       );
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     render(<TeachingPage />);
 
@@ -10416,7 +10433,7 @@ describe("TeachingPage", () => {
         { status: 403 },
       );
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     render(<TeachingPage />);
     await chooseWorkspaceCourse("teacher-course-enterprise-rbac-20260625");
@@ -10572,7 +10589,7 @@ describe("TeachingPage", () => {
       }
       return Response.json({ error: "unexpected" }, { status: 500 });
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     render(<TeachingPage />);
     openAgentWorkspace();
@@ -10778,7 +10795,7 @@ describe("TeachingPage", () => {
         }
         return Response.json({ error: "unexpected download request" }, { status: 500 });
       });
-      vi.stubGlobal("fetch", fetchMock);
+      vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
       render(<TeachingPage />);
       openAgentWorkspace();
@@ -10841,7 +10858,7 @@ describe("TeachingPage", () => {
       }
       return Response.json({ error: "unexpected" }, { status: 500 });
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     render(<TeachingPage />);
     openAgentWorkspace();
@@ -10949,7 +10966,7 @@ describe("TeachingPage", () => {
       }
       return Response.json({ error: "unexpected" }, { status: 500 });
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     const { container } = render(<TeachingPage />);
     openAgentWorkspace();
@@ -11063,7 +11080,7 @@ describe("TeachingPage", () => {
       }
       return Response.json({ error: "unexpected" }, { status: 500 });
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     render(<TeachingPage />);
     openAgentWorkspace();
@@ -11130,7 +11147,7 @@ describe("TeachingPage", () => {
       }
       return Response.json({ error: "unexpected" }, { status: 500 });
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     const { container } = render(<TeachingPage />);
     openAgentWorkspace();
@@ -11302,7 +11319,7 @@ describe("TeachingPage", () => {
       }
       return Response.json({ error: "unexpected" }, { status: 500 });
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     const { container } = render(<TeachingPage />);
     openAgentWorkspace();
@@ -11436,7 +11453,7 @@ describe("TeachingPage", () => {
 
   it("blocks uploaded teacher audio before registration when browser metadata is shorter than 10 seconds", async () => {
     const fetchMock = vi.fn();
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
     const originalCreateObjectUrl = URL.createObjectURL;
     const originalRevokeObjectUrl = URL.revokeObjectURL;
     Object.defineProperty(URL, "createObjectURL", {
@@ -11502,7 +11519,7 @@ describe("TeachingPage", () => {
 
   it("fails closed before signed AI session bootstrap when no teacher actor is read back", async () => {
     const fetchMock = vi.fn();
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     render(<TeachingPage />);
     openAgentWorkspace();
@@ -11539,7 +11556,7 @@ describe("TeachingPage", () => {
       }
       return Response.json({ error: "unexpected" }, { status: 500 });
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     render(<TeachingPage />);
     openAgentWorkspace();
@@ -11585,7 +11602,7 @@ describe("TeachingPage", () => {
       }
       return Response.json({ error: "unexpected protected workflow call" }, { status: 500 });
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     const { container } = render(<TeachingPage />);
     openAgentWorkspace();
@@ -11632,7 +11649,7 @@ describe("TeachingPage", () => {
       }
       return Response.json({ error: "unexpected" }, { status: 500 });
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     render(<TeachingPage />);
     openAgentWorkspace();
@@ -11666,7 +11683,7 @@ describe("TeachingPage", () => {
       }
       return Response.json({ error: "unexpected" }, { status: 500 });
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     render(<TeachingPage />);
     openAgentWorkspace();
@@ -11740,7 +11757,7 @@ describe("TeachingPage", () => {
       }
       return Response.json({ error: "unexpected" }, { status: 500 });
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     render(<TeachingPage />);
     openAgentWorkspace();
@@ -11817,7 +11834,7 @@ describe("TeachingPage", () => {
         },
       });
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     render(<TeachingPage />);
 
@@ -11871,7 +11888,7 @@ describe("TeachingPage", () => {
         },
       });
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     render(<TeachingPage />);
 
@@ -11913,7 +11930,7 @@ describe("TeachingPage", () => {
         },
       });
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     render(<TeachingPage />);
 
@@ -12020,7 +12037,7 @@ describe("TeachingPage", () => {
   it("disables every inline workspace action until a course is explicitly chosen", async () => {
     window.history.replaceState(null, "", "/teaching");
     const fetchMock = vi.fn(async () => createBulkRosterCourseListReadback([], true));
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     const { container } = render(<TeachingPage />);
     await screen.findByText("企业管理实验班");
@@ -12055,7 +12072,7 @@ describe("TeachingPage", () => {
         },
       ]),
     );
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     render(<TeachingPage />);
     await chooseWorkspaceCourse("teacher-course-enterprise-operations-20260623");
@@ -12114,7 +12131,7 @@ describe("TeachingPage", () => {
         },
       });
     });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     render(<TeachingPage />);
     await chooseWorkspaceCourse("teacher-course-enterprise-operations-20260623");
@@ -12140,7 +12157,7 @@ describe("TeachingPage", () => {
   it("refuses an invite join limit of zero before the request leaves the workspace", async () => {
     window.history.replaceState(null, "", "/teaching");
     const fetchMock = vi.fn(async () => createBulkRosterCourseListReadback([], true));
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", withClassroomReadbacks(fetchMock));
 
     render(<TeachingPage />);
     await chooseWorkspaceCourse("teacher-course-enterprise-operations-20260623");

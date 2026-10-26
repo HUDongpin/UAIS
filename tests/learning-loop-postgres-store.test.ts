@@ -51,6 +51,7 @@ function createFakeDatabase(
           setTimeout(resolveDelay, options.delayMilliseconds),
         );
       }
+      if (query.text.includes("AS course_slug")) return [{ course_slug: "course-1" }];
       return resolve(query);
     } finally {
       inFlight -= 1;
@@ -253,6 +254,7 @@ describe("P1 learning-loop Postgres store", () => {
             current_version_no: 1,
             version_id: ids.version,
             version_status: "draft",
+            content_text: "Student proof",
             draft_revision: 2,
             course_id: ids.course,
             class_id: ids.class,
@@ -408,11 +410,12 @@ describe("P1 learning-loop Postgres store", () => {
     });
     const idempotencyReads = fake.queries.filter(
       ({ text }) =>
-        text.includes("pg_advisory_xact_lock") ||
         text.includes("FROM uais_idempotency_records"),
     );
     expect(idempotencyReads).toHaveLength(1);
-    expect(idempotencyReads[0]?.text).toContain("pg_advisory_xact_lock");
+    const receiptIndex = fake.queries.indexOf(idempotencyReads[0]!);
+    expect(fake.queries[receiptIndex - 1]?.text).toContain("SELECT pg_advisory_xact_lock(");
+    expect(idempotencyReads[0]?.text).not.toContain("pg_advisory_xact_lock");
     expect(idempotencyReads[0]?.text).toContain("FROM uais_idempotency_records");
   });
 
@@ -717,6 +720,7 @@ describe("P1 learning-loop Postgres store", () => {
             current_version_no: 1,
             version_id: ids.version,
             version_status: "draft",
+            content_text: "Student proof",
             draft_revision: 2,
             course_id: ids.course,
             class_id: ids.class,

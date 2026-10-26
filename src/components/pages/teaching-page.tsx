@@ -1,8 +1,11 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
+import { ClassroomTeachingWorkspace } from "./classroom-teaching-workspace";
 import {
   clearClassRosterFragment,
+  getClassRosterHref,
+  openSamePageClassRoster,
   hasClassRosterFragment,
   noClassRosterFragment,
   subscribeClassRosterFragment,
@@ -274,14 +277,7 @@ export function TeachingPage() {
         </p>
       </section>
 
-      {catalogDemoCoursesVisible && !persistedCourseLoadError ? (
-        <section
-          role="status"
-          className="rounded-2xl border border-[var(--accent-border)] bg-[var(--accent-soft)] p-4 text-sm font-semibold leading-6 text-[var(--accent)]"
-        >
-          <p>{localizedText(TEACHING_CATALOG_DEMO_READ_ONLY_MESSAGE, locale)}</p>
-        </section>
-      ) : null}
+
 
       {persistedCourseLoadError ? (
         <section
@@ -293,7 +289,19 @@ export function TeachingPage() {
         </section>
       ) : null}
 
-      <section className="grid grid-cols-[minmax(0,1fr)] gap-5 lg:grid-cols-[280px_minmax(0,1fr)] [&>*]:min-w-0">
+      <ClassroomTeachingWorkspace locale={locale} courses={courseCards.filter((course) => isConfirmedWritableTeacherCourseId(writableCourseIds, course.id))} selectedCourseId={selectedCourseAction?.courseId} onSelectCourse={selectWorkspaceCourse} classesByCourse={courseClasses} membershipsByClass={classMemberships} onNewCourse={() => setIsNewCourseOpen(true)} onNewClass={setNewClassCourseId} onInvite={setSelectedClassInvitation} renderRoster={(classItem) => <button type="button" onClick={() => openSamePageClassRoster(getClassRosterHref(classItem.id))} className="rounded-full border border-[var(--border)] px-4 py-2 text-sm font-semibold">{locale === "zh-CN" ? "查看与审批名单" : "View and review class roster"}</button>} />
+
+      <details open={rosterFragment} className="rounded-2xl border border-[var(--border)] p-4">
+      <summary className="cursor-pointer font-semibold text-[var(--muted)]">{locale === "zh-CN" ? "高级教学工具与课程设置" : "Advanced teaching tools and course settings"}</summary>
+      {catalogDemoCoursesVisible && !persistedCourseLoadError ? (
+        <section
+          role="status"
+          className="rounded-2xl border border-[var(--accent-border)] bg-[var(--accent-soft)] p-4 text-sm font-semibold leading-6 text-[var(--accent)]"
+        >
+          <p>{localizedText(TEACHING_CATALOG_DEMO_READ_ONLY_MESSAGE, locale)}</p>
+        </section>
+      ) : null}
+      <section className="mt-4 grid grid-cols-[minmax(0,1fr)] gap-5 lg:grid-cols-[280px_minmax(0,1fr)] [&>*]:min-w-0">
         <aside className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-[0_18px_42px_var(--shadow)]">
           <h2 className="px-2 text-sm font-semibold text-[var(--muted)]">
             {t.teaching.operations}
@@ -346,6 +354,7 @@ export function TeachingPage() {
 
         {renderActiveWorkspacePanel()}
       </section>
+      </details>
 
       {isNewCourseOpen ? (
         <NewCourseDialog

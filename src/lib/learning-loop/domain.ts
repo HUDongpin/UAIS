@@ -106,12 +106,12 @@ export function normalizeLearningActivityDraft(value: unknown): LearningActivity
   };
 }
 
-export function normalizeSubmissionContent(value: unknown) {
+export function normalizeSubmissionContent(value: unknown, options: { allowEmpty?: boolean } = {}) {
   if (typeof value !== "string") {
     throw new LearningLoopValidationError("submission-content-required");
   }
   const normalized = value.replace(/\r\n?/g, "\n").trim();
-  if (!normalized) {
+  if (!normalized && !options.allowEmpty) {
     throw new LearningLoopValidationError("submission-content-required");
   }
   if (Array.from(normalized).length > 20_000) {

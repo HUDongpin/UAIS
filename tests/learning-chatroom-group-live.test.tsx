@@ -1049,6 +1049,7 @@ describe("learner chatroom group room UI", () => {
     // A 429 must never blank the room.
     expect(screen.getByText("限流前就在房间里的消息。")).toBeTruthy();
     expect(screen.queryByText(emptyChatCopy)).toBeNull();
+    expect(screen.getByText("消息同步暂时暂停，当前记录可能不是最新；稍后会自动重试。")).toBeTruthy();
 
     // Backed off for at least two intervals, so the next tick is skipped.
     await advancePoll();
@@ -1057,6 +1058,38 @@ describe("learner chatroom group room UI", () => {
     await advancePoll();
     expect(historyCalls(calls)).toHaveLength(3);
     expect(screen.getByText("限流前就在房间里的消息。")).toBeTruthy();
+  });
+
+  it("does not overlap a slow history request with later poll ticks", async () => {
+    vi.useFakeTimers();
+    let finish!: (response: Response) => void;
+    const pending = new Promise<Response>((resolve) => { finish = resolve; });
+    const { calls } = stubFetch({
+      teachingCourses: () => studentCoursesResponse([courseA], [groupThree]),
+      chatroomHistory: (_url, index) => index === 0 ? pending : groupTranscriptResponse([]),
+    });
+    renderChatroom();
+    await settle(); await settle();
+    await advancePoll(4);
+    expect(historyCalls(calls)).toHaveLength(1);
+    await act(async () => { finish(groupTranscriptResponse([])); });
+    await advancePoll();
+    expect(historyCalls(calls)).toHaveLength(2);
+  });
+
+  it("opens authorized archive pages without replacing the live classroom thread", async () => {
+    vi.useFakeTimers();
+    stubFetch({
+      teachingCourses: () => studentCoursesResponse([courseA], [groupThree]),
+      chatroomHistory: (url) => url.includes("archive=1")
+        ? Response.json({ messages: [{ id: "older-1", role: "student", content: "完整档案里的早期讨论", createdAt: "2026-01-01T00:00:00Z", authorName: "同学" }], transcript: { status: "loaded", archivePage: {} } })
+        : Response.json({ messages: [{ id: "latest-1", role: "student", content: "正在进行的课堂讨论", createdAt: "2026-01-02T00:00:00Z" }], transcript: { status: "loaded", window: { maxMessages: 500, atCapacity: false, archiveAvailable: true } } }),
+    });
+    renderChatroom(); await settle(); await settle();
+    fireEvent.click(screen.getByRole("button", { name: "查看完整讨论记录" }));
+    await settle(); await settle();
+    expect(screen.getByText("完整档案里的早期讨论")).toBeTruthy();
+    expect(screen.getByText("正在进行的课堂讨论")).toBeTruthy();
   });
 
   it("keeps the thinking-indicator dots motion-safe for reduced motion", async () => {

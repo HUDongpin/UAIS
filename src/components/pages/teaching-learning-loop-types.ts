@@ -5,6 +5,7 @@ import type {
   LearningSubmissionState,
   RubricJudgmentState,
 } from "@/lib/learning-loop/domain";
+import type { SubmissionImage } from "@/lib/learning-loop/submission-image-policy";
 
 export type TeacherLearningActivity = {
   id: string;
@@ -14,6 +15,7 @@ export type TeacherLearningActivity = {
   status: "draft" | "published" | "archived";
   lessonKey: string;
   lessonPosition: number;
+  lessonVersionId?: string;
   targetClassId: string;
   title: LearningActivityDraft["title"];
   instructions: LearningActivityDraft["instructions"];
@@ -42,11 +44,21 @@ export type TeacherSubmissionQueueRow = {
   updatedAt?: string;
 };
 
+export type TeacherSubmissionQueueCounts = {
+  totalStudents: number;
+  notSubmitted: number;
+  submitted: number;
+  awaitingReview: number;
+  revisionRequested: number;
+  feedbackReleased: number;
+};
+
 export type TeacherSubmissionVersion = {
   id: string;
   versionNo: number;
   status: "draft" | "sealed";
   contentText: string;
+  attachments?: SubmissionImage[];
   draftRevision: number;
   submittedAt?: string;
 };

@@ -161,7 +161,7 @@ describe("B-11 core database foundation", () => {
     for (const migration of UAIS_CORE_DATABASE_MIGRATIONS) {
       const sql = readProjectFile(migration.path);
       for (const table of migration.tables) {
-        expect(sql).toContain(`CREATE TABLE IF NOT EXISTS ${table}`);
+        expect(sql).toMatch(new RegExp(`CREATE TABLE (?:IF NOT EXISTS )?${table}\\s*\\(`));
       }
     }
 
@@ -187,6 +187,9 @@ describe("B-11 core database foundation", () => {
         "assessments",
         "auditLog",
         "classes",
+        "classroomAccountOnboarding",
+        "classroomMessages",
+        "courseRecordRetention",
         "courses",
         "enrollments",
         "exportJobs",
@@ -194,9 +197,11 @@ describe("B-11 core database foundation", () => {
         "learnerProfiles",
         "learningEvents",
         "lessons",
+        "lessonVersions",
         "providerJobs",
         "recommendations",
         "submissionVersions",
+        "submissionAttachments",
         "feedback",
         "formativeAttempts",
         "xapiOutbox",

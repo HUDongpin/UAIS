@@ -1,5 +1,6 @@
 import { LearningLoopValidationError } from "@/lib/learning-loop/domain";
 import { LearningLoopStoreError } from "@/lib/learning-loop/postgres-store";
+import { ClassroomRecordRetentionError } from "@/lib/server/classroom-record-retention-store";
 
 export function readLearningLoopTraceId(request: Request) {
   const candidate = request.headers.get("x-uais-trace-id")?.trim();
@@ -85,6 +86,9 @@ export function createLearningLoopErrorResponse(
       reasonCode: error.code,
       traceId,
     });
+  }
+  if (error instanceof ClassroomRecordRetentionError) {
+    return createLearningLoopJsonResponse(error.status, traceId, { status: "failed", reasonCode: error.reasonCode, traceId });
   }
   if (error instanceof LearningLoopStoreError) {
     return createLearningLoopJsonResponse(error.status, traceId, {
